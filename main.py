@@ -1,38 +1,54 @@
 import storage
+import ui
+import valid
 
 
-FILE_NAME = 'thesaurus.json'
-def correct_word(word: str) -> bool:
+def ask_object():
+        
+        list_features = storage.load_list_fetures()
+        
+        title = input('Введите название: ')
+        
+        user_score = float(input('Оценка по общему впечатлению: '))
+        
+        new_dict = {}
+        for features in list_features:
+            answer = input(f'{features} >> ')
+            if valid.is_parse_str_float(answer):
+                new_dict[features] = float(answer)
+            else:
+                print('Неверный тип данных!')
+            
+
+        res = storage.add_series(title, user_score, new_dict)
+        
+        if res is False:
+            print('Ошибка! Новый объект не добавлен')
+        else:
+            print('Новый объект добавлен!')
+        print('Количество сериалов: ', len(storage.load_dataset())) 
+        
+def main_loop():
     
-    return len(word.strip()) > 1
-
-
-def ask_new_item() -> tuple:
+    storage.init_dataset()
     while True:
-        termin = input('Введите термин: ')
-        if correct_word(termin) is True:
+        ui.clean_terminal()
+        ui.show_main_menu()
+        n = input('>> ')
+        if n == '0':
             break
-        print('Некорректный ввод')
-    while True:
-        definition = input('Введите определение: ')
-        if correct_word(definition) is True:
-            break
-        print('Некорректный ввод')
-    return (termin, definition)
-
-
-
+        elif n == '1':
+            ask_object()
+        elif n == '2':
+            print('Количество записей:', len(storage.load_dataset()))
+        else:
+            print('Неизвестная команда')
+        input('Enter, чтобы продолжить...')
+        
     
-def main_cy():
-    storage.create_json(FILE_NAME)
-    termin, definition = ask_new_item()
-    is_add = storage.add_term(FILE_NAME, termin, definition)
-    if is_add:
-        print('Термин добавлен!')
-    else:
-        print('Термин не добавлен!')
-
     
 
 if __name__ == "__main__":
-    main_cy()
+
+    main_loop()
+    
