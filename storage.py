@@ -17,6 +17,8 @@ def init_dataset():
             json.dump(empty_list, file, ensure_ascii=False, indent=4)
 
 
+
+     
 def load_dataset() -> list:
     '''Возвращает список dict-объектов'''
 
@@ -75,7 +77,98 @@ def add_movies(title: str, user_score: str, features: dict) -> bool:
     return True
 
 
+def init_weights():
+    if is_json_exists(constant.WEIGHTS_JSON) is False:
+        with open(constant.WEIGHTS_JSON, 'w', encoding='UTF-8') as file:
+            json.dump(constant.DEFAULT_WEIGHTS, file, ensure_ascii=False, indent=4)
 
 
+def load_weights() -> list:
+    with open(constant.WEIGHTS_JSON, 'r', encoding='UTF-8') as file:
+        return json.load(file)
+   
+def save_weights(data: list):
+    with open(constant.WEIGHTS_JSON, 'w', encoding='UTF-8') as file:
+        json.dump(data, file, ensure_ascii=False, indent=4)  
+
+def uppdate_weights(weights: dict):
+    save_weights(weights)
     
+def init_txt():
+
+    if is_json_exists(constant.TXT_INPUT) is False:
+        with open(constant.TXT_INPUT, 'w', encoding='UTF-8') as file:
+            return
+
+
+def input_txt() -> bool:
+    '''Импорт записей из txt в dataset.json'''
+    
+    expected_len = len(constant.FEATURES) + 2
+    added_count = 0
+    with open(constant.TXT_INPUT, 'r', encoding='utf-8-sig') as f: 
+        data = f.readlines()
+        
+        if len(data) == 0:
+            print('Текстовый файл пуст!')
+            return False
+        
+    for idx, line in enumerate(data):
+        if line.strip() == "":
+            continue
+        param = line.strip().split(';')
+        
+        param = [p.strip() for p in line.strip().split(';')]
+
+        print('DEBUG line:', idx + 1)
+        print('DEBUG param:', [repr(p) for p in param])
+        
+        if len(param) != expected_len:
+            print(f'Ошибка парсинга из текстового файла! Строка {idx+1}')
+            return False
+        
+        if param[0].strip().lower() == 'title':
+            continue
+        
+        title = param[0]
+        if valid.is_correct_title(title) is False:
+            print(f'Строка {idx+1}: Некорректное имя!')
+            return False
+        
+        if is_origin_title(title) is False:
+            print(f'Строка {idx+1}: Такое имя уже есть')
+            return False
+        
+        if valid.is_correct_score(param[1]) is False:
+            print(f'Строка {idx+1}: Некорректное значения параметров')
+            return False
+        
+        user_score = float(param[1])  
+        features_dict = {}   
+        for i, value in enumerate(param[2:]):
+            if valid.is_correct_score(value) is False:
+                print(f'Строка {idx+1}: Некорректное значения параметров')
+                return False
+            features_dict[constant.FEATURES[i]] = float(value)
+              
+        result = add_movies(
+            title=title,
+            user_score=user_score,
+        features=features_dict
+        )
+        if result is False:
+            print(f'Ошибка парсинга! Строка {idx+1}')
+            return False
+        added_count += 1        
+    
+    if added_count == 0:
+        print('Нет строк для импорта')
+        return False
+    
+    print(f'Импорт завершён. Добавлено записей: {added_count}')
+    return True 
+
+def restart_txt():
+    with open(constant.TXT_INPUT, 'w', encoding='UTF-8') as file:
+            return
     
