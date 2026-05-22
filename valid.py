@@ -3,8 +3,11 @@ import constant
 
 def is_valid_features(features: dict) -> bool:
     '''Проверка корректности ключей словаря features'''
-    return set(constant.FEATURES) & set(features.keys()) == set(constant.FEATURES)
+    return set(constant.FEATURES) == set(features.keys()) 
 
+def is_valid_features_meta(features_const: dict) -> bool:
+    '''Проверка корректности ключей словаря features'''
+    return set(constant.FEATURES_CONST) == set(features_const.keys()) 
 
 def is_valid_grade(nums: list, max_value = 10) -> bool:
     '''Проверка числа от 0 до max_value'''
@@ -34,7 +37,6 @@ def is_correct_score(score: str):
         return 0 <= sc_flt <= 10
     except:
         return False
-
 
 def is_correct_main_menu_command(command: str):
     if command in constant.COMMANDS:

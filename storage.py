@@ -15,6 +15,23 @@ def init_dataset():
         with open(constant.FILE_NAME, 'w', encoding='UTF-8') as file:
             json.dump(empty_list, file, ensure_ascii=False, indent=4)
 
+def init_meta():
+    empty_dict = {}
+
+    if is_json_exists(constant.META_JSON) is False:
+        os.makedirs(constant.DIR_META, exist_ok=True)
+        with open(constant.META_JSON, 'w', encoding='UTF-8') as file:
+            json.dump(empty_dict, file, ensure_ascii=False, indent=4)
+    
+def load_meta() -> dict:
+    
+    with open(constant.META_JSON, 'r', encoding='UTF-8') as file:
+        return json.load(file)
+
+def save_meta(meta: dict):
+    with open(constant.META_JSON, 'w', encoding='UTF-8') as file:
+        json.dump(meta, file, ensure_ascii=False, indent=4)
+    
 def load_dataset() -> list:
     '''Возвращает список dict-объектов'''
 
@@ -27,16 +44,45 @@ def save_dataset(data: list):
         json.dump(data, file, ensure_ascii=False, indent=4)
 
 def is_origin_title(new_title: str) -> bool:
+    
     data = load_dataset()
     
     for d in data:
         if d['title'].strip().lower() == new_title.strip().lower():
             return False
     return True
-
+def add_movies_to_meta(title, user_score, features_const):
+    title = title.strip()
+    meta = load_meta()
+    if valid.is_correct_title(title) is False:
+        print('Ошибка добавления! Некорректное название')
+        return False
+    
+    
+    
+    if valid.is_valid_features_meta(features_const) is False:
+        print('Ошибка добавления! Не хватает параметров')
+        return False
+    if valid.is_correct_score(user_score) is False:
+        print('Ошибка добавления! Некорректное значение user_score')
+        return False
+    
+    if valid.is_valid_grade(list(features_const.values())) is False:
+        print('Ошибка добавления! Неверное значение параметров')
+        return False
+    
+    user_score_float = float(user_score)
+    meta[title] = {
+    'user_score': user_score_float,
+    'features_const': features_const
+                }
+    save_meta(meta)
+    return True
+    
 def add_movies(title: str, user_score: str, features: dict) -> bool:
     ''' Добавляем ещё один объект в json'''
     
+    meta = load_meta()
     title = title.strip()
     if valid.is_correct_title(title) is False:
         print('Ошибка добавления! Некорректное название')
@@ -57,15 +103,19 @@ def add_movies(title: str, user_score: str, features: dict) -> bool:
         print('Ошибка добавления! Некорректное значение user_score')
         return False
     
-    user_score_float = float(user_score)
-    
-    data = load_dataset()
     new_obj = {}
-    
-    new_obj['title'] = title
-    new_obj['user_score'] = user_score_float
     new_obj['features'] = features
 
+    data = load_dataset()
+    user_score_float = float(user_score)
+    new_obj['title'] = title
+    new_obj['user_score'] = user_score_float
+    
+    if title in meta:
+        new_obj['user_score'] = meta[title]['user_score']
+        for k, v in meta[title]['features_const'].items():
+            new_obj['features'][k] = v
+    
     data.append(new_obj)
     save_dataset(data)
     return True

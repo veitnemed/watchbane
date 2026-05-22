@@ -4,6 +4,7 @@ import valid
 import constant
 import model
 import time
+import math
 
 def show_all_movies():
     data = storage.load_dataset()
@@ -15,6 +16,8 @@ def show_all_movies():
         title = obj['title']
         user_score = obj['user_score']
         print(f"{idx+1}) {title} | оценка: {user_score}")
+
+
 
 def loop_input(text: str, funcs_list: list):
     while True:
@@ -108,6 +111,7 @@ def show_feature_importance(data: list):
 
 def main_loop():
     
+    storage.init_meta()
     storage.init_dataset()
     storage.init_weights()
     storage.init_txt()
@@ -151,10 +155,7 @@ def main_loop():
         elif command == "8":
             ui.clean_terminal()
             lenth = len(storage.load_dataset())
-            if lenth >= 10:
-                model.one_to_one_error(data,10)
-            else:
-                model.one_to_one_error(data,lenth)
+            model.one_to_one_error(data,min(10,lenth))
         elif command == "9":
             ui.clean_terminal()
             get_predict(weights)
