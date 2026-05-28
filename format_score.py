@@ -1,15 +1,14 @@
 import math
 
 import constant
+import scheme
 
 
 def clip_0_10(value: float) -> float:
-    """Ограничивает число диапазоном от 0 до 10."""
     return max(0, min(10, value))
 
+
 def popularity_kp(kp_votes: int, year: int) -> float:
-    """Считает популярность по голосам kp с учетом года выхода."""
-    
     age = max(1, constant.NOW_YEAR - year)
     adjusted_votes = kp_votes / (age ** 0.5)
 
@@ -24,7 +23,6 @@ def popularity_kp(kp_votes: int, year: int) -> float:
 
 
 def popularity_score(imdb_votes: int, year: int) -> float:
-    """Считает популярность по голосам IMDb с учетом года выхода."""
     age = max(1, constant.NOW_YEAR - year)
     adjusted_votes = imdb_votes / (age ** 0.5)
 
@@ -38,30 +36,36 @@ def popularity_score(imdb_votes: int, year: int) -> float:
     return clip_0_10(score)
 
 
-def get_delta_score(first, last):
-    """Считает изменение оценки между первой и последней серией."""
-    return 5 + last - first
+FORMATTERS = {
+    "kp_popularity": lambda raw, main_info: popularity_kp(raw["kp_votes"], main_info["year"]),
+    "imdb_popularity": lambda raw, main_info: popularity_score(raw["imdb_votes"], main_info["year"])
+}
 
 
-def raw_to_struct(raw: dict):
-    """Преобразует сырые данные фильма в вычисленные признаки модели."""
+def raw_to_struct(raw: dict, main_info: dict):
     computed_scores = {}
-    computed_scores["kp_score"] = raw["kp_score"]
-    computed_scores["kp_popularity"] = popularity_kp(raw["kp_votes"], raw["year"])
-    computed_scores["imdb_score"] = raw["imdb_score"]
-    computed_scores["imdb_popularity"] = popularity_score(raw["imdb_votes"], raw["year"])
+    raw_schema = scheme.get_schema(scheme.RAW_SCORES)
+
+    for raw_feature, settings in raw_schema.items():
+        formated = settings["formated"]
+        if formated is None:
+            computed_scores[raw_feature] = raw[raw_feature]
+        else:
+            computed_scores[formated] = FORMATTERS[formated](raw, main_info)
+
     return computed_scores
 
 
-def build_features(raw_scores: dict, subjective_scores: dict) -> dict:
-    """Объединяет вычисленные и субъективные признаки в общий словарь features."""
-    computed_scores = raw_to_struct(raw_scores)
+def tag_to_score(value: int, max_value: int = 1) -> float:
+    if max_value <= 0:
+        return 0
+    return value / max_value * 10
+
+
+def tags_to_features(tags_vibe: dict) -> dict:
+    tags_schema = scheme.get_schema(scheme.TAGS_VIBE)
     features = {}
-
-    for feature in computed_scores:
-        features[feature] = computed_scores[feature]
-
-    for feature in subjective_scores:
-        features[feature] = subjective_scores[feature]
-
+    for feature, value in tags_vibe.items():
+        max_value = tags_schema[feature].get("max_value", 1)
+        features[feature] = tag_to_score(value, max_value)
     return features

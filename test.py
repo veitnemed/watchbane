@@ -26,19 +26,21 @@ def make_movie(title="Test Movie", user_score=8.0, raw_score=8.0) -> dict:
     return {
         "main_info": {
             "title": title,
-            "user_score": user_score
+            "user_score": user_score,
+            "year": 2024
         },
         "raw_scores": {
-            "year": 2024,
             "kp_score": raw_score,
             "kp_votes": 120000,
             "imdb_score": raw_score,
             "imdb_votes": 1200
         },
-        "subjective_scores": {
-            "holding": 8.0,
-            "hook": 7.0,
-            "tension": 6.0
+        constant.TAGS_VIBE_SECTION: {
+            "has_crime": 1,
+            "has_psyhology": 1,
+            "has_comedy": 0,
+            "has_mystic": 0,
+            "has_romantic_tension": 1
         }
     }
 
@@ -111,7 +113,7 @@ def test_add_new_movie() -> None:
     assert_check("Title сохранен в meta", "Test Movie" in meta)
     assert_check("В dataset нет постоянного поля features", "features" not in dataset["Test Movie"])
     assert_check("Features собраны полностью", set(model.get_features(dataset["Test Movie"])) == set(constant.FEATURES))
-    assert_check("Raw-поля в dataset совпадают с meta", dataset["Test Movie"]["raw_scores"] == meta["Test Movie"]["raw"])
+    assert_check("Raw-поля в dataset совпадают с meta", dataset["Test Movie"]["raw_scores"] == meta["Test Movie"]["raw_scores"])
 
 
 def test_meta_overrides_raw_scores() -> None:
@@ -124,13 +126,13 @@ def test_meta_overrides_raw_scores() -> None:
     storage.clean_dataset()
 
     second_movie = make_movie(title="Known Movie", raw_score=1.0)
-    second_movie["subjective_scores"]["hook"] = 3.0
+    second_movie[constant.TAGS_VIBE_SECTION]["has_comedy"] = 1
 
     assert_check("Повторная запись с тем же title добавляется в пустой dataset", storage.add_movie(second_movie))
 
     saved_movie = storage.load_dataset()["Known Movie"]
     assert_check("Raw kp_score взят из meta, а не из нового ввода", saved_movie["raw_scores"]["kp_score"] == 9.0)
-    assert_check("Subjective hook взят из нового ввода", saved_movie["subjective_scores"]["hook"] == 3.0)
+    assert_check("Tag has_comedy взят из нового ввода", saved_movie[constant.TAGS_VIBE_SECTION]["has_comedy"] == 1)
 
 
 def test_duplicate_rejected() -> None:
@@ -152,7 +154,7 @@ def test_feature_formatting() -> None:
     """Проверяет расчет computed-признаков из raw-полей."""
     print("\n5) Проверяем расчет признаков")
     raw_scores = make_movie()["raw_scores"]
-    computed = format_score.raw_to_struct(raw_scores)
+    computed = format_score.raw_to_struct(raw_scores, make_movie()["main_info"])
 
     assert_check("Computed содержит все ожидаемые ключи", set(computed) == set(constant.COMPUTED_SCORES))
     assert_check("kp_score переносится без изменений", computed["kp_score"] == raw_scores["kp_score"])
@@ -202,7 +204,7 @@ def test_txt_import() -> None:
     print("\n8) Проверяем импорт из txt")
     storage.clean_dataset()
     Path(constant.TXT_INPUT).write_text(
-        "Txt Movie;8;2024;8;120000;8;1200;8;7;6\n",
+        "Txt Movie;8;2024;8;120000;8;1200;1;1;0;0;1\n",
         encoding="utf-8"
     )
 
@@ -223,8 +225,8 @@ def test_csv_import() -> None:
     print("\n9) Проверяем импорт из CSV")
     storage.clean_dataset()
     Path(constant.CSV_INPUT).write_text(
-        "title,user_score,year,kp_score,kp_votes,imdb_score,imdb_votes,holding,hook,tension\n"
-        "Csv Movie,8,2024,8,120000,8,1200,8,7,6\n",
+        "title;user_score;year;kp_score;kp_votes;imdb_score;imdb_votes;has_crime;has_psyhology;has_comedy;has_mystic;has_romantic_tension\n"
+        "Csv Movie;8;2024;8;120000;8;1200;1;1;0;0;1\n",
         encoding="utf-8-sig"
     )
 

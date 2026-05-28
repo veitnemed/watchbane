@@ -1,39 +1,96 @@
-
 import copy
 
-SHEME_VALIDATORS  = {
-    "main_info": {
-        "title": (["title"], str),
-        "user_score": (["score"], float)
+
+MAIN_INFO = "main_info"
+RAW_SCORES = "raw_scores"
+TAGS_VIBE = "tags_vibe"
+
+
+SHEME_VALIDATORS = {
+    MAIN_INFO: {
+        "title": {
+            "tag": ["title"],
+            "type": str
+        },
+        "user_score": {
+            "tag": ["score"],
+            "type": float
+        },
+        "year": {
+            "tag": ["year"],
+            "type": int
+        }
     },
-    "raw_scores": {
-        "year": (["year"], int),
-        "kp_score": (["score"], float),
-        "kp_votes": (["votes"], int),
-        "imdb_score": (["score"], float),
-        "imdb_votes": (["votes"], int),
+    RAW_SCORES: {
+        "kp_score": {
+            "tag": ["score"],
+            "type": float,
+            "formated": None
+        },
+        "kp_votes": {
+            "tag": ["votes"],
+            "type": int,
+            "formated": "kp_popularity"
+        },
+        "imdb_score": {
+            "tag": ["score"],
+            "type": float,
+            "formated": None
+        },
+        "imdb_votes": {
+            "tag": ["votes"],
+            "type": int,
+            "formated": "imdb_popularity"
+        }
     },
-    "subjective_scores": {
-        "holding": (["score"], float),
-        "hook": (["score"], float),
-        "tension": (["score"], float),
-    },
-    "computed_scores": {
-        "kp_score": (["score"], float),
-        "imdb_score": (["score"], float),
-        "kp_popularity": (["score"], float),
-        "imdb_popularity": (["score"], float)     
+    TAGS_VIBE: {
+        "has_crime": {
+            "tag": ["tags_score"],
+            "type": int,
+            "max_value": 1
+        },
+        "has_psyhology": {
+            "tag": ["tags_score"],
+            "type": int,
+            "max_value": 1
+        },
+        "has_comedy": {
+            "tag": ["tags_score"],
+            "type": int,
+            "max_value": 1
+        },
+        "has_mystic": {
+            "tag": ["tags_score"],
+            "type": int,
+            "max_value": 1
+        },
+        "has_romantic_tension": {
+            "tag": ["tags_score"],
+            "type": int,
+            "max_value": 1
+        }
     }
 }
 
 SHEME_ADD = copy.deepcopy(SHEME_VALIDATORS)
-SHEME_ADD["main_info"]["title"][0].append("origin_title")
+SHEME_ADD[MAIN_INFO]["title"]["tag"].append("origin_title")
 
 
 def get_fields(selection_name: str) -> list:
     sheme_copy = copy.deepcopy(SHEME_VALIDATORS)
     return list(sheme_copy[selection_name].keys())
 
+
 def get_schema(selection_name: str) -> dict:
     sheme_copy = copy.deepcopy(SHEME_VALIDATORS)
     return sheme_copy[selection_name]
+
+
+def get_computed_fields() -> list:
+    computed_fields = []
+    for feature, settings in SHEME_VALIDATORS[RAW_SCORES].items():
+        if settings["formated"] is None:
+            computed_fields.append(feature)
+        else:
+            computed_fields.append(settings["formated"])
+    return computed_fields
