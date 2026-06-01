@@ -40,10 +40,11 @@ def show_train_menu(movies_counter: int, error: int, step: float, plateau_score:
     print(f'Шаг: {step} | Плато: {plateau_score} попыток без улучшения\n')
     print(' 1 >> Перебор весов 0..1')
     print(' 2 >> Рандомное обучение')
-    print(' 3 >> Комбинированное обучение')
-    print(' 4 >> Прогноз для каждого объекта')
-    print(' 5 >> Сделать прогноз')
-    print(' 6 >> Параметры обучения')
+    print(' 3 >> Train mode 1')
+    print(' 4 >> Train mode 2')
+    print(' 5 >> Прогноз для каждого объекта')
+    print(' 6 >> Сделать прогноз')
+    print(' 7 >> Параметры обучения')
     print(' 0 >> Главное меню\n')
 
 

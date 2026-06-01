@@ -66,6 +66,8 @@ def is_valid_raw_meta(raw: dict) -> bool:
 def is_tags_score(score: str, max_value: int = 1) -> bool:
     try:
         score_int = int(score)
+        if max_value is None:
+            return score_int >= 0
         return 0 <= score_int <= max_value
     except:
         return False

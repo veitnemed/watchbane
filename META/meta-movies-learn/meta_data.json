@@ -1,0 +1,210 @@
+{
+    "Чужие деньги": {
+        "main_info": {
+            "title": "Чужие деньги",
+            "user_score": 8.3,
+            "year": 2025
+        },
+        "raw_scores": {
+            "kp_score": 8.0,
+            "kp_votes": 128536,
+            "imdb_score": 6.3,
+            "imdb_votes": 141
+        }
+    },
+    "Триггер": {
+        "main_info": {
+            "title": "Триггер",
+            "user_score": 8.22,
+            "year": 2018
+        },
+        "raw_scores": {
+            "kp_score": 8.5,
+            "kp_votes": 2000000,
+            "imdb_score": 7.4,
+            "imdb_votes": 1300
+        }
+    },
+    "Аутсорс": {
+        "main_info": {
+            "title": "Аутсорс",
+            "user_score": 8.15,
+            "year": 2025
+        },
+        "raw_scores": {
+            "kp_score": 7.8,
+            "kp_votes": 209000,
+            "imdb_score": 7.3,
+            "imdb_votes": 988
+        }
+    },
+    "Чернобыль зона отчуждения": {
+        "main_info": {
+            "title": "Чернобыль зона отчуждения",
+            "user_score": 8.07,
+            "year": 2014
+        },
+        "raw_scores": {
+            "kp_score": 7.7,
+            "kp_votes": 278000,
+            "imdb_score": 6.6,
+            "imdb_votes": 1800
+        }
+    },
+    "Игра на выживание": {
+        "main_info": {
+            "title": "Игра на выживание",
+            "user_score": 7.99,
+            "year": 2020
+        },
+        "raw_scores": {
+            "kp_score": 7.5,
+            "kp_votes": 130885,
+            "imdb_score": 7.1,
+            "imdb_votes": 902
+        }
+    },
+    "Хрустальный": {
+        "main_info": {
+            "title": "Хрустальный",
+            "user_score": 7.92,
+            "year": 2021
+        },
+        "raw_scores": {
+            "kp_score": 8.2,
+            "kp_votes": 317000,
+            "imdb_score": 7.7,
+            "imdb_votes": 813
+        }
+    },
+    "Слово пацана": {
+        "main_info": {
+            "title": "Слово пацана",
+            "user_score": 7.84,
+            "year": 2023
+        },
+        "raw_scores": {
+            "kp_score": 8.1,
+            "kp_votes": 1027153,
+            "imdb_score": 7.6,
+            "imdb_votes": 7000
+        }
+    },
+    "Фарма": {
+        "main_info": {
+            "title": "Фарма",
+            "user_score": 6.53,
+            "year": 2024
+        },
+        "raw_scores": {
+            "kp_score": 7.3,
+            "kp_votes": 45000,
+            "imdb_score": 6.3,
+            "imdb_votes": 59
+        }
+    },
+    "Химмера": {
+        "main_info": {
+            "title": "Химмера",
+            "user_score": 6.46,
+            "year": 2022
+        },
+        "raw_scores": {
+            "kp_score": 7.7,
+            "kp_votes": 52175,
+            "imdb_score": 7.1,
+            "imdb_votes": 195
+        }
+    },
+    "Санкционер": {
+        "main_info": {
+            "title": "Санкционер",
+            "user_score": 4.15,
+            "year": 2025
+        },
+        "raw_scores": {
+            "kp_score": 7.5,
+            "kp_votes": 220000,
+            "imdb_score": 5.1,
+            "imdb_votes": 69
+        }
+    },
+    "Открытый брак": {
+        "main_info": {
+            "title": "Открытый брак",
+            "user_score": 4.08,
+            "year": 2023
+        },
+        "raw_scores": {
+            "kp_score": 7.3,
+            "kp_votes": 80000,
+            "imdb_score": 6.4,
+            "imdb_votes": 288
+        }
+    },
+    "Калимба": {
+        "main_info": {
+            "title": "Калимба",
+            "user_score": 6.15,
+            "year": 2024
+        },
+        "raw_scores": {
+            "kp_score": 6.8,
+            "kp_votes": 31000,
+            "imdb_score": 6.2,
+            "imdb_votes": 267
+        }
+    },
+    "Урок": {
+        "main_info": {
+            "title": "Урок",
+            "user_score": 6.07,
+            "year": 2025
+        },
+        "raw_scores": {
+            "kp_score": 7.5,
+            "kp_votes": 52000,
+            "imdb_score": 6.8,
+            "imdb_votes": 239
+        }
+    },
+    "Haappy End": {
+        "main_info": {
+            "title": "Haappy End",
+            "user_score": 7.2,
+            "year": 2021
+        },
+        "raw_scores": {
+            "kp_score": 7.4,
+            "kp_votes": 223000,
+            "imdb_score": 7.1,
+            "imdb_votes": 827
+        }
+    },
+    "Индентификация": {
+        "main_info": {
+            "title": "Индентификация",
+            "user_score": 5.92,
+            "year": 2022
+        },
+        "raw_scores": {
+            "kp_score": 7.2,
+            "kp_votes": 130000,
+            "imdb_score": 6.5,
+            "imdb_votes": 122
+        }
+    },
+    "Закон каменных джунглей": {
+        "main_info": {
+            "title": "Закон каменных джунглей",
+            "user_score": 7.8,
+            "year": 2014
+        },
+        "raw_scores": {
+            "kp_score": 7.8,
+            "kp_votes": 212000,
+            "imdb_score": 6.8,
+            "imdb_votes": 500
+        }
+    }
+}

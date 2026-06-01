@@ -95,6 +95,46 @@ def auto_train_grid_steps(data, weights, title: str):
     delta_time = end_time - start_time
     ui.show_result_train(best_weights, error_now, best_error, delta_time)
 
+def auto_train_mix_mode(data, weights, title: str):
+    start_time = time.perf_counter()
+    step_values = constant.STEPS_TRAIN_MIX
+    error_now = model.mean_absolute_error(data, weights)
+    best_weights = weights.copy()
+    best_error = error_now
+
+    print(title)
+    for step in step_values:
+        
+        no_mut = 0
+        while True:
+            new_weights_1 = model.fit_weights(data,best_weights,passes=1, step = step)
+            new_error_1 = model.mean_absolute_error(data,new_weights_1)
+            if new_error_1 < best_error:
+                best_error = new_error_1
+                best_weights = new_weights_1
+                no_mut = 0
+            else:
+                no_mut +=1
+        
+            new_weights_2 = model.fit_weights_until_plateau(data = data,start_weights = best_weights,score = 200, step = step)
+            new_error_2 = model.mean_absolute_error(data,new_weights_2)
+        
+            if new_error_2 < best_error:
+                best_error = new_error_2
+                best_weights = new_weights_2
+                no_mut = 0
+            else:
+                no_mut +=1
+                
+            if no_mut >= 5:
+                break
+            
+        print(f'step: {step} | error_now: {round(best_error,2)}')
+    storage.save_weights(best_weights)
+    end_time = time.perf_counter()
+    delta_time = end_time - start_time
+    ui.show_result_train(best_weights, error_now, best_error, delta_time)
+
 def show_mean_error(data, weights):
     ui.clean_terminal()
     abs_error = model.mean_absolute_error(data, weights)
@@ -196,7 +236,7 @@ def open_train_menu():
 
         command = request.loop_input(
             text=">> ",
-            funcs_list=[partial(valid.is_correct_select_menu,6)]
+            funcs_list=[partial(valid.is_correct_select_menu,7)]
         )
 
         if command == "0":
@@ -223,12 +263,17 @@ def open_train_menu():
                                   weights = weights,
                                   title= 'Перебор по шагам')
         elif command == "4":
+            auto_train_mix_mode(data = data,
+                                weights = weights,
+                                title= 'Усиленное обучение')
+        elif command == "5":
             length = len(data)
             model.one_to_one_error(data, min(10, length))
-        elif command == "5":
-            get_predict(weights)
         elif command == "6":
+            get_predict(weights)
+        elif command == "7":
             setup_train_params()
+        
 
 
         press_enter()

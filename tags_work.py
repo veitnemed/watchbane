@@ -49,7 +49,7 @@ def get_tag_translations() -> dict:
 
 
 def is_correct_tag_name(feature: str) -> bool:
-    return re.fullmatch(r"has_[a-z0-9_]+", feature) is not None
+    return re.fullmatch(r"[a-z][a-z0-9_]*", feature) is not None
 
 
 def load_json(file_name: str) -> dict:
@@ -130,9 +130,9 @@ def request_new_tag() -> None:
 
     tags = load_tags()
 
-    feature = input('Название поля на английском, например has_drama >> ').strip()
+    feature = input('Название поля на английском, например imdb_drama >> ').strip()
     if is_correct_tag_name(feature) is False:
-        print('Ошибка! Название должно начинаться с has_ и содержать только английские буквы, цифры и _.')
+        print('Ошибка! Название должно начинаться с английской буквы и содержать только английские буквы, цифры и _.')
         return
 
     if feature in tags:

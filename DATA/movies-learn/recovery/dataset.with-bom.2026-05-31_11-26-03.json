@@ -1,0 +1,288 @@
+﻿{
+    "Чужие деньги": {
+        "main_info": {
+            "title": "Чужие деньги",
+            "user_score": 8.3,
+            "year": 2025
+        },
+        "raw_scores": {
+            "kp_score": 8.0,
+            "kp_votes": 128536,
+            "imdb_score": 6.3,
+            "imdb_votes": 141
+        },
+        "computed_scores": {
+            "kp_score": 8.0,
+            "kp_popularity": 7.050273881703032,
+            "imdb_score": 6.3,
+            "imdb_popularity": 3.376868312395208
+        },
+        "tags_vibe": {
+            "has_crime": 1,
+            "has_psychology": 0,
+            "has_comedy": 0,
+            "has_relationships": 0,
+            "has_love_tension": 1
+        }
+    },
+    "Триггер": {
+        "main_info": {
+            "title": "Триггер",
+            "user_score": 8.22,
+            "year": 2018
+        },
+        "raw_scores": {
+            "kp_score": 8.5,
+            "kp_votes": 2000000,
+            "imdb_score": 7.4,
+            "imdb_votes": 1300
+        },
+        "computed_scores": {
+            "kp_score": 8.5,
+            "kp_popularity": 10,
+            "imdb_score": 7.4,
+            "imdb_popularity": 7.225712658561346
+        },
+        "tags_vibe": {
+            "has_crime": 0,
+            "has_psychology": 1,
+            "has_comedy": 0,
+            "has_relationships": 0,
+            "has_love_tension": 0
+        }
+    },
+    "Аутсорс": {
+        "main_info": {
+            "title": "Аутсорс",
+            "user_score": 8.15,
+            "year": 2025
+        },
+        "raw_scores": {
+            "kp_score": 7.8,
+            "kp_votes": 209000,
+            "imdb_score": 7.3,
+            "imdb_votes": 988
+        },
+        "computed_scores": {
+            "kp_score": 7.8,
+            "kp_popularity": 8.105881408875176,
+            "imdb_score": 7.3,
+            "imdb_popularity": 9.718402051887068
+        },
+        "tags_vibe": {
+            "has_crime": 1,
+            "has_psychology": 1,
+            "has_comedy": 0,
+            "has_relationships": 0,
+            "has_love_tension": 0
+        }
+    },
+    "Чернобыль зона отчуждения": {
+        "main_info": {
+            "title": "Чернобыль зона отчуждения",
+            "user_score": 8.07,
+            "year": 2014
+        },
+        "raw_scores": {
+            "kp_score": 7.7,
+            "kp_votes": 278000,
+            "imdb_score": 6.6,
+            "imdb_votes": 1800
+        },
+        "computed_scores": {
+            "kp_score": 7.7,
+            "kp_popularity": 6.0274208427912255,
+            "imdb_score": 6.6,
+            "imdb_popularity": 7.62533908307606
+        },
+        "tags_vibe": {
+            "has_crime": 0,
+            "has_psychology": 0,
+            "has_comedy": 0,
+            "has_relationships": 0,
+            "has_love_tension": 0
+        }
+    },
+    "Игра на выживание": {
+        "main_info": {
+            "title": "Игра на выживание",
+            "user_score": 7.99,
+            "year": 2020
+        },
+        "raw_scores": {
+            "kp_score": 7.5,
+            "kp_votes": 130885,
+            "imdb_score": 7.1,
+            "imdb_votes": 902
+        },
+        "computed_scores": {
+            "kp_score": 7.5,
+            "kp_popularity": 5.144221239029595,
+            "imdb_score": 7.1,
+            "imdb_popularity": 6.503706810105758
+        },
+        "tags_vibe": {
+            "has_crime": 0,
+            "has_psychology": 0,
+            "has_comedy": 0,
+            "has_relationships": 0,
+            "has_love_tension": 0
+        }
+    },
+    "Хрустальный": {
+        "main_info": {
+            "title": "Хрустальный",
+            "user_score": 7.92,
+            "year": 2021
+        },
+        "raw_scores": {
+            "kp_score": 8.2,
+            "kp_votes": 317000,
+            "imdb_score": 7.7,
+            "imdb_votes": 813
+        },
+        "computed_scores": {
+            "kp_score": 8.2,
+            "kp_popularity": 7.263021278568616,
+            "imdb_score": 7.7,
+            "imdb_popularity": 6.462266543175298
+        },
+        "tags_vibe": {
+            "has_crime": 1,
+            "has_psychology": 1,
+            "has_comedy": 0,
+            "has_relationships": 0,
+            "has_love_tension": 0
+        }
+    },
+    "Слово пацана": {
+        "main_info": {
+            "title": "Слово пацана",
+            "user_score": 7.84,
+            "year": 2023
+        },
+        "raw_scores": {
+            "kp_score": 8.1,
+            "kp_votes": 1027153,
+            "imdb_score": 7.6,
+            "imdb_votes": 7000
+        },
+        "computed_scores": {
+            "kp_score": 8.1,
+            "kp_popularity": 10,
+            "imdb_score": 7.6,
+            "imdb_popularity": 10
+        },
+        "tags_vibe": {
+            "has_crime": 1,
+            "has_psychology": 0,
+            "has_comedy": 0,
+            "has_relationships": 0,
+            "has_love_tension": 0
+        }
+    },
+    "Фарма": {
+        "main_info": {
+            "title": "Фарма",
+            "user_score": 6.53,
+            "year": 2024
+        },
+        "raw_scores": {
+            "kp_score": 7.3,
+            "kp_votes": 45000,
+            "imdb_score": 6.3,
+            "imdb_votes": 59
+        },
+        "computed_scores": {
+            "kp_score": 7.3,
+            "kp_popularity": 4.018637558036671,
+            "imdb_score": 6.3,
+            "imdb_popularity": 0
+        },
+        "tags_vibe": {
+            "has_crime": 0,
+            "has_psychology": 0,
+            "has_comedy": 1,
+            "has_relationships": 0,
+            "has_love_tension": 0
+        }
+    },
+    "Химмера": {
+        "main_info": {
+            "title": "Химмера",
+            "user_score": 6.46,
+            "year": 2022
+        },
+        "raw_scores": {
+            "kp_score": 7.7,
+            "kp_votes": 52175,
+            "imdb_score": 7.1,
+            "imdb_votes": 195
+        },
+        "computed_scores": {
+            "kp_score": 7.7,
+            "kp_popularity": 3.587312288687458,
+            "imdb_score": 7.1,
+            "imdb_popularity": 2.175259585218885
+        },
+        "tags_vibe": {
+            "has_crime": 1,
+            "has_psychology": 1,
+            "has_comedy": 0,
+            "has_relationships": 0,
+            "has_love_tension": 0
+        }
+    },
+    "Санкционер": {
+        "main_info": {
+            "title": "Санкционер",
+            "user_score": 4.15,
+            "year": 2025
+        },
+        "raw_scores": {
+            "kp_score": 7.5,
+            "kp_votes": 220000,
+            "imdb_score": 5.1,
+            "imdb_votes": 69
+        },
+        "computed_scores": {
+            "kp_score": 7.5,
+            "kp_popularity": 8.217263382430938,
+            "imdb_score": 5.1,
+            "imdb_popularity": 1.0490931480092733
+        },
+        "tags_vibe": {
+            "has_crime": 0,
+            "has_psychology": 0,
+            "has_comedy": 1,
+            "has_relationships": 0,
+            "has_love_tension": 0
+        }
+    },
+    "Открытый брак": {
+        "main_info": {
+            "title": "Открытый брак",
+            "user_score": 4.08,
+            "year": 2023
+        },
+        "raw_scores": {
+            "kp_score": 7.3,
+            "kp_votes": 80000,
+            "imdb_score": 6.4,
+            "imdb_votes": 288
+        },
+        "computed_scores": {
+            "kp_score": 7.3,
+            "kp_popularity": 4.827796776480468,
+            "imdb_score": 6.4,
+            "imdb_popularity": 3.913963920475356
+        },
+        "tags_vibe": {
+            "has_crime": 0,
+            "has_psychology": 0,
+            "has_comedy": 0,
+            "has_relationships": 1,
+            "has_love_tension": 0
+        }
+    }
+}

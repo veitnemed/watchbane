@@ -60,6 +60,8 @@ def raw_to_struct(raw: dict, main_info: dict):
 
 
 def tag_to_score(value: int, max_value: int = 1) -> float:
+    if max_value is None:
+        return clip_0_10(value)
     if max_value <= 0:
         return 0
     return value / max_value * 10

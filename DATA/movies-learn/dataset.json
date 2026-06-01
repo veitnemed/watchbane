@@ -1,0 +1,482 @@
+{
+    "Чужие деньги": {
+        "main_info": {
+            "title": "Чужие деньги",
+            "user_score": 8.3,
+            "year": 2025
+        },
+        "raw_scores": {
+            "kp_score": 8.0,
+            "kp_votes": 128536,
+            "imdb_score": 6.3,
+            "imdb_votes": 141
+        },
+        "computed_scores": {
+            "kp_score": 8.0,
+            "kp_popularity": 4.75473988715031,
+            "imdb_score": 6.3,
+            "imdb_popularity": 2.9040420888852436
+        },
+        "tags_vibe": {
+            "imdb_crime": 1,
+            "imdb_mystery": 0,
+            "imdb_thriller": 0,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 1
+        }
+    },
+    "Триггер": {
+        "main_info": {
+            "title": "Триггер",
+            "user_score": 8.22,
+            "year": 2018
+        },
+        "raw_scores": {
+            "kp_score": 8.5,
+            "kp_votes": 2000000,
+            "imdb_score": 7.4,
+            "imdb_votes": 1300
+        },
+        "computed_scores": {
+            "kp_score": 8.5,
+            "kp_popularity": 7.1775451868058315,
+            "imdb_score": 7.4,
+            "imdb_popularity": 5.030510414530033
+        },
+        "tags_vibe": {
+            "imdb_crime": 0,
+            "imdb_mystery": 0,
+            "imdb_thriller": 1,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 1
+        }
+    },
+    "Аутсорс": {
+        "main_info": {
+            "title": "Аутсорс",
+            "user_score": 8.15,
+            "year": 2025
+        },
+        "raw_scores": {
+            "kp_score": 7.8,
+            "kp_votes": 209000,
+            "imdb_score": 7.3,
+            "imdb_votes": 988
+        },
+        "computed_scores": {
+            "kp_score": 7.8,
+            "kp_popularity": 5.437359151659006,
+            "imdb_score": 7.3,
+            "imdb_popularity": 6.571936848083855
+        },
+        "tags_vibe": {
+            "imdb_crime": 0,
+            "imdb_mystery": 0,
+            "imdb_thriller": 1,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 1,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 1
+        }
+    },
+    "Чернобыль зона отчуждения": {
+        "main_info": {
+            "title": "Чернобыль зона отчуждения",
+            "user_score": 8.07,
+            "year": 2014
+        },
+        "raw_scores": {
+            "kp_score": 7.7,
+            "kp_votes": 278000,
+            "imdb_score": 6.6,
+            "imdb_votes": 1800
+        },
+        "computed_scores": {
+            "kp_score": 7.7,
+            "kp_popularity": 4.105182609429288,
+            "imdb_score": 6.6,
+            "imdb_popularity": 5.271667565425064
+        },
+        "tags_vibe": {
+            "imdb_crime": 0,
+            "imdb_mystery": 1,
+            "imdb_thriller": 1,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 1,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 3
+        }
+    },
+    "Игра на выживание": {
+        "main_info": {
+            "title": "Игра на выживание",
+            "user_score": 7.99,
+            "year": 2020
+        },
+        "raw_scores": {
+            "kp_score": 7.5,
+            "kp_votes": 130885,
+            "imdb_score": 7.1,
+            "imdb_votes": 902
+        },
+        "computed_scores": {
+            "kp_score": 7.5,
+            "kp_popularity": 3.5584600233355608,
+            "imdb_score": 7.1,
+            "imdb_popularity": 4.602333388331185
+        },
+        "tags_vibe": {
+            "imdb_crime": 0,
+            "imdb_mystery": 0,
+            "imdb_thriller": 1,
+            "imdb_horror": 1,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 2
+        }
+    },
+    "Хрустальный": {
+        "main_info": {
+            "title": "Хрустальный",
+            "user_score": 7.92,
+            "year": 2021
+        },
+        "raw_scores": {
+            "kp_score": 8.2,
+            "kp_votes": 317000,
+            "imdb_score": 7.7,
+            "imdb_votes": 813
+        },
+        "computed_scores": {
+            "kp_score": 8.2,
+            "kp_popularity": 4.891484085507364,
+            "imdb_score": 7.7,
+            "imdb_popularity": 4.578080255564718
+        },
+        "tags_vibe": {
+            "imdb_crime": 1,
+            "imdb_mystery": 1,
+            "imdb_thriller": 1,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 1,
+            "imdb_total_tags": 4
+        }
+    },
+    "Слово пацана": {
+        "main_info": {
+            "title": "Слово пацана",
+            "user_score": 7.84,
+            "year": 2023
+        },
+        "raw_scores": {
+            "kp_score": 8.1,
+            "kp_votes": 1027153,
+            "imdb_score": 7.6,
+            "imdb_votes": 7000
+        },
+        "computed_scores": {
+            "kp_score": 8.1,
+            "kp_popularity": 6.924834135677703,
+            "imdb_score": 7.6,
+            "imdb_popularity": 9.54391580563666
+        },
+        "tags_vibe": {
+            "imdb_crime": 1,
+            "imdb_mystery": 0,
+            "imdb_thriller": 0,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 1,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 2
+        }
+    },
+    "Фарма": {
+        "main_info": {
+            "title": "Фарма",
+            "user_score": 6.53,
+            "year": 2024
+        },
+        "raw_scores": {
+            "kp_score": 7.3,
+            "kp_votes": 45000,
+            "imdb_score": 6.3,
+            "imdb_votes": 59
+        },
+        "computed_scores": {
+            "kp_score": 7.3,
+            "kp_popularity": 2.8899534507519924,
+            "imdb_score": 6.3,
+            "imdb_popularity": 1.3146131707211954
+        },
+        "tags_vibe": {
+            "imdb_crime": 1,
+            "imdb_mystery": 0,
+            "imdb_thriller": 0,
+            "imdb_horror": 0,
+            "imdb_comedy": 0,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 2
+        }
+    },
+    "Химмера": {
+        "main_info": {
+            "title": "Химмера",
+            "user_score": 6.46,
+            "year": 2022
+        },
+        "raw_scores": {
+            "kp_score": 7.7,
+            "kp_votes": 52175,
+            "imdb_score": 7.1,
+            "imdb_votes": 195
+        },
+        "computed_scores": {
+            "kp_score": 7.7,
+            "kp_popularity": 2.645003267689503,
+            "imdb_score": 7.1,
+            "imdb_popularity": 2.3440453318695815
+        },
+        "tags_vibe": {
+            "imdb_crime": 1,
+            "imdb_mystery": 0,
+            "imdb_thriller": 0,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 1
+        }
+    },
+    "Санкционер": {
+        "main_info": {
+            "title": "Санкционер",
+            "user_score": 4.15,
+            "year": 2025
+        },
+        "raw_scores": {
+            "kp_score": 7.5,
+            "kp_votes": 220000,
+            "imdb_score": 5.1,
+            "imdb_votes": 69
+        },
+        "computed_scores": {
+            "kp_score": 7.5,
+            "kp_popularity": 5.509911136472016,
+            "imdb_score": 5.1,
+            "imdb_popularity": 1.8788252322321919
+        },
+        "tags_vibe": {
+            "imdb_crime": 0,
+            "imdb_mystery": 0,
+            "imdb_thriller": 0,
+            "imdb_horror": 0,
+            "imdb_comedy": 0,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 1
+        }
+    },
+    "Открытый брак": {
+        "main_info": {
+            "title": "Открытый брак",
+            "user_score": 4.08,
+            "year": 2023
+        },
+        "raw_scores": {
+            "kp_score": 7.3,
+            "kp_votes": 80000,
+            "imdb_score": 6.4,
+            "imdb_votes": 288
+        },
+        "computed_scores": {
+            "kp_score": 7.3,
+            "kp_popularity": 3.3668406422714403,
+            "imdb_score": 6.4,
+            "imdb_popularity": 3.173343830256826
+        },
+        "tags_vibe": {
+            "imdb_crime": 0,
+            "imdb_mystery": 0,
+            "imdb_thriller": 0,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 0
+        }
+    },
+    "Калимба": {
+        "main_info": {
+            "title": "Калимба",
+            "user_score": 6.15,
+            "year": 2024
+        },
+        "raw_scores": {
+            "kp_score": 6.8,
+            "kp_votes": 31000,
+            "imdb_score": 6.2,
+            "imdb_votes": 267
+        },
+        "computed_scores": {
+            "kp_score": 6.8,
+            "kp_popularity": 2.4366809500474576,
+            "imdb_score": 6.2,
+            "imdb_popularity": 3.387978592563177
+        },
+        "tags_vibe": {
+            "imdb_crime": 0,
+            "imdb_mystery": 1,
+            "imdb_thriller": 1,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 2
+        }
+    },
+    "Урок": {
+        "main_info": {
+            "title": "Урок",
+            "user_score": 6.07,
+            "year": 2025
+        },
+        "raw_scores": {
+            "kp_score": 7.5,
+            "kp_votes": 52000,
+            "imdb_score": 6.8,
+            "imdb_votes": 239
+        },
+        "computed_scores": {
+            "kp_score": 7.5,
+            "kp_popularity": 3.5225064908754278,
+            "imdb_score": 6.8,
+            "imdb_popularity": 3.801425501852458
+        },
+        "tags_vibe": {
+            "imdb_crime": 0,
+            "imdb_mystery": 0,
+            "imdb_thriller": 0,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 0
+        }
+    },
+    "Haappy End": {
+        "main_info": {
+            "title": "Haappy End",
+            "user_score": 7.2,
+            "year": 2021
+        },
+        "raw_scores": {
+            "kp_score": 7.4,
+            "kp_votes": 223000,
+            "imdb_score": 7.1,
+            "imdb_votes": 827
+        },
+        "computed_scores": {
+            "kp_score": 7.4,
+            "kp_popularity": 4.403014335188354,
+            "imdb_score": 7.1,
+            "imdb_popularity": 4.610636092831227
+        },
+        "tags_vibe": {
+            "imdb_crime": 0,
+            "imdb_mystery": 0,
+            "imdb_thriller": 0,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 0
+        }
+    },
+    "Индентификация": {
+        "main_info": {
+            "title": "Индентификация",
+            "user_score": 5.92,
+            "year": 2022
+        },
+        "raw_scores": {
+            "kp_score": 7.2,
+            "kp_votes": 130000,
+            "imdb_score": 6.5,
+            "imdb_votes": 122
+        },
+        "computed_scores": {
+            "kp_score": 7.2,
+            "kp_popularity": 3.8198740784903578,
+            "imdb_score": 6.5,
+            "imdb_popularity": 1.7280311380254665
+        },
+        "tags_vibe": {
+            "imdb_crime": 1,
+            "imdb_mystery": 1,
+            "imdb_thriller": 1,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 3
+        }
+    },
+    "Закон каменных джунглей": {
+        "main_info": {
+            "title": "Закон каменных джунглей",
+            "user_score": 7.8,
+            "year": 2014
+        },
+        "raw_scores": {
+            "kp_score": 7.8,
+            "kp_votes": 212000,
+            "imdb_score": 6.8,
+            "imdb_votes": 500
+        },
+        "computed_scores": {
+            "kp_score": 7.8,
+            "kp_popularity": 3.7390665449856946,
+            "imdb_score": 6.8,
+            "imdb_popularity": 2.941577959199707
+        },
+        "tags_vibe": {
+            "imdb_crime": 1,
+            "imdb_mystery": 0,
+            "imdb_thriller": 0,
+            "imdb_horror": 0,
+            "imdb_comedy": 1,
+            "imdb_sci_fi": 0,
+            "imdb_period_drama": 0,
+            "imdb_serial_killer": 0,
+            "imdb_total_tags": 1
+        }
+    }
+}

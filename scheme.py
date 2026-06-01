@@ -48,7 +48,7 @@ SHEME_VALIDATORS = {
         feature: {
             "tag": ["tags_score"],
             "type": int,
-            "max_value": 1
+            "max_value": None if feature == "imdb_total_tags" else 1
         }
         for feature in tags_work.get_tag_fields()
     }

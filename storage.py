@@ -341,7 +341,7 @@ def init_weights():
 
 def load_weights() -> list:
     """Загружает веса модели из JSON-файла."""
-    with open(constant.WEIGHTS_JSON, 'r', encoding='UTF-8') as file:
+    with open(constant.WEIGHTS_JSON, 'r', encoding='utf-8-sig') as file:
         weights = json.load(file)
     normalized = {}
     for feature in constant.FEATURES:

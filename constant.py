@@ -17,6 +17,7 @@ EDIT_CSV = 'C:/TXT_FILES/movies-learn/edit_dataset.csv'
 EDIT_EXCEL = 'C:/TXT_FILES/movies-learn/edit_dataset.xlsx'
 
 STEPS_TRAIN = [0.05, 0.02, 0.01, 0.005, 0.001]
+STEPS_TRAIN_MIX = [0.01, 0.05, 0.02, 0.01, 0.005]
 
 MAIN_INFO = scheme.get_fields(scheme.MAIN_INFO)
 RAW_SCORES = scheme.get_fields(scheme.RAW_SCORES)
