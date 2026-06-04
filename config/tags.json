@@ -1,0 +1,112 @@
+{
+    "ivestigation": {
+        "label": "Расследование",
+        "title": "Расследование",
+        "question": "Присууствует в данном чериале расследование незакконной деятельности?",
+        "scale": [
+            "Нет, вообще не присуствует",
+            "Есть"
+        ],
+        "translation": "ivestigation"
+    },
+    "is_ivi": {
+        "label": "Площадка: Иви",
+        "title": "Иви",
+        "question": "Сериал выходил на площадке Иви?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "is_ivi"
+    },
+    "is_kinopoisk": {
+        "label": "Площадка: Кинопоиск",
+        "title": "Кинопоиск",
+        "question": "Сериал выходил на площадке Кинопоиск?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "is_kinopoisk"
+    },
+    "is_okko": {
+        "label": "Площадка: Okko",
+        "title": "Okko",
+        "question": "Сериал выходил на площадке Okko?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "is_okko"
+    },
+    "is_tnt": {
+        "label": "Площадка: TNT",
+        "title": "TNT",
+        "question": "Сериал выходил на площадке TNT?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "is_tnt"
+    },
+    "is_tv_3": {
+        "label": "Площадка: TV-3",
+        "title": "TV-3",
+        "question": "Сериал выходил на площадке TV-3?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "is_tv_3"
+    },
+    "is_premier": {
+        "label": "Площадка: Premier",
+        "title": "Premier",
+        "question": "Сериал выходил на площадке Premier?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "is_premier"
+    },
+    "is_kion": {
+        "label": "Площадка: КИОН",
+        "title": "КИОН",
+        "question": "Сериал выходил на площадке КИОН?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "is_kion"
+    },
+    "is_wink": {
+        "label": "Площадка: Wink",
+        "title": "Wink",
+        "question": "Сериал выходил на площадке Wink?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "is_wink"
+    },
+    "is_more_tv": {
+        "label": "Площадка: more.tv",
+        "title": "more.tv",
+        "question": "Сериал выходил на площадке more.tv?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "is_more_tv"
+    },
+    "is_start": {
+        "label": "Площадка: START",
+        "title": "START",
+        "question": "Сериал выходил на площадке START?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "is_start"
+    }
+}
