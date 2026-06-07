@@ -14,7 +14,7 @@ def clip_0_10(value: float) -> float:
 def popularity_by_votes(votes: int, year: int, min_votes: int, max_votes: int) -> float:
     """Считает популярность по количеству голосов и году выхода."""
     age = max(1, constant.NOW_YEAR - year)
-    adjusted_votes = votes / (age ** 0.5)
+    adjusted_votes = votes / (age ** 0.25)
 
     score = (
         math.log1p(adjusted_votes / min_votes)

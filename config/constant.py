@@ -8,7 +8,6 @@ FILE_NAME = 'C:/DATA/movies-learn/dataset.json'
 WEIGHTS_JSON = 'C:/DATA/movies-learn/weights.json'
 BACKUP_DIR = 'C:/BACKUP/movies-learn/BACKUP/'
 
-
 DIR_META = 'C:/META/meta-movies-learn/'
 META_JSON = 'C:/META/meta-movies-learn/meta_data.json'
 
@@ -29,6 +28,8 @@ CSV_FIELDS = MAIN_INFO + RAW_SCORES + TAGS_VIBE
 FEATURES = COMPUTED_SCORES + TAGS_VIBE
 RAW_META_FIELDS = RAW_SCORES
 FEATURES_CONST = COMPUTED_SCORES
+
+ONLY_SCORES = CSV_FIELDS.copy(); ONLY_SCORES.remove("title"); ONLY_SCORES.remove("year")
 
 SECTION_LABELS = {
     scheme.MAIN_INFO: "Основная информация",

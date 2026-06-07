@@ -54,7 +54,7 @@ def open_train_menu():
 
         command = request.loop_input(
             text=">> ",
-            funcs_list=[partial(valid.is_correct_select_menu, 7)]
+            funcs_list=[partial(valid.is_correct_select_menu, 8)]
         )
 
         if command == "0":
@@ -95,6 +95,8 @@ def open_train_menu():
             interface_funcs.get_predict(weights)
         elif command == "7":
             global_menu_funcs.setup_train_params()
+        elif command == "8":
+            global_menu_funcs.export_train_report()
 
         global_menu_funcs.press_enter()
 
@@ -154,7 +156,7 @@ def open_tags_menu():
 
         command = request.loop_input(
             text=">> ",
-            funcs_list=[partial(valid.is_correct_select_menu, 3)]
+            funcs_list=[partial(valid.is_correct_select_menu, 4)]
         )
 
         if command == "0":
@@ -165,5 +167,7 @@ def open_tags_menu():
             tags_work.request_new_tag()
         elif command == "3":
             tags_work.request_delete_tag()
+        elif command == "4":
+            tags_work.request_delete_all_tags()
 
         global_menu_funcs.press_enter()

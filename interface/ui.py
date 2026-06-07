@@ -46,7 +46,7 @@ def show_data_menu(movies_counter: int, error: int):
     print(' 2 >> Загрузить датасет из Excel')
     print(' 3 >> Добавить запись')
     print(' 4 >> Показать мои оценки')
-    print(' 5 >> Информация о датасете')
+    print(' 5 >> Данные о датасете')
     print(' 0 >> Главное меню\n')
 
 
@@ -61,7 +61,8 @@ def show_train_menu(movies_counter: int, error: int, step: float, plateau_score:
     print(' 4 >> Гибридная оптимизация\n')
     print(' 5 >> Leave-one-out проверка')
     print(' 6 >> Сделать прогноз')
-    print(' 7 >> Параметры обучения\n')
+    print(' 7 >> Параметры обучения')
+    print(' 8 >> Выгрузить отчет\n')
     print(' 0 >> Главное меню\n')
 
 
@@ -90,6 +91,7 @@ def show_tags_menu():
     print(' 1 >> Показать теги')
     print(' 2 >> Добавить тег')
     print(' 3 >> Удалить тег')
+    print(' 4 >> Удалить все теги')
     print(' 0 >> Назад\n')
 
 

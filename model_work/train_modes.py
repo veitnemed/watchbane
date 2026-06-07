@@ -8,6 +8,11 @@ from interface import ui
 from model_work import model
 
 
+def show_weights_sum(weights: dict) -> None:
+    """Печатает сумму весов после обучения."""
+    print(f'Сумма весов: {round(sum(weights.values()), 4)}')
+
+
 def train_model(data, weights, fit_func, title: str, **train_kwargss):
     """Обучает модель выбранным способом."""
     start_time = time.perf_counter()
@@ -15,6 +20,7 @@ def train_model(data, weights, fit_func, title: str, **train_kwargss):
     print(title)
     old_error = model.mean_absolute_error(data, weights)
     new_weights = fit_func(data, weights, **train_kwargss)
+    new_weights = model.normalize_weights(new_weights)
     new_error = model.mean_absolute_error(data, new_weights)
 
     if new_error <= old_error:
@@ -26,6 +32,7 @@ def train_model(data, weights, fit_func, title: str, **train_kwargss):
 
     delta_time = time.perf_counter() - start_time
     ui.show_result_train(new_weights, old_error, new_error, delta_time)
+    show_weights_sum(new_weights)
 
 
 def auto_train_grid_steps(data, weights, title: str):
@@ -39,6 +46,7 @@ def auto_train_grid_steps(data, weights, title: str):
     print(title)
     for step in step_values:
         new_weights = model.fit_weights(data, best_weights, passes=5, step=step)
+        new_weights = model.normalize_weights(new_weights)
         new_error = model.mean_absolute_error(data, new_weights)
 
         if new_error < best_error:
@@ -50,6 +58,7 @@ def auto_train_grid_steps(data, weights, title: str):
     storage.save_weights(best_weights)
     delta_time = time.perf_counter() - start_time
     ui.show_result_train(best_weights, error_now, best_error, delta_time)
+    show_weights_sum(best_weights)
 
 
 def auto_train_mix_mode(data, weights, title: str):
@@ -65,6 +74,7 @@ def auto_train_mix_mode(data, weights, title: str):
         no_mut = 0
         while True:
             new_weights_1 = model.fit_weights(data, best_weights, passes=1, step=step)
+            new_weights_1 = model.normalize_weights(new_weights_1)
             new_error_1 = model.mean_absolute_error(data, new_weights_1)
             if new_error_1 < best_error:
                 best_error = new_error_1
@@ -79,6 +89,7 @@ def auto_train_mix_mode(data, weights, title: str):
                 score=200,
                 step=step
             )
+            new_weights_2 = model.normalize_weights(new_weights_2)
             new_error_2 = model.mean_absolute_error(data, new_weights_2)
 
             if new_error_2 < best_error:
@@ -96,3 +107,4 @@ def auto_train_mix_mode(data, weights, title: str):
     storage.save_weights(best_weights)
     delta_time = time.perf_counter() - start_time
     ui.show_result_train(best_weights, error_now, best_error, delta_time)
+    show_weights_sum(best_weights)

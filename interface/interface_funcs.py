@@ -3,6 +3,7 @@
 from config import constant
 from core import format_score as format
 from model_work import model
+from interface import global_menu_funcs
 from interface import request
 from data_work import storage
 from interface import ui
@@ -102,4 +103,6 @@ def show_feature_importance(weights, full_error):
 
 def show_data_info():
     """Показывает сводку по датасету."""
-    pass
+    data = storage.load_dataset()
+    for line in global_menu_funcs.build_dataset_info_lines(data):
+        print(line)

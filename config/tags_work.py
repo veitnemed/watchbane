@@ -7,8 +7,8 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-
 TAGS_JSON = str(Path(__file__).with_name("tags.json"))
+DEFAULT_TAG = "tag0"
 
 
 def load_tags() -> dict:
@@ -121,6 +121,7 @@ def add_tag_to_data(feature: str) -> None:
 def delete_tag_from_data(feature: str) -> None:
     """Удаляет тег из данных и весов."""
     from config import constant
+    from model_work import model
 
     dataset = load_json(constant.FILE_NAME)
     for movie in dataset.values():
@@ -130,7 +131,52 @@ def delete_tag_from_data(feature: str) -> None:
 
     weights = load_json(constant.WEIGHTS_JSON)
     weights.pop(feature, None)
+    weights = model.normalize_weights(weights)
     save_json(constant.WEIGHTS_JSON, weights)
+
+
+def remove_default_tag_if_only_tag(tags: dict) -> dict:
+    """Удаляет tag0 перед добавлением первого настоящего тега."""
+    if list(tags.keys()) != [DEFAULT_TAG]:
+        return tags
+
+    delete_tag_from_data(DEFAULT_TAG)
+    tags.pop(DEFAULT_TAG, None)
+    save_tags(tags)
+    return tags
+
+def delete_all_tags() -> None:
+    """Удаляет все теги и оставляет технический tag0."""
+    from config import constant
+
+    old_tags = load_tags()
+
+    dataset = load_json(constant.FILE_NAME)
+    for movie in dataset.values():
+        movie[constant.TAGS_VIBE_SECTION] = {
+            DEFAULT_TAG: 0
+        }
+    save_json(constant.FILE_NAME, dataset)
+
+    weights = load_json(constant.WEIGHTS_JSON)
+    for feature in old_tags.keys():
+        weights.pop(feature, None)
+    weights[DEFAULT_TAG] = 0
+    save_json(constant.WEIGHTS_JSON, weights)
+
+    tags = {
+        DEFAULT_TAG: {
+            "label": "Технический тег",
+            "title": "Технический тег",
+            "question": "Технический тег-заглушка?",
+            "scale": [
+                "Нет",
+                "Да"
+            ],
+            "translation": DEFAULT_TAG
+        }
+    }
+    save_tags(tags)
 
 
 def show_tags() -> None:
@@ -179,6 +225,7 @@ def request_new_tag() -> None:
 
     storage.create_backup()
     backup_tag_files()
+    tags = remove_default_tag_if_only_tag(tags)
     add_tag_to_data(feature)
     tags[feature] = settings
     save_tags(tags)
@@ -187,6 +234,21 @@ def request_new_tag() -> None:
     print('Схема изменилась. Запусти программу снова.')
     raise SystemExit
 
+def request_delete_all_tags() -> None:
+    """Запрашивает подтверждение и оставляет только tag0."""
+    from data_work import storage
+    answer = input("\nУдалить все теги? Введите yes >> ").strip().lower()
+    if answer != "yes":
+        print('Удаление отменено.')
+        return
+    
+    storage.create_backup()
+    backup_tag_files()
+    delete_all_tags()
+    move_edit_files_to_backup()
+    print("Все теги удалены. Оставлен технический tag0.")
+    print('Схема изменилась. Запусти программу снова.')
+    raise SystemExit
 
 def request_delete_tag() -> None:
     """Запрашивает и удаляет тег."""

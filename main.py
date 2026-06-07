@@ -10,7 +10,6 @@ from interface import request
 from interface import ui
 from model_work import model
 
-
 def main_loop():
     """Запускает главный цикл программы."""
     storage.init_all_dates()
@@ -34,7 +33,6 @@ def main_loop():
             global_menu.open_tags_menu()
         elif command == "5":
             global_menu.open_extra_menu()
-
 
 if __name__ == "__main__":
     main_loop()
