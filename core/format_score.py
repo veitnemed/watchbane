@@ -30,18 +30,18 @@ def popularity_kp(kp_votes: int, year: int) -> float:
     return popularity_by_votes(
         votes=kp_votes,
         year=year,
-        min_votes=5000,
+        min_votes=50000,
         max_votes=5000000
     )
 
 
 def popularity_score(imdb_votes: int, year: int) -> float:
-    """Считает популярность по голосам IMDb."""
+    """Считает популярность  по голосам IMDb."""
     return popularity_by_votes(
         votes=imdb_votes,
         year=year,
-        min_votes=50,
-        max_votes=5000
+        min_votes=200,
+        max_votes=10000
     )
 
 

@@ -11,6 +11,11 @@ def clean_terminal():
     os.system('cls')
 
 
+def press_enter():
+    """Ждет нажатия Enter."""
+    input('Enter, чтобы продолжить >>')
+
+
 def show_menu_title(title: str):
     """Печатает центрированный заголовок подменю."""
     print(f'\n{title.center(MENU_WIDTH)}\n')
@@ -47,6 +52,8 @@ def show_data_menu(movies_counter: int, error: int):
     print(' 3 >> Добавить запись')
     print(' 4 >> Показать мои оценки')
     print(' 5 >> Данные о датасете')
+    print(' 6 >> Прочитать оценки TST')
+    print(' 7 >> Бэкап')
     print(' 0 >> Главное меню\n')
 
 
@@ -59,10 +66,13 @@ def show_train_menu(movies_counter: int, error: int, step: float, plateau_score:
     print(' 2 >> Случайная оптимизация')
     print(' 3 >> Многошаговый координатный поиск')
     print(' 4 >> Гибридная оптимизация\n')
-    print(' 5 >> Leave-one-out проверка')
-    print(' 6 >> Сделать прогноз')
-    print(' 7 >> Параметры обучения')
-    print(' 8 >> Выгрузить отчет\n')
+    print(' 5 >> Оценить вклады')
+    print(' 6 >> Рассчитать ошибку для топ N')
+    print(' 7 >> Leave-one-out проверка')
+    print(' 8 >> Сделать прогноз')
+    print(' 9 >> Параметры обучения')
+    print(' 10 >> Выгрузить отчет')
+    print(' 11 >> Проверка устойчивости к шуму оценок\n')
     print(' 0 >> Главное меню\n')
 
 
@@ -82,6 +92,7 @@ def show_extra_menu(movies_counter: int, error: int):
     show_menu_title('ДОПОЛНИТЕЛЬНО')
     print(' 1 >> Показать влияние количества голосов')
     print(' 2 >> Пересчитать raw оценки')
+    print(' 3 >> Просмотр API признаков')
     print(' 0 >> Главное меню\n')
 
 

@@ -2,12 +2,14 @@
 
 from config import constant
 from core import format_score as format
+from data_work import dataset_stats
+from data_work import tst_scores
 from model_work import model
-from interface import global_menu_funcs
 from interface import request
 from data_work import storage
 from interface import ui
 from core import valid
+from integrations import api
 
 
 def show_all_movies():
@@ -24,16 +26,12 @@ def show_all_movies():
 
 def get_predict(weights: dict) -> None:
     """Запрашивает признаки и показывает прогноз модели."""
-    title = request.loop_input(text='Введите название: ', funcs_list=[valid.is_correct_title])
+    defaults = request.request_api_defaults()
+    if defaults is None:
+        return
 
-    features = {}
-    for feature in constant.FEATURES:
-        answer = request.loop_input(
-            text=f'{feature} >> ',
-            funcs_list=[valid.is_correct_score]
-        )
-        features[feature] = valid.parse_float(answer)
-
+    title = defaults["main_info"]["title"]
+    features = request.request_predict_features(defaults)
     score = model.predict_score(features, weights)
     print(f'Оценка модели для {title}: {score}')
 
@@ -42,7 +40,11 @@ def request_object() -> None:
     """Запрашивает фильм и добавляет его в датасет."""
     ui.clean_terminal()
 
-    movie_request = request.request_all_scores()
+    defaults = request.request_api_defaults()
+    if defaults is None:
+        return
+
+    movie_request = request.request_all_scores(defaults)
     result = storage.add_movie(movie_request)
 
     if result:
@@ -104,5 +106,51 @@ def show_feature_importance(weights, full_error):
 def show_data_info():
     """Показывает сводку по датасету."""
     data = storage.load_dataset()
-    for line in global_menu_funcs.build_dataset_info_lines(data):
+    for line in dataset_stats.build_dataset_info_lines(data):
+        print(line)
+
+
+def read_tst_scores():
+    """Читает оценки из TST JSON и обновляет оценки совпавших сериалов."""
+    try:
+        result = tst_scores.apply_tst_scores()
+    except FileNotFoundError:
+        print(f'Файл TST не найден: {constant.TST_SCORES_JSON}')
+        return
+    except ValueError as error:
+        print(f'Ошибка чтения TST: {error}')
+        return
+
+    print('Оценки TST прочитаны.')
+    print(f'Всего в TST: {result["total"]}')
+    print(f'Обновлено оценок: {result["updated"]}')
+    print(f'Без изменений: {result["unchanged"]}')
+    print(f'Не найдены в датасете: {len(result["not_found"])}')
+    print(f'Некорректные оценки: {len(result["invalid"])}')
+
+    if len(result["not_found"]) > 0:
+        print('\nПервые ненайденные:')
+        for title in result["not_found"][:10]:
+            print(f'- {title}')
+
+    if len(result["invalid"]) > 0:
+        print('\nПервые с некорректной оценкой:')
+        for title in result["invalid"][:10]:
+            print(f'- {title}')
+
+
+def show_api_features():
+    """Ищет сериал через API и печатает полный JSON найденного объекта."""
+    title = request.loop_input(
+        text='Название сериала >> ',
+        funcs_list=[valid.is_correct_title]
+    )
+    result = api.find_series_raw(title, "Россия")
+
+    if result["ok"] is False:
+        print(f'Сериал не найден в списке API: {result["details"]}')
+        return
+
+    print('\nСериал найден в списке API.\n')
+    for line in api.format_api_movie_lines(result["data"]):
         print(line)

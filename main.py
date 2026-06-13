@@ -5,7 +5,7 @@ from functools import partial
 from core import valid
 from data_work import storage
 from interface import global_menu
-from interface import global_menu_funcs
+from interface import menu_state
 from interface import request
 from interface import ui
 from model_work import model
@@ -16,7 +16,7 @@ def main_loop():
 
     while True:
         ui.clean_terminal()
-        data, weights, movies_counter, abs_error = global_menu_funcs.get_menu_state()
+        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         kp_error = model.kp_mean_absolute_error(data)
         ui.show_global_menu(movies_counter, round(abs_error, 2), kp_error)
 

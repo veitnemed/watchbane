@@ -123,6 +123,34 @@ def is_correct_plateau_score(value: str) -> bool:
     except ValueError:
         return False
 
+def is_correct_noise_delta(value: str) -> bool:
+    """Проверяет максимальное случайное смещение оценки для шумового эксперимента."""
+    if value.strip() == "":
+        return True
+    try:
+        delta = parse_float(value)
+        return 0 <= delta <= 10
+    except ValueError:
+        return False
+
+def is_correct_noise_runs(value: str) -> bool:
+    """Проверяет количество повторов шумового эксперимента."""
+    if value.strip() == "":
+        return True
+    try:
+        runs = int(value)
+        return runs > 0
+    except ValueError:
+        return False
+
+def is_correct_top_n(value: str) -> bool:
+    """Проверяет число объектов для топа ошибок."""
+    try:
+        top_n = int(value)
+        return top_n > 0
+    except ValueError:
+        return False
+
 VALIDATORS = {
     "score": is_correct_score,
     "year": is_correct_year,

@@ -1,12 +1,52 @@
 {
-    "thriller_or_dramma": {
-        "label": "Триллер или драмма",
-        "title": "Триллер/драмма",
-        "question": "Есть ли в названи триллер или драмма?",
+    "has_drama": {
+        "label": "Драма",
+        "title": "Драма",
+        "question": "Есть ли у сериала жанр драма?",
         "scale": [
             "Нет",
             "Да"
         ],
-        "translation": "thriller_or_dramma"
+        "translation": "drama"
+    },
+    "has_crime": {
+        "label": "Криминал",
+        "title": "Криминал",
+        "question": "Есть ли у сериала жанр криминал?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "crime"
+    },
+    "has_thriller": {
+        "label": "Триллер",
+        "title": "Триллер",
+        "question": "Есть ли у сериала жанр триллер?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "thriller"
+    },
+    "has_comedy": {
+        "label": "Комедия",
+        "title": "Комедия",
+        "question": "Есть ли у сериала жанр комедия?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "comedy"
+    },
+    "has_detective": {
+        "label": "Детектив",
+        "title": "Детектив",
+        "question": "Есть ли у сериала жанр детектив?",
+        "scale": [
+            "Нет",
+            "Да"
+        ],
+        "translation": "detective"
     }
 }

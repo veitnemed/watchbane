@@ -3,14 +3,17 @@
 from functools import partial
 
 from config import constant
-from config import tags_work
 from data_work import excel_work
 from data_work import storage
-from interface import global_menu_funcs
+from interface import backup_menu
 from interface import interface_funcs
+from interface import menu_state
 from interface import request
+from interface import tags_menu
+from interface import train_params
 from interface import ui
 from model_work import model
+from model_work import train_report
 from model_work import train_modes
 from core import valid
 
@@ -19,10 +22,10 @@ def open_data_menu():
     """Открывает меню работы с данными."""
     while True:
         ui.clean_terminal()
-        data, weights, movies_counter, abs_error = global_menu_funcs.get_menu_state()
+        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_data_menu(movies_counter, round(abs_error, 2))
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 5)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 7)])
         if command == "0":
             return
         elif command == "1":
@@ -36,25 +39,29 @@ def open_data_menu():
             interface_funcs.show_all_movies()
         elif command == "5":
             interface_funcs.show_data_info()
+        elif command == "6":
+            interface_funcs.read_tst_scores()
+        elif command == "7":
+            backup_menu.open_backup_menu()
 
-        global_menu_funcs.press_enter()
+        ui.press_enter()
 
 
 def open_train_menu():
     """Открывает меню обучения модели."""
     while True:
         ui.clean_terminal()
-        data, weights, movies_counter, abs_error = global_menu_funcs.get_menu_state()
+        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_train_menu(
             movies_counter,
             round(abs_error, 2),
-            global_menu_funcs.TRAIN_STEP,
-            global_menu_funcs.TRAIN_PLATEAU_SCORE
+            train_params.TRAIN_STEP,
+            train_params.TRAIN_PLATEAU_SCORE
         )
 
         command = request.loop_input(
             text=">> ",
-            funcs_list=[partial(valid.is_correct_select_menu, 8)]
+            funcs_list=[partial(valid.is_correct_select_menu, 11)]
         )
 
         if command == "0":
@@ -65,7 +72,7 @@ def open_train_menu():
                 weights=weights,
                 fit_func=model.fit_weights,
                 title='Перебор весов 0..1',
-                step=global_menu_funcs.TRAIN_STEP
+                step=train_params.TRAIN_STEP
             )
         elif command == "2":
             train_modes.train_model(
@@ -73,8 +80,8 @@ def open_train_menu():
                 weights=weights,
                 fit_func=model.fit_weights_until_plateau,
                 title='Рандомное обучение',
-                step=global_menu_funcs.TRAIN_STEP,
-                score=global_menu_funcs.TRAIN_PLATEAU_SCORE
+                step=train_params.TRAIN_STEP,
+                score=train_params.TRAIN_PLATEAU_SCORE
             )
         elif command == "3":
             train_modes.auto_train_grid_steps(
@@ -89,23 +96,43 @@ def open_train_menu():
                 title='Усиленное обучение'
             )
         elif command == "5":
-            length = len(data)
-            model.one_to_one_error(data, min(10, length))
+            model.print_feature_group_mae(data, weights)
         elif command == "6":
-            interface_funcs.get_predict(weights)
+            top_n = request.loop_input(
+                text="Топ N ошибок >> ",
+                funcs_list=[valid.is_correct_top_n]
+            )
+            model.top_prediction_errors(data, weights, int(top_n))
         elif command == "7":
-            global_menu_funcs.setup_train_params()
+            top_n = request.loop_input(
+                text="Топ N ошибок >> ",
+                funcs_list=[valid.is_correct_top_n]
+            )
+            model.one_to_one_error(data, int(top_n))
         elif command == "8":
-            global_menu_funcs.export_train_report()
+            interface_funcs.get_predict(weights)
+        elif command == "9":
+            train_params.setup_train_params()
+        elif command == "10":
+            train_report.export_train_report(
+                train_params.TRAIN_STEP,
+                train_params.TRAIN_PLATEAU_SCORE
+            )
+        elif command == "11":
+            train_modes.run_noise_sensitivity(
+                data=data,
+                weights=weights,
+                step=train_params.TRAIN_STEP
+            )
 
-        global_menu_funcs.press_enter()
+        ui.press_enter()
 
 
 def open_weights_menu():
     """Открывает меню просмотра и сброса весов."""
     while True:
         ui.clean_terminal()
-        data, weights, movies_counter, abs_error = global_menu_funcs.get_menu_state()
+        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_weights_menu(movies_counter, round(abs_error, 2))
 
         command = request.loop_input(
@@ -122,19 +149,19 @@ def open_weights_menu():
         elif command == "3":
             interface_funcs.reset_weights_model()
 
-        global_menu_funcs.press_enter()
+        ui.press_enter()
 
 
 def open_extra_menu():
     """Открывает меню дополнительных действий."""
     while True:
         ui.clean_terminal()
-        data, weights, movies_counter, abs_error = global_menu_funcs.get_menu_state()
+        data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_extra_menu(movies_counter, round(abs_error, 2))
 
         command = request.loop_input(
             text=">> ",
-            funcs_list=[partial(valid.is_correct_select_menu, 2)]
+            funcs_list=[partial(valid.is_correct_select_menu, 3)]
         )
 
         if command == "0":
@@ -144,8 +171,10 @@ def open_extra_menu():
         elif command == "2":
             updated_count = storage.rework_formated_scores()
             print(f'Пересчитано записей: {updated_count}')
+        elif command == "3":
+            interface_funcs.show_api_features()
 
-        global_menu_funcs.press_enter()
+        ui.press_enter()
 
 
 def open_tags_menu():
@@ -162,12 +191,12 @@ def open_tags_menu():
         if command == "0":
             return
         elif command == "1":
-            tags_work.show_tags()
+            tags_menu.show_tags()
         elif command == "2":
-            tags_work.request_new_tag()
+            tags_menu.request_new_tag()
         elif command == "3":
-            tags_work.request_delete_tag()
+            tags_menu.request_delete_tag()
         elif command == "4":
-            tags_work.request_delete_all_tags()
+            tags_menu.request_delete_all_tags()
 
-        global_menu_funcs.press_enter()
+        ui.press_enter()

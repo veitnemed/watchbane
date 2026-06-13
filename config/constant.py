@@ -1,10 +1,11 @@
 """Собирает константы проекта: пути, поля, подписи и веса по умолчанию."""
 
 from config import scheme
-from config import tags_work
+from data_work import tags_work
 
 DATA_DIR = 'C:/DATA/movies-learn/'
 FILE_NAME = 'C:/DATA/movies-learn/dataset.json'
+TST_SCORES_JSON = 'C:/DATA/movies-learn/dataset_from_tst.json'
 WEIGHTS_JSON = 'C:/DATA/movies-learn/weights.json'
 BACKUP_DIR = 'C:/BACKUP/movies-learn/BACKUP/'
 
@@ -15,7 +16,7 @@ DIR_TXT = 'C:/TXT_FILES/movies-learn/'
 EDIT_EXCEL = 'C:/TXT_FILES/movies-learn/edit_dataset.xlsx'
 
 STEPS_TRAIN = [0.05, 0.02, 0.01, 0.005, 0.001]
-STEPS_TRAIN_MIX = [0.01, 0.05, 0.02, 0.01, 0.005]
+STEPS_TRAIN_MIX = [0.2, 0.1, 0.05, 0.03,  0.02, 0.01, 0.005]
 
 MAIN_INFO = scheme.get_fields(scheme.MAIN_INFO)
 RAW_SCORES = scheme.get_fields(scheme.RAW_SCORES)

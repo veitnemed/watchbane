@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import json
 import tempfile
 from pathlib import Path
 import sys
@@ -14,6 +15,7 @@ from config import constant
 from core import format_score
 from model_work import model
 from data_work import storage
+from data_work import tst_scores
 from core import valid
 
 
@@ -59,6 +61,7 @@ def setup_temp_project():
     old_paths = {
         "DATA_DIR": constant.DATA_DIR,
         "FILE_NAME": constant.FILE_NAME,
+        "TST_SCORES_JSON": constant.TST_SCORES_JSON,
         "WEIGHTS_JSON": constant.WEIGHTS_JSON,
         "BACKUP_DIR": constant.BACKUP_DIR,
         "DIR_META": constant.DIR_META,
@@ -67,6 +70,7 @@ def setup_temp_project():
 
     constant.DATA_DIR = str(root / "data")
     constant.FILE_NAME = str(root / "data" / "dataset.json")
+    constant.TST_SCORES_JSON = str(root / "data" / "dataset_from_tst.json")
     constant.WEIGHTS_JSON = str(root / "data" / "weights.json")
     constant.BACKUP_DIR = str(root / "backup") + "/"
     constant.DIR_META = str(root / "meta")
@@ -217,6 +221,53 @@ def test_training() -> None:
     assert_check("MAE не увеличилась", new_error <= start_error)
 
 
+def test_tst_scores_import() -> None:
+    """Проверяет чтение оценок из TST JSON."""
+    print("\n8) Проверяем чтение оценок TST")
+    storage.clean_dataset()
+
+    movie = make_movie("TST Movie", user_score=5.0, raw_score=7.0)
+    assert_check("Тестовая запись добавляется", storage.add_movie(movie))
+
+    with open(constant.TST_SCORES_JSON, "w", encoding="UTF-8") as file:
+        json.dump({
+            "TST Movie": 8.5,
+            "Missing Movie": 7.0,
+            "Bad Score": 11
+        }, file, ensure_ascii=False, indent=4)
+
+    result = tst_scores.apply_tst_scores()
+    data = storage.load_dataset()
+
+    assert_check("Оценка совпавшего сериала обновлена", data["TST Movie"]["main_info"]["user_score"] == 8.5)
+    assert_check("Лишний сериал попал в not_found", result["not_found"] == ["Missing Movie"])
+    assert_check("Некорректная оценка попала в invalid", result["invalid"] == ["Bad Score"])
+    assert_check("Обновлена ровно одна оценка", result["updated"] == 1)
+
+
+def test_backup_restore() -> None:
+    """Проверяет восстановление датасета из backup."""
+    print("\n9) Проверяем восстановление backup")
+    storage.clean_dataset()
+
+    first_movie = make_movie("Backup A", user_score=7.0, raw_score=7.0)
+    second_movie = make_movie("Backup B", user_score=9.0, raw_score=9.0)
+
+    assert_check("Первая запись добавляется", storage.add_movie(first_movie))
+    storage.create_backup()
+    backup_path = storage.get_latest_backups(1)[0]
+
+    assert_check("Вторая запись добавляется", storage.add_movie(second_movie))
+    assert_check("В датасете временно 2 записи", len(storage.load_dataset()) == 2)
+
+    records_count = storage.restore_backup(backup_path)
+    data = storage.load_dataset()
+
+    assert_check("Backup восстановил 1 запись", records_count == 1)
+    assert_check("Первая запись осталась", "Backup A" in data)
+    assert_check("Вторая запись исчезла после восстановления", "Backup B" not in data)
+
+
 def run_tests() -> None:
     """Запускает все тесты проекта."""
     temp_dir, old_paths = setup_temp_project()
@@ -230,6 +281,8 @@ def run_tests() -> None:
         test_validation()
         test_tag_compatibility()
         test_training()
+        test_tst_scores_import()
+        test_backup_restore()
         print("\nВсе проверки пройдены: True")
     finally:
         restore_project_paths(temp_dir, old_paths)

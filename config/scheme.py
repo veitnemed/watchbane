@@ -1,11 +1,12 @@
 """Описывает секции данных фильма и правила полей."""
 
 import copy
-from config import tags_work
+from data_work import tags_work
 
 
 MAIN_INFO = "main_info"
 RAW_SCORES = "raw_scores"
+GENRE = "genre"
 TAGS_VIBE = "tags_vibe"
 
 
@@ -46,14 +47,15 @@ SHEME_VALIDATORS = {
             "formated": "imdb_popularity"
         }
     },
-    TAGS_VIBE: {
+    GENRE: {
         feature: {
             "tag": ["tags_score"],
             "type": int,
             "max_value": None if feature == "imdb_total_tags" else 1
         }
         for feature in tags_work.get_tag_fields()
-    }
+    },
+    TAGS_VIBE: {}
 }
 
 SHEME_ADD = copy.deepcopy(SHEME_VALIDATORS)

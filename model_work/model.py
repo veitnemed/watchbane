@@ -88,6 +88,62 @@ def mean_error(data: list, weights=constant.DEFAULT_WEIGHTS) -> float:
         error += calc_error(obj, weights) / length
     return error
 
+
+def make_group_weights(weights: dict, features: list) -> dict:
+    """Оставляет веса только выбранных признаков и нормализует их."""
+    group_weights = {}
+    for feature in features:
+        group_weights[feature] = weights.get(feature, 0)
+
+    total_weight = sum(group_weights.values())
+    if total_weight > 0:
+        return normalize_weights(group_weights)
+
+    if len(group_weights) == 0:
+        return {}
+
+    equal_weight = 1 / len(group_weights)
+    return {
+        feature: equal_weight
+        for feature in group_weights
+    }
+
+
+def print_feature_group_mae(data: list, weights: dict) -> dict:
+    """Печатает MAE полной модели, модели без vibe-тегов и модели только на vibe-тегах."""
+    data = iter_movies(data)
+    if len(data) == 0:
+        print("Датасет пуст.")
+        return {}
+
+    vibe_features = constant.TAGS_VIBE
+    other_features = [
+        feature for feature in constant.FEATURES
+        if feature not in vibe_features
+    ]
+
+    full_mae = mean_absolute_error(data, weights)
+    without_vibe_weights = make_group_weights(weights, other_features)
+    only_vibe_weights = make_group_weights(weights, vibe_features)
+
+    without_vibe_mae = mean_absolute_error(data, without_vibe_weights)
+    only_vibe_mae = mean_absolute_error(data, only_vibe_weights)
+
+    print("\nОЦЕНКА ВКЛАДОВ")
+    print("=" * 50)
+    print(f"MAE vibe + остальное: {full_mae:.4f} ({full_mae * 10:.2f}%)")
+    print(f"MAE без vibe tags: {without_vibe_mae:.4f} ({without_vibe_mae * 10:.2f}%)")
+    print(f"MAE только vibe tags: {only_vibe_mae:.4f} ({only_vibe_mae * 10:.2f}%)")
+    print("")
+    print(f"Признаков без vibe tags: {len(other_features)}")
+    print(f"Vibe tags: {len(vibe_features)}")
+
+    return {
+        "full_mae": full_mae,
+        "without_vibe_mae": without_vibe_mae,
+        "only_vibe_mae": only_vibe_mae,
+    }
+
 def choice_rand_features(amount: int = 2) -> list:
     """Выбирает случайные признаки модели."""
     features = list(constant.DEFAULT_WEIGHTS.keys())
@@ -208,7 +264,6 @@ def one_to_one_error(data: list, top_n):
     length_data = len(data)
     mean_error = 0
     result = []
-    all_dict = {}
     for idx in range(length_data):
         train_data = data.copy()
         test_movie = train_data.pop(idx)
@@ -216,34 +271,126 @@ def one_to_one_error(data: list, top_n):
         user_score = get_user_score(test_movie)
         new_weights = fit_weights(train_data)
         features = get_features(test_movie)
-        predict = predict_score(get_features(test_movie), new_weights)
-        error = abs(user_score - predict)
-        result.append((error, get_movie_title(test_movie), round(user_score, 1), round(predict, 1),new_weights, features))
-        mean_error += error / length_data
+        predict = predict_score(features, new_weights)
+        signed_error = predict - user_score
+        abs_error = abs(signed_error)
+        result.append({
+            "abs_error": abs_error,
+            "signed_error": signed_error,
+            "title": get_movie_title(test_movie),
+            "user_score": user_score,
+            "predict": predict,
+            "weights": new_weights,
+            "features": features,
+        })
+        mean_error += abs_error / length_data
 
-    sorted_result = sorted(result, key=lambda x: x[0], reverse=True)
+    print_error_report("LEAVE-ONE-OUT", result, top_n)
 
-    counter = 0
-
-    for error, title, user_score, predict, new_weights,features in sorted_result:
-        counter += 1
-        print(f"\n{title} ({round(user_score, 2)})")
-        print('Оценка модели:', round(predict, 2))
-        print('Ошибка:', round(error, 2))
-        print('\nВклад параметров:')
-        res = []
-        for k,v in features.items():
-            impact = v*new_weights[k]
-            res.append((impact,k))
-
-        for k, v in sorted(res, reverse=True):
-            print(f"{v}: + {round(k,2)}")
-
-        if counter == top_n:
-            break
-
-    print('Средняя ошибка:', round(mean_error, 4))
+    print('Средняя абсолютная ошибка:', round(mean_error, 2))
     return mean_error
+
+
+def top_prediction_errors(data: list, weights: dict, top_n: int):
+    """Печатает топ ошибок модели на текущих обученных весах."""
+    data = iter_movies(data)
+
+    if len(data) == 0:
+        print("Датасет пуст.")
+        return 0
+
+    rows = []
+    mean_error = 0
+    for movie in data:
+        user_score = get_user_score(movie)
+        features = get_features(movie)
+        predict = predict_score(features, weights)
+        signed_error = predict - user_score
+        abs_error = abs(signed_error)
+        rows.append({
+            "abs_error": abs_error,
+            "signed_error": signed_error,
+            "title": get_movie_title(movie),
+            "user_score": user_score,
+            "predict": predict,
+            "weights": weights,
+            "features": features,
+        })
+        mean_error += abs_error / len(data)
+
+    print_error_report("ОШИБКИ НА ТЕКУЩИХ ВЕСАХ", rows, top_n)
+    print('Средняя абсолютная ошибка:', round(mean_error, 2))
+    return mean_error
+
+
+def split_error_rows(rows: list, top_n: int) -> tuple:
+    """Делит ошибки на топ завышений и топ занижений."""
+    overestimated = sorted(
+        [row for row in rows if row["signed_error"] > 0],
+        key=lambda row: row["signed_error"],
+        reverse=True
+    )[:top_n]
+    underestimated = sorted(
+        [row for row in rows if row["signed_error"] < 0],
+        key=lambda row: row["signed_error"]
+    )[:top_n]
+    return overestimated, underestimated
+
+
+def print_error_report(title: str, rows: list, top_n: int) -> None:
+    """Печатает краткую и полную информацию по топу ошибок."""
+    overestimated, underestimated = split_error_rows(rows, top_n)
+
+    print(f"\n{title}")
+    print("=" * 50)
+
+    print("\n# КРАТКАЯ ИНФОРМАЦИЯ")
+    print_short_error_group("МОДЕЛЬ ЗАВЫШАЕТ", overestimated)
+    print_short_error_group("МОДЕЛЬ ЗАНИЖАЕТ", underestimated)
+
+    print("\n# ПОЛНАЯ ИНФОРМАЦИЯ")
+    print_full_error_group("МОДЕЛЬ ЗАВЫШАЕТ", overestimated)
+    print_full_error_group("МОДЕЛЬ ЗАНИЖАЕТ", underestimated)
+
+
+def print_short_error_group(title: str, rows: list) -> None:
+    """Печатает короткий список ошибок."""
+    print(f"\n{title}")
+
+    if len(rows) == 0:
+        print("Нет объектов.")
+        return
+
+    for idx, row in enumerate(rows, start=1):
+        print(
+            f"{idx}. {row['title']} "
+            f"({row['user_score']:.1f}) -> {row['predict']:.1f} "
+            f"| ошибка {row['signed_error']:+.2f}"
+        )
+
+
+def print_full_error_group(title: str, rows: list) -> None:
+    """Печатает подробности ошибок с ограничением до 4 признаков."""
+    print(f"\n{title}")
+
+    if len(rows) == 0:
+        print("Нет объектов.")
+        return
+
+    for idx, row in enumerate(rows, start=1):
+        print(f"\n{idx}. {row['title']}")
+        print(f"Моя оценка: {row['user_score']:.2f}")
+        print(f"Оценка модели: {row['predict']:.2f}")
+        print(f"Ошибка: {row['signed_error']:+.2f}")
+        print("Вклад параметров:")
+
+        impacts = []
+        for feature, value in row["features"].items():
+            impact = value * row["weights"][feature]
+            impacts.append((abs(impact), impact, feature))
+
+        for _, impact, feature in sorted(impacts, reverse=True)[:4]:
+            print(f"{feature}: {impact:+.2f}")
 
 
 def selection_weights_without_feature(
@@ -281,3 +428,5 @@ def selection_weights_without_feature(
         weights_select[feature] = min_weight
 
     return weights_select
+
+

@@ -3,9 +3,12 @@
 import time
 
 from config import constant
+from core import valid
 from data_work import storage
+from interface import request
 from interface import ui
 from model_work import model
+from model_work import noise_experiment
 
 
 def show_weights_sum(weights: dict) -> None:
@@ -108,3 +111,58 @@ def auto_train_mix_mode(data, weights, title: str):
     delta_time = time.perf_counter() - start_time
     ui.show_result_train(best_weights, error_now, best_error, delta_time)
     show_weights_sum(best_weights)
+
+
+def run_noise_sensitivity(data, weights, step: float) -> None:
+    """Запускает проверку устойчивости модели к шуму пользовательских оценок."""
+    if len(data) == 0:
+        print('Датасет пуст.')
+        return
+
+    delta = request.loop_input(
+        text='Шум оценки [0.5] >> ',
+        funcs_list=[valid.is_correct_noise_delta]
+    )
+    runs = request.loop_input(
+        text='Количество повторов [100] >> ',
+        funcs_list=[valid.is_correct_noise_runs]
+    )
+
+    if delta.strip() == "":
+        delta = 0.5
+    else:
+        delta = valid.parse_float(delta)
+
+    if runs.strip() == "":
+        runs = 100
+    else:
+        runs = int(runs)
+
+    start_time = time.perf_counter()
+    result = noise_experiment.run_noise_experiment(
+        data=data,
+        weights=weights,
+        delta=delta,
+        runs=runs,
+        fit_func=model.fit_weights,
+        passes=1,
+        step=step
+    )
+    delta_time = time.perf_counter() - start_time
+
+    print('ПРОВЕРКА УСТОЙЧИВОСТИ К ШУМУ ОЦЕНОК')
+    print('=' * 50)
+    print(f'Шум оценки: +/- {result["delta"]}')
+    print(f'Количество повторов: {result["runs"]}')
+    print(f'MAE исходной модели: {round(result["original_mae_before"], 4)}')
+    print(f'Средний MAE на зашумленных оценках: {round(result["avg_noisy_mae"], 4)}')
+    print(
+        'Средний MAE на исходных оценках после обучения на шуме: '
+        f'{round(result["avg_original_mae_after_noise_training"], 4)}'
+    )
+    print(
+        'Разброс MAE на исходных оценках после обучения на шуме: '
+        f'{round(result["min_original_mae_after_noise_training"], 4)} .. '
+        f'{round(result["max_original_mae_after_noise_training"], 4)}'
+    )
+    print(f'Время: {round(delta_time, 4)} сек.')
