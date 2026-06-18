@@ -2,7 +2,7 @@
 
 from config import genre_tags
 from config import scheme
-from data_work import tags_work
+from config import tags_work
 
 DATA_DIR = 'C:/DATA/movies-learn/'
 FILE_NAME = 'C:/DATA/movies-learn/dataset.json'

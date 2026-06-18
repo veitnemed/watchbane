@@ -2,7 +2,7 @@
 
 import copy
 from config import genre_tags
-from data_work import tags_work
+from config import tags_work
 
 
 MAIN_INFO = "main_info"
