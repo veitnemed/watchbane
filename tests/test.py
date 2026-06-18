@@ -21,7 +21,7 @@ from data_work import excel_work
 from data_work import candidate_pool
 from data_work import sql_search
 from data_work import title_resolve
-from interface import request as request_ui
+from ui import request as request_ui
 from integrations import api
 from common import valid
 
@@ -473,7 +473,7 @@ def test_manual_add_defaults_when_lookup_fails() -> None:
     }
 
     output = io.StringIO()
-    with patch("interface.request.title_resolve.resolve_title_data_for_add", return_value=resolved):
+    with patch("ui.request.title_resolve.resolve_title_data_for_add", return_value=resolved):
         with patch("builtins.input", return_value="y"):
             with contextlib.redirect_stdout(output):
                 defaults = request_ui.resolve_title_for_training("Manual Missing Title", confirm_genres=True)

@@ -9,11 +9,11 @@ from data_work import genre_stats
 from data_work import sql_search
 from data_work import title_resolve
 from model_work import model
-from interface import candidate_pool_ui
-from interface import request
-from interface import title_presenters
+from ui import candidate_pool_ui
+from ui import request
+from ui import title_presenters
 from data_work import storage
-from interface import ui
+from ui import ui
 from common import valid
 from integrations import api
 

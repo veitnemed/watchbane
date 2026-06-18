@@ -6,8 +6,8 @@ import time
 
 from config import constant
 from common import valid
-from interface import request
-from interface import ui
+from ui import request
+from ui import ui
 from model_work import model
 
 try:

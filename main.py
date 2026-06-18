@@ -4,10 +4,10 @@ from functools import partial
 
 from common import valid
 from data_work import storage
-from interface import global_menu
-from interface import menu_state
-from interface import request
-from interface import ui
+from ui import global_menu
+from ui import menu_state
+from ui import request
+from ui import ui
 from model_work import model
 
 def main_loop():

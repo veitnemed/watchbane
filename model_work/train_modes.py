@@ -1,7 +1,7 @@
 """Содержит вспомогательные режимы диагностики модели."""
 
 from common import valid
-from interface import request
+from ui import request
 from model_work import linear_regression_train
 from model_work import noise_experiment
 
