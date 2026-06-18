@@ -1,3 +1,10 @@
+"""LEGACY: устаревший скрипт на старом плоском layout (patterns/storage/valid).
+
+Не импортируется текущим меню и несовместим с актуальной структурой пакетов
+(common/config/storage/dataset/candidates/model/apis/ui). Оставлен как есть до
+отдельного решения: удалить или переписать под новые модули.
+"""
+
 import csv
 import random
 import time
