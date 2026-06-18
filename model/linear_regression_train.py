@@ -8,7 +8,7 @@ from config import constant
 from common import valid
 from ui import request
 from ui import ui
-from model_work import model
+from model import model
 
 try:
     from sklearn.linear_model import ElasticNet, Lasso, Ridge, SGDRegressor

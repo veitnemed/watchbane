@@ -2,8 +2,8 @@
 
 from common import valid
 from ui import request
-from model_work import linear_regression_train
-from model_work import noise_experiment
+from model import linear_regression_train
+from model import noise_experiment
 
 
 def _fit_with_ridge_benchmark(train_data, start_weights, **_ignored) -> dict:

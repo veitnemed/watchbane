@@ -839,7 +839,7 @@ def find_suspicious_duplicates() -> list:
 
 def rank_candidates_by_predict(candidates: list, weights: dict) -> list:
     """Ранжирует кандидатов по предикту модели без вайб-тегов."""
-    from model_work import model
+    from model import model
 
     no_vibe_features = [
         feature for feature in constant.FEATURES
@@ -863,7 +863,7 @@ def rank_candidates_by_predict(candidates: list, weights: dict) -> list:
 
 def candidate_feature_contributions(candidate: dict, weights: dict) -> dict:
     """Считает вклад каждого признака в предикт кандидата без вайб-тегов."""
-    from model_work import model
+    from model import model
 
     no_vibe_features = [
         feature for feature in constant.FEATURES

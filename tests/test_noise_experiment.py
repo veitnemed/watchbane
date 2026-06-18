@@ -11,9 +11,9 @@ if str(ROOT_DIR) not in sys.path:
 
 from config import constant
 from common import format_score
-from model_work import model
-from model_work import linear_regression_train
-from model_work import noise_experiment
+from model import model
+from model import linear_regression_train
+from model import noise_experiment
 
 
 def assert_check(text: str, result: bool) -> None:

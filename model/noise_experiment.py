@@ -3,7 +3,7 @@
 import copy
 import random
 
-from model_work import model
+from model import model
 
 
 def clamp_score(value: float) -> float:
@@ -73,7 +73,7 @@ def run_noise_experiment(
 ) -> dict:
     """Проверяет, как обучение на шумных оценках влияет на попадание в исходный вкус."""
     if fit_func is None:
-        from model_work import linear_regression_train
+        from model import linear_regression_train
 
         def fit_func(train_data, start_weights, **_ignored):
             return linear_regression_train.train_ridge_for_benchmark(

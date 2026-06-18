@@ -71,7 +71,7 @@ def add_tag_to_data(feature: str) -> None:
 def delete_tag_from_data(feature: str) -> None:
     """Удаляет тег из датасета и весов."""
     from config import constant
-    from model_work import model
+    from model import model
 
     dataset = load_json(constant.FILE_NAME)
     for movie in dataset.values():

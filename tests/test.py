@@ -14,8 +14,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from config import constant
 from common import format_score
-from model_work import model
-from model_work import linear_regression_train
+from model import model
+from model import linear_regression_train
 from data_work import storage
 from data_work import excel_work
 from data_work import candidate_pool

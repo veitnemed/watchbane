@@ -205,7 +205,7 @@ def normalize_weights(weights: dict) -> dict:
 
 def one_to_one_error(data: list, top_n):
     """Проверяет модель методом leave-one-out."""
-    from model_work import linear_regression_train
+    from model import linear_regression_train
 
     data = iter_movies(data)
 
@@ -372,7 +372,7 @@ def selection_weights_without_feature(
     if len(features) == 0:
         return {}
 
-    from model_work import linear_regression_train
+    from model import linear_regression_train
 
     trained_weights = linear_regression_train.train_ridge_for_benchmark(
         data=data,

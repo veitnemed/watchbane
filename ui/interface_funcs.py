@@ -8,7 +8,7 @@ from data_work import genre_import
 from data_work import genre_stats
 from data_work import sql_search
 from data_work import title_resolve
-from model_work import model
+from model import model
 from ui import candidate_pool_ui
 from ui import request
 from ui import title_presenters
@@ -165,7 +165,7 @@ def show_feature_importance(weights, full_error):
             "delta": error_without_feature - full_error,
         }
 
-    from model_work import linear_regression_train
+    from model import linear_regression_train
 
     print('Оценка вклада признаков\n')
     print(f"Метод обучения для benchmark: {linear_regression_train.BENCHMARK_METHOD_LABEL}")

@@ -15,7 +15,7 @@ from config import constant
 from data_work import storage
 from data_work import tags_work
 from apis import api
-from model_work import model
+from model import model
 
 NEW_TAGS = {
     "has_drama": {

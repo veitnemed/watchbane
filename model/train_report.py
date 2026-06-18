@@ -7,7 +7,7 @@ from config import constant
 from data_work import dataset_stats
 from data_work import storage
 from data_work import tags_work
-from model_work import model
+from model import model
 
 REPORTS_DIR_NAME = "reports"
 

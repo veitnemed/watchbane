@@ -12,10 +12,10 @@ from ui import menu_state
 from ui import request
 from ui import tags_menu
 from ui import ui
-from model_work import linear_regression_train
-from model_work import model
-from model_work import train_report
-from model_work import train_modes
+from model import linear_regression_train
+from model import model
+from model import train_report
+from model import train_modes
 from common import valid
 
 

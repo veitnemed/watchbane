@@ -8,7 +8,7 @@ from ui import global_menu
 from ui import menu_state
 from ui import request
 from ui import ui
-from model_work import model
+from model import model
 
 def main_loop():
     """Запускает главный цикл программы."""

@@ -1,7 +1,7 @@
 """Собирает текущее состояние приложения для экранов меню."""
 
 from data_work import storage
-from model_work import model
+from model import model
 
 
 def get_menu_state():
