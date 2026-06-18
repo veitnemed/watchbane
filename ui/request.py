@@ -7,7 +7,7 @@ from config import scheme
 from common import format_score
 from common import valid
 from data_work import storage
-from data_work import title_resolve
+from dataset import title_resolve
 from ui import title_presenters
 
 

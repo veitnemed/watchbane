@@ -3,8 +3,8 @@
 from functools import partial
 
 from config import constant
-from data_work import excel_work
-from data_work import rating_comparison
+from dataset import excel_work
+from dataset import rating_comparison
 from data_work import storage
 from ui import backup_menu
 from ui import interface_funcs

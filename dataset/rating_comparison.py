@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from data_work import storage
-from data_work.dataset_records import update_dataset_record
+from dataset.dataset_records import update_dataset_record
 from ui import ui
 
 

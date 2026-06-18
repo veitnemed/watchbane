@@ -2,7 +2,7 @@
 
 from config import constant
 from config import scheme
-from data_work import title_resolve
+from dataset import title_resolve
 
 
 def short_text(value, limit: int = 50) -> str:

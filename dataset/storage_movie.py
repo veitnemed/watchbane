@@ -4,7 +4,7 @@ from config import constant
 from config import scheme
 from common import format_score as format
 from common import valid
-from data_work.dataset_records import add_dataset_record
+from dataset.dataset_records import add_dataset_record
 from storage.data import load_dataset, save_dataset
 from storage.normalize import (
     normalize_csv_row,

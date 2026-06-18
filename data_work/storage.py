@@ -2,6 +2,6 @@
 
 from storage.data import *
 from storage.files import *
-from data_work.storage_movie import *
+from dataset.storage_movie import *
 from storage.normalize import *
 from candidates.candidate_pool import *

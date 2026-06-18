@@ -9,7 +9,7 @@ from openpyxl.utils import get_column_letter
 
 from config import constant
 from data_work import storage
-from data_work.dataset_records import update_dataset_record
+from dataset.dataset_records import update_dataset_record
 
 
 SHEET_NAME = "dataset"

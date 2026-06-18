@@ -4,9 +4,9 @@ import os
 from datetime import datetime
 
 from config import constant
-from data_work import dataset_stats
+from dataset import dataset_stats
 from data_work import storage
-from data_work import tags_work
+from dataset import tags_work
 from model import model
 
 REPORTS_DIR_NAME = "reports"

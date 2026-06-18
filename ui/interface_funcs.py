@@ -3,11 +3,11 @@
 from config import constant
 from common import format_score as format
 from candidates import candidate_pool
-from data_work import dataset_stats
-from data_work import genre_import
-from data_work import genre_stats
+from dataset import dataset_stats
+from dataset import genre_import
+from dataset import genre_stats
 from apis import imdb_sql as sql_search
-from data_work import title_resolve
+from dataset import title_resolve
 from model import model
 from ui import candidate_pool_ui
 from ui import request

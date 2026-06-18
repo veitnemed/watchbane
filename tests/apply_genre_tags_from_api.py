@@ -13,7 +13,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from config import constant
 from data_work import storage
-from data_work import tags_work
+from dataset import tags_work
 from apis import kp_api as api
 from model import model
 

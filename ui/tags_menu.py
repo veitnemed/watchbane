@@ -1,7 +1,7 @@
 """Содержит интерактивные действия меню настройки тегов."""
 
 from data_work import storage
-from data_work import tags_work
+from dataset import tags_work
 
 
 def show_tags() -> None:

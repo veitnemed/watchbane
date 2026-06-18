@@ -17,10 +17,10 @@ from common import format_score
 from model import model
 from model import linear_regression_train
 from data_work import storage
-from data_work import excel_work
+from dataset import excel_work
 from candidates import candidate_pool
 from apis import imdb_sql as sql_search
-from data_work import title_resolve
+from dataset import title_resolve
 from ui import request as request_ui
 from apis import kp_api as api
 from common import valid
@@ -506,8 +506,8 @@ def test_add_resolver_prioritizes_sql_and_kp() -> None:
         "description": "KP description",
     }
 
-    with patch("data_work.title_resolve.sql_search.search_title_in_sql", return_value={"ok": True, "data": sql_data}):
-        with patch("data_work.title_resolve.api.find_series_raw", return_value={"ok": True, "data": kp_data}):
+    with patch("dataset.title_resolve.sql_search.search_title_in_sql", return_value={"ok": True, "data": sql_data}):
+        with patch("dataset.title_resolve.api.find_series_raw", return_value={"ok": True, "data": kp_data}):
             resolved = title_resolve.resolve_title_data_for_add("Input Title")
 
     defaults = resolved["defaults"]
@@ -542,10 +542,10 @@ def test_add_resolver_uses_tmdb_when_kp_fails() -> None:
         "credits": {},
     }
 
-    with patch("data_work.title_resolve.sql_search.search_title_in_sql", return_value={"ok": True, "data": sql_data}):
-        with patch("data_work.title_resolve.api.find_series_raw", return_value={"ok": False, "error": "network_error", "details": "timeout"}):
-            with patch("data_work.title_resolve.api_tmdb.search_tv_by_name", return_value=[{"id": 10, "name": "TMDb Title", "vote_count": 10}]):
-                with patch("data_work.title_resolve.api_tmdb.get_tv_details", return_value=tmdb_details):
+    with patch("dataset.title_resolve.sql_search.search_title_in_sql", return_value={"ok": True, "data": sql_data}):
+        with patch("dataset.title_resolve.api.find_series_raw", return_value={"ok": False, "error": "network_error", "details": "timeout"}):
+            with patch("dataset.title_resolve.api_tmdb.search_tv_by_name", return_value=[{"id": 10, "name": "TMDb Title", "vote_count": 10}]):
+                with patch("dataset.title_resolve.api_tmdb.get_tv_details", return_value=tmdb_details):
                     resolved = title_resolve.resolve_title_data_for_add("Input Title")
 
     defaults = resolved["defaults"]
@@ -561,9 +561,9 @@ def test_add_resolver_offline_without_sql_is_manual() -> None:
     """Проверяет, что полный offline/no-match сценарий остаётся ручным."""
     print("\n11.8) Проверяем полный offline/manual сценарий resolver-а")
 
-    with patch("data_work.title_resolve.sql_search.search_title_in_sql", return_value={"ok": False, "details": "not_found"}):
-        with patch("data_work.title_resolve.api.find_series_raw", return_value={"ok": False, "error": "network_error", "details": "timeout"}):
-            with patch("data_work.title_resolve.api_tmdb.search_tv_by_name", side_effect=RuntimeError("offline")):
+    with patch("dataset.title_resolve.sql_search.search_title_in_sql", return_value={"ok": False, "details": "not_found"}):
+        with patch("dataset.title_resolve.api.find_series_raw", return_value={"ok": False, "error": "network_error", "details": "timeout"}):
+            with patch("dataset.title_resolve.api_tmdb.search_tv_by_name", side_effect=RuntimeError("offline")):
                 resolved = title_resolve.resolve_title_data_for_add("Manual Only")
 
     assert_check("Ничего не найдено", resolved["found"] is False)
