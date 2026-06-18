@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from config import constant
-from core import valid
+from common import valid
 from data_work import candidate_pool
 
 

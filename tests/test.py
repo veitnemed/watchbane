@@ -13,7 +13,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from config import constant
-from core import format_score
+from common import format_score
 from model_work import model
 from model_work import linear_regression_train
 from data_work import storage
@@ -23,7 +23,7 @@ from data_work import sql_search
 from data_work import title_resolve
 from interface import request as request_ui
 from integrations import api
-from core import valid
+from common import valid
 
 
 def show_check(text: str, result: bool) -> None:

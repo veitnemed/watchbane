@@ -3,8 +3,8 @@
 from dataclasses import dataclass
 
 from config import constant
-from core import format_score
-from core import valid
+from common import format_score
+from common import valid
 from data_work.storage_data import add_movies_to_meta, get_meta_obj, load_dataset, load_meta, save_dataset, save_meta
 from data_work.storage_normalize import (
     is_valid_genre_tags,

@@ -10,7 +10,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from config import constant
-from core import format_score
+from common import format_score
 from model_work import model
 from model_work import linear_regression_train
 from model_work import noise_experiment

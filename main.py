@@ -2,7 +2,7 @@
 
 from functools import partial
 
-from core import valid
+from common import valid
 from data_work import storage
 from interface import global_menu
 from interface import menu_state

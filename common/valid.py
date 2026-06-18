@@ -84,17 +84,6 @@ def is_tags_score(score: str, max_value: int = 1) -> bool:
         return False
 
 
-def is_origin_title(title: str) -> bool:
-    """Проверяет, что такого названия еще нет."""
-    from data_work import storage
-
-    dataset = storage.load_dataset()
-    title = title.strip()
-    for k in dataset.keys():
-        if k.lower() == title.lower():
-            return False
-    return True
-
 def is_correct_select_menu(max_value: int, n: int) -> bool:
     """Проверяет выбор пункта меню."""
     try:
@@ -137,5 +126,4 @@ VALIDATORS = {
     "votes": is_correct_votes,
     "tags_score": is_tags_score,
     "title": is_correct_title,
-    "origin_title": is_origin_title
 }

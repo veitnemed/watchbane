@@ -5,7 +5,7 @@ import os
 
 from config import constant
 from config import genre_tags
-from core import valid
+from common import valid
 from data_work.storage_files import is_json_exists
 from data_work.storage_normalize import LEGACY_TAG_FIELDS, normalize_main_info, normalize_movie_tags, normalize_raw_scores
 

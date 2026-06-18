@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 
 from config import constant
-from core import valid
+from common import valid
 from interface import request
 from interface import ui
 from model_work import model

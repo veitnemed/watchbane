@@ -2,8 +2,8 @@
 
 from config import constant
 from config import scheme
-from core import format_score as format
-from core import valid
+from common import format_score as format
+from common import valid
 from data_work.dataset_records import add_dataset_record
 from data_work.storage_data import load_dataset, save_dataset
 from data_work.storage_normalize import (

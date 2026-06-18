@@ -1,7 +1,7 @@
 """Считает прогнозы, ошибки модели и подбирает веса признаков."""
 
 from config import constant
-from core import format_score
+from common import format_score
 from data_work import storage
 
 def iter_movies(data):

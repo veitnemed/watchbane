@@ -3,7 +3,7 @@
 from config import constant
 from config import genre_tags
 from config import scheme
-from core import valid
+from common import valid
 
 
 LEGACY_TAG_FIELDS = {

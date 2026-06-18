@@ -4,8 +4,9 @@ import copy
 
 from config import constant
 from config import scheme
-from core import format_score
-from core import valid
+from common import format_score
+from common import valid
+from data_work import storage
 from data_work import title_resolve
 from interface import title_presenters
 
@@ -30,6 +31,8 @@ def get_validators(tags_validators: list, max_value: int = 1) -> list:
     for tag in tags_validators:
         if tag == "tags_score":
             validators.append(lambda value, max_value=max_value: valid.is_tags_score(value, max_value))
+        elif tag == "origin_title":
+            validators.append(storage.is_origin_title)
         else:
             validators.append(valid.VALIDATORS[tag])
     return validators

@@ -16,7 +16,7 @@ from model_work import linear_regression_train
 from model_work import model
 from model_work import train_report
 from model_work import train_modes
-from core import valid
+from common import valid
 
 
 def open_data_menu():

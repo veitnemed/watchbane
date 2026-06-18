@@ -8,7 +8,7 @@ from difflib import SequenceMatcher
 
 from config import constant
 from config import genre_tags
-from core import format_score
+from common import format_score
 from integrations import api
 
 DISCOVER_PAGE_LIMIT = 30

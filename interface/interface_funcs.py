@@ -1,7 +1,7 @@
 """Содержит действия интерфейса, которые запускаются из пунктов меню."""
 
 from config import constant
-from core import format_score as format
+from common import format_score as format
 from data_work import candidate_pool
 from data_work import dataset_stats
 from data_work import genre_import
@@ -14,7 +14,7 @@ from interface import request
 from interface import title_presenters
 from data_work import storage
 from interface import ui
-from core import valid
+from common import valid
 from integrations import api
 
 
