@@ -19,7 +19,7 @@ from model import linear_regression_train
 from data_work import storage
 from data_work import excel_work
 from candidates import candidate_pool
-from data_work import sql_search
+from apis import sql_search
 from data_work import title_resolve
 from ui import request as request_ui
 from apis import api

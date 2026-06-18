@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from data_work import sql_search
+from apis import sql_search
 from candidates.tmdb_candidate_pool import (
     build_candidate_pool,
     print_summary,

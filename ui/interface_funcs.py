@@ -6,7 +6,7 @@ from candidates import candidate_pool
 from data_work import dataset_stats
 from data_work import genre_import
 from data_work import genre_stats
-from data_work import sql_search
+from apis import sql_search
 from data_work import title_resolve
 from model import model
 from ui import candidate_pool_ui
@@ -438,7 +438,7 @@ def run_tmdb_candidate_pool_flow() -> None:
     """Запускает новый TMDb candidate_pool v1 без смешивания со старым общим пулом."""
     from pathlib import Path
 
-    from data_work import sql_search
+    from apis import sql_search
     from candidates.tmdb_candidate_pool import (
         build_candidate_pool,
         save_candidate_pool_result,
