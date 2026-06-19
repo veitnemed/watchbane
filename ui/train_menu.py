@@ -1,7 +1,7 @@
 """UI-оркестрация режимов обучения: ввод параметров, запуск и вывод результата.
 
 Чистые вычисления живут в model.linear_regression_train / model.noise_experiment,
-а здесь только интерактив (input/print) поверх них.
+а здесь только интерактив поверх них.
 """
 
 import time
@@ -32,6 +32,7 @@ def choose_method() -> tuple[str, str] | None:
 
 def request_float(text: str, default_value: float) -> float:
     """Запрашивает float-параметр с дефолтным значением."""
+
     def is_valid_value(raw: str) -> bool:
         if raw.strip() == "":
             return True
@@ -140,6 +141,9 @@ def run_noise_sensitivity(data, weights) -> None:
     if len(data) == 0:
         print("Датасет пуст.")
         return
+    if len(model.iter_movies(data)) < 2:
+        print("Недостаточно данных для расчёта LOO MAE.")
+        return
 
     if linear_regression_train.is_method_available(linear_regression_train.BENCHMARK_METHOD) is False:
         print(
@@ -173,14 +177,14 @@ def run_noise_sensitivity(data, weights) -> None:
     print(f"Метод обучения для benchmark: {linear_regression_train.BENCHMARK_METHOD_LABEL}")
     print(f"Повторов: {result['runs']}")
     print(f"Шум оценки: ±{result['delta']:.2f}")
-    print(f"MAE до эксперимента: {result['original_mae_before']:.4f}")
-    print(f"Средний MAE на зашумленных данных: {result['avg_noisy_mae']:.4f}")
+    print(f"LOO MAE до эксперимента: {result['original_loo_mae_before']:.4f}")
+    print(f"Средний LOO MAE на зашумленных данных: {result['avg_noisy_loo_mae']:.4f}")
     print(
-        "Средний MAE на исходных данных после обучения на шуме: "
-        f"{result['avg_original_mae_after_noise_training']:.4f}"
+        "Средний LOO MAE на исходных данных после обучения на шуме: "
+        f"{result['avg_original_loo_mae_after_noise_training']:.4f}"
     )
     print(
-        "Диапазон MAE: "
-        f"{result['min_original_mae_after_noise_training']:.4f}"
-        f" .. {result['max_original_mae_after_noise_training']:.4f}"
+        "Диапазон LOO MAE: "
+        f"{result['min_original_loo_mae_after_noise_training']:.4f}"
+        f" .. {result['max_original_loo_mae_after_noise_training']:.4f}"
     )

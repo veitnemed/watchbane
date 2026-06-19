@@ -1,4 +1,4 @@
-"""Тесты шумового эксперимента устойчивости модели."""
+"""Tests for the noise benchmark helpers."""
 
 import copy
 from pathlib import Path
@@ -66,33 +66,27 @@ def test_perturb_does_not_mutate_source() -> None:
 
     noisy = noise_experiment.perturb_user_scores(data, delta=1.0, rng=rng)
 
-    assert_check("Исходный датасет не изменился", data == original)
-    assert_check("Зашумленный датасет создан как новый объект", noisy is not data)
-    assert_check("Зашумленные оценки остались в диапазоне 0..10", all(
-        0 <= movie["main_info"]["user_score"] <= 10
-        for movie in model.iter_movies(noisy)
-    ))
+    assert_check("Source dataset stays unchanged", data == original)
+    assert_check("Noisy dataset is a new object", noisy is not data)
+    assert_check(
+        "Noisy scores stay inside 0..10",
+        all(0 <= movie["main_info"]["user_score"] <= 10 for movie in model.iter_movies(noisy)),
+    )
 
 
 def test_zero_delta_keeps_scores() -> None:
     data = make_dataset()
     noisy = noise_experiment.perturb_user_scores(data, delta=0, rng=random.Random(1))
 
-    original_scores = [
-        movie["main_info"]["user_score"]
-        for movie in model.iter_movies(data)
-    ]
-    noisy_scores = [
-        movie["main_info"]["user_score"]
-        for movie in model.iter_movies(noisy)
-    ]
+    original_scores = [movie["main_info"]["user_score"] for movie in model.iter_movies(data)]
+    noisy_scores = [movie["main_info"]["user_score"] for movie in model.iter_movies(noisy)]
 
-    assert_check("Шум 0 сохраняет пользовательские оценки", noisy_scores == original_scores)
+    assert_check("Zero delta keeps user scores unchanged", noisy_scores == original_scores)
 
 
 def test_noise_experiment_summary() -> None:
     if linear_regression_train.is_method_available(linear_regression_train.BENCHMARK_METHOD) is False:
-        print("SKIP: Ridge недоступен в текущем окружении.")
+        print("SKIP: Ridge benchmark is unavailable in the current environment.")
         return
 
     data = make_dataset()
@@ -116,31 +110,31 @@ def test_noise_experiment_summary() -> None:
     expected_keys = {
         "runs",
         "delta",
-        "original_mae_before",
-        "avg_noisy_mae",
-        "avg_original_mae_after_noise_training",
-        "min_original_mae_after_noise_training",
-        "max_original_mae_after_noise_training",
+        "original_loo_mae_before",
+        "avg_noisy_loo_mae",
+        "avg_original_loo_mae_after_noise_training",
+        "min_original_loo_mae_after_noise_training",
+        "max_original_loo_mae_after_noise_training",
         "trials",
     }
 
-    assert_check("Результат содержит ожидаемые метрики", set(result) == expected_keys)
-    assert_check("Вернулось нужное количество прогонов", len(result["trials"]) == 5)
-    assert_check("Средний MAE на шуме неотрицательный", result["avg_noisy_mae"] >= 0)
+    assert_check("Result contains the expected metrics", set(result) == expected_keys)
+    assert_check("Returned the expected number of trials", len(result["trials"]) == 5)
+    assert_check("Average noisy LOO MAE is non-negative", result["avg_noisy_loo_mae"] >= 0)
     assert_check(
-        "Диапазон MAE на исходных оценках упорядочен",
-        result["min_original_mae_after_noise_training"]
-        <= result["avg_original_mae_after_noise_training"]
-        <= result["max_original_mae_after_noise_training"]
+        "Original-data LOO MAE range is ordered",
+        result["min_original_loo_mae_after_noise_training"]
+        <= result["avg_original_loo_mae_after_noise_training"]
+        <= result["max_original_loo_mae_after_noise_training"],
     )
 
 
 def run_tests() -> None:
-    print("=== Тесты шумового эксперимента ===")
+    print("=== Noise Benchmark Tests ===")
     test_perturb_does_not_mutate_source()
     test_zero_delta_keeps_scores()
     test_noise_experiment_summary()
-    print("\nПроверки шумового эксперимента пройдены: True")
+    print("\nNoise benchmark checks passed: True")
 
 
 if __name__ == "__main__":

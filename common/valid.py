@@ -1,28 +1,35 @@
-"""Проверяет корректность пользовательского ввода и структур данных."""
+"""Validation helpers for user input and project data structures."""
+
+import unicodedata
 
 from config import constant
 
 
 def parse_float(value) -> float:
-    """Преобразует строку с точкой или запятой в число."""
+    """Convert a string with dot or comma to float."""
     return float(str(value).replace(",", "."))
 
 
 def is_valid_features(features: dict) -> bool:
-    """Проверяет, что набор признаков совпадает со схемой модели."""
+    """Check that feature keys match the current model schema."""
     return set(constant.FEATURES) == set(features.keys())
 
 
+def has_control_characters(text: str) -> bool:
+    """Return True when the string contains control characters."""
+    return any(unicodedata.category(char).startswith("C") for char in text)
+
+
 def is_correct_title(title):
-    """Проверяет корректность названия."""
-    title = title.strip()
-    if title == '':
+    """Validate title-like input while allowing normal punctuation."""
+    title = str(title).strip()
+    if title == "":
         return False
-    return len(set(constant.BAD_CHARACTERS) & set(title)) == 0
+    return has_control_characters(title) is False
 
 
 def is_correct_score(score: str):
-    """Проверяет корректность оценки."""
+    """Check score validity."""
     try:
         score_float = parse_float(score)
         return 0 <= score_float <= 10
@@ -31,7 +38,7 @@ def is_correct_score(score: str):
 
 
 def is_correct_year(year: str) -> bool:
-    """Проверяет корректность года."""
+    """Check year validity."""
     try:
         year_int = int(year)
         return 2000 <= year_int <= constant.NOW_YEAR
@@ -40,12 +47,12 @@ def is_correct_year(year: str) -> bool:
 
 
 def is_correct_main_menu_command(command: str):
-    """Проверяет команду главного меню."""
+    """Check main menu command."""
     return command in constant.COMMANDS
 
 
 def is_correct_votes(votes: str) -> bool:
-    """Проверяет количество голосов."""
+    """Check votes count validity."""
     try:
         votes_int = int(votes)
         return votes_int >= 0
@@ -54,7 +61,7 @@ def is_correct_votes(votes: str) -> bool:
 
 
 def is_valid_raw_meta(raw: dict) -> bool:
-    """Проверяет сырые данные для meta."""
+    """Validate raw meta payload."""
     if set(raw.keys()) != set(constant.RAW_META_FIELDS):
         return False
 
@@ -74,7 +81,7 @@ def is_valid_raw_meta(raw: dict) -> bool:
 
 
 def is_tags_score(score: str, max_value: int = 1) -> bool:
-    """Проверяет значение тега."""
+    """Check tag score validity."""
     try:
         score_int = int(score)
         if max_value is None:
@@ -85,15 +92,16 @@ def is_tags_score(score: str, max_value: int = 1) -> bool:
 
 
 def is_correct_select_menu(max_value: int, n: int) -> bool:
-    """Проверяет выбор пункта меню."""
+    """Check menu item selection."""
     try:
         n_int = int(n)
         return 0 <= n_int <= max_value
     except:
         return True
-    
+
+
 def is_correct_noise_delta(value: str) -> bool:
-    """Проверяет максимальное случайное смещение оценки для шумового эксперимента."""
+    """Check noise delta for benchmark input."""
     if value.strip() == "":
         return True
     try:
@@ -102,8 +110,9 @@ def is_correct_noise_delta(value: str) -> bool:
     except ValueError:
         return False
 
+
 def is_correct_noise_runs(value: str) -> bool:
-    """Проверяет количество повторов шумового эксперимента."""
+    """Check benchmark runs input."""
     if value.strip() == "":
         return True
     try:
@@ -112,13 +121,15 @@ def is_correct_noise_runs(value: str) -> bool:
     except ValueError:
         return False
 
+
 def is_correct_top_n(value: str) -> bool:
-    """Проверяет число объектов для топа ошибок."""
+    """Check top-N input."""
     try:
         top_n = int(value)
         return top_n > 0
     except ValueError:
         return False
+
 
 VALIDATORS = {
     "score": is_correct_score,

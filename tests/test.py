@@ -16,6 +16,7 @@ from config import constant
 from common import format_score
 from model import model
 from model import linear_regression_train
+from model import noise_experiment
 from storage import data as storage_data
 from storage import files as storage_files
 from storage import normalize as storage_normalize
@@ -63,6 +64,19 @@ def make_movie(title="Test Movie", user_score=8.0, raw_score=8.0) -> dict:
             "imdb_score": raw_score,
             "imdb_votes": 1200
         },
+        "computed_scores": format_score.raw_to_struct(
+            {
+                "kp_score": raw_score,
+                "kp_votes": 120000,
+                "imdb_score": raw_score,
+                "imdb_votes": 1200,
+            },
+            {
+                "title": title,
+                "user_score": user_score,
+                "year": 2024,
+            },
+        ),
         constant.TAGS_VIBE_SECTION: tags_vibe,
         constant.GENRE_SECTION: genre_tags
     }
@@ -82,6 +96,8 @@ def setup_temp_project():
         "BACKUP_DIR": constant.BACKUP_DIR,
         "DIR_META": constant.DIR_META,
         "META_JSON": constant.META_JSON,
+        "DIR_TXT": constant.DIR_TXT,
+        "EDIT_EXCEL": constant.EDIT_EXCEL,
     }
 
     constant.DATA_DIR = str(root / "data")
@@ -92,6 +108,8 @@ def setup_temp_project():
     constant.BACKUP_DIR = str(root / "backup") + "/"
     constant.DIR_META = str(root / "meta")
     constant.META_JSON = str(root / "meta" / "meta_data.json")
+    constant.DIR_TXT = str(root / "txt")
+    constant.EDIT_EXCEL = str(root / "txt" / "edit_dataset.xlsx")
 
     storage_data.init_dataset()
     storage_data.init_meta()
@@ -225,6 +243,37 @@ def test_excel_title_guard() -> None:
     )
 
 
+def test_excel_export_overwrite_refreshes_dataset() -> None:
+    """Проверяет, что повторный export пересоздаёт Excel по актуальному dataset."""
+    print("\n5.3) Проверяем пересоздание Excel по актуальному dataset")
+    from openpyxl import load_workbook
+
+    storage_data.save_dataset({
+        "Old Title": make_movie("Old Title"),
+    })
+    assert_check("Первый export Excel успешен", excel_work.export_dataset_to_excel(overwrite=True))
+
+    storage_data.save_dataset({
+        "Old Title": make_movie("Old Title"),
+        "Кухня": make_movie("Кухня"),
+    })
+    assert_check("Повторный export Excel успешен", excel_work.export_dataset_to_excel(overwrite=True))
+
+    workbook = load_workbook(constant.EDIT_EXCEL, data_only=True, read_only=True)
+    try:
+        worksheet = workbook.active
+        titles = [
+            str(row[0]).strip()
+            for row in worksheet.iter_rows(min_row=2, max_col=1, values_only=True)
+            if row[0] is not None
+        ]
+    finally:
+        workbook.close()
+
+    assert_check("Новая запись появляется в Excel после переэкспорта", "Кухня" in titles)
+    assert_check("Excel содержит актуальный набор title", set(titles) == {"Old Title", "Кухня"})
+
+
 def test_validation() -> None:
     """Проверяет валидаторы."""
     print("\n6) Проверяем валидацию")
@@ -236,6 +285,18 @@ def test_validation() -> None:
     assert_check("Год 1999 не проходит", valid.is_correct_year("1999") is False)
     assert_check("100 голосов проходит", valid.is_correct_votes("100"))
     assert_check("-1 голосов не проходит", valid.is_correct_votes("-1") is False)
+
+
+def test_title_punctuation_validation() -> None:
+    """Проверяет, что названия с обычной пунктуацией проходят validator."""
+    print("\n6.1) Проверяем title validator с пунктуацией")
+    assert_check("Ева, рожай! проходит", valid.is_correct_title("Ева, рожай!"))
+    assert_check("Слово пацана. Кровь на асфальте проходит", valid.is_correct_title("Слово пацана. Кровь на асфальте"))
+    assert_check("Что? Где? Когда? проходит", valid.is_correct_title("Что? Где? Когда?"))
+    assert_check("Метод-2 проходит", valid.is_correct_title("Метод-2"))
+    assert_check("Пищеблок: Экстра проходит", valid.is_correct_title("Пищеблок: Экстра"))
+    assert_check("Строка из пробелов не проходит", valid.is_correct_title("   ") is False)
+    assert_check("Управляющий символ не проходит", valid.is_correct_title("Bad\nTitle") is False)
 
 
 def test_tag_compatibility() -> None:
@@ -290,6 +351,34 @@ def test_training() -> None:
     show_check("MAE после обучения", round(new_error, 4))
     assert_check("Новые веса содержат все признаки", set(new_weights) == set(constant.FEATURES))
     assert_check("MAE не увеличилась", new_error <= start_error)
+
+
+def test_noise_experiment_uses_loo_metrics() -> None:
+    """Проверяет, что noise benchmark использует LOO-метрики и не вызывает обычный MAE."""
+    print("\n8) Проверяем noise benchmark на LOO MAE")
+    if linear_regression_train.is_method_available(linear_regression_train.BENCHMARK_METHOD) is False:
+        print("SKIP: Ridge benchmark недоступен в текущем окружении.")
+        return
+
+    data = {
+        "A": make_movie("A", user_score=8.0, raw_score=8.0),
+        "B": make_movie("B", user_score=6.0, raw_score=6.2),
+        "C": make_movie("C", user_score=9.0, raw_score=8.7),
+    }
+
+    with patch("model.noise_experiment.model.mean_absolute_error", side_effect=AssertionError("MAE не должен вызываться")):
+        result = noise_experiment.run_noise_experiment(
+            data=data,
+            weights=constant.DEFAULT_WEIGHTS.copy(),
+            delta=0.5,
+            runs=3,
+            seed=123,
+        )
+
+    assert_check("Benchmark возвращает LOO baseline", "original_loo_mae_before" in result)
+    assert_check("Benchmark возвращает средний LOO на шуме", "avg_noisy_loo_mae" in result)
+    assert_check("Benchmark возвращает LOO на исходных данных после шума", "avg_original_loo_mae_after_noise_training" in result)
+    assert_check("Вернулось 3 прогона benchmark", len(result["trials"]) == 3)
 
 
 def test_backup_restore() -> None:
@@ -665,9 +754,12 @@ def run_tests() -> None:
         test_feature_formatting()
         test_excel_row_supports_genre()
         test_excel_title_guard()
+        test_excel_export_overwrite_refreshes_dataset()
         test_validation()
+        test_title_punctuation_validation()
         test_tag_compatibility()
         test_training()
+        test_noise_experiment_uses_loo_metrics()
         test_backup_restore()
         test_api_fallback_to_secondary_token()
         test_sql_title_search()
