@@ -7,7 +7,7 @@
 ## Что умеет проект
 
 - хранить `dataset`, `meta` и `weights` в JSON;
-- добавлять записи через безопасный путь `storage.add_movie() -> add_dataset_record()`;
+- добавлять записи через безопасный путь `dataset.storage_movie.add_movie() -> dataset.dataset_records.add_dataset_record()`;
 - подтягивать defaults из IMDb SQL / KP / TMDb и показывать форму подтверждения перед сохранением;
 - пересчитывать `computed_scores` из `raw_scores`;
 - поддерживать vibe-теги и жанровую разметку;
@@ -179,7 +179,7 @@ Flow поддерживает:
 При переносе кандидата:
 
 - defaults строятся из данных кандидата;
-- сохранение идёт через `storage.add_movie() -> add_dataset_record()`;
+- сохранение идёт через `dataset.storage_movie.add_movie() -> dataset.dataset_records.add_dataset_record()`;
 - после успешного добавления кандидат удаляется из общего пула;
 - для incomplete-кандидата показывается предупреждение, но ручной перенос разрешён.
 
@@ -219,20 +219,26 @@ Flow поддерживает:
 ## Ключевые файлы
 
 - `main.py` - точка входа.
-- `interface/` - меню, запросы, UI-оркестрация.
-- `data_work/` - dataset, storage, candidate pool, SQL, TMDb pipeline.
-- `integrations/` - внешние API.
-- `model_work/` - предикт, обучение, отчёты.
+- `ui/` - меню, запросы, формы, UI-оркестрация.
+- `storage/` - низкоуровневое хранение (dataset/meta/weights, файлы, backup, нормализация).
+- `dataset/` - записи, meta, Excel, статистика, теги, резолв тайтлов.
+- `candidates/` - общий candidate pool и TMDb pipeline.
+- `model/` - предикт, обучение, метрики, отчёты.
+- `apis/` - внешние API: KP (`kp_api`), TMDb (`tmdb_api`), IMDb SQL (`imdb_sql`).
+- `common/` - чистые утилиты: валидация, формат-скоринг.
+- `config/` - константы, схемы, каталоги тегов/жанров.
 - `datasets/dataset_sql_light/imdb_light.sqlite3` - локальная IMDb SQLite база.
 - `data/candidate_pool/` - TMDb JSON/CSV артефакты.
 - `data/cache/tmdb/` - локальный кэш TMDb.
 
+Архитектура слоёв и правила зависимостей: [docs/ARCHITECTURE_TARGET.md](docs/ARCHITECTURE_TARGET.md). Правила добавления функционала: [add_functions.md](add_functions.md).
+
 ## Полезные команды
 
-Компиляция изменённых интерфейсных модулей:
+Компиляция всех пакетов:
 
 ```powershell
-py -m compileall interface\ui.py interface\global_menu.py interface\interface_funcs.py
+py -m compileall common config storage dataset candidates model apis ui tests
 ```
 
 Основной тестовый запуск:

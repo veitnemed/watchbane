@@ -7,7 +7,7 @@
 Новые записи должны сохраняться через существующий безопасный путь:
 
 ```python
-storage.add_movie(...)
+storage_movie.add_movie(...)
     -> add_dataset_record(...)
 ```
 
@@ -19,8 +19,8 @@ storage.add_movie(...)
 
 Файлы:
 
-- [interface/interface_funcs.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/interface_funcs.py:1)
-- [interface/request.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/interface/request.py:1)
+- [ui/interface_funcs.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/ui/interface_funcs.py:1)
+- [ui/request.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/ui/request.py:1)
 
 Отвечает за:
 
@@ -37,8 +37,8 @@ UI не должен молча добавлять запись в dataset.
 
 Файлы:
 
-- [data_work/storage_movie.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/storage_movie.py:1)
-- [data_work/dataset_records.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/dataset_records.py:1)
+- [dataset/storage_movie.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/dataset/storage_movie.py:1)
+- [dataset/dataset_records.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/dataset/dataset_records.py:1)
 
 Отвечает за:
 
@@ -130,7 +130,7 @@ add_dataset_record(
 interface_funcs.request_object()
 -> request.request_api_defaults(confirm_genres=True)
 -> request.request_all_scores(defaults)
--> storage.add_movie(movie_request, print_message=False)
+-> storage_movie.add_movie(movie_request, print_message=False)
 ```
 
 Особенности:
@@ -147,7 +147,7 @@ interface_funcs.request_object()
 interface_funcs.mark_candidate_as_watched()
 -> title_resolve.build_candidate_transfer_payload(candidate)
 -> request.request_all_scores(defaults)
--> storage.add_movie(
+-> storage_movie.add_movie(
        movie_request,
        meta_payload=meta_payload,
        pool_candidate=candidate,
@@ -165,7 +165,7 @@ interface_funcs.mark_candidate_as_watched()
 
 Логика живёт в:
 
-- [data_work/title_resolve.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/data_work/title_resolve.py:203)
+- [dataset/title_resolve.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/dataset/title_resolve.py:203)
 
 `build_candidate_transfer_payload(candidate)` готовит:
 
@@ -278,7 +278,7 @@ Excel-поток сейчас служит для patch существующих
 Текущее правило:
 
 - успешное добавление через перенос кандидата должно удалить кандидата из общего пула;
-- для этого caller передаёт `pool_candidate` в `storage.add_movie()`;
+- для этого caller передаёт `pool_candidate` в `storage_movie.add_movie()`;
 - cleanup выполняется в `add_dataset_record()`, а не вручную отдельным UI-шагом после сохранения.
 
 ## Печать сообщений
