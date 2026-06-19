@@ -17,7 +17,7 @@ from ui import ui
 from model import linear_regression_train
 from model import model
 from model import train_report
-from model import train_modes
+from ui import train_menu
 from common import valid
 
 
@@ -61,14 +61,14 @@ def open_train_menu():
         if command == "0":
             return
         if command == "1":
-            linear_regression_train.train_linear_model(
+            train_menu.train_linear_model(
                 data=data,
                 weights=weights,
             )
         elif command == "2":
             rating_comparison.start_rating_comparison()
         elif command == "3":
-            train_modes.run_noise_sensitivity(
+            train_menu.run_noise_sensitivity(
                 data=data,
                 weights=weights,
             )
@@ -129,7 +129,7 @@ def open_efficiency_menu():
             )
             model.one_to_one_error(data, int(top_n))
         elif command == "4":
-            train_modes.run_noise_sensitivity(
+            train_menu.run_noise_sensitivity(
                 data=data,
                 weights=weights,
             )
