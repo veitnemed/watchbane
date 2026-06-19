@@ -1,5 +1,9 @@
 """Содержит действия интерфейса, которые запускаются из пунктов меню."""
 
+import json
+import os
+from datetime import datetime
+
 from config import constant
 from common import format_score as format
 from candidates import candidate_pool
@@ -41,6 +45,85 @@ def _build_sorted_score_rows(data: dict) -> list[dict]:
     return rows
 
 
+def build_linear_distribution_items(items: list[dict]) -> list[dict]:
+    """Возвращает draft-строки с proposed_score без изменения dataset."""
+    if len(items) == 0:
+        return []
+
+    scores = [_parse_user_score(item.get("score", item.get("user_score"))) for item in items]
+    min_score = min(scores)
+    max_score = max(scores)
+    step = 0.0 if len(items) == 1 else (max_score - min_score) / (len(items) - 1)
+
+    draft_items = []
+    for index, item in enumerate(items, start=1):
+        old_score = _parse_user_score(item.get("score", item.get("user_score")))
+        proposed_score = old_score if len(items) == 1 else min_score + step * (index - 1)
+        proposed_score = round(proposed_score, 4)
+        draft_items.append({
+            "position": index,
+            "title": item["title"],
+            "old_score": old_score,
+            "proposed_score": proposed_score,
+            "delta": round(proposed_score - old_score, 4),
+        })
+    return draft_items
+
+
+def build_linear_distribution_draft(items: list[dict], created_at: str | None = None) -> dict:
+    """Собирает JSON-структуру draft линейного распределения."""
+    draft_items = build_linear_distribution_items(items)
+    old_scores = [item["old_score"] for item in draft_items]
+    return {
+        "created_at": created_at or datetime.now().isoformat(timespec="seconds"),
+        "method": "linear_distribution",
+        "min_score": min(old_scores) if old_scores else None,
+        "max_score": max(old_scores) if old_scores else None,
+        "count": len(draft_items),
+        "items": draft_items,
+    }
+
+
+def save_linear_distribution_draft(draft: dict, drafts_dir: str | None = None) -> str:
+    """Сохраняет draft JSON и возвращает путь к файлу."""
+    target_dir = drafts_dir or constant.RATING_ORDER_DRAFTS_DIR
+    os.makedirs(target_dir, exist_ok=True)
+    file_name = f"rating_order_draft_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.json"
+    file_path = os.path.join(target_dir, file_name)
+    with open(file_path, "w", encoding="UTF-8") as file:
+        json.dump(draft, file, ensure_ascii=False, indent=4)
+    return file_path
+
+
+def print_linear_distribution_preview(draft: dict, draft_path: str) -> None:
+    """Печатает preview созданного draft."""
+    changed_items = [item for item in draft["items"] if abs(item["delta"]) > 0]
+    print(f"Draft сохранен: {draft_path}")
+    print(f"Обработано записей: {draft['count']}")
+    print(f"Оценок изменится в draft: {len(changed_items)}")
+    print(f"min_score / max_score: {draft['min_score']} / {draft['max_score']}")
+
+    print("\nTop-10 изменений по модулю delta:")
+    top_changes = sorted(draft["items"], key=lambda item: abs(item["delta"]), reverse=True)[:10]
+    if len(top_changes) == 0:
+        print("Нет записей.")
+        return
+    for item in top_changes:
+        print(
+            f"{item['position']}) {item['title']} | "
+            f"{item['old_score']} -> {item['proposed_score']} | "
+            f"delta: {item['delta']:+.4f}"
+        )
+
+
+def create_linear_distribution_draft(rows: list[dict]) -> str:
+    """Создает draft линейного распределения оценок и печатает preview."""
+    draft = build_linear_distribution_draft(rows)
+    draft_path = save_linear_distribution_draft(draft)
+    print_linear_distribution_preview(draft, draft_path)
+    return draft_path
+
+
 def show_all_movies():
     """Показывает все фильмы из датасета."""
     data = storage_data.load_dataset()
@@ -68,7 +151,7 @@ def open_scores_actions_menu(rows: list[dict]) -> None:
         funcs_list=[lambda value: value in {"5", "6", "7", "8"}],
     )
     if command == "5":
-        print("Линейное распределение оценок будет добавлено отдельным шагом.")
+        create_linear_distribution_draft(rows)
     elif command == "6":
         change_user_score_from_rows(rows)
     elif command == "7":

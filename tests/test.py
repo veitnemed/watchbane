@@ -2,6 +2,7 @@
 
 import contextlib
 import io
+import json
 import tempfile
 from pathlib import Path
 import sys
@@ -94,6 +95,7 @@ def setup_temp_project():
         "WEIGHTS_JSON": constant.WEIGHTS_JSON,
         "CRITERIA_POOL_JSON": constant.CRITERIA_POOL_JSON,
         "CANDIDATE_POOL_JSON": constant.CANDIDATE_POOL_JSON,
+        "RATING_ORDER_DRAFTS_DIR": constant.RATING_ORDER_DRAFTS_DIR,
         "BACKUP_DIR": constant.BACKUP_DIR,
         "DIR_META": constant.DIR_META,
         "META_JSON": constant.META_JSON,
@@ -106,6 +108,7 @@ def setup_temp_project():
     constant.WEIGHTS_JSON = str(root / "data" / "weights.json")
     constant.CRITERIA_POOL_JSON = str(root / "data" / "candidate_criteria.json")
     constant.CANDIDATE_POOL_JSON = str(root / "data" / "candidate_pool.json")
+    constant.RATING_ORDER_DRAFTS_DIR = str(root / "data" / "rating_order_drafts")
     constant.BACKUP_DIR = str(root / "backup") + "/"
     constant.DIR_META = str(root / "meta")
     constant.META_JSON = str(root / "meta" / "meta_data.json")
@@ -323,7 +326,7 @@ def test_scores_menu_structure_and_safe_update() -> None:
 
     before_linear = storage_data.load_dataset()
     scores_output = io.StringIO()
-    with patch("builtins.input", side_effect=["5"]):
+    with patch("builtins.input", side_effect=["8"]):
         with contextlib.redirect_stdout(scores_output):
             interface_funcs.show_all_movies()
     output_text = scores_output.getvalue()
@@ -332,13 +335,50 @@ def test_scores_menu_structure_and_safe_update() -> None:
     assert_check("После просмотра есть пункт линейного распределения", "Линейное распределение оценок" in output_text)
     assert_check("После просмотра есть пункт изменения user_score", "Изменить оценку user_score" in output_text)
     assert_check("После просмотра есть пункт изменения названия", "Изменить название" in output_text)
-    assert_check("Линейное распределение не меняет dataset", storage_data.load_dataset() == before_linear)
+    assert_check("Выход из подменю не меняет dataset", storage_data.load_dataset() == before_linear)
 
     with patch("builtins.input", side_effect=["6", "1", "5.5"]):
         with contextlib.redirect_stdout(io.StringIO()):
             interface_funcs.show_all_movies()
     updated = storage_data.load_dataset()
     assert_check("Изменение user_score проходит через update-service", updated["Low"]["main_info"]["user_score"] == 5.5)
+
+
+def test_linear_distribution_draft() -> None:
+    """Проверяет draft линейного распределения оценок без применения к dataset."""
+    print("\n6.3) Проверяем draft линейного распределения оценок")
+
+    rows = [
+        {"title": "A", "score": 5.0},
+        {"title": "B", "score": 7.0},
+        {"title": "C", "score": 10.0},
+    ]
+    proposed = interface_funcs.build_linear_distribution_items(rows)
+    assert_check("3 оценки распределяются линейно", [item["proposed_score"] for item in proposed] == [5.0, 7.5, 10.0])
+    assert_check("Delta считается от old_score", [item["delta"] for item in proposed] == [0.0, 0.5, 0.0])
+
+    single = interface_funcs.build_linear_distribution_items([{"title": "Only", "score": 8.0}])
+    assert_check("Одна запись не падает", len(single) == 1)
+    assert_check("Одна запись сохраняет old_score", single[0]["proposed_score"] == 8.0)
+
+    storage_data.save_dataset({
+        "A": make_movie("A", user_score=5.0, raw_score=5.0),
+        "B": make_movie("B", user_score=7.0, raw_score=7.0),
+        "C": make_movie("C", user_score=10.0, raw_score=10.0),
+    })
+    before_dataset = storage_data.load_dataset()
+    draft_output = io.StringIO()
+    with patch("builtins.input", side_effect=["5"]):
+        with contextlib.redirect_stdout(draft_output):
+            interface_funcs.show_all_movies()
+
+    draft_files = sorted(Path(constant.RATING_ORDER_DRAFTS_DIR).glob("rating_order_draft_*.json"))
+    assert_check("Draft JSON создан во временной папке", len(draft_files) == 1)
+    draft = json.loads(draft_files[0].read_text(encoding="utf-8"))
+    assert_check("Draft содержит метод linear_distribution", draft["method"] == "linear_distribution")
+    assert_check("Draft содержит proposed_score", draft["items"][1]["proposed_score"] == 7.5)
+    assert_check("Dataset не меняется при создании draft", storage_data.load_dataset() == before_dataset)
+    assert_check("Preview показывает top изменений", "Top-10 изменений по модулю delta" in draft_output.getvalue())
 
 
 def test_tag_compatibility() -> None:
@@ -800,6 +840,7 @@ def run_tests() -> None:
         test_validation()
         test_title_punctuation_validation()
         test_scores_menu_structure_and_safe_update()
+        test_linear_distribution_draft()
         test_tag_compatibility()
         test_training()
         test_noise_experiment_uses_loo_metrics()
