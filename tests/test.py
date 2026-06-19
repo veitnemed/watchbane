@@ -25,6 +25,7 @@ from dataset import excel_work
 from candidates import candidate_pool
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
+from ui import interface_funcs
 from ui import request as request_ui
 from apis import kp_api as api
 from common import valid
@@ -297,6 +298,47 @@ def test_title_punctuation_validation() -> None:
     assert_check("Пищеблок: Экстра проходит", valid.is_correct_title("Пищеблок: Экстра"))
     assert_check("Строка из пробелов не проходит", valid.is_correct_title("   ") is False)
     assert_check("Управляющий символ не проходит", valid.is_correct_title("Bad\nTitle") is False)
+
+
+def test_scores_menu_structure_and_safe_update() -> None:
+    """Проверяет UX меню оценок и безопасное обновление user_score."""
+    print("\n6.2) Проверяем меню оценок dataset")
+    from ui import ui as ui_module
+
+    storage_data.save_dataset({
+        "High": make_movie("High", user_score=9.0, raw_score=9.0),
+        "Low": make_movie("Low", user_score=4.0, raw_score=4.0),
+        "Middle": make_movie("Middle", user_score=6.5, raw_score=6.5),
+    })
+
+    data_menu_output = io.StringIO()
+    with contextlib.redirect_stdout(data_menu_output):
+        ui_module.show_data_menu(3, 0)
+    train_menu_output = io.StringIO()
+    with contextlib.redirect_stdout(train_menu_output):
+        ui_module.show_train_menu(3, 0)
+
+    assert_check("Пункт уточнения порядка находится в данных", "Уточнить порядок оценок" in data_menu_output.getvalue())
+    assert_check("Попарное сравнение убрано из обучения", "Попарное сравнение оценок" not in train_menu_output.getvalue())
+
+    before_linear = storage_data.load_dataset()
+    scores_output = io.StringIO()
+    with patch("builtins.input", side_effect=["5"]):
+        with contextlib.redirect_stdout(scores_output):
+            interface_funcs.show_all_movies()
+    output_text = scores_output.getvalue()
+
+    assert_check("Просмотр отсортирован по user_score снизу вверх", output_text.index("Low") < output_text.index("Middle") < output_text.index("High"))
+    assert_check("После просмотра есть пункт линейного распределения", "Линейное распределение оценок" in output_text)
+    assert_check("После просмотра есть пункт изменения user_score", "Изменить оценку user_score" in output_text)
+    assert_check("После просмотра есть пункт изменения названия", "Изменить название" in output_text)
+    assert_check("Линейное распределение не меняет dataset", storage_data.load_dataset() == before_linear)
+
+    with patch("builtins.input", side_effect=["6", "1", "5.5"]):
+        with contextlib.redirect_stdout(io.StringIO()):
+            interface_funcs.show_all_movies()
+    updated = storage_data.load_dataset()
+    assert_check("Изменение user_score проходит через update-service", updated["Low"]["main_info"]["user_score"] == 5.5)
 
 
 def test_tag_compatibility() -> None:
@@ -757,6 +799,7 @@ def run_tests() -> None:
         test_excel_export_overwrite_refreshes_dataset()
         test_validation()
         test_title_punctuation_validation()
+        test_scores_menu_structure_and_safe_update()
         test_tag_compatibility()
         test_training()
         test_noise_experiment_uses_loo_metrics()

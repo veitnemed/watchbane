@@ -61,6 +61,7 @@ def show_data_menu(movies_counter: int, error: int):
     print(' 5 >> Данные о датасете')
     print(' 6 >> Бэкап')
     print(' 7 >> Переименовать запись')
+    print(' 8 >> Уточнить порядок оценок')
     print(' 0 >> Главное меню\n')
 
 
@@ -110,9 +111,8 @@ def show_train_menu(movies_counter: int, error: int):
     show_header(movies_counter, error)
     show_menu_title('ОБУЧЕНИЕ')
     print(' 1 >> Линейная регрессия')
-    print(' 2 >> Попарное сравнение оценок')
-    print(' 3 >> Проверка устойчивости к шуму')
-    print(' 4 >> LOO обучение')
+    print(' 2 >> Проверка устойчивости к шуму')
+    print(' 3 >> LOO обучение')
     print(' 0 >> Главное меню\n')
 
 

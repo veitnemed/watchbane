@@ -28,7 +28,7 @@ def open_data_menu():
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_data_menu(movies_counter, round(abs_error, 2))
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 7)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 8)])
         if command == "0":
             return
         if command == "1":
@@ -46,6 +46,8 @@ def open_data_menu():
             backup_menu.open_backup_menu()
         elif command == "7":
             interface_funcs.rename_movie_record()
+        elif command == "8":
+            rating_comparison.start_rating_comparison()
 
         ui.press_enter()
 
@@ -57,7 +59,7 @@ def open_train_menu():
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_train_menu(movies_counter, round(abs_error, 2))
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 4)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 3)])
         if command == "0":
             return
         if command == "1":
@@ -66,13 +68,11 @@ def open_train_menu():
                 weights=weights,
             )
         elif command == "2":
-            rating_comparison.start_rating_comparison()
-        elif command == "3":
             train_menu.run_noise_sensitivity(
                 data=data,
                 weights=weights,
             )
-        elif command == "4":
+        elif command == "3":
             linear_regression_train.run_loo_training(
                 data=data,
                 weights=weights,

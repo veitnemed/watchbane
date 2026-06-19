@@ -6,6 +6,7 @@ from candidates import candidate_pool
 from dataset import dataset_stats
 from dataset import genre_import
 from dataset import genre_stats
+from dataset.dataset_records import update_dataset_record
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
 from model import model
@@ -17,6 +18,29 @@ from dataset import storage_movie
 from ui import ui
 from common import valid
 
+
+def _parse_user_score(value) -> float:
+    try:
+        return float(str(value).replace(",", "."))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _build_sorted_score_rows(data: dict) -> list[dict]:
+    rows = []
+    for dataset_title, movie in data.items():
+        main_info = movie.get("main_info", {})
+        title = main_info.get("title") or dataset_title
+        score = _parse_user_score(main_info.get("user_score"))
+        rows.append({
+            "title": title,
+            "score": score,
+            "year": main_info.get("year"),
+        })
+    rows.sort(key=lambda row: (row["score"], str(row["title"]).casefold()))
+    return rows
+
+
 def show_all_movies():
     """Показывает все фильмы из датасета."""
     data = storage_data.load_dataset()
@@ -24,9 +48,50 @@ def show_all_movies():
         print('Датасет пуст!')
         return
 
-    for idx, movie in enumerate(data.values()):
-        main_info = movie["main_info"]
-        print(f"{idx + 1}) {main_info['title']} | оценка: {main_info['user_score']}")
+    rows = _build_sorted_score_rows(data)
+    for idx, row in enumerate(rows, start=1):
+        year_text = f" | год: {row['year']}" if row.get("year") not in (None, "") else ""
+        print(f"{idx}) {row['title']} | user_score: {row['score']}{year_text}")
+
+    open_scores_actions_menu(rows)
+
+
+def open_scores_actions_menu(rows: list[dict]) -> None:
+    """Открывает действия после просмотра оценок."""
+    print("\n 5 >> Линейное распределение оценок")
+    print(" 6 >> Изменить оценку user_score")
+    print(" 7 >> Изменить название")
+    print(" 8 >> Главное меню\n")
+
+    command = request.loop_input(
+        text=">> ",
+        funcs_list=[lambda value: value in {"5", "6", "7", "8"}],
+    )
+    if command == "5":
+        print("Линейное распределение оценок будет добавлено отдельным шагом.")
+    elif command == "6":
+        change_user_score_from_rows(rows)
+    elif command == "7":
+        rename_movie_record()
+
+
+def change_user_score_from_rows(rows: list[dict]) -> None:
+    """Меняет user_score через безопасный update-service."""
+    selected_index = request.loop_input(
+        text="Номер записи >> ",
+        funcs_list=[lambda value: value.isdigit() and 1 <= int(value) <= len(rows)],
+    )
+    row = rows[int(selected_index) - 1]
+    new_score = request.loop_input(
+        text=f"Новая оценка user_score для {row['title']} >> ",
+        funcs_list=[valid.is_correct_score],
+    )
+    result = update_dataset_record(
+        row["title"],
+        {"main_info": {"user_score": valid.parse_float(new_score)}},
+        source_name="scores_menu",
+    )
+    print(result.message)
 
 
 def get_predict(weights: dict) -> None:
