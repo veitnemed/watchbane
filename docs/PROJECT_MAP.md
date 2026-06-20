@@ -244,4 +244,6 @@ py tests\test.py
 py main.py
 ```
 
+Актуально для TMDb flow: после обычного build и сохранения snapshot UI сразу предлагает auto-import этого result в общий candidate pool. Для `test-run` auto-import не предлагается, а ручной import остаётся доступен через меню управления пулами.
+
 Для меню `candidate_pool` полезно отдельно проверять: возврат по `0` из подменю, TMDb flow, import TMDb result, top prediction с runtime-фильтрами, retry KP с preview, перенос кандидата в dataset через форму.

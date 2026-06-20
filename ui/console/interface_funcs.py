@@ -827,6 +827,69 @@ def _tmdb_mode_label(mode: str) -> str:
     return labels.get(mode, mode)
 
 
+def ask_auto_import_choice(input_func=input, output_func=print) -> bool:
+    """Спрашивает, нужно ли сразу импортировать TMDb result в общий пул."""
+    while True:
+        answer = str(
+            input_func("Импортировать результат в общий пул кандидатов? [Y/n] >> ")
+        ).strip().casefold()
+        if answer in {"", "y", "yes", "д", "да"}:
+            return True
+        if answer in {"n", "no", "н"}:
+            return False
+        output_func("Неверный ввод. Используйте Enter/Y для импорта или N для отмены.")
+
+
+def _print_tmdb_import_stats(stats: dict, output_func=print) -> None:
+    """Печатает статистику импорта TMDb result в общий candidate pool."""
+    skipped_watched = stats.get("skipped_watched", stats.get("watched_skipped", 0))
+    skipped_duplicates = stats.get("skipped_duplicates", stats.get("duplicates", 0))
+
+    output_func(f"Прочитано: {stats.get('read', 0)}")
+    output_func(f"Добавлено новых: {stats.get('added', 0)}")
+    output_func(f"Обновлено существующих: {stats.get('updated', 0)}")
+    output_func(f"Пропущено already watched: {skipped_watched}")
+    output_func(f"Пропущено как дубли: {skipped_duplicates}")
+    output_func(f"Ошибок: {stats.get('errors', 0)}")
+    output_func(f"Размер пула до импорта: {stats.get('pool_size_before', 0)}")
+    output_func(f"Размер пула после импорта: {stats.get('pool_size_after', stats.get('pool_size', 0))}")
+    output_func(f"criteria_name: {stats.get('criteria_name') or '-'}")
+
+
+def maybe_auto_import_tmdb_result(
+    result_path,
+    criteria_name: str,
+    *,
+    input_func=input,
+    output_func=print,
+    import_func=None,
+):
+    """Предлагает авто-импорт сохранённого TMDb result в общий candidate pool."""
+    if ask_auto_import_choice(input_func=input_func, output_func=output_func) is False:
+        output_func("Импорт отменён. Result сохранён, его можно импортировать позже через управление пуллами.")
+        return None
+
+    if import_func is None:
+        from candidates.import_tmdb import import_tmdb_result_to_common_pool as import_func
+
+    try:
+        stats = import_func(result_path, criteria_name=criteria_name)
+    except Exception as error:
+        output_func(f"Авто-импорт не выполнен: {error}")
+        output_func("Result сохранён, его можно импортировать позже через управление пуллами.")
+        return None
+
+    if isinstance(stats, dict) is False or stats.get("ok") is False:
+        error_text = stats.get("error") if isinstance(stats, dict) else "неизвестная ошибка"
+        output_func(f"Авто-импорт не выполнен: {error_text}")
+        output_func("Result сохранён, его можно импортировать позже через управление пуллами.")
+        return stats
+
+    output_func("\nИмпорт TMDb result завершён.")
+    _print_tmdb_import_stats(stats, output_func=output_func)
+    return stats
+
+
 def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     """Запускает новый TMDb candidate_pool v1 без смешивания со старым общим пулом."""
     from pathlib import Path
@@ -968,6 +1031,9 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
         print(f"Будет детально обработано не больше {details_limit} кандидатов.")
     else:
         print("\nTMDb candidate_pool v1 готов.")
+    if is_test_run is False:
+        print(f"TMDb result сохранён: {json_path}")
+        maybe_auto_import_tmdb_result(json_path, criteria_name)
     print(f"JSON: {json_path}")
     print(f"CSV: {csv_path}")
     _print_tmdb_candidate_stats(result)

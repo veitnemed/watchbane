@@ -1559,6 +1559,144 @@ def test_tmdb_candidate_pool_import_wrapper_delegates_to_new_module() -> None:
     assert_check("Wrapper реально делегирует в новый модуль", mocked.called is True)
 
 
+def test_tmdb_auto_import_helper_accepts_enter_as_yes() -> None:
+    """Проверяет, что Enter считается подтверждением auto-import."""
+    print("\n20) Проверяем auto-import helper: Enter = yes")
+
+    calls = []
+    output = []
+
+    def fake_import(result_path, criteria_name=None):
+        calls.append((result_path, criteria_name))
+        return {
+            "ok": True,
+            "read": 3,
+            "added": 2,
+            "updated": 1,
+            "watched_skipped": 0,
+            "skipped_watched": 0,
+            "duplicates": 0,
+            "skipped_duplicates": 0,
+            "errors": 0,
+            "criteria_name": criteria_name,
+            "pool_size_before": 10,
+            "pool_size_after": 12,
+            "pool_size": 12,
+        }
+
+    stats = interface_funcs.maybe_auto_import_tmdb_result(
+        "saved_result.json",
+        "tmdb_RU_quality",
+        input_func=lambda _prompt: "",
+        output_func=output.append,
+        import_func=fake_import,
+    )
+
+    assert_check("Enter запускает import", calls == [("saved_result.json", "tmdb_RU_quality")])
+    assert_check("Успешная статистика возвращается наружу", stats["ok"] is True)
+    assert_check("Helper печатает заголовок успешного импорта", any("Импорт TMDb result завершён." in line for line in output))
+
+
+def test_tmdb_auto_import_helper_n_cancels_import() -> None:
+    """Проверяет, что n отменяет auto-import без вызова import."""
+    print("\n21) Проверяем auto-import helper: n = cancel")
+
+    output = []
+
+    def fail_import(_result_path, criteria_name=None):
+        raise AssertionError(f"Import не должен вызываться: {criteria_name}")
+
+    stats = interface_funcs.maybe_auto_import_tmdb_result(
+        "saved_result.json",
+        "tmdb_RU_quality",
+        input_func=lambda _prompt: "n",
+        output_func=output.append,
+        import_func=fail_import,
+    )
+
+    assert_check("При n helper возвращает None", stats is None)
+    assert_check(
+        "При n печатается сообщение об отмене",
+        any("Импорт отменён. Result сохранён" in line for line in output),
+    )
+
+
+def test_tmdb_auto_import_helper_reports_error_without_crash() -> None:
+    """Проверяет, что ошибка import не валит flow и snapshot остаётся сохранённым."""
+    print("\n22) Проверяем auto-import helper: ошибка import")
+
+    output = []
+    stats = interface_funcs.maybe_auto_import_tmdb_result(
+        "saved_result.json",
+        "tmdb_RU_quality",
+        input_func=lambda _prompt: "",
+        output_func=output.append,
+        import_func=lambda _path, criteria_name=None: {"ok": False, "error": "boom", "criteria_name": criteria_name},
+    )
+
+    assert_check("Helper не бросает исключение и возвращает stats ошибки", stats["ok"] is False)
+    assert_check("Печатается понятная ошибка import", any("Авто-импорт не выполнен: boom" in line for line in output))
+    assert_check("Печатается подсказка про сохранённый result", any("Result сохранён" in line for line in output))
+
+
+def test_run_tmdb_candidate_pool_flow_calls_auto_import_after_save() -> None:
+    """Проверяет, что обычный TMDb build предлагает auto-import после save."""
+    print("\n23) Проверяем normal build -> auto-import prompt")
+
+    db_path = Path(constant.DATA_DIR) / "fake_imdb.sqlite"
+    db_path.write_text("ok", encoding="utf-8")
+    build_result = {"stats": {"discover_total": 1}, "candidates": []}
+    answers = iter(["", "", "", "", "", "", "", "", "", "y"])
+    output = io.StringIO()
+
+    with patch("builtins.input", side_effect=lambda _prompt: next(answers)):
+        with patch("apis.imdb_sql.DEFAULT_DB_PATH", db_path):
+            with patch("ui.console.interface_funcs.ui.clean_terminal", return_value=None):
+                with patch("candidates.tmdb_candidate_pool.build_candidate_pool", return_value=build_result):
+                    with patch(
+                        "candidates.tmdb_candidate_pool.save_candidate_pool_result",
+                        return_value=("data/candidate_pool/tmdb_result.json", "data/candidate_pool/tmdb_result.csv"),
+                    ):
+                        with patch("ui.console.interface_funcs._print_tmdb_candidate_stats", return_value=None):
+                            with patch("ui.console.interface_funcs.maybe_auto_import_tmdb_result") as mocked_auto_import:
+                                with contextlib.redirect_stdout(output):
+                                    interface_funcs.run_tmdb_candidate_pool_flow(is_test_run=False)
+
+    assert_check("После обычного save вызывается auto-import helper", mocked_auto_import.called is True)
+    assert_check(
+        "Auto-import helper получает путь к сохранённому result",
+        mocked_auto_import.call_args.args == ("data/candidate_pool/tmdb_result.json", "tmdb_RU_quality"),
+    )
+    assert_check("UI сообщает, что TMDb result сохранён", "TMDb result сохранён: data/candidate_pool/tmdb_result.json" in output.getvalue())
+
+
+def test_run_tmdb_candidate_pool_flow_test_run_skips_auto_import() -> None:
+    """Проверяет, что test-run не предлагает auto-import."""
+    print("\n24) Проверяем test-run без auto-import")
+
+    db_path = Path(constant.DATA_DIR) / "fake_imdb_test.sqlite"
+    db_path.write_text("ok", encoding="utf-8")
+    build_result = {"stats": {"discover_total": 1}, "candidates": []}
+    answers = iter(["", "", "", "", "", "", "", "", "y"])
+    output = io.StringIO()
+
+    with patch("builtins.input", side_effect=lambda _prompt: next(answers)):
+        with patch("apis.imdb_sql.DEFAULT_DB_PATH", db_path):
+            with patch("ui.console.interface_funcs.ui.clean_terminal", return_value=None):
+                with patch("candidates.tmdb_candidate_pool.build_candidate_pool", return_value=build_result):
+                    with patch(
+                        "candidates.tmdb_candidate_pool.save_candidate_pool_test_result",
+                        return_value=("data/candidate_pool/tmdb_test_result.json", "data/candidate_pool/tmdb_test_result.csv"),
+                    ):
+                        with patch("ui.console.interface_funcs._print_tmdb_candidate_stats", return_value=None):
+                            with patch("ui.console.interface_funcs.maybe_auto_import_tmdb_result") as mocked_auto_import:
+                                with contextlib.redirect_stdout(output):
+                                    interface_funcs.run_tmdb_candidate_pool_flow(is_test_run=True)
+
+    assert_check("В test-run auto-import helper не вызывается", mocked_auto_import.called is False)
+    assert_check("В test-run нет сообщения про auto-import save prompt", "TMDb result сохранён:" not in output.getvalue())
+
+
 def test_tmdb_genre_diagnostics_and_helpers() -> None:
     """Проверяет TMDb genre diagnostics и чистые genre helpers без изменения dataset."""
     print("\n15) Проверяем TMDb genre diagnostics")
@@ -1684,6 +1822,11 @@ def run_tests() -> None:
         test_import_tmdb_module_normalizes_schema_and_keeps_unknown_fields()
         test_import_tmdb_module_skips_watched_by_title_identity()
         test_tmdb_candidate_pool_import_wrapper_delegates_to_new_module()
+        test_tmdb_auto_import_helper_accepts_enter_as_yes()
+        test_tmdb_auto_import_helper_n_cancels_import()
+        test_tmdb_auto_import_helper_reports_error_without_crash()
+        test_run_tmdb_candidate_pool_flow_calls_auto_import_after_save()
+        test_run_tmdb_candidate_pool_flow_test_run_skips_auto_import()
         test_tmdb_genre_diagnostics_and_helpers()
         print("\nВсе проверки пройдены: True")
     finally:
