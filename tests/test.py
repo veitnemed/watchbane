@@ -26,8 +26,8 @@ from dataset import excel_work
 from candidates import candidate_pool
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
-from ui import interface_funcs
-from ui import request as request_ui
+from ui.console import interface_funcs
+from ui.console import request as request_ui
 from apis import kp_api as api
 from common import valid
 
@@ -309,7 +309,7 @@ def test_title_punctuation_validation() -> None:
 def test_scores_menu_structure_and_safe_update() -> None:
     """Проверяет UX меню оценок и безопасное обновление user_score."""
     print("\n6.2) Проверяем меню оценок dataset")
-    from ui import ui as ui_module
+    from ui.console import ui as ui_module
 
     storage_data.save_dataset({
         "High": make_movie("High", user_score=9.0, raw_score=9.0),
@@ -433,8 +433,8 @@ def test_apply_rating_order_draft() -> None:
     )
 
     with patch("builtins.input", side_effect=["1"]):
-        with patch("ui.interface_funcs.calculate_rating_order_loo_mae", side_effect=[1.0, 0.9]) as loo_mock:
-            with patch("ui.interface_funcs.update_dataset_record", wraps=interface_funcs.update_dataset_record) as update_mock:
+        with patch("ui.console.interface_funcs.calculate_rating_order_loo_mae", side_effect=[1.0, 0.9]) as loo_mock:
+            with patch("ui.console.interface_funcs.update_dataset_record", wraps=interface_funcs.update_dataset_record) as update_mock:
                 with contextlib.redirect_stdout(io.StringIO()):
                     applied = interface_funcs.apply_rating_order_draft_flow(input_func=lambda _text: "y")
 
@@ -496,7 +496,7 @@ def test_apply_rating_order_draft_cancel_keeps_dataset() -> None:
     )
 
     with patch("builtins.input", side_effect=["1"]):
-        with patch("ui.interface_funcs.calculate_rating_order_loo_mae", side_effect=[1.0, 1.1]):
+        with patch("ui.console.interface_funcs.calculate_rating_order_loo_mae", side_effect=[1.0, 1.1]):
             with contextlib.redirect_stdout(io.StringIO()):
                 applied = interface_funcs.apply_rating_order_draft_flow(input_func=lambda _text: "")
 
@@ -770,7 +770,7 @@ def test_manual_add_defaults_when_lookup_fails() -> None:
     }
 
     output = io.StringIO()
-    with patch("ui.request.title_resolve.resolve_title_data_for_add", return_value=resolved):
+    with patch("ui.console.request.title_resolve.resolve_title_data_for_add", return_value=resolved):
         with patch("builtins.input", return_value="y"):
             with contextlib.redirect_stdout(output):
                 defaults = request_ui.resolve_title_for_training("Manual Missing Title", confirm_genres=True)

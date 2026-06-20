@@ -7,7 +7,7 @@ from pathlib import Path
 
 from storage import data as storage_data
 from dataset.dataset_records import update_dataset_record
-from ui import ui
+from ui.console import ui
 
 
 MIN_COMPARISON_RECORDS = 2

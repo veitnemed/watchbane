@@ -219,7 +219,8 @@ Flow поддерживает:
 ## Ключевые файлы
 
 - `main.py` - точка входа.
-- `ui/` - меню, запросы, формы, UI-оркестрация.
+- `ui/console/` - текущее консольное меню, запросы, формы, UI-оркестрация.
+- `ui/gui/` - место под будущий GUI.
 - `storage/` - низкоуровневое хранение (dataset/meta/weights, файлы, backup, нормализация).
 - `dataset/` - записи, meta, Excel, статистика, теги, резолв тайтлов.
 - `candidates/` - общий candidate pool и TMDb pipeline.
@@ -231,7 +232,7 @@ Flow поддерживает:
 - `data/candidate_pool/` - TMDb JSON/CSV артефакты.
 - `data/cache/tmdb/` - локальный кэш TMDb.
 
-Архитектура слоёв и правила зависимостей: [docs/ARCHITECTURE_TARGET.md](docs/ARCHITECTURE_TARGET.md). Правила добавления функционала: [add_functions.md](add_functions.md).
+Архитектура слоёв и правила зависимостей: [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md). Правила добавления функционала: [add_functions.md](add_functions.md).
 
 ## Полезные команды
 

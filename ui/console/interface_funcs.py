@@ -17,13 +17,13 @@ from apis import imdb_sql as sql_search
 from dataset import title_resolve
 from model import linear_regression_train
 from model import model
-from ui import candidate_pool_ui
-from ui import request
-from ui import title_presenters
+from ui.console import candidate_pool_ui
+from ui.console import request
+from ui.console import title_presenters
 from storage import data as storage_data
 from storage import files as storage_files
 from dataset import storage_movie
-from ui import ui
+from ui.console import ui
 from common import valid
 
 

@@ -8,7 +8,7 @@ from common import format_score
 from common import valid
 from storage import data as storage_data
 from dataset import title_resolve
-from ui import title_presenters
+from ui.console import title_presenters
 
 
 def get_request_schema() -> dict:

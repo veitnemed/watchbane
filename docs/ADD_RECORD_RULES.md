@@ -19,8 +19,8 @@ storage_movie.add_movie(...)
 
 Файлы:
 
-- [ui/interface_funcs.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/ui/interface_funcs.py:1)
-- [ui/request.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/ui/request.py:1)
+- [ui/console/interface_funcs.py](../ui/console/interface_funcs.py)
+- [ui/console/request.py](../ui/console/request.py)
 
 Отвечает за:
 
@@ -37,8 +37,8 @@ UI не должен молча добавлять запись в dataset.
 
 Файлы:
 
-- [dataset/storage_movie.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/dataset/storage_movie.py:1)
-- [dataset/dataset_records.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/dataset/dataset_records.py:1)
+- [dataset/storage_movie.py](../dataset/storage_movie.py)
+- [dataset/dataset_records.py](../dataset/dataset_records.py)
 
 Отвечает за:
 
@@ -165,7 +165,7 @@ interface_funcs.mark_candidate_as_watched()
 
 Логика живёт в:
 
-- [dataset/title_resolve.py](/d:/VS%20PROJJJ/vscode%20projects/recommended/dataset/title_resolve.py:203)
+- [dataset/title_resolve.py](../dataset/title_resolve.py)
 
 `build_candidate_transfer_payload(candidate)` готовит:
 

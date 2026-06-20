@@ -7,17 +7,17 @@ from dataset import excel_work
 from storage import files as storage_files
 from dataset import storage_movie
 from candidates import candidate_pool
-from ui import backup_menu
-from ui import interface_funcs
-from ui import menu_state
-from ui import request
-from ui import rating_comparison
-from ui import tags_menu
-from ui import ui
+from ui.console import backup_menu
+from ui.console import interface_funcs
+from ui.console import menu_state
+from ui.console import request
+from ui.console import rating_comparison
+from ui.console import tags_menu
+from ui.console import ui
 from model import linear_regression_train
 from model import model
 from model import train_report
-from ui import train_menu
+from ui.console import train_menu
 from common import valid
 
 

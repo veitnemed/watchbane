@@ -4,7 +4,7 @@
 при добавлении или изменении функциональности в Terminal Movies Learn.
 
 Связанные документы:
-- [docs/ARCHITECTURE_TARGET.md](docs/ARCHITECTURE_TARGET.md) - слои и правила зависимостей.
+- [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md) - слои и правила зависимостей.
 - [PROJECT_MAP.md](PROJECT_MAP.md) - где какой код лежит сейчас.
 - [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления/изменения записей dataset.
 
@@ -41,7 +41,7 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 
 ## 3. Куда класть новый код
 
-- Новый пункт меню / экран / форма / prompt → `ui/` (`global_menu.py`, `interface_funcs.py`, `request.py`, `ui.py`).
+- Новый пункт меню / экран / форма / prompt → `ui/console/` (`global_menu.py`, `interface_funcs.py`, `request.py`, `ui.py`).
 - Новый сценарий над пользовательским dataset (add/update/stats/excel/tags/genre) → `dataset/`.
 - Новая логика пулов кандидатов (сбор, фильтры, dedupe, ranking, retry) → `candidates/`.
 - Новый расчёт/метрика/режим обучения (без ввода-вывода) → `model/`.
@@ -51,16 +51,16 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 - Новая константа/путь/схема/каталог тегов или жанров → `config/`.
 
 Если функция совмещает ввод-вывод и логику — **раздели**: интерактив (input/print)
-в `ui/`, вычисление/сохранение в нижнем слое, UI вызывает сервис и печатает результат.
+в `ui/console/`, вычисление/сохранение в нижнем слое, UI вызывает сервис и печатает результат.
 
 ## 4. Шаблоны типовых задач
 
 ### Добавить пункт меню, который что-то делает с данными
 
 1. Логику-сервис положить в нужный слой (`dataset`/`candidates`/`model`), без `print/input`.
-2. В `ui/interface_funcs.py` добавить UI-функцию: собрать ввод через `ui.request`,
+2. В `ui/console/interface_funcs.py` добавить UI-функцию: собрать ввод через `ui.console.request`,
    вызвать сервис, напечатать результат.
-3. В `ui/global_menu.py` (и `ui/ui.py` для отрисовки) подключить пункт.
+3. В `ui/console/global_menu.py` (и `ui/console/ui.py` для отрисовки) подключить пункт.
 
 ### Добавить/изменить запись dataset
 

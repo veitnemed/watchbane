@@ -10,8 +10,8 @@ from common import valid
 from model import linear_regression_train
 from model import model
 from model import noise_experiment
-from ui import request
-from ui import ui
+from ui.console import request
+from ui.console import ui
 
 
 def choose_method() -> tuple[str, str] | None:

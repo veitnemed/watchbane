@@ -81,10 +81,10 @@ def make_cyrillic_movie() -> dict:
 def test_source_files_are_utf8() -> None:
     print("\n1) Проверяем чтение исходников как UTF-8")
     test_source = (ROOT_DIR / "tests" / "test.py").read_text(encoding="utf-8")
-    readme = (ROOT_DIR / "README.md").read_text(encoding="utf-8")
+    readme = (ROOT_DIR / "docs" / "README.md").read_text(encoding="utf-8")
 
     assert_check("tests/test.py содержит нормальную кириллицу", "Проверяет основные сценарии" in test_source)
-    assert_check("README.md содержит нормальную кириллицу", "Небольшой экспериментальный проект" in readme)
+    assert_check("docs/README.md содержит нормальную кириллицу", "Консольный Python-проект" in readme)
 
 
 def test_tags_json_are_utf8() -> None:
