@@ -10,6 +10,7 @@ from config import constant
 from config import genre_tags
 from common import format_score
 from apis import kp_api as api
+from candidates.keys import normalize_key_part, pool_entry_key, title_identity_key
 
 DISCOVER_PAGE_LIMIT = 30
 DISCOVER_PAGE_PAUSE_SECONDS = 1.0
@@ -52,17 +53,12 @@ def load_candidate_pool() -> dict:
     init_candidate_pool()
     with open(constant.CANDIDATE_POOL_JSON, "r", encoding="utf-8-sig") as file:
         data = json.load(file)
-    if isinstance(data, dict) is False:
-        return {}
-    normalized = remove_watched_candidates(deduplicate_pool(data))
-    if normalized != data:
-        save_candidate_pool(normalized)
-    return normalized
+    return data if isinstance(data, dict) else {}
 
 
 def save_candidate_pool(data: dict) -> None:
     """Сохраняет пул кандидатов."""
-    data = remove_watched_candidates(deduplicate_pool(data))
+    data = normalize_pool(data)
     with open(constant.CANDIDATE_POOL_JSON, "w", encoding="utf-8") as file:
         json.dump(data, file, ensure_ascii=False, indent=4)
 
@@ -148,7 +144,7 @@ def delete_criteria_and_candidates(criteria_name: str) -> dict:
     all_criteria.pop(criteria_name, None)
     save_candidate_criteria(all_criteria)
 
-    pool = load_candidate_pool()
+    pool = normalize_pool(load_candidate_pool())
     filtered_pool = {}
     deleted_candidates = 0
     for key, candidate in pool.items():
@@ -166,16 +162,7 @@ def delete_criteria_and_candidates(criteria_name: str) -> dict:
 
 def candidate_key(movie: dict) -> str:
     """Строит стабильный ключ кандидата для дедупликации."""
-    title = normalized_title_key(
-        movie.get("name")
-        or movie.get("title")
-        or movie.get("alternativeName")
-        or movie.get("alternative_title")
-        or movie.get("enName")
-        or ""
-    )
-    year = movie.get("year") or ""
-    return f"{title}|{year}"
+    return title_identity_key(movie)
 
 
 def normalized_title_key(title: str) -> str:
@@ -232,10 +219,7 @@ def candidate_sort_score(candidate: dict) -> tuple:
 
 def candidate_pool_key(candidate: dict) -> str:
     """Строит ключ дедупликации для уже сохраненного кандидата."""
-    title = normalized_title_key(candidate.get("title") or candidate.get("alternative_title") or "")
-    year = candidate.get("year") or ""
-    criteria_name = candidate.get("criteria_name") or ""
-    return f"{criteria_name}|{title}|{year}"
+    return pool_entry_key(candidate)
 
 
 def candidate_title(candidate: dict) -> str:
@@ -258,26 +242,49 @@ def candidates_are_same(candidate: dict, other_candidate: dict, include_criteria
 
 def deduplicate_pool(pool: dict) -> dict:
     """Удаляет дубли из пула, оставляя лучший вариант по рейтингу и голосам."""
-    best_candidates = []
-    for candidate in pool.values():
-        matched_index = None
-        for idx, current_best in enumerate(best_candidates):
-            if candidates_are_same(candidate, current_best, include_criteria=True):
-                matched_index = idx
-                break
-
-        if matched_index is None:
-            best_candidates.append(candidate)
-            continue
-
-        current_best = best_candidates[matched_index]
-        if candidate_sort_score(candidate) > candidate_sort_score(current_best):
-            best_candidates[matched_index] = candidate
-
     deduplicated = {}
-    for candidate in best_candidates:
-        deduplicated[candidate_key(candidate)] = candidate
+    for candidate in pool.values():
+        if isinstance(candidate, dict) is False:
+            continue
+        key = pool_entry_key(candidate)
+        current_best = deduplicated.get(key)
+        if current_best is None or candidate_sort_score(candidate) > candidate_sort_score(current_best):
+            deduplicated[key] = candidate
     return deduplicated
+
+
+def migrate_pool_keys(pool: dict) -> dict:
+    """Переводит legacy-ключи пула на criteria-aware формат."""
+    migrated = {}
+    for candidate in pool.values():
+        if isinstance(candidate, dict) is False:
+            continue
+        key = pool_entry_key(candidate)
+        current_best = migrated.get(key)
+        if current_best is None or candidate_sort_score(candidate) > candidate_sort_score(current_best):
+            migrated[key] = candidate
+    return migrated
+
+
+def normalize_pool(pool: dict) -> dict:
+    """Приводит пул к каноническому виду без автоматической записи."""
+    if isinstance(pool, dict) is False:
+        return {}
+    return remove_watched_candidates(deduplicate_pool(migrate_pool_keys(pool)))
+
+
+def normalize_or_migrate_candidate_pool_file() -> dict:
+    """Явно мигрирует и нормализует candidate_pool.json."""
+    original = load_candidate_pool()
+    normalized = normalize_pool(original)
+    changed = normalized != original
+    if changed:
+        save_candidate_pool(normalized)
+    return {
+        "changed": changed,
+        "before": len(original) if isinstance(original, dict) else 0,
+        "after": len(normalized),
+    }
 
 
 def build_watched_signatures() -> set:
@@ -288,10 +295,12 @@ def build_watched_signatures() -> set:
     signatures = set()
     for movie in dataset.values():
         main_info = movie.get("main_info", {})
-        title = normalized_title_key(main_info.get("title"))
-        year = main_info.get("year") or ""
-        if title != "":
-            signatures.add(f"{title}|{year}")
+        signature = title_identity_key({
+            "title": main_info.get("title"),
+            "year": main_info.get("year"),
+        })
+        if signature != "|":
+            signatures.add(signature)
     return signatures
 
 
@@ -302,7 +311,7 @@ def is_watched_candidate(candidate: dict, watched_signatures: set | None = None)
 
     title = normalized_title_key(candidate.get("title") or candidate.get("alternative_title") or "")
     year = candidate.get("year") or ""
-    exact_signature = f"{title}|{year}"
+    exact_signature = title_identity_key(candidate)
     if exact_signature in watched_signatures:
         return True
 
@@ -367,7 +376,7 @@ def normalize_candidate(movie: dict, criteria_name: str) -> dict:
 
 def collect_candidates(criteria_name: str, criteria: dict) -> dict:
     """Собирает новых кандидатов из API по критериям."""
-    pool = load_candidate_pool()
+    pool = normalize_pool(load_candidate_pool())
     watched_signatures = build_watched_signatures()
     target_count = int(criteria.get("count") or 20)
     availability = api.check_api_available()
@@ -420,7 +429,7 @@ def collect_candidates(criteria_name: str, criteria: dict) -> dict:
                 watched_skipped += 1
                 continue
 
-            key = candidate_key(movie)
+            key = pool_entry_key(candidate)
             if key in pool:
                 duplicates += 1
                 continue
@@ -453,7 +462,7 @@ def collect_candidates(criteria_name: str, criteria: dict) -> dict:
 
 def get_candidates_by_criteria(criteria_name: str) -> list:
     """Возвращает кандидатов, собранных по выбранному набору критериев."""
-    pool = load_candidate_pool()
+    pool = normalize_pool(load_candidate_pool())
     candidates = [
         candidate
         for candidate in pool.values()
@@ -471,7 +480,7 @@ def get_candidates_by_criteria(criteria_name: str) -> list:
 
 def get_all_candidates() -> list:
     """Возвращает всех кандидатов из общего пула."""
-    pool = load_candidate_pool()
+    pool = normalize_pool(load_candidate_pool())
     candidates = list(pool.values())
     candidates.sort(
         key=lambda item: (
@@ -659,7 +668,7 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
     """Повторно добирает KP-данные для неполных кандидатов в общем candidate_pool."""
     from candidates import tmdb_candidate_pool
 
-    pool = load_candidate_pool()
+    pool = normalize_pool(load_candidate_pool())
     incomplete_candidates = get_incomplete_candidates(pool, criteria_name=criteria_name)
     selected_candidates = incomplete_candidates[:max(0, int(limit))]
     stats = {
@@ -753,7 +762,7 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
 
 def remove_candidate_from_pool(target_candidate: dict) -> int:
     """Удаляет из общего пула все варианты кандидата, совпадающие по названию и году."""
-    pool = load_candidate_pool()
+    pool = normalize_pool(load_candidate_pool())
     filtered_pool = {}
     removed = 0
 

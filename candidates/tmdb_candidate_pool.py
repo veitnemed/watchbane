@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from candidates import candidate_pool as legacy_candidate_pool
+from candidates.keys import pool_entry_key
 from apis import imdb_sql as sql_search
 from apis import kp_api
 from apis import tmdb_api as api_tmdb
@@ -1046,7 +1047,7 @@ def import_tmdb_result_to_common_pool(result_path, criteria_name: str | None = N
             "errors": 1,
         }
 
-    pool = legacy_candidate_pool.load_candidate_pool()
+    pool = legacy_candidate_pool.normalize_pool(legacy_candidate_pool.load_candidate_pool())
     watched_signatures = legacy_candidate_pool.build_watched_signatures()
     stats = {
         "ok": True,
@@ -1075,16 +1076,11 @@ def import_tmdb_result_to_common_pool(result_path, criteria_name: str | None = N
             stats["watched_skipped"] += 1
             continue
 
-        matched_key = None
-        matched_candidate = None
-        for key, existing_candidate in pool.items():
-            if legacy_candidate_pool.candidates_are_same(candidate, existing_candidate, include_criteria=True):
-                matched_key = key
-                matched_candidate = existing_candidate
-                break
+        matched_key = pool_entry_key(candidate)
+        matched_candidate = pool.get(matched_key)
 
-        if matched_key is None:
-            pool[legacy_candidate_pool.candidate_key(candidate)] = candidate
+        if matched_candidate is None:
+            pool[matched_key] = candidate
             stats["added"] += 1
             continue
 

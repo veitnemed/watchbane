@@ -871,6 +871,109 @@ def test_add_resolver_offline_without_sql_is_manual() -> None:
     assert_check("TMDb API ошибка", resolved["statuses"]["tmdb_api"] == "ошибка")
 
 
+def test_candidate_pool_cross_criteria_keys_survive_save_load() -> None:
+    """Проверяет, что одинаковый title/year в разных criteria_name не схлопывается."""
+    print("\n12) Проверяем cross-criteria ключи candidate_pool")
+
+    candidate_pool.save_candidate_pool({
+        "legacy-one": {
+            "title": "Метод",
+            "alternative_title": "",
+            "year": 2015,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 7.3,
+            "kp_votes": 1000,
+            "imdb_score": 7.4,
+            "imdb_votes": 5000,
+            "genres": ["драма"],
+        },
+        "legacy-two": {
+            "title": "Метод",
+            "alternative_title": "",
+            "year": 2015,
+            "criteria_name": "tmdb_RU_hidden",
+            "kp_score": 7.8,
+            "kp_votes": 1500,
+            "imdb_score": 7.5,
+            "imdb_votes": 4500,
+            "genres": ["драма"],
+        },
+    })
+
+    pool = candidate_pool.load_candidate_pool()
+    criteria_names = {candidate.get("criteria_name") for candidate in pool.values()}
+
+    assert_check("В пуле остаются обе criteria-версии", len(pool) == 2)
+    assert_check("Сохраняются оба criteria_name", criteria_names == {"tmdb_RU_quality", "tmdb_RU_hidden"})
+    assert_check(
+        "Ключи пула становятся criteria-aware",
+        set(pool.keys()) == {"tmdb_ru_quality|метод|2015", "tmdb_ru_hidden|метод|2015"}
+    )
+
+
+def test_candidate_pool_same_criteria_duplicates_keep_best() -> None:
+    """Проверяет дедуп внутри одного criteria-aware ключа."""
+    print("\n13) Проверяем дедуп внутри одного pool_entry_key")
+
+    candidate_pool.save_candidate_pool({
+        "first": {
+            "title": "Метод",
+            "alternative_title": "",
+            "year": 2015,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 7.1,
+            "kp_votes": 800,
+            "imdb_score": 7.0,
+            "imdb_votes": 2500,
+            "genres": ["драма"],
+        },
+        "second": {
+            "title": "Метод",
+            "alternative_title": "",
+            "year": 2015,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 8.4,
+            "kp_votes": 2200,
+            "imdb_score": 8.0,
+            "imdb_votes": 9000,
+            "genres": ["драма"],
+        },
+    })
+
+    pool = candidate_pool.load_candidate_pool()
+    saved_candidate = next(iter(pool.values()))
+
+    assert_check("Дубликаты в одном criteria-aware ключе схлопываются", len(pool) == 1)
+    assert_check("Остаётся лучший кандидат по текущему score-правилу", saved_candidate["kp_score"] == 8.4)
+
+
+def test_load_candidate_pool_is_read_only() -> None:
+    """Проверяет, что load_candidate_pool больше не пишет файл на чтении."""
+    print("\n14) Проверяем read-only поведение load_candidate_pool")
+
+    candidate_pool.save_candidate_pool({
+        "one": {
+            "title": "Метод",
+            "alternative_title": "",
+            "year": 2015,
+            "criteria_name": "tmdb_RU_quality",
+            "kp_score": 7.5,
+            "kp_votes": 1000,
+            "imdb_score": 7.3,
+            "imdb_votes": 3000,
+            "genres": ["драма"],
+        },
+    })
+    before_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    with patch("candidates.candidate_pool.save_candidate_pool", side_effect=RuntimeError("load must not save")):
+        pool = candidate_pool.load_candidate_pool()
+
+    after_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    assert_check("load_candidate_pool возвращает данные", len(pool) == 1)
+    assert_check("load_candidate_pool не меняет mtime файла", before_mtime == after_mtime)
+
 def test_remove_candidate_from_pool() -> None:
     """Проверяет удаление просмотренного кандидата из общего пула по совпадающему названию и году."""
     print("\n12) Проверяем удаление просмотренного кандидата из пула")
@@ -919,7 +1022,7 @@ def test_remove_candidate_from_pool() -> None:
     })
     pool = candidate_pool.load_candidate_pool()
 
-    assert_check("Удалён совпавший кандидат из единого общего пула", removed == 1)
+    assert_check("Удалён совпавший кандидат из единого общего пула", removed == 2)
     assert_check("В пуле остался только другой сериал", len(pool) == 1)
 
 
@@ -1020,6 +1123,62 @@ def test_tmdb_candidate_pool_criteria_name() -> None:
         any(candidate.get("criteria_name") == "tmdb_RU_quality" for candidate in pool.values())
     )
 
+
+def test_tmdb_import_keeps_cross_criteria_entries() -> None:
+    """Проверяет, что TMDb import не теряет одинаковый title/year из разных criteria."""
+    print("\n16) Проверяем cross-criteria TMDb import")
+
+    first_result_path = Path(constant.DATA_DIR) / "tmdb_result_quality.json"
+    second_result_path = Path(constant.DATA_DIR) / "tmdb_result_hidden.json"
+
+    first_result = {
+        "criteria_name": "tmdb_RU_quality",
+        "country": "RU",
+        "mode": "quality",
+        "candidates": [
+            {
+                "title": "Метод",
+                "year": 2015,
+                "tmdb_id": 301,
+                "genres_tmdb": ["Drama"],
+                "tmdb_rating": 7.5,
+                "tmdb_votes": 50,
+            }
+        ],
+    }
+    second_result = {
+        "criteria_name": "tmdb_RU_hidden",
+        "country": "RU",
+        "mode": "hidden",
+        "candidates": [
+            {
+                "title": "Метод",
+                "year": 2015,
+                "tmdb_id": 302,
+                "genres_tmdb": ["Drama"],
+                "tmdb_rating": 7.7,
+                "tmdb_votes": 40,
+            }
+        ],
+    }
+
+    first_result_path.write_text(json.dumps(first_result, ensure_ascii=False), encoding="utf-8")
+    second_result_path.write_text(json.dumps(second_result, ensure_ascii=False), encoding="utf-8")
+
+    first_stats = tmdb_candidate_pool.import_tmdb_result_to_common_pool(first_result_path)
+    second_stats = tmdb_candidate_pool.import_tmdb_result_to_common_pool(second_result_path)
+    pool = candidate_pool.load_candidate_pool()
+    method_candidates = [
+        candidate
+        for candidate in pool.values()
+        if candidate.get("title") == "Метод" and candidate.get("year") == 2015
+    ]
+    criteria_names = {candidate.get("criteria_name") for candidate in method_candidates}
+
+    assert_check("Первый TMDb import успешен", first_stats["ok"] is True)
+    assert_check("Второй TMDb import успешен", second_stats["ok"] is True)
+    assert_check("После двух import остаются обе criteria-версии", criteria_names == {"tmdb_RU_quality", "tmdb_RU_hidden"})
+    assert_check("TMDb import не схлопывает одинаковый title/year из разных criteria", len(method_candidates) == 2)
 
 def test_tmdb_genre_diagnostics_and_helpers() -> None:
     """Проверяет TMDb genre diagnostics и чистые genre helpers без изменения dataset."""
@@ -1125,9 +1284,13 @@ def run_tests() -> None:
         test_add_resolver_prioritizes_sql_and_kp()
         test_add_resolver_uses_tmdb_when_kp_fails()
         test_add_resolver_offline_without_sql_is_manual()
+        test_candidate_pool_cross_criteria_keys_survive_save_load()
+        test_candidate_pool_same_criteria_duplicates_keep_best()
+        test_load_candidate_pool_is_read_only()
         test_remove_candidate_from_pool()
         test_candidate_pool_genre_filters()
         test_tmdb_candidate_pool_criteria_name()
+        test_tmdb_import_keeps_cross_criteria_entries()
         test_tmdb_genre_diagnostics_and_helpers()
         print("\nВсе проверки пройдены: True")
     finally:
