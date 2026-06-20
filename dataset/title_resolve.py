@@ -231,6 +231,105 @@ def is_sql_candidate_identity_safe(sql_candidate: dict | None, api_candidate: di
     return True, "title_year_match"
 
 
+def extract_api_original_title(series: dict | None) -> str:
+    """Достаёт original title из API/TMDb candidate для second-pass SQL."""
+    if not isinstance(series, dict):
+        return ""
+    for key in ("original_title", "original_name", "originalName", "alternativeName", "enName"):
+        value = str(series.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def has_api_imdb_values(series: dict | None) -> bool:
+    """Проверяет, дал ли API хотя бы часть IMDb score/votes."""
+    if not isinstance(series, dict):
+        return False
+    raw_scores = extract_api_raw_scores(series)
+    return raw_scores.get("imdb_score") not in (None, "") or raw_scores.get("imdb_votes") not in (None, "")
+
+
+def iter_sql_result_candidates(sql_result: dict) -> list:
+    """Возвращает best + alternatives из SQL-ответа для проверки identity."""
+    if not isinstance(sql_result, dict) or sql_result.get("ok") is not True:
+        return []
+
+    candidates = []
+    data = sql_result.get("data")
+    if isinstance(data, dict):
+        candidates.append(data)
+        for alternative in data.get("alternatives", []) or []:
+            if isinstance(alternative, dict):
+                candidates.append(alternative)
+    return candidates
+
+
+def resolve_sql_after_api_mismatch(query: str, api_candidate: dict, country: str = "Россия", sql_search_func=None) -> dict:
+    """Ищет SQL-кандидата заново по API identity после reject первого SQL."""
+    sql_search_func = sql_search_func or sql_search.search_title_in_sql
+    attempts = []
+
+    imdb_id = extract_candidate_imdb_id(api_candidate)
+    imdb_id_search = getattr(sql_search, "search_title_by_imdb_id", None)
+    if imdb_id:
+        if callable(imdb_id_search):
+            sql_result = imdb_id_search(imdb_id)
+            attempts.append({"method": "imdb_id", "query": imdb_id, "result": sql_result})
+            for candidate in iter_sql_result_candidates(sql_result):
+                accepted, reason = is_sql_candidate_identity_safe(candidate, api_candidate, query)
+                if accepted:
+                    return {
+                        "data": candidate,
+                        "identity": {"accepted": True, "reason": reason},
+                        "status": "найдено и принято",
+                        "attempts": attempts,
+                    }
+        else:
+            attempts.append({"method": "imdb_id", "query": imdb_id, "result": {"ok": False, "error": "unsupported"}})
+
+    api_title = extract_api_title(api_candidate)
+    api_original_title = extract_api_original_title(api_candidate)
+    search_titles = unique_preserve_order([api_title, api_original_title])
+    last_identity = None
+    found_rejected = False
+
+    for search_title in search_titles:
+        sql_result = sql_search_func(search_title, country)
+        attempt = {"method": "title_year", "query": search_title, "result": sql_result}
+        attempts.append(attempt)
+        if sql_result.get("ok") is not True:
+            continue
+
+        for candidate in iter_sql_result_candidates(sql_result):
+            accepted, reason = is_sql_candidate_identity_safe(candidate, api_candidate, query)
+            last_identity = {"accepted": accepted, "reason": reason}
+            if accepted:
+                attempt["accepted_candidate"] = candidate
+                return {
+                    "data": candidate,
+                    "identity": last_identity,
+                    "status": "найдено и принято",
+                    "attempts": attempts,
+                }
+            found_rejected = True
+
+    if found_rejected:
+        return {
+            "data": None,
+            "identity": last_identity,
+            "status": f"найдено, но отклонено ({last_identity.get('reason')})",
+            "attempts": attempts,
+        }
+
+    return {
+        "data": None,
+        "identity": None,
+        "status": "не найдено",
+        "attempts": attempts,
+    }
+
+
 def extract_api_raw_scores(series: dict) -> dict:
     """Собирает рейтинги и голоса из ответа API в плоский словарь."""
     return {
@@ -440,7 +539,13 @@ def first_value(*items):
     return None, None
 
 
-def build_add_defaults_by_priority(input_title: str, sql_data: dict | None, api_data: dict | None, tmdb_data: dict | None) -> dict:
+def build_add_defaults_by_priority(
+    input_title: str,
+    sql_data: dict | None,
+    api_data: dict | None,
+    tmdb_data: dict | None,
+    sql_source: str = "imdb_sql",
+) -> dict:
     """Собирает defaults для добавления записи по зафиксированным приоритетам источников."""
     defaults = build_empty_add_defaults(input_title)
     sources = {
@@ -474,19 +579,19 @@ def build_add_defaults_by_priority(input_title: str, sql_data: dict | None, api_
         (extract_api_title(api_data) if api_data is not None else None, "kp_api"),
         (input_title, "input"),
         (extract_tmdb_title(tmdb_data), "tmdb_api"),
-        ((effective_sql_data or {}).get("title") or (effective_sql_data or {}).get("original_title"), "imdb_sql"),
+        ((effective_sql_data or {}).get("title") or (effective_sql_data or {}).get("original_title"), sql_source),
     )
     year_value, year_source = first_value(
         ((api_data or {}).get("year"), "kp_api"),
-        ((effective_sql_data or {}).get("year"), "imdb_sql"),
+        ((effective_sql_data or {}).get("year"), sql_source),
         ((tmdb_data or {}).get("year"), "tmdb_api"),
     )
     imdb_score, imdb_score_source = first_value(
-        ((effective_sql_data or {}).get("imdb_rating"), "imdb_sql"),
+        ((effective_sql_data or {}).get("imdb_rating"), sql_source),
         (api_scores.get("imdb_score"), "kp_api"),
     )
     imdb_votes, imdb_votes_source = first_value(
-        ((effective_sql_data or {}).get("imdb_votes"), "imdb_sql"),
+        ((effective_sql_data or {}).get("imdb_votes"), sql_source),
         (api_scores.get("imdb_votes"), "kp_api"),
     )
     kp_score, kp_score_source = first_value((api_scores.get("kp_score"), "kp_api"))
@@ -494,7 +599,7 @@ def build_add_defaults_by_priority(input_title: str, sql_data: dict | None, api_
     genres, genres_source = first_value(
         (api_genres, "kp_api"),
         (tmdb_genres, "tmdb_api"),
-        (sql_genres, "imdb_sql"),
+        (sql_genres, sql_source),
     )
     description, description_source = first_value(
         (extract_api_description(api_data) if api_data is not None else None, "kp_api"),
@@ -607,23 +712,60 @@ def resolve_title_data_for_add(title: str, country: str = "Россия") -> dic
     else:
         print_progress_step("TMDb API", "Не требуется")
 
+    api_identity_candidate = api_data if api_data is not None else tmdb_data
+    sql_first_identity = None
+    sql_second_pass_result = None
+    sql_second_pass_data = None
+    sql_second_pass_identity = None
+    sql_second_pass_status = None
+    sql_merge_data = sql_data
+    sql_merge_source = "imdb_sql"
+
+    if sql_data is not None and api_identity_candidate is not None:
+        accepted, reason = is_sql_candidate_identity_safe(sql_data, api_identity_candidate, title)
+        sql_first_identity = {"accepted": accepted, "reason": reason}
+        if accepted is False:
+            if has_api_imdb_values(api_data):
+                sql_second_pass_status = "не требуется, IMDb взят из KP API"
+            else:
+                sql_second_pass_result = resolve_sql_after_api_mismatch(title, api_identity_candidate, country)
+                sql_second_pass_data = sql_second_pass_result.get("data")
+                sql_second_pass_identity = sql_second_pass_result.get("identity")
+                sql_second_pass_status = sql_second_pass_result.get("status")
+                if sql_second_pass_data is not None:
+                    sql_merge_data = sql_second_pass_data
+                    sql_merge_source = "imdb_sql_second_pass"
+
     found = sql_data is not None or api_data is not None or tmdb_data is not None
     defaults = None
     sources = {}
     source_values = {}
     sql_identity = None
     if found:
-        built = build_add_defaults_by_priority(title, sql_data, api_data, tmdb_data)
+        built = build_add_defaults_by_priority(title, sql_merge_data, api_data, tmdb_data, sql_merge_source)
         defaults = built["defaults"]
         sources = built["sources"]
         source_values = built["source_values"]
-        sql_identity = built["sql_identity"]
+        sql_identity = sql_first_identity or built["sql_identity"]
+
+    statuses = {
+        "sql": get_sql_status(sql_data, sql_identity),
+        "kp_api": get_kp_status(api_data, last_api_error),
+        "tmdb_api": tmdb_status,
+    }
+    if sql_second_pass_status is not None:
+        statuses["sql_second_pass"] = sql_second_pass_status
 
     return {
         "title": title,
         "country": country,
         "sql_result": sql_result,
         "sql_data": sql_data,
+        "sql_merge_data": sql_merge_data,
+        "sql_merge_source": sql_merge_source,
+        "sql_second_pass_result": sql_second_pass_result,
+        "sql_second_pass_data": sql_second_pass_data,
+        "sql_second_pass_identity": sql_second_pass_identity,
         "api_data": api_data,
         "api_error": last_api_error,
         "tmdb_data": tmdb_data,
@@ -632,11 +774,7 @@ def resolve_title_data_for_add(title: str, country: str = "Россия") -> dic
         "sources": sources,
         "source_values": source_values,
         "sql_identity": sql_identity,
-        "statuses": {
-            "sql": get_sql_status(sql_data, sql_identity),
-            "kp_api": get_kp_status(api_data, last_api_error),
-            "tmdb_api": tmdb_status,
-        },
+        "statuses": statuses,
         "found": found,
     }
 

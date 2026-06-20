@@ -921,9 +921,183 @@ def test_add_defaults_keeps_sql_only_flow() -> None:
     assert_check("Источник IMDb SQL-only", built["sources"]["imdb_score"] == "imdb_sql")
 
 
+def test_add_resolver_second_pass_sql_after_identity_mismatch() -> None:
+    """Проверяет second-pass SQL после first-pass mismatch, если API не дал IMDb."""
+    print("\n11.11) Проверяем second-pass SQL после identity mismatch")
+    first_sql = {
+        "title": "Mad",
+        "original_title": "Mad",
+        "year": 2010,
+        "genres": ["Animation", "Comedy"],
+        "imdb_rating": 6.0,
+        "imdb_votes": 3480,
+    }
+    second_sql = {
+        "title": "Псих",
+        "original_title": "Псих",
+        "year": 2020,
+        "genres": ["драма"],
+        "imdb_rating": 7.0,
+        "imdb_votes": 584,
+    }
+    kp_data = {
+        "name": "Псих",
+        "year": 2020,
+        "rating": {"kp": 7.372},
+        "votes": {"kp": 173943},
+        "genres": [{"name": "драма"}],
+    }
+
+    with patch(
+        "dataset.title_resolve.sql_search.search_title_in_sql",
+        side_effect=[{"ok": True, "data": first_sql}, {"ok": True, "data": second_sql}],
+    ) as mocked_sql:
+        with patch("dataset.title_resolve.api.find_series_raw", return_value={"ok": True, "data": kp_data}):
+            resolved = title_resolve.resolve_title_data_for_add("Псих")
+
+    defaults = resolved["defaults"]
+    assert_check("First-pass SQL отклонён", resolved["sql_identity"]["accepted"] is False)
+    assert_check("Second-pass SQL принят", resolved["sql_second_pass_identity"]["accepted"] is True)
+    assert_check("Second-pass вызвал SQL второй раз", mocked_sql.call_count == 2)
+    assert_check("Final IMDb rating из second-pass SQL", defaults["raw_scores"]["imdb_score"] == 7.0)
+    assert_check("Final IMDb votes из second-pass SQL", defaults["raw_scores"]["imdb_votes"] == 584)
+    assert_check("Источник IMDb second-pass", resolved["sources"]["imdb_score"] == "imdb_sql_second_pass")
+    assert_check("Статус second-pass принят", resolved["statuses"]["sql_second_pass"] == "найдено и принято")
+
+
+def test_add_resolver_skips_second_pass_when_api_has_imdb() -> None:
+    """Проверяет, что second-pass не нужен, если KP API уже дал IMDb."""
+    print("\n11.12) Проверяем skip second-pass при IMDb из API")
+    first_sql = {
+        "title": "Mad",
+        "original_title": "Mad",
+        "year": 2010,
+        "genres": ["Animation", "Comedy"],
+        "imdb_rating": 6.0,
+        "imdb_votes": 3480,
+    }
+    kp_data = {
+        "name": "Псих",
+        "year": 2020,
+        "rating": {"kp": 7.372, "imdb": 7.0},
+        "votes": {"kp": 173943, "imdb": 584},
+        "genres": [{"name": "драма"}],
+    }
+
+    with patch("dataset.title_resolve.sql_search.search_title_in_sql", return_value={"ok": True, "data": first_sql}) as mocked_sql:
+        with patch("dataset.title_resolve.api.find_series_raw", return_value={"ok": True, "data": kp_data}):
+            resolved = title_resolve.resolve_title_data_for_add("Псих")
+
+    defaults = resolved["defaults"]
+    assert_check("First-pass SQL отклонён", resolved["sql_identity"]["accepted"] is False)
+    assert_check("Second-pass SQL не вызывается", mocked_sql.call_count == 1)
+    assert_check("IMDb rating берётся из API", defaults["raw_scores"]["imdb_score"] == 7.0)
+    assert_check("Источник IMDb KP API", resolved["sources"]["imdb_score"] == "kp_api")
+    assert_check(
+        "Статус second-pass сообщает, что он не нужен",
+        resolved["statuses"]["sql_second_pass"] == "не требуется, IMDb взят из KP API",
+    )
+
+
+def test_add_resolver_rejects_second_pass_sql_mismatch() -> None:
+    """Проверяет, что second-pass SQL тоже проходит identity gate."""
+    print("\n11.13) Проверяем reject second-pass SQL mismatch")
+    first_sql = {
+        "title": "Mad",
+        "original_title": "Mad",
+        "year": 2010,
+        "genres": ["Animation", "Comedy"],
+        "imdb_rating": 6.0,
+        "imdb_votes": 3480,
+    }
+    second_sql = {
+        "title": "Bad",
+        "original_title": "Bad",
+        "year": 2011,
+        "genres": ["Comedy"],
+        "imdb_rating": 5.5,
+        "imdb_votes": 100,
+    }
+    kp_data = {
+        "name": "Псих",
+        "year": 2020,
+        "rating": {"kp": 7.372},
+        "votes": {"kp": 173943},
+        "genres": [{"name": "драма"}],
+    }
+
+    with patch(
+        "dataset.title_resolve.sql_search.search_title_in_sql",
+        side_effect=[{"ok": True, "data": first_sql}, {"ok": True, "data": second_sql}],
+    ):
+        with patch("dataset.title_resolve.api.find_series_raw", return_value={"ok": True, "data": kp_data}):
+            resolved = title_resolve.resolve_title_data_for_add("Псих")
+
+    defaults = resolved["defaults"]
+    assert_check("First-pass SQL отклонён", resolved["sql_identity"]["accepted"] is False)
+    assert_check("Second-pass SQL тоже отклонён", resolved["sql_second_pass_identity"]["accepted"] is False)
+    assert_check("Чужой second-pass IMDb не используется", defaults["raw_scores"]["imdb_score"] is None)
+    assert_check("Источник IMDb остаётся пустым", resolved["sources"]["imdb_score"] is None)
+    assert_check("Статус second-pass показывает reject", "отклонено" in resolved["statuses"]["sql_second_pass"])
+
+
+def test_add_resolver_accepted_first_pass_skips_second_pass() -> None:
+    """Проверяет, что accepted first-pass не запускает second-pass."""
+    print("\n11.14) Проверяем accepted first-pass без second-pass")
+    first_sql = {
+        "tconst": "tt1234567",
+        "title": "Псих",
+        "original_title": "Псих",
+        "year": 2020,
+        "genres": ["драма"],
+        "imdb_rating": 7.0,
+        "imdb_votes": 584,
+    }
+    kp_data = {
+        "externalId": {"imdb": "tt1234567"},
+        "name": "Псих",
+        "year": 2020,
+        "rating": {"kp": 7.372},
+        "votes": {"kp": 173943},
+        "genres": [{"name": "драма"}],
+    }
+
+    with patch("dataset.title_resolve.sql_search.search_title_in_sql", return_value={"ok": True, "data": first_sql}) as mocked_sql:
+        with patch("dataset.title_resolve.api.find_series_raw", return_value={"ok": True, "data": kp_data}):
+            resolved = title_resolve.resolve_title_data_for_add("Псих")
+
+    assert_check("First-pass SQL принят", resolved["sql_identity"]["accepted"] is True)
+    assert_check("Second-pass не вызывается", mocked_sql.call_count == 1)
+    assert_check("Статуса second-pass нет", "sql_second_pass" not in resolved["statuses"])
+    assert_check("Источник IMDb first-pass", resolved["sources"]["imdb_score"] == "imdb_sql")
+
+
+def test_add_resolver_sql_only_skips_second_pass() -> None:
+    """Проверяет, что SQL-only при отсутствии API не запускает second-pass."""
+    print("\n11.15) Проверяем SQL-only resolver без second-pass")
+    sql_data = {
+        "title": "Mad",
+        "original_title": "Mad",
+        "year": 2010,
+        "genres": ["Animation", "Comedy"],
+        "imdb_rating": 6.0,
+        "imdb_votes": 3480,
+    }
+
+    with patch("dataset.title_resolve.sql_search.search_title_in_sql", return_value={"ok": True, "data": sql_data}) as mocked_sql:
+        with patch("dataset.title_resolve.api.find_series_raw", return_value={"ok": False, "error": "not_found", "details": "not found"}):
+            with patch("dataset.title_resolve.api_tmdb.search_tv_by_name", return_value=[]):
+                resolved = title_resolve.resolve_title_data_for_add("Mad")
+
+    assert_check("SQL-only принят", resolved["sql_identity"]["accepted"] is True)
+    assert_check("Second-pass не вызывается без API candidate", mocked_sql.call_count == 1)
+    assert_check("Статуса second-pass нет в SQL-only", "sql_second_pass" not in resolved["statuses"])
+    assert_check("IMDb остаётся из SQL-only", resolved["sources"]["imdb_score"] == "imdb_sql")
+
+
 def test_add_resolver_prioritizes_sql_and_kp() -> None:
     """Проверяет приоритет SQL для IMDb и KP API для KP/жанров/описания."""
-    print("\n11.11) Проверяем приоритеты источников SQL + KP API")
+    print("\n11.16) Проверяем приоритеты источников SQL + KP API")
     sql_data = {
         "tconst": "tt7654321",
         "title": "SQL Title",
@@ -959,7 +1133,7 @@ def test_add_resolver_prioritizes_sql_and_kp() -> None:
 
 def test_add_resolver_uses_tmdb_when_kp_fails() -> None:
     """Проверяет fallback на TMDb для жанров/описания, без подстановки KP/IMDb оценок."""
-    print("\n11.12) Проверяем fallback на TMDb при падении KP API")
+    print("\n11.17) Проверяем fallback на TMDb при падении KP API")
     sql_data = {
         "tconst": "tt2468135",
         "title": "SQL Title",
@@ -997,7 +1171,7 @@ def test_add_resolver_uses_tmdb_when_kp_fails() -> None:
 
 def test_add_resolver_offline_without_sql_is_manual() -> None:
     """Проверяет, что полный offline/no-match сценарий остаётся ручным."""
-    print("\n11.13) Проверяем полный offline/manual сценарий resolver-а")
+    print("\n11.18) Проверяем полный offline/manual сценарий resolver-а")
 
     with patch("dataset.title_resolve.sql_search.search_title_in_sql", return_value={"ok": False, "details": "not_found"}):
         with patch("dataset.title_resolve.api.find_series_raw", return_value={"ok": False, "error": "network_error", "details": "timeout"}):
@@ -1803,6 +1977,11 @@ def run_tests() -> None:
         test_add_defaults_accepts_sql_when_title_year_match_without_imdb_id()
         test_add_defaults_rejects_sql_when_year_differs_more_than_one()
         test_add_defaults_keeps_sql_only_flow()
+        test_add_resolver_second_pass_sql_after_identity_mismatch()
+        test_add_resolver_skips_second_pass_when_api_has_imdb()
+        test_add_resolver_rejects_second_pass_sql_mismatch()
+        test_add_resolver_accepted_first_pass_skips_second_pass()
+        test_add_resolver_sql_only_skips_second_pass()
         test_add_resolver_prioritizes_sql_and_kp()
         test_add_resolver_uses_tmdb_when_kp_fails()
         test_add_resolver_offline_without_sql_is_manual()

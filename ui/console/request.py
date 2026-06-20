@@ -236,6 +236,7 @@ def build_manual_defaults(input_title: str, base_defaults: dict | None = None) -
 def format_source(source: str | None) -> str:
     labels = {
         "imdb_sql": "IMDb SQL",
+        "imdb_sql_second_pass": "IMDb SQL second pass",
         "kp_api": "KP API",
         "tmdb_api": "TMDb API",
         "input": "ручной ввод",
@@ -275,7 +276,11 @@ def print_autofill_status(resolved: dict, *, manual_mode: bool) -> None:
     description = source_values.get("description")
 
     print("\nАвтозаполнение:")
-    print(f"SQL: {statuses.get('sql', 'не найдено')}")
+    if "sql_second_pass" in statuses:
+        print(f"SQL first pass: {statuses.get('sql', 'не найдено')}")
+        print(f"SQL second pass: {statuses.get('sql_second_pass', 'не найдено')}")
+    else:
+        print(f"SQL: {statuses.get('sql', 'не найдено')}")
     print(f"KP API: {statuses.get('kp_api', 'не найдено')}")
     print(f"TMDb API: {statuses.get('tmdb_api', 'не найдено')}")
     print("")
