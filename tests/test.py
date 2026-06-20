@@ -96,6 +96,7 @@ def setup_temp_project():
         "CRITERIA_POOL_JSON": constant.CRITERIA_POOL_JSON,
         "CANDIDATE_POOL_JSON": constant.CANDIDATE_POOL_JSON,
         "RATING_ORDER_DRAFTS_DIR": constant.RATING_ORDER_DRAFTS_DIR,
+        "MODEL_METRICS_JSON": constant.MODEL_METRICS_JSON,
         "BACKUP_DIR": constant.BACKUP_DIR,
         "DIR_META": constant.DIR_META,
         "META_JSON": constant.META_JSON,
@@ -109,6 +110,7 @@ def setup_temp_project():
     constant.CRITERIA_POOL_JSON = str(root / "data" / "candidate_criteria.json")
     constant.CANDIDATE_POOL_JSON = str(root / "data" / "candidate_pool.json")
     constant.RATING_ORDER_DRAFTS_DIR = str(root / "data" / "rating_order_drafts")
+    constant.MODEL_METRICS_JSON = str(root / "config" / "model_metrics.json")
     constant.BACKUP_DIR = str(root / "backup") + "/"
     constant.DIR_META = str(root / "meta")
     constant.META_JSON = str(root / "meta" / "meta_data.json")
@@ -118,6 +120,7 @@ def setup_temp_project():
     storage_data.init_dataset()
     storage_data.init_meta()
     storage_data.init_weights()
+    storage_data.init_model_metrics()
 
     return temp_dir, old_paths
 
@@ -379,6 +382,126 @@ def test_linear_distribution_draft() -> None:
     assert_check("Draft содержит proposed_score", draft["items"][1]["proposed_score"] == 7.5)
     assert_check("Dataset не меняется при создании draft", storage_data.load_dataset() == before_dataset)
     assert_check("Preview показывает top изменений", "Top-10 изменений по модулю delta" in draft_output.getvalue())
+
+
+def write_rating_order_draft(name: str, items: list[dict]) -> Path:
+    """Создаёт draft распределения оценок для тестов."""
+    draft_dir = Path(constant.RATING_ORDER_DRAFTS_DIR)
+    draft_dir.mkdir(parents=True, exist_ok=True)
+    draft_path = draft_dir / name
+    draft = {
+        "created_at": "2026-06-19T12:00:00",
+        "method": "linear_distribution",
+        "min_score": min(item["old_score"] for item in items),
+        "max_score": max(item["old_score"] for item in items),
+        "count": len(items),
+        "items": items,
+    }
+    draft_path.write_text(json.dumps(draft, ensure_ascii=False, indent=4), encoding="utf-8")
+    return draft_path
+
+
+def clear_rating_order_drafts() -> None:
+    """Очищает временные draft-файлы тестового проекта."""
+    draft_dir = Path(constant.RATING_ORDER_DRAFTS_DIR)
+    if draft_dir.exists() is False:
+        return
+    for draft_file in draft_dir.glob("rating_order_draft_*.json"):
+        draft_file.unlink()
+
+
+def test_apply_rating_order_draft() -> None:
+    """Проверяет безопасное применение draft распределения оценок."""
+    print("\n6.4) Проверяем применение draft распределения оценок")
+
+    storage_data.save_dataset({
+        "A": make_movie("A", user_score=5.0, raw_score=5.0),
+        "B": make_movie("B", user_score=7.0, raw_score=7.0),
+        "C": make_movie("C", user_score=10.0, raw_score=10.0),
+    })
+    clear_rating_order_drafts()
+    storage_data.save_model_metrics({"loo_mae": 0.4321})
+    before_weights = storage_data.load_weights()
+    before_metrics = storage_data.load_model_metrics()
+    write_rating_order_draft(
+        "rating_order_draft_2026-06-19_12-00-00.json",
+        [
+            {"position": 1, "title": "A", "old_score": 5.0, "proposed_score": 5.0, "delta": 0.0},
+            {"position": 2, "title": "B", "old_score": 7.0, "proposed_score": 7.5, "delta": 0.5},
+            {"position": 3, "title": "C", "old_score": 10.0, "proposed_score": 10.0, "delta": 0.0},
+        ],
+    )
+
+    with patch("builtins.input", side_effect=["1"]):
+        with patch("ui.interface_funcs.calculate_rating_order_loo_mae", side_effect=[1.0, 0.9]) as loo_mock:
+            with patch("ui.interface_funcs.update_dataset_record", wraps=interface_funcs.update_dataset_record) as update_mock:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    applied = interface_funcs.apply_rating_order_draft_flow(input_func=lambda _text: "y")
+
+    updated = storage_data.load_dataset()
+    assert_check("Draft с совпадающим old_score применяется", applied is True)
+    assert_check("update_dataset_record вызван для изменённой оценки", update_mock.call_count == 1)
+    assert_check("LOO comparison вызывается для текущего и draft dataset", loo_mock.call_count == 2)
+    assert_check("user_score обновлён после применения", updated["B"]["main_info"]["user_score"] == 7.5)
+    assert_check("Веса не меняются при применении draft", storage_data.load_weights() == before_weights)
+    assert_check("model_metrics не меняется при применении draft", storage_data.load_model_metrics() == before_metrics)
+
+
+def test_apply_rating_order_draft_stops_on_stale_or_missing_data() -> None:
+    """Проверяет остановку применения draft при рассинхроне с dataset."""
+    print("\n6.5) Проверяем защиту применения draft")
+
+    storage_data.save_dataset({
+        "A": make_movie("A", user_score=5.0, raw_score=5.0),
+        "B": make_movie("B", user_score=7.0, raw_score=7.0),
+    })
+    clear_rating_order_drafts()
+    stale = {
+        "method": "linear_distribution",
+        "items": [
+            {"title": "A", "old_score": 4.0, "proposed_score": 5.0},
+        ],
+    }
+    missing = {
+        "method": "linear_distribution",
+        "items": [
+            {"title": "Missing", "old_score": 7.0, "proposed_score": 8.0},
+        ],
+    }
+    ok_stale, message_stale, _ = interface_funcs.validate_rating_order_draft(stale, storage_data.load_dataset())
+    ok_missing, message_missing, _ = interface_funcs.validate_rating_order_draft(missing, storage_data.load_dataset())
+
+    assert_check("Draft с несовпадающим old_score останавливается", ok_stale is False)
+    assert_check("Stale draft сообщает о смене dataset", message_stale == "Dataset изменился после создания draft. Создайте новый draft.")
+    assert_check("Draft с отсутствующим title останавливается", ok_missing is False)
+    assert_check("Missing title сообщает об отсутствующей записи", "отсутствует запись" in message_missing)
+
+
+def test_apply_rating_order_draft_cancel_keeps_dataset() -> None:
+    """Проверяет, что отмена подтверждения не меняет dataset."""
+    print("\n6.6) Проверяем отмену применения draft")
+
+    storage_data.save_dataset({
+        "A": make_movie("A", user_score=5.0, raw_score=5.0),
+        "B": make_movie("B", user_score=7.0, raw_score=7.0),
+    })
+    clear_rating_order_drafts()
+    before_dataset = storage_data.load_dataset()
+    write_rating_order_draft(
+        "rating_order_draft_2026-06-19_13-00-00.json",
+        [
+            {"position": 1, "title": "A", "old_score": 5.0, "proposed_score": 5.0, "delta": 0.0},
+            {"position": 2, "title": "B", "old_score": 7.0, "proposed_score": 8.0, "delta": 1.0},
+        ],
+    )
+
+    with patch("builtins.input", side_effect=["1"]):
+        with patch("ui.interface_funcs.calculate_rating_order_loo_mae", side_effect=[1.0, 1.1]):
+            with contextlib.redirect_stdout(io.StringIO()):
+                applied = interface_funcs.apply_rating_order_draft_flow(input_func=lambda _text: "")
+
+    assert_check("При отмене draft не применяется", applied is False)
+    assert_check("Dataset не меняется при отмене", storage_data.load_dataset() == before_dataset)
 
 
 def test_tag_compatibility() -> None:
@@ -841,6 +964,9 @@ def run_tests() -> None:
         test_title_punctuation_validation()
         test_scores_menu_structure_and_safe_update()
         test_linear_distribution_draft()
+        test_apply_rating_order_draft()
+        test_apply_rating_order_draft_stops_on_stale_or_missing_data()
+        test_apply_rating_order_draft_cancel_keeps_dataset()
         test_tag_compatibility()
         test_training()
         test_noise_experiment_uses_loo_metrics()

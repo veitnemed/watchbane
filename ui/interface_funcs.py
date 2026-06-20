@@ -2,7 +2,9 @@
 
 import json
 import os
+import copy
 from datetime import datetime
+from pathlib import Path
 
 from config import constant
 from common import format_score as format
@@ -13,11 +15,13 @@ from dataset import genre_stats
 from dataset.dataset_records import update_dataset_record
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
+from model import linear_regression_train
 from model import model
 from ui import candidate_pool_ui
 from ui import request
 from ui import title_presenters
 from storage import data as storage_data
+from storage import files as storage_files
 from dataset import storage_movie
 from ui import ui
 from common import valid
@@ -28,6 +32,13 @@ def _parse_user_score(value) -> float:
         return float(str(value).replace(",", "."))
     except (TypeError, ValueError):
         return 0.0
+
+
+def _try_parse_score(value) -> float | None:
+    try:
+        return float(str(value).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
 
 
 def _build_sorted_score_rows(data: dict) -> list[dict]:
@@ -124,6 +135,238 @@ def create_linear_distribution_draft(rows: list[dict]) -> str:
     return draft_path
 
 
+def get_rating_order_draft_files(drafts_dir: str | None = None) -> list[Path]:
+    """Возвращает draft-файлы от новых к старым."""
+    target_dir = Path(drafts_dir or constant.RATING_ORDER_DRAFTS_DIR)
+    if target_dir.exists() is False:
+        return []
+    draft_files = [
+        path for path in target_dir.glob("rating_order_draft_*.json")
+        if path.is_file()
+    ]
+    draft_files.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    return draft_files
+
+
+def load_rating_order_draft(path: str | Path) -> dict | None:
+    """Загружает draft JSON."""
+    try:
+        with open(path, "r", encoding="utf-8-sig") as file:
+            draft = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return None
+    return draft if isinstance(draft, dict) else None
+
+
+def _find_dataset_title_in_data(data: dict, title: str) -> str | None:
+    expected = str(title).strip().lower()
+    for dataset_title in data.keys():
+        if dataset_title.strip().lower() == expected:
+            return dataset_title
+    return None
+
+
+def validate_rating_order_draft(draft: dict, data: dict) -> tuple[bool, str, list[dict]]:
+    """Проверяет структуру draft и соответствие текущему dataset."""
+    if draft.get("method") != "linear_distribution":
+        return False, "Некорректный draft: method должен быть linear_distribution.", []
+    items = draft.get("items")
+    if isinstance(items, list) is False or len(items) == 0:
+        return False, "Некорректный draft: отсутствует items.", []
+
+    validated_items = []
+    for item in items:
+        if isinstance(item, dict) is False:
+            return False, "Некорректный draft: item должен быть объектом.", []
+        for field in ("title", "old_score", "proposed_score"):
+            if field not in item:
+                return False, f"Некорректный draft: отсутствует поле {field}.", []
+
+        dataset_title = _find_dataset_title_in_data(data, item["title"])
+        if dataset_title is None:
+            return False, f"В dataset отсутствует запись из draft: {item['title']}", []
+
+        current_score = _parse_user_score(data[dataset_title].get("main_info", {}).get("user_score"))
+        old_score = _try_parse_score(item["old_score"])
+        if old_score is None:
+            return False, f"Некорректный old_score для {item['title']}.", []
+        if abs(current_score - old_score) > 0.0001:
+            return False, "Dataset изменился после создания draft. Создайте новый draft.", []
+
+        proposed_score = _try_parse_score(item["proposed_score"])
+        if proposed_score is None or valid.is_correct_score(str(proposed_score)) is False:
+            return False, f"Некорректный proposed_score для {item['title']}.", []
+
+        validated_item = dict(item)
+        validated_item["title"] = dataset_title
+        validated_item["old_score"] = old_score
+        validated_item["proposed_score"] = proposed_score
+        validated_item["delta"] = round(proposed_score - old_score, 4)
+        validated_items.append(validated_item)
+
+    return True, "", validated_items
+
+
+def calculate_rating_order_loo_mae(data: dict) -> float | None:
+    """Считает LOO MAE для draft-сценария без сохранения весов и metrics."""
+    if linear_regression_train.is_method_available(linear_regression_train.BENCHMARK_METHOD) is False:
+        return None
+    return linear_regression_train.calculate_linear_loo_mae(
+        data=data,
+        method=linear_regression_train.BENCHMARK_METHOD,
+        start_weights=storage_data.load_weights(),
+        alpha=linear_regression_train.BENCHMARK_RIDGE_ALPHA,
+        l1_ratio=0.5,
+        max_iter=5000,
+    )
+
+
+def build_dataset_with_draft_scores(data: dict, items: list[dict]) -> dict:
+    """Возвращает копию dataset с proposed_score из draft."""
+    draft_data = copy.deepcopy(data)
+    for item in items:
+        draft_data[item["title"]]["main_info"]["user_score"] = item["proposed_score"]
+    return draft_data
+
+
+def build_rating_order_draft_preview(draft_path: str, data: dict, items: list[dict]) -> dict:
+    """Собирает preview применения draft и LOO MAE до/после."""
+    draft_data = build_dataset_with_draft_scores(data, items)
+    current_loo_mae = calculate_rating_order_loo_mae(data)
+    draft_loo_mae = calculate_rating_order_loo_mae(draft_data)
+    changed_items = [item for item in items if abs(item["delta"]) > 0.0001]
+    return {
+        "draft_path": draft_path,
+        "count": len(items),
+        "changed_count": len(changed_items),
+        "current_loo_mae": current_loo_mae,
+        "draft_loo_mae": draft_loo_mae,
+        "items": items,
+    }
+
+
+def _format_optional_loo(value: float | None) -> str:
+    if value is None:
+        return "не рассчитан"
+    return f"{value:.4f}"
+
+
+def print_rating_order_draft_apply_preview(preview: dict) -> None:
+    """Печатает preview применения draft."""
+    current_loo_mae = preview["current_loo_mae"]
+    draft_loo_mae = preview["draft_loo_mae"]
+    print(f"Draft: {preview['draft_path']}")
+    print(f"Записей в draft: {preview['count']}")
+    print(f"Оценок изменится: {preview['changed_count']}")
+    print(f"current_loo_mae: {_format_optional_loo(current_loo_mae)}")
+    print(f"draft_loo_mae: {_format_optional_loo(draft_loo_mae)}")
+    if current_loo_mae is not None and draft_loo_mae is not None:
+        delta = draft_loo_mae - current_loo_mae
+        if abs(delta) < 0.00005:
+            print("Разница LOO MAE: без изменений")
+        elif delta < 0:
+            print(f"Разница LOO MAE: улучшение {delta:.4f}")
+        else:
+            print(f"Разница LOO MAE: ухудшение +{delta:.4f}")
+
+    print("\nTop-10 изменений по модулю delta:")
+    top_changes = sorted(preview["items"], key=lambda item: abs(item["delta"]), reverse=True)[:10]
+    for item in top_changes:
+        print(
+            f"{item.get('position', '-')}) {item['title']} | "
+            f"{item['old_score']} -> {item['proposed_score']} | "
+            f"delta: {item['delta']:+.4f}"
+        )
+
+
+def apply_rating_order_draft_items(items: list[dict]) -> dict:
+    """Применяет draft через update_dataset_record()."""
+    updated = 0
+    skipped = 0
+    errors = []
+    for item in items:
+        if abs(item["delta"]) <= 0.0001:
+            skipped += 1
+            continue
+        result = update_dataset_record(
+            item["title"],
+            {"main_info": {"user_score": item["proposed_score"]}},
+            source_name="rating_order_draft",
+        )
+        if result.ok:
+            updated += 1
+        else:
+            skipped += 1
+            errors.append(result)
+    return {
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors,
+    }
+
+
+def choose_rating_order_draft_file() -> Path | None:
+    """Показывает список draft-файлов и возвращает выбранный путь."""
+    draft_files = get_rating_order_draft_files()
+    if len(draft_files) == 0:
+        print("Draft-файлы распределения оценок не найдены.")
+        return None
+
+    print("\nDraft-файлы распределения оценок:\n")
+    for idx, file_path in enumerate(draft_files, start=1):
+        changed_at = datetime.fromtimestamp(file_path.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+        print(f"{idx}) {file_path.name} | {changed_at}")
+    print("0) Назад")
+
+    selected = request.loop_input(
+        text="\nВыберите draft >> ",
+        funcs_list=[lambda value: value.isdigit() and 0 <= int(value) <= len(draft_files)],
+    )
+    if selected == "0":
+        return None
+    return draft_files[int(selected) - 1]
+
+
+def apply_rating_order_draft_flow(input_func=input) -> bool:
+    """Выбирает, проверяет и применяет draft распределения оценок после LOO preview."""
+    draft_path = choose_rating_order_draft_file()
+    if draft_path is None:
+        return False
+
+    draft = load_rating_order_draft(draft_path)
+    if draft is None:
+        print("Некорректный draft JSON.")
+        return False
+
+    data = storage_data.load_dataset()
+    ok, message, items = validate_rating_order_draft(draft, data)
+    if ok is False:
+        print(message)
+        return False
+
+    preview = build_rating_order_draft_preview(str(draft_path), data, items)
+    print_rating_order_draft_apply_preview(preview)
+    answer = input_func("\nПрименить draft к dataset? [y/N] ").strip().casefold()
+    if answer not in {"y", "yes", "д", "да"}:
+        print("Применение отменено.")
+        return False
+
+    storage_files.create_backup()
+    result = apply_rating_order_draft_items(items)
+    print("\nDraft применён.")
+    print(f"Обновлено записей: {result['updated']}")
+    print(f"Пропущено записей: {result['skipped']}")
+    print(f"Применённый draft: {draft_path}")
+    print(f"LOO MAE до: {_format_optional_loo(preview['current_loo_mae'])}")
+    print(f"LOO MAE после: {_format_optional_loo(preview['draft_loo_mae'])}")
+    if len(result["errors"]) > 0:
+        print("Часть записей не обновлена:")
+        for error in result["errors"]:
+            print(f"- {error.title}: {error.message}")
+    print("Оценки изменены. Запустите LOO обучение отдельно.")
+    return True
+
+
 def show_all_movies():
     """Показывает все фильмы из датасета."""
     data = storage_data.load_dataset()
@@ -144,11 +387,12 @@ def open_scores_actions_menu(rows: list[dict]) -> None:
     print("\n 5 >> Линейное распределение оценок")
     print(" 6 >> Изменить оценку user_score")
     print(" 7 >> Изменить название")
-    print(" 8 >> Главное меню\n")
+    print(" 8 >> Главное меню")
+    print(" 9 >> Применить draft распределения оценок\n")
 
     command = request.loop_input(
         text=">> ",
-        funcs_list=[lambda value: value in {"5", "6", "7", "8"}],
+        funcs_list=[lambda value: value in {"5", "6", "7", "8", "9"}],
     )
     if command == "5":
         create_linear_distribution_draft(rows)
@@ -156,6 +400,8 @@ def open_scores_actions_menu(rows: list[dict]) -> None:
         change_user_score_from_rows(rows)
     elif command == "7":
         rename_movie_record()
+    elif command == "9":
+        apply_rating_order_draft_flow()
 
 
 def change_user_score_from_rows(rows: list[dict]) -> None:
