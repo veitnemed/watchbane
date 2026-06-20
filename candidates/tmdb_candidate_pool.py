@@ -12,6 +12,7 @@ from typing import Any
 
 from candidates import candidate_pool as legacy_candidate_pool
 from candidates.keys import pool_entry_key
+from candidates.schema import normalize_candidate_record
 from apis import imdb_sql as sql_search
 from apis import kp_api
 from apis import tmdb_api as api_tmdb
@@ -196,6 +197,7 @@ def report_progress(source: str, status: str) -> None:
 def set_kp_status(candidate: dict[str, Any], status: str, is_complete: bool) -> None:
     candidate["kp_status"] = status
     candidate["is_complete"] = is_complete
+    candidate.update(normalize_candidate_record(candidate))
 
 
 def normalize_country_code(value: str | None) -> str:
@@ -688,7 +690,7 @@ def normalize_tmdb_candidate_for_common_pool(candidate: dict[str, Any], criteria
         "kp_status": candidate.get("kp_status") or "not_requested",
         "is_complete": bool(candidate.get("is_complete")),
     })
-    return normalized
+    return normalize_candidate_record(normalized)
 
 
 def enrich_from_kp_cache_only(candidate: dict[str, Any]) -> dict[str, Any]:
@@ -958,7 +960,7 @@ def list_tmdb_result_files() -> list[Path]:
 
 
 def normalize_tmdb_candidate_for_common_import(candidate: dict[str, Any], criteria_name: str) -> dict[str, Any]:
-    return {
+    return normalize_candidate_record({
         "id": candidate.get("kp_id"),
         "title": candidate.get("title"),
         "alternative_title": candidate.get("original_title"),
@@ -982,7 +984,7 @@ def normalize_tmdb_candidate_for_common_import(candidate: dict[str, Any], criter
         "is_complete": candidate.get("is_complete"),
         "signals": candidate.get("signals") or [],
         "saved_at": datetime.now().isoformat(timespec="seconds"),
-    }
+    })
 
 
 def tmdb_import_default_criteria_name(result: dict[str, Any]) -> str | None:

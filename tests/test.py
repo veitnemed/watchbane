@@ -24,6 +24,7 @@ from storage import normalize as storage_normalize
 from dataset import storage_movie
 from dataset import excel_work
 from candidates import candidate_pool
+from candidates import schema as candidate_schema
 from candidates import tmdb_candidate_pool
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
@@ -974,6 +975,147 @@ def test_load_candidate_pool_is_read_only() -> None:
     assert_check("load_candidate_pool возвращает данные", len(pool) == 1)
     assert_check("load_candidate_pool не меняет mtime файла", before_mtime == after_mtime)
 
+def test_candidate_schema_normalizes_legacy_complete_record() -> None:
+    """Проверяет legacy backfill для complete-кандидата без is_complete/kp_status."""
+    print("\n15) Проверяем schema backfill для complete legacy candidate")
+
+    normalized = candidate_schema.normalize_candidate_record({
+        "title": "Legacy Complete",
+        "year": 2020,
+        "kp_score": 7.2,
+        "kp_votes": 1500,
+        "imdb_score": 7.4,
+        "imdb_votes": 7000,
+        "extra_field": "keep_me",
+    })
+
+    assert_check("Legacy candidate получает criteria_name=legacy", normalized["criteria_name"] == "legacy")
+    assert_check("Legacy candidate получает source=legacy", normalized["source"] == "legacy")
+    assert_check("Legacy candidate становится complete", normalized["is_complete"] is True)
+    assert_check("Legacy candidate получает kp_status=done", normalized["kp_status"] == "done")
+    assert_check("Unknown fields сохраняются", normalized["extra_field"] == "keep_me")
+
+
+def test_candidate_schema_marks_missing_kp() -> None:
+    """Проверяет incomplete-кандидата без KP score/votes."""
+    print("\n16) Проверяем schema completeness без KP")
+
+    candidate = candidate_schema.normalize_candidate_record({
+        "title": "No KP Yet",
+        "year": 2021,
+        "imdb_score": 7.1,
+        "imdb_votes": 5000,
+        "kp_score": None,
+        "kp_votes": None,
+    })
+    completeness = candidate_schema.compute_completeness(candidate)
+
+    assert_check("Candidate без KP не complete", candidate["is_complete"] is False)
+    assert_check("missing_fields содержит kp_score", "kp_score" in completeness["missing_fields"])
+    assert_check("missing_fields содержит kp_votes", "kp_votes" in completeness["missing_fields"])
+    assert_check("kp_status не done без KP данных", completeness["kp_status"] != "done")
+
+
+def test_candidate_schema_preserves_specific_kp_status() -> None:
+    """Проверяет сохранение конкретного KP-статуса при отсутствии KP данных."""
+    print("\n17) Проверяем сохранение конкретного kp_status")
+
+    candidate = candidate_schema.normalize_candidate_record({
+        "title": "KP Not Found",
+        "year": 2021,
+        "kp_status": "not_found",
+        "kp_score": None,
+        "kp_votes": None,
+        "imdb_score": 7.0,
+        "imdb_votes": 3000,
+    })
+
+    assert_check("kp_status=not_found сохраняется", candidate["kp_status"] == "not_found")
+    assert_check("Candidate со статусом not_found остаётся incomplete", candidate["is_complete"] is False)
+
+
+def test_candidate_schema_ready_for_predict_requires_kp_and_imdb() -> None:
+    """Проверяет readiness gate по единой schema-функции."""
+    print("\n18) Проверяем readiness gate schema")
+
+    ready_candidate = {
+        "title": "Ready",
+        "year": 2020,
+        "kp_score": 7.5,
+        "kp_votes": 1000,
+        "imdb_score": 7.4,
+        "imdb_votes": 5000,
+    }
+    incomplete_candidate = {
+        "title": "Incomplete",
+        "year": 2020,
+        "kp_score": 7.5,
+        "kp_votes": 1000,
+        "imdb_score": 7.4,
+        "imdb_votes": None,
+    }
+
+    assert_check("is_ready_for_predict=True только при полном KP+IMDb", candidate_schema.is_ready_for_predict(ready_candidate) is True)
+    assert_check("is_ready_for_predict=False если не хватает поля", candidate_schema.is_ready_for_predict(incomplete_candidate) is False)
+
+
+def test_retry_kp_enrichment_makes_candidate_complete() -> None:
+    """Проверяет, что retry KP переводит кандидата в complete после успешного fill."""
+    print("\n19) Проверяем retry KP -> complete")
+
+    candidate_pool.save_candidate_pool({
+        "one": {
+            "title": "Retry Candidate",
+            "alternative_title": "",
+            "year": 2020,
+            "criteria_name": "legacy",
+            "kp_score": None,
+            "kp_votes": None,
+            "imdb_score": 7.3,
+            "imdb_votes": 4200,
+            "kp_status": "missing",
+        },
+    })
+
+    kp_movie = {
+        "id": 555,
+        "name": "Retry Candidate",
+        "year": 2020,
+        "rating": {"kp": 8.1},
+        "votes": {"kp": 12000},
+        "description": "Filled from KP",
+    }
+
+    with patch("candidates.tmdb_candidate_pool.kp_match_is_safe", return_value=(True, None)):
+        with patch("candidates.candidate_pool.api.find_series_raw", return_value={"ok": True, "data": kp_movie}):
+            stats = candidate_pool.retry_kp_enrichment_for_pool(limit=1)
+
+    pool = candidate_pool.load_candidate_pool()
+    candidate = next(
+        item for item in pool.values()
+        if item.get("title") == "Retry Candidate"
+    )
+
+    assert_check("Retry действительно нашёл KP", stats["kp_found"] == 1)
+    assert_check("После retry кандидат complete", candidate["is_complete"] is True)
+    assert_check("После retry kp_status=done", candidate["kp_status"] == "done")
+
+
+def test_candidate_schema_keeps_unknown_fields() -> None:
+    """Проверяет, что schema-нормализация не удаляет неизвестные поля."""
+    print("\n20) Проверяем сохранение unknown fields")
+
+    normalized = candidate_schema.normalize_candidate_record({
+        "title": "Unknown Fields",
+        "year": 2022,
+        "custom_blob": {"hello": "world"},
+        "signals": ["keep"],
+    })
+
+    assert_check("Unknown dict field сохраняется", normalized["custom_blob"] == {"hello": "world"})
+    assert_check("Signals сохраняются", normalized["signals"] == ["keep"])
+
+
 def test_remove_candidate_from_pool() -> None:
     """Проверяет удаление просмотренного кандидата из общего пула по совпадающему названию и году."""
     print("\n12) Проверяем удаление просмотренного кандидата из пула")
@@ -1287,6 +1429,12 @@ def run_tests() -> None:
         test_candidate_pool_cross_criteria_keys_survive_save_load()
         test_candidate_pool_same_criteria_duplicates_keep_best()
         test_load_candidate_pool_is_read_only()
+        test_candidate_schema_normalizes_legacy_complete_record()
+        test_candidate_schema_marks_missing_kp()
+        test_candidate_schema_preserves_specific_kp_status()
+        test_candidate_schema_ready_for_predict_requires_kp_and_imdb()
+        test_retry_kp_enrichment_makes_candidate_complete()
+        test_candidate_schema_keeps_unknown_fields()
         test_remove_candidate_from_pool()
         test_candidate_pool_genre_filters()
         test_tmdb_candidate_pool_criteria_name()

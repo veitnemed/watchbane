@@ -11,6 +11,11 @@ from config import genre_tags
 from common import format_score
 from apis import kp_api as api
 from candidates.keys import normalize_key_part, pool_entry_key, title_identity_key
+from candidates.schema import (
+    compute_completeness as schema_compute_completeness,
+    is_ready_for_predict as schema_is_ready_for_predict,
+    normalize_candidate_record,
+)
 
 DISCOVER_PAGE_LIMIT = 30
 DISCOVER_PAGE_PAUSE_SECONDS = 1.0
@@ -246,6 +251,7 @@ def deduplicate_pool(pool: dict) -> dict:
     for candidate in pool.values():
         if isinstance(candidate, dict) is False:
             continue
+        candidate = normalize_candidate_record(candidate)
         key = pool_entry_key(candidate)
         current_best = deduplicated.get(key)
         if current_best is None or candidate_sort_score(candidate) > candidate_sort_score(current_best):
@@ -259,6 +265,7 @@ def migrate_pool_keys(pool: dict) -> dict:
     for candidate in pool.values():
         if isinstance(candidate, dict) is False:
             continue
+        candidate = normalize_candidate_record(candidate)
         key = pool_entry_key(candidate)
         current_best = migrated.get(key)
         if current_best is None or candidate_sort_score(candidate) > candidate_sort_score(current_best):
@@ -356,7 +363,7 @@ def movie_matches_genres(movie: dict, expected_genres: list, excluded_genres: li
 
 def normalize_candidate(movie: dict, criteria_name: str) -> dict:
     """Оставляет в пуле кандидатов полезные поля."""
-    return {
+    return normalize_candidate_record({
         "id": movie.get("id"),
         "title": movie.get("name") or movie.get("alternativeName") or movie.get("enName"),
         "alternative_title": movie.get("alternativeName") or movie.get("enName"),
@@ -371,7 +378,7 @@ def normalize_candidate(movie: dict, criteria_name: str) -> dict:
         "genres": [item.get("name") for item in movie.get("genres", []) or [] if isinstance(item, dict) and item.get("name")],
         "criteria_name": criteria_name,
         "saved_at": datetime.now().isoformat(timespec="seconds"),
-    }
+    })
 
 
 def collect_candidates(criteria_name: str, criteria: dict) -> dict:
@@ -566,6 +573,7 @@ def filter_saved_candidates_for_prediction(candidates: list, filters: dict) -> l
 
     filtered = []
     for candidate in candidates:
+        candidate = normalize_candidate_record(candidate)
         if criteria_name and candidate.get("criteria_name") != criteria_name:
             continue
         if source and candidate.get("source") != source:
@@ -595,7 +603,7 @@ def filter_saved_candidates_for_prediction(candidates: list, filters: dict) -> l
         if _matches_min_value(candidate, "tmdb_votes", min_tmdb_votes) is False:
             continue
 
-        if only_complete and "is_complete" in candidate and candidate.get("is_complete") is not True:
+        if only_complete and schema_is_ready_for_predict(candidate) is False:
             continue
 
         filtered.append(candidate)
@@ -609,19 +617,7 @@ def _has_prediction_value(value) -> bool:
 
 def is_candidate_ready_for_prediction(candidate: dict) -> bool:
     """Проверяет, можно ли безопасно считать обычный предикт для кандидата."""
-    has_all_prediction_fields = (
-        _has_prediction_value(candidate.get("kp_score"))
-        and _has_prediction_value(candidate.get("kp_votes"))
-        and _has_prediction_value(candidate.get("imdb_score"))
-        and _has_prediction_value(candidate.get("imdb_votes"))
-    )
-    if has_all_prediction_fields is False:
-        return False
-
-    if "is_complete" in candidate:
-        return candidate.get("is_complete") is True
-
-    return True
+    return schema_is_ready_for_predict(candidate)
 
 
 def append_signal(candidate: dict, signal: str) -> None:
@@ -633,12 +629,7 @@ def append_signal(candidate: dict, signal: str) -> None:
 
 def is_candidate_incomplete(candidate: dict) -> bool:
     """Проверяет, нужны ли кандидату повторные попытки добора KP."""
-    return (
-        candidate.get("is_complete") is False
-        or candidate.get("kp_score") is None
-        or candidate.get("kp_votes") is None
-        or candidate.get("kp_status") in {"not_found", "pending_limit", "error"}
-    )
+    return schema_compute_completeness(candidate)["is_complete"] is False
 
 
 def get_incomplete_candidates(pool: dict, criteria_name: str | None = None) -> list:
@@ -694,9 +685,9 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
         year = tmdb_candidate_pool.candidate_year(candidate)
         if len(queries) == 0:
             candidate["kp_status"] = "not_found"
-            candidate["is_complete"] = False
             candidate["last_kp_error"] = "empty_query"
             append_signal(candidate, "kp_api_not_found_retry")
+            candidate.update(normalize_candidate_record(candidate))
             stats["kp_not_found"] += 1
             continue
 
@@ -711,9 +702,9 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
                     continue
 
                 candidate["kp_status"] = "error"
-                candidate["is_complete"] = False
                 candidate["last_kp_error"] = error_code
                 append_signal(candidate, "kp_api_error_retry")
+                candidate.update(normalize_candidate_record(candidate))
                 stats["api_errors"] += 1
                 found = True
                 break
@@ -723,22 +714,17 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
             if is_safe is False:
                 last_error = f"rejected_{reason}"
                 candidate["kp_status"] = "not_found"
-                candidate["is_complete"] = False
                 candidate["last_kp_error"] = last_error
                 append_signal(candidate, f"kp_api_retry_rejected_{reason}")
+                candidate.update(normalize_candidate_record(candidate))
                 continue
 
             tmdb_candidate_pool.fill_candidate_from_kp_api(candidate, movie)
             candidate["kp_score"] = candidate.get("kp_rating")
             candidate["kp_status"] = "done"
-            candidate["is_complete"] = (
-                candidate.get("kp_score") is not None
-                and candidate.get("kp_votes") is not None
-                and candidate.get("imdb_score") is not None
-                and candidate.get("imdb_votes") is not None
-            )
             candidate.pop("last_kp_error", None)
             append_signal(candidate, "kp_api_hit_retry")
+            candidate.update(normalize_candidate_record(candidate))
             stats["kp_found"] += 1
             if candidate["is_complete"]:
                 stats["became_complete"] += 1
@@ -749,9 +735,9 @@ def retry_kp_enrichment_for_pool(limit: int = 10, criteria_name: str | None = No
             continue
 
         candidate["kp_status"] = "not_found"
-        candidate["is_complete"] = False
         candidate["last_kp_error"] = last_error or "not_found"
         append_signal(candidate, "kp_api_not_found_retry")
+        candidate.update(normalize_candidate_record(candidate))
         stats["kp_not_found"] += 1
 
     stats["remaining_incomplete"] = len(get_incomplete_candidates(pool, criteria_name=criteria_name))
