@@ -827,7 +827,7 @@ def _tmdb_mode_label(mode: str) -> str:
     return labels.get(mode, mode)
 
 
-def run_tmdb_candidate_pool_flow() -> None:
+def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     """Запускает новый TMDb candidate_pool v1 без смешивания со старым общим пулом."""
     from pathlib import Path
 
@@ -871,18 +871,6 @@ def run_tmdb_candidate_pool_flow() -> None:
         print("Ошибка: выберите 1 или 2.")
         return
 
-    print("\nРежим запуска:")
-    print("1 >> Обычный")
-    print("2 >> Тестовый прогон без перезаписи основного файла")
-    run_mode_answer = input("Выбор [1] >> ").strip()
-    if run_mode_answer in ("", "1"):
-        is_test_run = False
-    elif run_mode_answer == "2":
-        is_test_run = True
-    else:
-        print("Ошибка: выберите 1 или 2.")
-        return
-
     if is_test_run:
         pages = 1
         details_answer = input("\nСколько кандидатов детально обработать в test-run [5] >> ").strip()
@@ -901,7 +889,8 @@ def run_tmdb_candidate_pool_flow() -> None:
     print("\nБудет запущен TMDb candidate_pool v1:\n")
     print(f"Страна: {country}")
     print(f"Режим: {_tmdb_mode_label(mode)}")
-    print(f"Режим запуска: {'тестовый прогон' if is_test_run else 'обычный'}")
+    if is_test_run:
+        print("Режим запуска: тестовый прогон")
     print(f"Страниц TMDb Discover: {pages}")
     print(f"Лимит TMDb Details: {details_limit}")
     print(f"Минимальный год: {year_min if year_min is not None else 'не важно'}")

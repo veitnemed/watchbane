@@ -78,16 +78,6 @@ def show_candidate_pool_menu(movies_counter: int, error: int, candidates_count: 
     print(' 6 >> Диагностика и обслуживание')
     print(' 0 >> Главное меню\n')
 
-
-def show_candidate_pool_collect_menu():
-    """Печатает подменю сборки нового пула кандидатов."""
-    show_menu_title('СОБРАТЬ НОВЫЙ ПУЛЛ')
-    print(' 1 >> TMDb -> IMDb SQL -> KP API')
-    print(' 2 >> Legacy IMDb SQL -> KP API')
-    print(' 3 >> TMDb test-run')
-    print(' 0 >> Назад\n')
-
-
 def show_candidate_pool_management_menu():
     """Печатает подменю управления сохранёнными пулами."""
     show_menu_title('УПРАВЛЕНИЕ ПУЛЛАМИ')

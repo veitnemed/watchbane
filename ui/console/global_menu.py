@@ -197,7 +197,7 @@ def open_candidate_pool_menu():
         if command == "0":
             return
         if command == "1":
-            open_candidate_pool_collect_menu()
+            interface_funcs.run_tmdb_candidate_pool_flow()
         elif command == "2":
             interface_funcs.show_candidate_pool()
         elif command == "3":
@@ -210,26 +210,6 @@ def open_candidate_pool_menu():
             open_candidate_pool_diagnostics_menu()
 
         ui.press_enter()
-
-
-def open_candidate_pool_collect_menu():
-    """Открывает подменю сборки нового пула кандидатов."""
-    while True:
-        ui.clean_terminal()
-        ui.show_candidate_pool_collect_menu()
-
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 3)])
-        if command == "0":
-            return
-        if command == "1":
-            interface_funcs.run_tmdb_candidate_pool_flow()
-        elif command == "2":
-            interface_funcs.collect_candidate_pool()
-        elif command == "3":
-            interface_funcs.run_tmdb_candidate_pool_flow()
-
-        ui.press_enter()
-
 
 def open_candidate_pool_management_menu():
     """Открывает подменю управления сохранёнными пулами."""

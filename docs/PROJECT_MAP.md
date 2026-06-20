@@ -141,11 +141,9 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 6. `Диагностика и обслуживание`
 0. `Главное меню`
 
-Подменю `Собрать новый пулл`:
+Пункт `Собрать новый пулл` сразу запускает основной сценарий:
 
 - `TMDb -> IMDb SQL -> KP API`
-- `Legacy IMDb SQL -> KP API`
-- `TMDb test-run`
 
 Подменю `Управление пуллами`:
 
@@ -201,7 +199,7 @@ UI печатает финальное сообщение сам. Service воз
 ### 5. TMDb candidate pool v1
 
 1. `ui.console.interface_funcs.run_tmdb_candidate_pool_flow()`
-2. выбор страны, режима и обычного запуска или test-run;
+2. выбор страны и режима;
 3. ввод ранних Discover-фильтров (`year_min`, `year_max`, `min_tmdb_score`, `min_tmdb_votes`);
 4. `candidates.tmdb_candidate_pool.build_candidate_pool(...)`;
 5. прогресс отдаётся через `set_progress_reporter` (печатает UI), итог - `build_summary_lines`;
@@ -243,4 +241,4 @@ py tests\test.py
 py main.py
 ```
 
-Для меню `candidate_pool` полезно отдельно проверять: возврат по `0` из каждого подменю, legacy flow, TMDb flow, import TMDb result, top prediction с runtime-фильтрами, retry KP с preview, перенос кандидата в dataset через форму.
+Для меню `candidate_pool` полезно отдельно проверять: возврат по `0` из подменю, TMDb flow, import TMDb result, top prediction с runtime-фильтрами, retry KP с preview, перенос кандидата в dataset через форму.
