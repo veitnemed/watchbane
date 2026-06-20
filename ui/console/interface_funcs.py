@@ -833,6 +833,7 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
 
     from apis import imdb_sql as sql_search
     from candidates.tmdb_candidate_pool import (
+        build_tmdb_criteria_name,
         build_candidate_pool,
         save_candidate_pool_result,
         save_candidate_pool_test_result,
@@ -871,6 +872,8 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
         print("Ошибка: выберите 1 или 2.")
         return
 
+    criteria_answer = input("\nНазвание пулла / criteria_name [auto] >> ").strip()
+
     if is_test_run:
         pages = 1
         details_answer = input("\nСколько кандидатов детально обработать в test-run [5] >> ").strip()
@@ -885,8 +888,15 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     year_max = _parse_optional_bounded_int(input("Максимальный год [не важно] >> ").strip(), 1900, constant.NOW_YEAR)
     min_tmdb_score = _parse_optional_bounded_float(input("Минимальный TMDb рейтинг [не важно] >> ").strip(), 0.0, 10.0)
     min_tmdb_votes = _parse_optional_bounded_int(input("Минимум голосов TMDb [не важно] >> ").strip(), 0, 10_000_000)
+    criteria_name = criteria_answer or build_tmdb_criteria_name(
+        country,
+        mode,
+        year_min=year_min,
+        min_tmdb_score=min_tmdb_score,
+    )
 
     print("\nБудет запущен TMDb candidate_pool v1:\n")
+    print(f"Название пулла: {criteria_name}")
     print(f"Страна: {country}")
     print(f"Режим: {_tmdb_mode_label(mode)}")
     if is_test_run:
@@ -919,6 +929,7 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
             pages=pages,
             details_limit=details_limit,
             mode=mode,
+            criteria_name=criteria_name,
             year_min=year_min,
             year_max=year_max,
             min_tmdb_score=min_tmdb_score,
@@ -969,6 +980,89 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
             _print_tmdb_candidate_top(candidates)
     else:
         print("Итоговый список кандидатов пуст.")
+
+
+def show_tmdb_dataset_genre_diagnostics() -> None:
+    """Показывает и сохраняет распределение TMDb TV-жанров по текущему dataset."""
+    from candidates.tmdb_candidate_pool import (
+        build_tmdb_genre_distribution_report,
+        save_tmdb_genre_distribution_report,
+    )
+
+    ui.clean_terminal()
+    dataset = storage_data.load_dataset()
+    meta = storage_data.load_meta()
+    if len(dataset) == 0:
+        print("Dataset пуст. Диагностика жанров недоступна.")
+        return
+
+    print("TMDb genre distribution for dataset:\n")
+    print("Будут выполнены TMDb details/search запросы с использованием локального кэша, если он есть.")
+    answer = input("Продолжить? [y/N] ").strip().casefold()
+    if answer not in {"y", "yes", "д", "да"}:
+        print("Операция отменена.")
+        return
+
+    def print_progress(event: dict) -> None:
+        index = event.get("index")
+        total = event.get("total")
+        title = event.get("title") or "-"
+        year = event.get("year") or "-"
+        status = event.get("status")
+        if status == "start":
+            print(f"[{index}/{total}] {title} ({year}): поиск TMDb...")
+            return
+
+        if status == "matched":
+            genres = ", ".join(event.get("genres") or []) or "жанры пустые"
+            print(f"[{index}/{total}] {title} ({year}): найдено, жанры={genres}")
+        elif status == "error":
+            print(f"[{index}/{total}] {title} ({year}): ошибка {event.get('error')}")
+        elif status == "stopped":
+            print(f"\n{event.get('error')}")
+            print("Проверьте доступ к TMDb/VPN/сеть и запустите диагностику позже.")
+        else:
+            print(f"[{index}/{total}] {title} ({year}): не найдено")
+
+    try:
+        report = build_tmdb_genre_distribution_report(dataset, meta, progress_callback=print_progress)
+        report_path = save_tmdb_genre_distribution_report(report)
+    except RuntimeError as error:
+        print(f"Ошибка TMDb: {error}")
+        return
+    except OSError as error:
+        print(f"Ошибка файловой системы: {error}")
+        return
+
+    print("\nTMDb genre distribution for dataset:\n")
+    if report["genre_counts"]:
+        for genre_name, count in report["genre_counts"].items():
+            print(f"{genre_name}: {count}")
+    else:
+        print("Жанры не найдены.")
+
+    print("\nИтог:")
+    print(f"Обработано записей: {report['total_dataset_items']}")
+    print(f"Фактически проверено: {report.get('processed', report['total_dataset_items'])}")
+    print(f"Найдено в TMDb: {report['matched']}")
+    print(f"Не найдено: {report['unmatched']}")
+    print(f"Без жанров: {len(report.get('empty_genre_items') or [])}")
+    if report.get("stopped_early"):
+        print(f"Остановлено досрочно: {report.get('stop_reason')}")
+
+    if report["unmatched_items"]:
+        print("\nНе найдено:")
+        for item in report["unmatched_items"]:
+            year = item.get("year") or "-"
+            print(f"- {item.get('title')} ({year})")
+
+    if report.get("empty_genre_items"):
+        print("\nTMDb найден, но genres пустые:")
+        for item in report["empty_genre_items"]:
+            year = item.get("year") or "-"
+            print(f"- {item.get('title')} ({year})")
+
+    print(f"\nОтчёт сохранён: {report_path}")
 
 
 def import_tmdb_result_to_common_pool_flow() -> None:

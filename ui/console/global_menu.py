@@ -236,7 +236,7 @@ def open_candidate_pool_diagnostics_menu():
         ui.clean_terminal()
         ui.show_candidate_pool_diagnostics_menu()
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 3)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 4)])
         if command == "0":
             return
         if command == "1":
@@ -245,6 +245,8 @@ def open_candidate_pool_diagnostics_menu():
             interface_funcs.retry_kp_for_incomplete_candidates()
         elif command == "3":
             interface_funcs.show_candidate_contributions()
+        elif command == "4":
+            interface_funcs.show_tmdb_dataset_genre_diagnostics()
 
         ui.press_enter()
 

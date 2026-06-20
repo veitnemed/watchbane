@@ -93,6 +93,7 @@ def show_candidate_pool_diagnostics_menu():
     print(' 1 >> Показать подозрительные дубли')
     print(' 2 >> Добрать KP для неполных кандидатов')
     print(' 3 >> Показать вклады для кандидатов')
+    print(' 4 >> Показать TMDb жанры по dataset')
     print(' 0 >> Назад\n')
 
 

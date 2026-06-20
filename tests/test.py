@@ -24,6 +24,7 @@ from storage import normalize as storage_normalize
 from dataset import storage_movie
 from dataset import excel_work
 from candidates import candidate_pool
+from candidates import tmdb_candidate_pool
 from apis import imdb_sql as sql_search
 from dataset import title_resolve
 from ui.console import interface_funcs
@@ -947,6 +948,149 @@ def test_candidate_pool_genre_filters() -> None:
     )
 
 
+def test_tmdb_candidate_pool_criteria_name() -> None:
+    """Проверяет ручной/auto criteria_name и совместимость импорта старых result."""
+    print("\n14) Проверяем criteria_name для TMDb candidate_pool")
+
+    def fake_details(_tmdb_id, **_kwargs):
+        return {
+            "id": 101,
+            "name": "TMDb Candidate",
+            "original_name": "TMDb Candidate",
+            "first_air_date": "2021-01-01",
+            "origin_country": ["RU"],
+            "production_countries": [{"iso_3166_1": "RU", "name": "Russia"}],
+            "genres": [{"name": "Drama"}],
+            "vote_average": 8.0,
+            "vote_count": 100,
+            "popularity": 10,
+            "external_ids": {},
+            "credits": {},
+        }
+
+    with patch("candidates.tmdb_candidate_pool.api_tmdb.load_tmdb_token", return_value="token"):
+        with patch("candidates.tmdb_candidate_pool.api_tmdb.discover_tv_candidates", return_value=[{"id": 101, "vote_count": 100, "popularity": 10}]):
+            with patch("candidates.tmdb_candidate_pool.api_tmdb.get_tv_details", side_effect=fake_details):
+                with patch("candidates.tmdb_candidate_pool.connect_imdb", return_value=None):
+                    with patch("candidates.tmdb_candidate_pool.enrich_from_kp_api_if_needed", side_effect=lambda candidate, _country, _stats: candidate):
+                        manual_result = tmdb_candidate_pool.build_candidate_pool(
+                            country="RU",
+                            pages=1,
+                            details_limit=1,
+                            mode="quality",
+                            criteria_name="Русские драмы 2020+",
+                        )
+                        auto_result = tmdb_candidate_pool.build_candidate_pool(
+                            country="RU",
+                            pages=1,
+                            details_limit=1,
+                            mode="quality",
+                            year_min=2020,
+                            min_tmdb_score=7.0,
+                        )
+
+    assert_check("Ручное criteria_name сохраняется в result", manual_result["criteria_name"] == "Русские драмы 2020+")
+    assert_check("Ручное criteria_name сохраняется в candidate", manual_result["candidates"][0]["criteria_name"] == "Русские драмы 2020+")
+    assert_check("Auto criteria_name создаётся по параметрам", auto_result["criteria_name"] == "tmdb_RU_quality_2020plus_min7")
+    assert_check("Auto criteria_name сохраняется в settings", auto_result["settings"]["criteria_name"] == "tmdb_RU_quality_2020plus_min7")
+
+    old_result_path = Path(constant.DATA_DIR) / "old_tmdb_result.json"
+    old_result = {
+        "country": "RU",
+        "mode": "quality",
+        "candidates": [
+            {
+                "title": "Old TMDb Candidate",
+                "year": 2022,
+                "tmdb_id": 200,
+                "genres_tmdb": ["Drama"],
+                "tmdb_rating": 7.5,
+                "tmdb_votes": 50,
+            }
+        ],
+    }
+    old_result_path.write_text(json.dumps(old_result, ensure_ascii=False), encoding="utf-8")
+    stats = tmdb_candidate_pool.import_tmdb_result_to_common_pool(old_result_path)
+    pool = candidate_pool.load_candidate_pool()
+
+    assert_check("Старый result без criteria_name импортируется", stats["ok"] is True)
+    assert_check("Для старого result используется fallback criteria_name", stats["criteria_name"] == "tmdb_RU_quality")
+    assert_check(
+        "Common candidate получает fallback criteria_name",
+        any(candidate.get("criteria_name") == "tmdb_RU_quality" for candidate in pool.values())
+    )
+
+
+def test_tmdb_genre_diagnostics_and_helpers() -> None:
+    """Проверяет TMDb genre diagnostics и чистые genre helpers без изменения dataset."""
+    print("\n15) Проверяем TMDb genre diagnostics")
+
+    dataset = {
+        "A": make_movie("A", user_score=8.0),
+        "B": make_movie("B", user_score=7.0),
+    }
+    meta = {
+        "A": {"tmdb_id": 1},
+    }
+    before_dataset = json.loads(json.dumps(dataset, ensure_ascii=False))
+
+    def fake_details(tmdb_id):
+        if tmdb_id == 1:
+            return {
+                "id": 1,
+                "name": "A",
+                "first_air_date": "2020-01-01",
+                "genres": [{"name": "Drama"}, {"name": "Crime"}],
+                "external_ids": {},
+                "credits": {},
+            }
+        raise RuntimeError("unexpected tmdb_id")
+
+    progress_events = []
+    report = tmdb_candidate_pool.build_tmdb_genre_distribution_report(
+        dataset,
+        meta,
+        details_fetcher=fake_details,
+        search_func=lambda _title: [],
+        progress_callback=progress_events.append,
+    )
+    report_path = tmdb_candidate_pool.save_tmdb_genre_distribution_report(
+        report,
+        output_dir=Path(constant.DATA_DIR) / "diagnostics",
+    )
+    genres = tmdb_candidate_pool.collect_candidate_genres({
+        "genres": [{"name": "Драма"}, "драма"],
+        "imdb_genres": [" Crime "],
+        "genres_tmdb": ["Mystery"],
+        "genre_ids": [80],
+    })
+
+    assert_check("Diagnostics считает Drama", report["genre_counts"]["Drama"] == 1)
+    assert_check("Diagnostics считает Crime", report["genre_counts"]["Crime"] == 1)
+    assert_check("Unmatched попадает в unmatched_items", report["unmatched_items"] == [{"title": "B", "year": 2024}])
+    assert_check("Diagnostics JSON создаётся", report_path.exists())
+    assert_check("Dataset не меняется при diagnostics", dataset == before_dataset)
+    assert_check("Diagnostics progress вызывается по каждой записи", len(progress_events) == 4)
+    assert_check("collect_candidate_genres нормализует и убирает дубли", genres == {"драма", "crime", "mystery"})
+
+    error_dataset = {
+        "A": make_movie("A", user_score=8.0),
+        "B": make_movie("B", user_score=7.0),
+        "C": make_movie("C", user_score=6.0),
+    }
+    error_events = []
+    stopped_report = tmdb_candidate_pool.build_tmdb_genre_distribution_report(
+        error_dataset,
+        {},
+        search_func=lambda _title: (_ for _ in ()).throw(RuntimeError("offline")),
+        progress_callback=error_events.append,
+        max_consecutive_errors=2,
+    )
+    assert_check("Diagnostics останавливается после серии ошибок", stopped_report["stopped_early"] is True)
+    assert_check("Diagnostics не обходит весь dataset при сетевых ошибках", stopped_report["processed"] == 2)
+    assert_check("Diagnostics сообщает stop progress event", error_events[-1]["status"] == "stopped")
+
+
 def run_tests() -> None:
     """Запускает все тесты проекта."""
     temp_dir, old_paths = setup_temp_project()
@@ -983,6 +1127,8 @@ def run_tests() -> None:
         test_add_resolver_offline_without_sql_is_manual()
         test_remove_candidate_from_pool()
         test_candidate_pool_genre_filters()
+        test_tmdb_candidate_pool_criteria_name()
+        test_tmdb_genre_diagnostics_and_helpers()
         print("\nВсе проверки пройдены: True")
     finally:
         restore_project_paths(temp_dir, old_paths)

@@ -85,6 +85,7 @@ py main.py
 1. `Показать подозрительные дубли`
 2. `Добрать KP для неполных кандидатов`
 3. `Показать вклады для кандидатов`
+4. `Показать TMDb жанры по dataset`
 0. `Назад`
 
 ## Общий candidate pool
@@ -143,6 +144,7 @@ Flow поддерживает:
 
 - выбор страны;
 - режим `quality` / `hidden_gems`;
+- название пулла / `criteria_name` вручную или auto;
 - ограничение страниц Discover;
 - ограничение `details limit`;
 - ранние TMDb-фильтры:
@@ -152,6 +154,9 @@ Flow поддерживает:
   - минимум голосов TMDb.
 
 В итоговой статистике TMDb flow печатает блок `TMDb Discover filters`.
+`criteria_name` сохраняется в result JSON, settings-блок, каждый candidate и при импорте в общий candidate pool.
+
+Диагностика `Показать TMDb жанры по dataset` сохраняет отчёт в `data/diagnostics/tmdb_genre_distribution_YYYY-MM-DD_HH-MM-SS.json` и не меняет dataset/candidate_pool.
 
 ## Добавление записи в dataset
 

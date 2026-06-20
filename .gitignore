@@ -29,4 +29,5 @@ datasets/
 *.db
 
 data/candidate_pool/
+data/diagnostics/
 _safety_audit/

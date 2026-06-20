@@ -18,6 +18,7 @@ from apis import tmdb_api as api_tmdb
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 OUTPUT_DIR = ROOT_DIR / "data" / "candidate_pool"
+DIAGNOSTICS_DIR = ROOT_DIR / "data" / "diagnostics"
 KP_CACHE_DIR = ROOT_DIR / "data" / "cache" / "kp"
 
 SERIOUS_GENRES_TMDB = [18, 80, 9648]
@@ -70,10 +71,96 @@ KP_COUNTRY_BY_ISO2 = {
     "GB": "Великобритания",
     "DE": "Германия",
 }
+TMDB_TV_GENRE_NAMES_BY_ID = {
+    10759: "Action & Adventure",
+    16: "Animation",
+    35: "Comedy",
+    80: "Crime",
+    99: "Documentary",
+    18: "Drama",
+    10751: "Family",
+    10762: "Kids",
+    9648: "Mystery",
+    10763: "News",
+    10764: "Reality",
+    10765: "Sci-Fi & Fantasy",
+    10766: "Soap",
+    10767: "Talk",
+    10768: "War & Politics",
+    37: "Western",
+}
 
 
 def ensure_output_dir() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_diagnostics_dir(output_dir: str | Path | None = None) -> Path:
+    path = Path(output_dir) if output_dir is not None else DIAGNOSTICS_DIR
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def build_tmdb_criteria_name(
+    country: str,
+    mode: str,
+    year_min: int | None = None,
+    min_tmdb_score: float | None = None,
+) -> str:
+    name = f"tmdb_{normalize_country_code(country)}_{mode}"
+    if year_min is not None:
+        name += f"_{int(year_min)}plus"
+    if min_tmdb_score is not None:
+        score = f"{float(min_tmdb_score):g}".replace(".", "_")
+        name += f"_min{score}"
+    return name
+
+
+def normalize_genre_name(name: str) -> str:
+    return str(name or "").strip().casefold().replace("ё", "е")
+
+
+def _genre_values_from_field(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, dict):
+        value = [value]
+    if isinstance(value, list) is False and isinstance(value, tuple) is False and isinstance(value, set) is False:
+        return []
+
+    genres = []
+    for item in value:
+        if isinstance(item, dict):
+            genre_name = item.get("name") or item.get("genre") or item.get("title")
+            if genre_name:
+                genres.append(str(genre_name))
+        elif item is not None:
+            text = str(item).strip()
+            if text:
+                genres.append(text)
+    return genres
+
+
+def collect_candidate_genres(candidate: dict) -> set[str]:
+    genres: set[str] = set()
+    for field in ("genres", "imdb_genres", "genres_tmdb", "tmdb_genres"):
+        for genre_name in _genre_values_from_field(candidate.get(field)):
+            normalized = normalize_genre_name(genre_name)
+            if normalized:
+                genres.add(normalized)
+
+    for genre_id in candidate.get("genre_ids") or []:
+        try:
+            genre_name = TMDB_TV_GENRE_NAMES_BY_ID.get(int(genre_id))
+        except (TypeError, ValueError):
+            genre_name = None
+        normalized = normalize_genre_name(genre_name or "")
+        if normalized:
+            genres.add(normalized)
+
+    return genres
 
 
 def contains_cyrillic(text: str | None) -> bool:
@@ -639,6 +726,7 @@ def build_candidate_pool(
     pages: int = 3,
     details_limit: int = 50,
     mode: str = "quality",
+    criteria_name: str | None = None,
     year_min: int | None = None,
     year_max: int | None = None,
     min_tmdb_score: float | None = None,
@@ -652,6 +740,12 @@ def build_candidate_pool(
         raise ValueError("country must be a 2-letter ISO code")
     if mode not in {"quality", "hidden_gems"}:
         raise ValueError("mode должен быть quality или hidden_gems")
+    criteria_name = str(criteria_name or "").strip() or build_tmdb_criteria_name(
+        country,
+        mode,
+        year_min=year_min,
+        min_tmdb_score=min_tmdb_score,
+    )
 
     token = api_tmdb.load_tmdb_token()
     query = apply_discover_filters(
@@ -767,7 +861,7 @@ def build_candidate_pool(
             candidate["quality_score"] = compute_quality_score(candidate)
             candidate["hidden_gem_score"] = compute_hidden_gem_score(candidate)
             candidate["final_score"] = compute_final_score(candidate, mode)
-            candidates.append(normalize_tmdb_candidate_for_common_pool(candidate))
+            candidates.append(normalize_tmdb_candidate_for_common_pool(candidate, criteria_name=criteria_name))
     finally:
         if conn is not None:
             conn.close()
@@ -786,10 +880,22 @@ def build_candidate_pool(
     stats["complete_candidates"] = sum(1 for candidate in candidates if candidate.get("is_complete") is True)
 
     return {
+        "criteria_name": criteria_name,
         "country": country,
         "mode": mode,
         "source": "tmdb_discover_imdb_sql",
         "query": query,
+        "settings": {
+            "criteria_name": criteria_name,
+            "country": country,
+            "mode": mode,
+            "pages": int(pages),
+            "details_limit": int(details_limit),
+            "year_min": year_min,
+            "year_max": year_max,
+            "min_tmdb_score": min_tmdb_score,
+            "min_tmdb_votes": min_tmdb_votes,
+        },
         "stats": stats,
         "candidates": candidates,
     }
@@ -879,6 +985,13 @@ def normalize_tmdb_candidate_for_common_import(candidate: dict[str, Any], criter
 
 
 def tmdb_import_default_criteria_name(result: dict[str, Any]) -> str | None:
+    for value in [
+        result.get("criteria_name"),
+        (result.get("settings") or {}).get("criteria_name") if isinstance(result.get("settings"), dict) else None,
+    ]:
+        text = str(value or "").strip()
+        if text:
+            return text
     for candidate in result.get("candidates") or []:
         value = str(candidate.get("criteria_name") or "").strip()
         if value:
@@ -993,12 +1106,210 @@ def import_tmdb_result_to_common_pool(result_path, criteria_name: str | None = N
         "genres": [],
         "excluded_genres": [],
         "source": "tmdb_imdb_kp_v1",
+        "settings": result.get("settings") or {},
         "result_file": str(result_path),
         "updated_at": datetime.now().isoformat(timespec="seconds"),
     })
     legacy_candidate_pool.save_candidate_pool(pool)
     stats["pool_size"] = len(legacy_candidate_pool.load_candidate_pool())
     return stats
+
+
+def _safe_year(value) -> int | None:
+    try:
+        if value in (None, ""):
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _find_nested_value(data, key: str):
+    if isinstance(data, dict) is False:
+        return None
+    if key in data and data[key] not in (None, ""):
+        return data[key]
+    for value in data.values():
+        if isinstance(value, dict):
+            found = _find_nested_value(value, key)
+            if found not in (None, ""):
+                return found
+        elif isinstance(value, list):
+            for item in value:
+                found = _find_nested_value(item, key)
+                if found not in (None, ""):
+                    return found
+    return None
+
+
+def _tmdb_id_from_meta(meta_obj: dict | None):
+    if isinstance(meta_obj, dict) is False:
+        return None
+    return (
+        meta_obj.get("tmdb_id")
+        or _find_nested_value(meta_obj.get("tmdb_data"), "tmdb_id")
+        or _find_nested_value(meta_obj.get("tmdb_data"), "id")
+        or _find_nested_value(meta_obj.get("source_values"), "tmdb_id")
+    )
+
+
+def _genres_from_tmdb_details(details: dict[str, Any]) -> list[str]:
+    if isinstance(details, dict) is False:
+        return []
+    if "genres_tmdb" in details:
+        return unique_non_empty(_genre_values_from_field(details.get("genres_tmdb")))
+    return unique_non_empty(api_tmdb.normalize_tmdb_tv(details).get("genres_tmdb") or [])
+
+
+def build_tmdb_genre_distribution_report(
+    dataset: dict,
+    meta: dict | None = None,
+    *,
+    details_fetcher=None,
+    search_func=None,
+    choose_func=None,
+    normalizer=None,
+    progress_callback=None,
+    max_consecutive_errors: int | None = 3,
+) -> dict[str, Any]:
+    details_fetcher = details_fetcher or api_tmdb.get_tv_details
+    search_func = search_func or api_tmdb.search_tv_by_name
+    choose_func = choose_func or api_tmdb.choose_best_result
+    normalizer = normalizer or api_tmdb.normalize_tmdb_tv
+    meta = meta or {}
+
+    created_at = datetime.now().isoformat(timespec="seconds")
+    genre_counts: dict[str, int] = {}
+    items: list[dict[str, Any]] = []
+    unmatched_items: list[dict[str, Any]] = []
+    empty_genre_items: list[dict[str, Any]] = []
+    consecutive_errors = 0
+    stopped_early = False
+    stop_reason = None
+
+    dataset_items = list((dataset or {}).items())
+    total_items = len(dataset_items)
+    for index, (title, record) in enumerate(dataset_items, start=1):
+        main_info = record.get("main_info") if isinstance(record, dict) else {}
+        title_text = str((main_info or {}).get("title") or title or "").strip()
+        year = _safe_year((main_info or {}).get("year"))
+        meta_obj = meta.get(title) or meta.get(title_text) or {}
+        tmdb_id = _tmdb_id_from_meta(meta_obj)
+        matched = False
+        genres: list[str] = []
+        error = None
+        if progress_callback is not None:
+            progress_callback({
+                "index": index,
+                "total": total_items,
+                "title": title_text,
+                "year": year,
+                "status": "start",
+                "tmdb_id": safe_int(tmdb_id),
+                "genres": [],
+            })
+
+        try:
+            if tmdb_id in (None, ""):
+                results = search_func(title_text)
+                selected = choose_func(results)
+                if selected:
+                    tmdb_id = selected.get("id")
+
+            if tmdb_id not in (None, ""):
+                details = details_fetcher(int(tmdb_id))
+                normalized_details = normalizer(details)
+                genres = unique_non_empty(
+                    normalized_details.get("genres_tmdb")
+                    or _genres_from_tmdb_details(details)
+                )
+                matched = True
+        except Exception as exc:
+            error = str(exc)
+            matched = False
+
+        item = {
+            "title": title_text,
+            "year": year,
+            "tmdb_id": safe_int(tmdb_id),
+            "matched": matched,
+            "genres": genres,
+        }
+        if error:
+            item["error"] = error
+        items.append(item)
+
+        if matched:
+            consecutive_errors = 0
+            if len(genres) == 0:
+                empty_genre_items.append({"title": title_text, "year": year, "tmdb_id": safe_int(tmdb_id)})
+            for genre_name in genres:
+                genre_counts[genre_name] = genre_counts.get(genre_name, 0) + 1
+        else:
+            unmatched_items.append({"title": title_text, "year": year})
+            if error:
+                consecutive_errors += 1
+            else:
+                consecutive_errors = 0
+
+        if progress_callback is not None:
+            status = "matched" if matched else "unmatched"
+            if error:
+                status = "error"
+            progress_callback({
+                "index": index,
+                "total": total_items,
+                "title": title_text,
+                "year": year,
+                "status": status,
+                "tmdb_id": safe_int(tmdb_id),
+                "genres": genres,
+                "error": error,
+            })
+
+        if (
+            max_consecutive_errors is not None
+            and max_consecutive_errors > 0
+            and consecutive_errors >= max_consecutive_errors
+        ):
+            stopped_early = True
+            stop_reason = f"Остановлено после {consecutive_errors} подряд ошибок TMDb: {error}"
+            if progress_callback is not None:
+                progress_callback({
+                    "index": index,
+                    "total": total_items,
+                    "title": title_text,
+                    "year": year,
+                    "status": "stopped",
+                    "error": stop_reason,
+                    "processed": len(items),
+                })
+            break
+
+    genre_counts = dict(sorted(genre_counts.items(), key=lambda pair: (-pair[1], pair[0])))
+    return {
+        "created_at": created_at,
+        "source": "dataset",
+        "total_dataset_items": len(dataset or {}),
+        "matched": sum(1 for item in items if item["matched"]),
+        "unmatched": len(unmatched_items),
+        "processed": len(items),
+        "stopped_early": stopped_early,
+        "stop_reason": stop_reason,
+        "genre_counts": genre_counts,
+        "items": items,
+        "unmatched_items": unmatched_items,
+        "empty_genre_items": empty_genre_items,
+    }
+
+
+def save_tmdb_genre_distribution_report(report: dict[str, Any], output_dir: str | Path | None = None) -> Path:
+    diagnostics_dir = ensure_diagnostics_dir(output_dir)
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    path = diagnostics_dir / f"tmdb_genre_distribution_{timestamp}.json"
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(report, file, ensure_ascii=False, indent=2)
+    return path
 
 
 def candidate_to_csv_row(candidate: dict[str, Any]) -> dict[str, Any]:

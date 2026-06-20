@@ -156,6 +156,7 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 - `Показать подозрительные дубли`
 - `Добрать KP для неполных кандидатов`
 - `Показать вклады для кандидатов`
+- `Показать TMDb жанры по dataset`
 
 ## Ключевые потоки
 
@@ -200,10 +201,11 @@ UI печатает финальное сообщение сам. Service воз
 
 1. `ui.console.interface_funcs.run_tmdb_candidate_pool_flow()`
 2. выбор страны и режима;
-3. ввод ранних Discover-фильтров (`year_min`, `year_max`, `min_tmdb_score`, `min_tmdb_votes`);
-4. `candidates.tmdb_candidate_pool.build_candidate_pool(...)`;
-5. прогресс отдаётся через `set_progress_reporter` (печатает UI), итог - `build_summary_lines`;
-6. сохранение отдельного TMDb result; при необходимости импорт в общий пул.
+3. ввод названия пулла / `criteria_name` или auto;
+4. ввод ранних Discover-фильтров (`year_min`, `year_max`, `min_tmdb_score`, `min_tmdb_votes`);
+5. `candidates.tmdb_candidate_pool.build_candidate_pool(...)`;
+6. прогресс отдаётся через `set_progress_reporter` (печатает UI), итог - `build_summary_lines`;
+7. сохранение отдельного TMDb result; при необходимости импорт в общий пул.
 
 ### 6. Обучение модели
 
@@ -230,6 +232,7 @@ UI печатает финальное сообщение сам. Service воз
 - `C:/DATA/movies-learn/weights.json` - веса модели.
 - `C:/DATA/movies-learn/candidate_pool.json` - общий candidate pool.
 - `data/candidate_pool/*.json|*.csv` - TMDb candidate pool result.
+- `data/diagnostics/tmdb_genre_distribution_*.json` - диагностические отчёты TMDb-жанров по dataset.
 - `data/cache/tmdb/` - локальный кэш TMDb Discover/Details.
 - `datasets/dataset_sql_light/imdb_light.sqlite3` - локальная IMDb SQLite база.
 
