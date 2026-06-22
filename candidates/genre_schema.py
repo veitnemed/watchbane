@@ -125,6 +125,33 @@ def _iter_raw_genres(values: Any) -> list[str]:
     return [text] if text != "" else []
 
 
+def normalize_genre_filter_list(values) -> list[str]:
+    """Normalizes user/runtime genre filters to ordered unique canonical keys."""
+    keys: list[str] = []
+    seen: set[str] = set()
+    for raw_value in _iter_raw_genres(values):
+        genre_key = normalize_genre_to_key(raw_value)
+        if genre_key is None or genre_key in seen:
+            continue
+        seen.add(genre_key)
+        keys.append(genre_key)
+    return keys
+
+
+def genre_keys_match_any(candidate_keys: list[str], required_keys: list[str]) -> bool:
+    """True when candidate genre_keys intersect required canonical keys."""
+    if len(required_keys) == 0:
+        return True
+    return len(set(candidate_keys) & set(required_keys)) > 0
+
+
+def genre_keys_match_none(candidate_keys: list[str], excluded_keys: list[str]) -> bool:
+    """True when candidate genre_keys do not intersect excluded canonical keys."""
+    if len(excluded_keys) == 0:
+        return True
+    return len(set(candidate_keys) & set(excluded_keys)) == 0
+
+
 def build_genre_keys(candidate: dict) -> list[str]:
     """Builds ordered unique genre keys from imdb_genres, genres_tmdb, then legacy genres."""
     raw_values: list[str] = []

@@ -11,6 +11,8 @@ from config import genre_tags
 from common import format_score
 from apis import kp_api as api
 from candidates.keys import normalize_key_part, pool_entry_key, title_identity_key
+from candidates import country_schema
+from candidates import genre_schema
 from candidates import genres as candidate_genres
 from candidates.schema import (
     compute_completeness as schema_compute_completeness,
@@ -651,18 +653,16 @@ def format_prediction_filter_default_lines(defaults: dict) -> list[str]:
 
 
 def collect_prediction_genre_options(candidates: list) -> list[str]:
-    """Returns unique saved-pool genres available for runtime top prediction filters."""
+    """Returns unique saved-pool genre labels for runtime top prediction filters."""
     seen = set()
     options = []
     for candidate in candidates:
-        for genre_name in _candidate_list_values(candidate, "genres"):
-            text = str(genre_name or "").strip()
-            if text == "":
+        normalized = normalize_candidate_record(candidate)
+        for label in normalized.get("genres_display") or []:
+            text = str(label or "").strip()
+            if text == "" or text in seen:
                 continue
-            key = candidate_genres.normalize_genre_name(text)
-            if key in seen:
-                continue
-            seen.add(key)
+            seen.add(text)
             options.append(text)
     return sorted(options, key=lambda value: str(value).casefold())
 
@@ -681,29 +681,32 @@ def _candidate_list_values(candidate: dict, field_name: str) -> list[str]:
 
 
 def _matches_optional_country(candidate: dict, country_filter: str | None) -> bool:
-    expected = _normalized_optional_text(country_filter)
-    if expected == "":
+    if str(country_filter or "").strip() == "":
         return True
 
-    countries = [_normalized_optional_text(item) for item in _candidate_list_values(candidate, "countries")]
-    if len(countries) == 0:
+    expected_iso2 = country_schema.normalize_country_filter(country_filter)
+    if expected_iso2 is None:
         return False
 
-    for country in countries:
-        if country == expected:
-            return True
-        if expected in country or country in expected:
-            return True
-    return False
+    candidate_codes = _candidate_list_values(candidate, "country_codes")
+    if len(candidate_codes) == 0:
+        return False
+    return expected_iso2 in candidate_codes
 
 
 def _matches_optional_genres(candidate: dict, include_genres: list[str], exclude_genres: list[str]) -> bool:
-    candidate_genre_values = _candidate_list_values(candidate, "genres")
-    if candidate_genres.genres_match_none(candidate_genre_values, exclude_genres or []) is False:
+    candidate_keys = _candidate_list_values(candidate, "genre_keys")
+    exclude_keys = genre_schema.normalize_genre_filter_list(exclude_genres or [])
+    if genre_schema.genre_keys_match_none(candidate_keys, exclude_keys) is False:
         return False
-    if len(include_genres or []) == 0:
+    include_raw = include_genres or []
+    include_keys = genre_schema.normalize_genre_filter_list(include_raw)
+    has_include_filter = any(str(genre or "").strip() for genre in include_raw)
+    if has_include_filter and len(include_keys) == 0:
+        return False
+    if len(include_keys) == 0:
         return True
-    return candidate_genres.genres_match_any(candidate_genre_values, include_genres)
+    return genre_schema.genre_keys_match_any(candidate_keys, include_keys)
 
 
 def _matches_min_value(candidate: dict, field_name: str, min_value) -> bool:

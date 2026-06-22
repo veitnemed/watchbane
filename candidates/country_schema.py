@@ -49,6 +49,14 @@ def country_value_to_iso2(value: str) -> str | None:
     return None
 
 
+def normalize_country_filter(value: str | None) -> str | None:
+    """Normalizes user/runtime country filter to ISO-2 when alias is known."""
+    text = str(value or "").strip()
+    if text == "":
+        return None
+    return country_value_to_iso2(text)
+
+
 def build_country_codes(candidate: dict) -> list[str]:
     """Builds ordered unique ISO-2 country codes from available candidate fields."""
     codes: list[str] = []

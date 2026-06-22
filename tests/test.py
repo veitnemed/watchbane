@@ -1676,6 +1676,131 @@ def test_genre_normalization_runtime_filters() -> None:
     assert_check("Runtime filter оставляет EN Drama title", filtered[0]["title"] == "Drama EN")
 
 
+def test_canonical_runtime_filters_use_genre_keys_and_country_codes() -> None:
+    """Проверяет, что top prediction filters сравнивают canonical keys, а не raw strings."""
+    print("\n20b) Проверяем canonical runtime filters для genre_keys/country_codes")
+
+    def _filter_candidates(candidates: list, **filters) -> list:
+        payload = {
+            "criteria_name": None,
+            "source": None,
+            "country": None,
+            "year_min": None,
+            "year_max": None,
+            "include_genres": [],
+            "exclude_genres": [],
+            "min_kp_score": None,
+            "min_kp_votes": None,
+            "min_imdb_score": None,
+            "min_imdb_votes": None,
+            "only_complete": False,
+        }
+        payload.update(filters)
+        return candidate_pool.filter_saved_candidates_for_prediction(candidates, payload)
+
+    def _ready(title: str, **fields) -> dict:
+        return candidate_schema.normalize_candidate_record({
+            "title": title,
+            "year": 2020,
+            "kp_score": 8.0,
+            "kp_votes": 1000,
+            "imdb_score": 7.5,
+            "imdb_votes": 5000,
+            **fields,
+        })
+
+    kr_drama_crime = _ready(
+        "KR Drama Crime",
+        countries=["KR", "South Korea"],
+        genres=["Drama", "Crime"],
+    )
+    kr_comedy = _ready(
+        "KR Comedy",
+        countries=["KR", "South Korea"],
+        genres=["Comedy"],
+    )
+    ru_drama = _ready(
+        "RU Drama",
+        countries=["RU", "Россия"],
+        genres=["Drama"],
+    )
+    unknown_country = _ready(
+        "Unknown Country",
+        countries=["Atlantis"],
+        genres=["Drama"],
+    )
+    unknown_genre = _ready(
+        "Unknown Genre",
+        countries=["KR"],
+        genres=["TotallyUnknownGenreXYZ"],
+    )
+
+    assert_check(
+        "RU drama filter матчится с EN Drama через genre_keys",
+        len(_filter_candidates([kr_drama_crime], include_genres=["драма"])) == 1,
+    )
+    assert_check(
+        "Include драма, криминал находит mixed EN candidate",
+        len(_filter_candidates([kr_drama_crime], include_genres=["драма", "криминал"])) == 1,
+    )
+    assert_check(
+        "Exclude комедия отсекает Comedy candidate",
+        len(_filter_candidates([kr_comedy], exclude_genres=["комедия"])) == 0,
+    )
+    assert_check(
+        "Exclude комедия не отсекает Drama/Crime candidate",
+        len(_filter_candidates([kr_drama_crime], exclude_genres=["комедия"])) == 1,
+    )
+    assert_check(
+        "Country filter KR матчится с raw KR/South Korea через country_codes",
+        len(_filter_candidates([kr_drama_crime], country="KR")) == 1,
+    )
+    assert_check(
+        "Country filter Южная Корея матчится с KR candidate",
+        len(_filter_candidates([kr_drama_crime], country="Южная Корея")) == 1,
+    )
+    assert_check(
+        "Country filter KR не пропускает RU candidate",
+        len(_filter_candidates([ru_drama], country="KR")) == 0,
+    )
+    assert_check(
+        "Unknown country filter не матчит candidate и не падает",
+        len(_filter_candidates([kr_drama_crime], country="Atlantis")) == 0,
+    )
+    assert_check(
+        "Unknown include genre не матчит candidate и не падает",
+        len(_filter_candidates([kr_drama_crime], include_genres=["странный жанр"])) == 0,
+    )
+    assert_check(
+        "Candidate без mappable genre_keys не проходит include filter",
+        len(_filter_candidates([unknown_genre], include_genres=["драма"])) == 0,
+    )
+    assert_check(
+        "Candidate без country_codes не проходит country filter",
+        len(_filter_candidates([unknown_country], country="KR")) == 0,
+    )
+
+    candidate_pool.save_candidate_pool({
+        "kr": kr_drama_crime,
+        "ru": ru_drama,
+    })
+    before_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+    filtered = _filter_candidates(
+        candidate_pool.get_all_candidates(),
+        country="KR",
+        include_genres=["драма"],
+        exclude_genres=["комедия"],
+    )
+    after_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    assert_check("Canonical runtime filter read-only для pool JSON", before_mtime == after_mtime)
+    assert_check("Combined KR+drama filter оставляет KR Drama Crime", len(filtered) == 1)
+    assert_check("Combined filter сохраняет title", filtered[0]["title"] == "KR Drama Crime")
+
+    genre_options = candidate_pool.collect_prediction_genre_options([kr_drama_crime, kr_comedy])
+    assert_check("Genre options показывают display labels", set(genre_options) == {"Драма", "Криминал", "Комедия"})
+
+
 def test_contributions_readiness_gate() -> None:
     """Проверяет readiness gate для feature contributions без изменения pool/model."""
     print("\n21) Проверяем readiness gate для contributions")
@@ -4277,6 +4402,7 @@ def run_tests() -> None:
         test_build_prediction_filter_defaults_from_saved_criteria()
         test_prediction_filters_apply_saved_criteria_defaults()
         test_genre_normalization_runtime_filters()
+        test_canonical_runtime_filters_use_genre_keys_and_country_codes()
         test_contributions_readiness_gate()
         test_candidate_service_read_only_facade()
         test_candidate_service_top_prediction_view()
