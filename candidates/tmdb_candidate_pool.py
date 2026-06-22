@@ -13,6 +13,7 @@ from typing import Any
 from candidates import import_tmdb
 from candidates import candidate_pool as legacy_candidate_pool
 from candidates import kp_enrichment
+from candidates import kp_tmdb_build_debug
 from candidates.keys import pool_entry_key
 from candidates.schema import normalize_candidate_record
 from apis import imdb_sql as sql_search
@@ -29,6 +30,7 @@ SERIOUS_GENRES_TMDB = [18, 80, 9648]
 WITHOUT_GENRES_TMDB = [16, 10751, 10762, 10763, 10764, 10767]
 DEFAULT_VOTE_AVERAGE_GTE = 6.3
 DEFAULT_VOTE_COUNT_GTE = 10
+NETWORK_ERROR_SKIP_THRESHOLD = 3
 CSV_FIELDS = [
     "final_score",
     "country_score",
@@ -565,12 +567,26 @@ def mark_kp_pending_limit(candidate: dict[str, Any]) -> dict[str, Any]:
     return candidate
 
 
-def enrich_from_kp_api_if_needed(candidate: dict[str, Any], country: str, stats: dict[str, Any]) -> dict[str, Any]:
+def enrich_from_kp_api_if_needed(
+    candidate: dict[str, Any],
+    country: str,
+    stats: dict[str, Any],
+    *,
+    skip_network: bool = False,
+    kp_debug_session=None,
+) -> dict[str, Any]:
     """Дополняет TMDb-кандидата KP API, если cache не дал KP-рейтинг/голоса."""
     if candidate.get("kp_rating") not in (None, "") and candidate.get("kp_votes") not in (None, ""):
         set_kp_status(candidate, "cache_hit", True)
         stats["kp_api_skipped_cache"] += 1
         report_progress("KP API", "Cache hit")
+        return candidate
+
+    if skip_network:
+        stats["kp_api_skipped_after_errors"] += 1
+        set_kp_status(candidate, "skipped_network_errors", False)
+        append_signal(candidate, "kp_api_skipped_after_network_errors")
+        report_progress("KP API", "Пропущено")
         return candidate
 
     kp_country = tmdb_country_to_kp_country(country)
@@ -583,12 +599,17 @@ def enrich_from_kp_api_if_needed(candidate: dict[str, Any], country: str, stats:
         return candidate
 
     report_progress("KP API", "Ожидание ответа")
+    if kp_debug_session is not None:
+        kp_debug_session.start_candidate(candidate, kp_country)
     lookup = kp_enrichment.lookup_kp_via_api(
         candidate,
         queries,
         kp_country,
         continue_on_reject=False,
+        attempt_traces=kp_debug_session.current_attempts if kp_debug_session is not None else None,
     )
+    if kp_debug_session is not None:
+        kp_debug_session.finish_candidate(candidate, lookup)
     stats["kp_api_requested"] += int(lookup.get("attempts") or 0)
 
     if lookup["status"] == "found":
@@ -704,6 +725,7 @@ def build_candidate_pool(
     force_refresh: bool = False,
     db_path: str | Path = sql_search.DEFAULT_DB_PATH,
     kp_api_limit: int | None = None,
+    kp_build_debug: bool = True,
 ) -> dict[str, Any]:
     country = normalize_country_code(country)
     if is_iso2_country_code(country) is False:
@@ -759,6 +781,8 @@ def build_candidate_pool(
         "duplicates_removed": duplicates_removed,
         "watched_skipped": watched_skipped,
         "details_requested": len(details_candidates),
+        "tmdb_details_errors": 0,
+        "tmdb_details_skipped_after_errors": 0,
         "has_imdb_id": 0,
         "found_in_imdb_sql": 0,
         "country_passed": 0,
@@ -772,6 +796,7 @@ def build_candidate_pool(
         "kp_api_not_found": 0,
         "kp_api_rejected_by_match": 0,
         "kp_api_errors": 0,
+        "kp_api_skipped_after_errors": 0,
         "kp_api_skipped_cache": 0,
         "kp_pending_limit": 0,
         "kp_incomplete_candidates": 0,
@@ -779,9 +804,24 @@ def build_candidate_pool(
         "final_candidates": 0,
     }
 
+    tmdb_details_consecutive_errors = 0
+    tmdb_details_skip_network = False
+    kp_api_consecutive_errors = 0
+    kp_api_skip_network = False
+    kp_debug_session = None
+    if kp_build_debug:
+        kp_debug_session = kp_tmdb_build_debug.KpBuildDebugSession(
+            country=country,
+            criteria_name=criteria_name,
+        )
+
     try:
-        for item in details_candidates:
-            detail_index = len(candidates) + stats["country_rejected"] + stats["imdb_filter_rejected"] + 1
+        for detail_index, item in enumerate(details_candidates, start=1):
+            if tmdb_details_skip_network:
+                stats["tmdb_details_skipped_after_errors"] += 1
+                report_progress("TMDb Details", f"Пропущено [{detail_index}/{len(details_candidates)}]")
+                continue
+
             report_progress("TMDb Details", f"Ожидание ответа [{detail_index}/{len(details_candidates)}]")
             try:
                 details = api_tmdb.get_tv_details(
@@ -791,8 +831,13 @@ def build_candidate_pool(
                     token=token,
                 )
             except Exception:
+                stats["tmdb_details_errors"] += 1
+                tmdb_details_consecutive_errors += 1
                 report_progress("TMDb Details", "Ошибка сети")
-                raise
+                if tmdb_details_consecutive_errors >= NETWORK_ERROR_SKIP_THRESHOLD:
+                    tmdb_details_skip_network = True
+                continue
+            tmdb_details_consecutive_errors = 0
             report_progress("TMDb Details", f"Успешно [{detail_index}/{len(details_candidates)}]")
             candidate = prepare_candidate(details, country, source_query=query)
             if candidate.get("imdb_id"):
@@ -807,13 +852,29 @@ def build_candidate_pool(
             candidate = enrich_from_kp_cache_only(candidate)
             if "kp_cache_hit" in candidate.get("signals", []):
                 stats["kp_cache_hit"] += 1
-            if candidate.get("kp_status") == "cache_hit":
-                candidate = enrich_from_kp_api_if_needed(candidate, country, stats)
+            if kp_api_skip_network:
+                candidate = enrich_from_kp_api_if_needed(
+                    candidate, country, stats, skip_network=True, kp_debug_session=kp_debug_session,
+                )
+            elif candidate.get("kp_status") == "cache_hit":
+                candidate = enrich_from_kp_api_if_needed(
+                    candidate, country, stats, kp_debug_session=kp_debug_session,
+                )
             elif kp_api_limit is not None and stats["kp_api_requested"] >= int(kp_api_limit):
                 candidate = mark_kp_pending_limit(candidate)
                 report_progress("KP API", "Лимит, добрать позже")
             else:
-                candidate = enrich_from_kp_api_if_needed(candidate, country, stats)
+                kp_errors_before = stats["kp_api_errors"]
+                kp_requested_before = stats["kp_api_requested"]
+                candidate = enrich_from_kp_api_if_needed(
+                    candidate, country, stats, kp_debug_session=kp_debug_session,
+                )
+                if stats["kp_api_errors"] > kp_errors_before:
+                    kp_api_consecutive_errors += 1
+                    if kp_api_consecutive_errors >= NETWORK_ERROR_SKIP_THRESHOLD:
+                        kp_api_skip_network = True
+                elif stats["kp_api_requested"] > kp_requested_before:
+                    kp_api_consecutive_errors = 0
 
             if candidate["country_score"] >= 0.70:
                 stats["country_passed"] += 1
@@ -853,7 +914,7 @@ def build_candidate_pool(
     stats["kp_incomplete_candidates"] = sum(1 for candidate in candidates if candidate.get("is_complete") is not True)
     stats["complete_candidates"] = sum(1 for candidate in candidates if candidate.get("is_complete") is True)
 
-    return {
+    result_payload = {
         "criteria_name": criteria_name,
         "country": country,
         "mode": mode,
@@ -875,11 +936,25 @@ def build_candidate_pool(
         "stats": stats,
         "candidates": candidates,
     }
+    if kp_debug_session is not None:
+        result_payload["kp_debug"] = kp_debug_session.to_report()
+    return result_payload
 
 
 def output_base_path(country: str, mode: str) -> Path:
     ensure_output_dir()
     return OUTPUT_DIR / f"candidate_pool_{country.upper()}_{mode}"
+
+
+def _write_build_json(result: dict[str, Any], json_path: Path) -> Path | None:
+    """Writes build JSON without kp_debug blob; saves debug report separately."""
+    payload = dict(result)
+    kp_debug = payload.pop("kp_debug", None)
+    with open(json_path, "w", encoding="utf-8") as file:
+        json.dump(payload, file, ensure_ascii=False, indent=2)
+    if isinstance(kp_debug, dict):
+        return kp_tmdb_build_debug.save_kp_debug_report(kp_debug, json_path)
+    return None
 
 
 def save_candidate_pool_result(result: dict[str, Any]) -> tuple[Path, Path]:
@@ -889,8 +964,7 @@ def save_candidate_pool_result(result: dict[str, Any]) -> tuple[Path, Path]:
     json_path = base_path.with_suffix(".json")
     csv_path = base_path.with_suffix(".csv")
 
-    with open(json_path, "w", encoding="utf-8") as file:
-        json.dump(result, file, ensure_ascii=False, indent=2)
+    _write_build_json(result, json_path)
 
     with open(csv_path, "w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=CSV_FIELDS)
@@ -910,8 +984,7 @@ def save_candidate_pool_test_result(result: dict[str, Any]) -> tuple[Path, Path]
     json_path = base_path.with_suffix(".json")
     csv_path = base_path.with_suffix(".csv")
 
-    with open(json_path, "w", encoding="utf-8") as file:
-        json.dump(result, file, ensure_ascii=False, indent=2)
+    _write_build_json(result, json_path)
 
     with open(csv_path, "w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=CSV_FIELDS)
@@ -1161,6 +1234,8 @@ def build_summary_lines(result: dict[str, Any]) -> list[str]:
         f"Удалено дублей: {stats['duplicates_removed']}",
         f"Пропущено уже просмотренных: {stats['watched_skipped']}",
         f"Запрошено TMDb Details: {stats['details_requested']}",
+        f"TMDb Details ошибок сети: {stats.get('tmdb_details_errors', 0)}",
+        f"TMDb Details пропущено после ошибок: {stats.get('tmdb_details_skipped_after_errors', 0)}",
         f"С IMDb ID: {stats['has_imdb_id']}",
         f"Найдено в IMDb dataset: {stats['found_in_imdb_sql']}",
         f"KP найдено в кэше: {stats['kp_cache_hit']}",
@@ -1169,6 +1244,7 @@ def build_summary_lines(result: dict[str, Any]) -> list[str]:
         f"KP API не найдено: {stats['kp_api_not_found']}",
         f"KP API отклонено match-check: {stats['kp_api_rejected_by_match']}",
         f"KP API ошибок: {stats['kp_api_errors']}",
+        f"KP API пропущено после ошибок: {stats.get('kp_api_skipped_after_errors', 0)}",
         f"KP API пропущено из-за кэша: {stats['kp_api_skipped_cache']}",
         f"KP ожидает добора из-за лимита: {stats['kp_pending_limit']}",
         f"Неполных кандидатов по KP: {stats['kp_incomplete_candidates']}",

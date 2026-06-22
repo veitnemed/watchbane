@@ -1,6 +1,7 @@
 """Проверяет основные сценарии работы проекта на временных данных."""
 
 import contextlib
+import copy
 import io
 import inspect
 import json
@@ -29,7 +30,11 @@ from candidates import service as candidate_service
 from candidates import genres as pool_genres
 from candidates import import_tmdb as tmdb_import
 from candidates import schema as candidate_schema
+from candidates import genre_schema
+from candidates import country_schema
 from candidates import tmdb_candidate_pool
+from candidates import kp_enrichment
+from candidates import kp_tmdb_build_debug
 from candidates import tmdb_country_options
 from candidates import tmdb_genre_options
 from apis import imdb_sql as sql_search
@@ -2740,9 +2745,216 @@ def test_candidate_schema_ready_for_predict_requires_kp_and_imdb() -> None:
     assert_check("is_ready_for_predict=False если не хватает поля", candidate_schema.is_ready_for_predict(incomplete_candidate) is False)
 
 
+def test_kp_country_alias_matching() -> None:
+    """Проверяет alias matching для Южной Кореи без ослабления других стран."""
+    print("\n19a) Проверяем KP country alias matching")
+
+    assert_check(
+        "Южная Корея matches South Korea",
+        kp_enrichment.countries_match("Южная Корея", ["South Korea"]) is True,
+    )
+    assert_check(
+        "Южная Корея matches Republic of Korea",
+        kp_enrichment.countries_match("Южная Корея", ["Republic of Korea"]) is True,
+    )
+    assert_check(
+        "Южная Корея matches Korea, Republic of",
+        kp_enrichment.countries_match("Южная Корея", ["Korea, Republic of"]) is True,
+    )
+    assert_check(
+        "KR matches Южная Корея",
+        kp_enrichment.countries_match("KR", ["Южная Корея"]) is True,
+    )
+    assert_check(
+        "Япония не matches South Korea",
+        kp_enrichment.countries_match("Япония", ["South Korea"]) is False,
+    )
+    assert_check(
+        "Россия не matches South Korea",
+        kp_enrichment.countries_match("Россия", ["South Korea"]) is False,
+    )
+    assert_check(
+        "Россия matches KP label Россия",
+        kp_enrichment.countries_match(
+            "Россия",
+            kp_enrichment.extract_kp_country_values({"countries": [{"name": "Россия"}]}),
+        ) is True,
+    )
+    assert_check(
+        "Япония matches KP label Япония",
+        kp_enrichment.countries_match(
+            "Япония",
+            kp_enrichment.extract_kp_country_values({"countries": [{"name": "Япония"}]}),
+        ) is True,
+    )
+
+
+def test_kp_lookup_kr_country_aliases() -> None:
+    """Проверяет, что KR lookup с South Korea в KP не падает в country_not_found."""
+    print("\n19b) Проверяем KR KP lookup country aliases")
+
+    candidate = {
+        "title": "Гоблин",
+        "original_title": "Guardian: The Lonely and Great God",
+        "year": 2016,
+    }
+    kp_movie = {
+        "id": 1005016,
+        "name": "Гоблин",
+        "year": 2016,
+        "type": "tv-series",
+        "countries": [{"name": "South Korea"}],
+        "rating": {"kp": 8.5},
+        "votes": {"kp": 12000},
+    }
+
+    def fake_fetch_json(url, **kwargs):
+        return {"ok": True, "data": {"docs": [kp_movie]}}
+
+    with patch("apis.kp_api.fetch_json", side_effect=fake_fetch_json):
+        lookup = kp_enrichment.lookup_kp_via_api(
+            candidate,
+            ["Гоблин"],
+            "Южная Корея",
+        )
+
+    assert_check("KR lookup status=found", lookup["status"] == "found")
+    assert_check("KR lookup не country_not_found", lookup.get("error") != "country_not_found")
+    assert_check("KR lookup возвращает movie", lookup.get("movie") is not None)
+
+
+def test_kp_country_from_iso2_mapping() -> None:
+    """Проверяет перевод ISO-2 TMDb country в русское название для KP API."""
+    print("\n19) Проверяем kp_country_from_iso2 mapping")
+
+    assert_check("JP -> Япония", kp_enrichment.kp_country_from_iso2("JP") == "Япония")
+    assert_check("FR -> Франция", kp_enrichment.kp_country_from_iso2("FR") == "Франция")
+    assert_check("UA -> Украина", kp_enrichment.kp_country_from_iso2("UA") == "Украина")
+    assert_check("US -> США", kp_enrichment.kp_country_from_iso2("US") == "США")
+    assert_check("Неизвестный ISO -> пустая строка", kp_enrichment.kp_country_from_iso2("XX") == "")
+    assert_check(
+        "Неизвестный ISO не превращается в Россия",
+        kp_enrichment.kp_country_from_iso2("XX") != "Россия",
+    )
+
+    for code in tmdb_country_options.COUNTRY_CODE_ORDER:
+        expected_label = tmdb_country_options.COUNTRY_NAMES_RU_BY_CODE[code]
+        assert_check(
+            f"KP mapping покрывает TMDb UI country {code}",
+            kp_enrichment.kp_country_from_iso2(code) == expected_label,
+        )
+
+
+def test_kp_series_type_filter() -> None:
+    """Проверяет расширенный KP type-фильтр для anime/animated-series без ослабления match-check."""
+    print("\n20) Проверяем KP series type filter")
+
+    tv_series = {"type": "tv-series", "name": "Regular Series"}
+    anime_series = {"type": "anime", "name": "Anime Series", "isSeries": True}
+    animated_series = {"type": "animated-series", "name": "Animated Series"}
+    cartoon_serial = {
+        "type": "cartoon",
+        "name": "Cartoon Serial",
+        "seasonsInfo": [{"number": 1}],
+    }
+    cartoon_film = {"type": "cartoon", "name": "Cartoon Film"}
+    movie = {"type": "movie", "name": "Feature Film"}
+    film = {"type": "film", "name": "Another Film"}
+
+    assert_check("tv-series проходит type-фильтр", api.is_series(tv_series) is True)
+    assert_check("anime проходит type-фильтр", api.is_series(anime_series) is True)
+    assert_check("animated-series проходит type-фильтр", api.is_series(animated_series) is True)
+    assert_check("cartoon с serial markers проходит", api.is_series(cartoon_serial) is True)
+    assert_check("cartoon без serial markers блокируется", api.is_series(cartoon_film) is False)
+    assert_check("movie блокируется", api.is_series(movie) is False)
+    assert_check("film блокируется", api.is_series(film) is False)
+
+    candidate = {
+        "title": "Наруто",
+        "original_title": "ナルト",
+        "year": 2002,
+    }
+    wrong_anime = {
+        "name": "Совсем другой anime",
+        "year": 2002,
+        "type": "anime",
+    }
+    assert_check("anime type не bypass-ит match-check", api.is_series(wrong_anime) is True)
+    is_safe, reason = kp_enrichment.kp_match_is_safe(candidate, wrong_anime)
+    assert_check("anime type всё ещё требует title match", is_safe is False)
+    assert_check("anime type всё ещё требует title mismatch reason", reason == "title_mismatch")
+
+
+def test_kp_tmdb_build_debug_traces_rejection_details() -> None:
+    """Проверяет TEMP KP debug traces: query, counts, rejection summary."""
+    print("\n20) Проверяем KP TMDb build debug traces")
+
+    candidate = {
+        "title": "Offline Alpha Series",
+        "original_title": "Offline Alpha Original",
+        "year": 2013,
+    }
+    kp_movie = {
+        "id": 9001,
+        "name": "Completely Different Beta",
+        "year": 2013,
+        "type": "tv-series",
+        "countries": [{"name": "Япония"}],
+    }
+    traces: list[dict] = []
+
+    def fake_fetch_json(url, **kwargs):
+        return {"ok": True, "data": {"docs": [kp_movie]}}
+
+    with patch("apis.kp_api.fetch_json", side_effect=fake_fetch_json):
+        lookup = kp_enrichment.lookup_kp_via_api(
+            candidate,
+            ["Offline Alpha Series"],
+            "Япония",
+            attempt_traces=traces,
+        )
+
+    assert_check("Lookup остаётся rejected", lookup["status"] == "rejected")
+    assert_check("Debug trace записан", len(traces) == 1)
+    trace = traces[0]
+    assert_check("Trace содержит candidate title", trace["candidate_title"] == "Offline Alpha Series")
+    assert_check("Trace содержит KP query", trace["kp_query"] == "Offline Alpha Series")
+    assert_check("Trace содержит KP country", trace["kp_country"] == "Япония")
+    assert_check("Trace содержит series count", trace["kp_series_count"] == 1)
+    assert_check("Trace содержит KP selected title", trace["kp_selected_title"] == "Completely Different Beta")
+    assert_check("Trace содержит reject_reason", trace["reject_reason"] == "title_mismatch")
+    assert_check("Trace содержит similarity", trace["title_similarity"] is not None)
+    assert_check(
+        "Trace summary объясняет rejection",
+        "title_mismatch" in str(trace.get("rejection_summary") or ""),
+    )
+
+
+def test_kp_tmdb_build_debug_session_save() -> None:
+    """Проверяет сохранение отдельного *_kp_debug.json рядом с build result."""
+    print("\n21) Проверяем сохранение KP debug report")
+
+    session = kp_tmdb_build_debug.KpBuildDebugSession(country="JP", criteria_name="test_jp")
+    session.start_candidate({"title": "Debug Save", "original_title": "Debug", "year": 2020}, "Япония")
+    session.finish_candidate(
+        {"title": "Debug Save", "kp_status": "not_found"},
+        {"status": "not_found", "error": "not_found"},
+    )
+    report = session.to_report()
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        json_path = Path(temp_dir) / "candidate_pool_JP_quality.json"
+        json_path.write_text("{}", encoding="utf-8")
+        debug_path = kp_tmdb_build_debug.save_kp_debug_report(report, json_path)
+        assert_check("Debug report сохранён", debug_path.is_file())
+        saved = json.loads(debug_path.read_text(encoding="utf-8"))
+        assert_check("Debug report содержит entries", len(saved.get("entries") or []) == 1)
+        assert_check("Debug report содержит attempts", len(saved["entries"][0].get("attempts") or []) == 0)
+
+
 def test_retry_kp_enrichment_makes_candidate_complete() -> None:
     """Проверяет, что retry KP переводит кандидата в complete после успешного fill."""
-    print("\n19) Проверяем retry KP -> complete")
+    print("\n20) Проверяем retry KP -> complete")
 
     candidate_pool.save_candidate_pool({
         "one": {
@@ -2795,6 +3007,191 @@ def test_candidate_schema_keeps_unknown_fields() -> None:
 
     assert_check("Unknown dict field сохраняется", normalized["custom_blob"] == {"hello": "world"})
     assert_check("Signals сохраняются", normalized["signals"] == ["keep"])
+
+
+def test_candidate_genre_schema_normalization() -> None:
+    """Проверяет alias -> genre_key -> display label без мутации raw genres."""
+    print("\n20a) Проверяем candidate genre_schema normalization")
+
+    case_one = candidate_schema.normalize_candidate_record({
+        "title": "Genre Case 1",
+        "year": 2020,
+        "genres": ["Drama", "драма"],
+    })
+    assert_check("Drama+драма -> один key drama", case_one["genre_keys"] == ["drama"])
+    assert_check("Drama+драма -> один display Драма", case_one["genres_display"] == ["Драма"])
+
+    case_two = candidate_schema.normalize_candidate_record({
+        "title": "Genre Case 2",
+        "year": 2020,
+        "genres": ["Biography", "Drama", "History", "драма", "Боевик и Приключения"],
+    })
+    assert_check(
+        "Mixed raw genres -> canonical keys без дублей",
+        case_two["genre_keys"] == ["biography", "drama", "history", "action_adventure"],
+    )
+    assert_check(
+        "Mixed raw genres -> display labels",
+        case_two["genres_display"] == ["Биография", "Драма", "История", "Боевик/приключения"],
+    )
+
+    case_three = candidate_schema.normalize_candidate_record({
+        "title": "Genre Case 3",
+        "year": 2020,
+        "genres": ["Comedy", "Romance", "драма", "комедия"],
+    })
+    assert_check(
+        "Comedy/Romance/драма/комедия -> comedy, romance, drama",
+        case_three["genre_keys"] == ["comedy", "romance", "drama"],
+    )
+
+    case_four = candidate_schema.normalize_candidate_record({
+        "title": "Genre Case 4",
+        "year": 2020,
+        "genres": ["Action", "Adventure", "Боевик и Приключения"],
+    })
+    assert_check(
+        "Action+Adventure -> один action_adventure",
+        case_four["genre_keys"] == ["action_adventure"],
+    )
+    assert_check(
+        "Action+Adventure -> один display label",
+        case_four["genres_display"] == ["Боевик/приключения"],
+    )
+
+    unknown_case = candidate_schema.normalize_candidate_record({
+        "title": "Genre Unknown",
+        "year": 2020,
+        "genres": ["Drama", "TotallyUnknownGenreXYZ"],
+    })
+    assert_check("Unknown genre не ломает normalize", unknown_case["genre_keys"] == ["drama"])
+    assert_check("Unknown genre не попадает в display", unknown_case["genres_display"] == ["Драма"])
+
+    legacy_raw = {
+        "title": "Legacy Raw",
+        "year": 2020,
+        "genres": ["Drama", "Comedy"],
+    }
+    legacy_snapshot = copy.deepcopy(legacy_raw)
+    normalized_legacy = candidate_schema.normalize_candidate_record(legacy_raw)
+    assert_check("legacy candidate genres не мутируется", legacy_raw == legacy_snapshot)
+    assert_check("legacy genres сохраняются в normalized copy", normalized_legacy["genres"] == ["Drama", "Comedy"])
+
+    priority_case = candidate_schema.normalize_candidate_record({
+        "title": "Priority Case",
+        "year": 2020,
+        "imdb_genres": ["Crime"],
+        "genres_tmdb": ["Drama"],
+        "genres": ["Comedy"],
+    })
+    assert_check(
+        "imdb_genres имеет приоритет над tmdb/legacy",
+        priority_case["genre_keys"] == ["crime", "drama", "comedy"],
+    )
+
+
+def test_candidate_country_schema_normalization() -> None:
+    """Проверяет alias -> country_codes -> country_display без мутации raw countries."""
+    print("\n20b) Проверяем candidate country_schema normalization")
+
+    kr_case = candidate_schema.normalize_candidate_record({
+        "title": "KR Case",
+        "year": 2020,
+        "countries": ["KR", "South Korea"],
+    })
+    assert_check("KR+South Korea -> country_codes [KR]", kr_case["country_codes"] == ["KR"])
+    assert_check("KR+South Korea -> country_display Южная Корея", kr_case["country_display"] == "Южная Корея")
+
+    kr_alias_case = candidate_schema.normalize_candidate_record({
+        "title": "KR Alias Case",
+        "year": 2020,
+        "countries": ["Корея Южная"],
+    })
+    assert_check("Корея Южная -> country_codes [KR]", kr_alias_case["country_codes"] == ["KR"])
+    assert_check("Корея Южная -> country_display Южная Корея", kr_alias_case["country_display"] == "Южная Корея")
+
+    jp_case = candidate_schema.normalize_candidate_record({
+        "title": "JP Case",
+        "year": 2020,
+        "countries": ["JP", "Япония"],
+    })
+    assert_check("JP+Япония -> country_codes [JP]", jp_case["country_codes"] == ["JP"])
+    assert_check("JP+Япония -> country_display Япония", jp_case["country_display"] == "Япония")
+
+    ru_case = candidate_schema.normalize_candidate_record({
+        "title": "RU Case",
+        "year": 2020,
+        "countries": ["RU", "Россия"],
+    })
+    assert_check("RU+Россия -> country_codes [RU]", ru_case["country_codes"] == ["RU"])
+    assert_check("RU+Россия -> country_display Россия", ru_case["country_display"] == "Россия")
+
+    priority_case = candidate_schema.normalize_candidate_record({
+        "title": "Country Priority Case",
+        "year": 2020,
+        "tmdb_origin_countries": ["KR"],
+        "countries": ["South Korea"],
+    })
+    assert_check(
+        "tmdb_origin_countries имеет приоритет над countries",
+        priority_case["country_codes"] == ["KR"],
+    )
+    assert_check(
+        "priority case -> country_display Южная Корея",
+        priority_case["country_display"] == "Южная Корея",
+    )
+
+    unknown_case = candidate_schema.normalize_candidate_record({
+        "title": "Unknown Country Case",
+        "year": 2020,
+        "countries": ["Atlantis"],
+    })
+    assert_check("Unknown country -> country_codes пустой", unknown_case["country_codes"] == [])
+    assert_check("Unknown country -> country_display None", unknown_case["country_display"] is None)
+    assert_check(
+        "Unknown country UI fallback на raw countries",
+        country_schema.candidate_country_for_display(unknown_case) == "Atlantis",
+    )
+
+    legacy_raw = {
+        "title": "Legacy Country Raw",
+        "year": 2020,
+        "countries": ["KR", "South Korea"],
+    }
+    legacy_snapshot = copy.deepcopy(legacy_raw)
+    normalized_legacy = candidate_schema.normalize_candidate_record(legacy_raw)
+    assert_check("legacy candidate countries не мутируется", legacy_raw == legacy_snapshot)
+    assert_check(
+        "legacy countries сохраняются в normalized copy",
+        normalized_legacy["countries"] == ["KR", "South Korea"],
+    )
+
+    coproduction_case = candidate_schema.normalize_candidate_record({
+        "title": "Coproduction Case",
+        "year": 2020,
+        "countries": ["US", "GB"],
+    })
+    assert_check("Coproduction -> оба ISO-2 code", coproduction_case["country_codes"] == ["US", "GB"])
+    assert_check("Coproduction display -> primary US label", coproduction_case["country_display"] == "США")
+
+    candidate_pool.save_candidate_pool({
+        "legacy-one": {
+            "title": "Country Save Case",
+            "alternative_title": "",
+            "year": 2021,
+            "criteria_name": "tmdb_KR_quality",
+            "countries": ["KR", "South Korea"],
+            "kp_score": 7.5,
+            "kp_votes": 1000,
+            "imdb_score": 7.4,
+            "imdb_votes": 5000,
+            "genres": ["драма"],
+        },
+    })
+    saved_pool = candidate_pool.load_candidate_pool()
+    saved_candidate = next(iter(saved_pool.values()))
+    assert_check("Write path сохраняет country_codes", saved_candidate.get("country_codes") == ["KR"])
+    assert_check("Write path сохраняет country_display", saved_candidate.get("country_display") == "Южная Корея")
 
 
 def test_remove_candidate_from_pool() -> None:
@@ -2898,7 +3295,10 @@ def test_tmdb_candidate_pool_criteria_name() -> None:
         with patch("candidates.tmdb_candidate_pool.api_tmdb.discover_tv_candidates", return_value=[{"id": 101, "vote_count": 100, "popularity": 10}]):
             with patch("candidates.tmdb_candidate_pool.api_tmdb.get_tv_details", side_effect=fake_details):
                 with patch("candidates.tmdb_candidate_pool.connect_imdb", return_value=None):
-                    with patch("candidates.tmdb_candidate_pool.enrich_from_kp_api_if_needed", side_effect=lambda candidate, _country, _stats: candidate):
+                    with patch(
+                        "candidates.tmdb_candidate_pool.enrich_from_kp_api_if_needed",
+                        side_effect=lambda candidate, _country, _stats, **_kwargs: candidate,
+                    ):
                         manual_result = tmdb_candidate_pool.build_candidate_pool(
                             country="RU",
                             pages=1,
@@ -2944,6 +3344,105 @@ def test_tmdb_candidate_pool_criteria_name() -> None:
     assert_check(
         "Common candidate получает fallback criteria_name",
         any(candidate.get("criteria_name") == "tmdb_RU_quality" for candidate in pool.values())
+    )
+
+
+def test_tmdb_candidate_pool_network_error_skip_gate() -> None:
+    """Проверяет, что TMDb Details и KP API пропускаются после 3 подряд сетевых ошибок."""
+    print("\n14.0b) Проверяем skip-gate после 3 сетевых ошибок TMDb/KP")
+
+    discover_items = [
+        {"id": index, "vote_count": 100, "popularity": 10}
+        for index in range(1, 6)
+    ]
+    progress_events = []
+
+    def fake_details(tmdb_id, **_kwargs):
+        return {
+            "id": tmdb_id,
+            "name": f"Network Gate {tmdb_id}",
+            "original_name": f"Network Gate {tmdb_id}",
+            "first_air_date": "2024-01-01",
+            "origin_country": ["RU"],
+            "production_countries": [{"iso_3166_1": "RU", "name": "Russia"}],
+            "genres": [{"name": "Drama"}],
+            "vote_average": 7.5,
+            "vote_count": 100,
+            "popularity": 10,
+            "external_ids": {},
+            "credits": {},
+        }
+
+    tmdb_details_calls = []
+
+    def failing_details(tmdb_id, **_kwargs):
+        tmdb_details_calls.append(tmdb_id)
+        raise RuntimeError("tmdb offline")
+
+    try:
+        tmdb_candidate_pool.set_progress_reporter(lambda source, status: progress_events.append((source, status)))
+        with patch("candidates.tmdb_candidate_pool.api_tmdb.load_tmdb_token", return_value="token"):
+            with patch("candidates.tmdb_candidate_pool.api_tmdb.discover_tv_candidates", return_value=discover_items):
+                with patch("candidates.tmdb_candidate_pool.api_tmdb.get_tv_details", side_effect=failing_details):
+                    with patch("candidates.tmdb_candidate_pool.connect_imdb", return_value=None):
+                        tmdb_result = tmdb_candidate_pool.build_candidate_pool(
+                            country="RU",
+                            pages=1,
+                            details_limit=5,
+                            mode="quality",
+                            kp_api_limit=0,
+                        )
+    finally:
+        tmdb_candidate_pool.set_progress_reporter(None)
+
+    assert_check("TMDb Details останавливает сетевые попытки после 3 ошибок", len(tmdb_details_calls) == 3)
+    assert_check("TMDb Details stats считает ошибки", tmdb_result["stats"]["tmdb_details_errors"] == 3)
+    assert_check("TMDb Details stats считает пропуски", tmdb_result["stats"]["tmdb_details_skipped_after_errors"] == 2)
+    assert_check(
+        "TMDb Details выводит Пропущено",
+        any(source == "TMDb Details" and "Пропущено" in status for source, status in progress_events),
+    )
+
+    progress_events = []
+    kp_lookup_calls = []
+
+    def failing_kp_lookup(*_args, **_kwargs):
+        kp_lookup_calls.append(1)
+        return {
+            "status": "error",
+            "movie": None,
+            "error": "network_error",
+            "reject_reason": None,
+            "query": "offline",
+            "attempts": 1,
+        }
+
+    try:
+        tmdb_candidate_pool.set_progress_reporter(lambda source, status: progress_events.append((source, status)))
+        with patch("candidates.tmdb_candidate_pool.api_tmdb.load_tmdb_token", return_value="token"):
+            with patch("candidates.tmdb_candidate_pool.api_tmdb.discover_tv_candidates", return_value=discover_items):
+                with patch("candidates.tmdb_candidate_pool.api_tmdb.get_tv_details", side_effect=fake_details):
+                    with patch("candidates.tmdb_candidate_pool.connect_imdb", return_value=None):
+                        with patch("candidates.kp_enrichment.lookup_kp_via_api", side_effect=failing_kp_lookup):
+                            kp_result = tmdb_candidate_pool.build_candidate_pool(
+                                country="RU",
+                                pages=1,
+                                details_limit=5,
+                                mode="quality",
+                            )
+    finally:
+        tmdb_candidate_pool.set_progress_reporter(None)
+
+    assert_check("KP API останавливает сетевые попытки после 3 ошибок", len(kp_lookup_calls) == 3)
+    assert_check("KP API stats считает ошибки", kp_result["stats"]["kp_api_errors"] == 3)
+    assert_check("KP API stats считает пропуски", kp_result["stats"]["kp_api_skipped_after_errors"] == 2)
+    assert_check(
+        "KP API выводит Пропущено",
+        any(source == "KP API" and status == "Пропущено" for source, status in progress_events),
+    )
+    assert_check(
+        "KP API сохраняет статус skipped_network_errors у пропущенных кандидатов",
+        any(candidate.get("kp_status") == "skipped_network_errors" for candidate in kp_result["candidates"]),
     )
 
 
@@ -3792,11 +4291,20 @@ def run_tests() -> None:
         test_candidate_schema_marks_missing_kp()
         test_candidate_schema_preserves_specific_kp_status()
         test_candidate_schema_ready_for_predict_requires_kp_and_imdb()
+        test_kp_country_alias_matching()
+        test_kp_lookup_kr_country_aliases()
+        test_kp_country_from_iso2_mapping()
+        test_kp_series_type_filter()
+        test_kp_tmdb_build_debug_traces_rejection_details()
+        test_kp_tmdb_build_debug_session_save()
         test_retry_kp_enrichment_makes_candidate_complete()
         test_candidate_schema_keeps_unknown_fields()
+        test_candidate_genre_schema_normalization()
+        test_candidate_country_schema_normalization()
         test_remove_candidate_from_pool()
         test_candidate_pool_genre_filters()
         test_tmdb_candidate_pool_criteria_name()
+        test_tmdb_candidate_pool_network_error_skip_gate()
         test_tmdb_candidate_pool_discover_genre_filters()
         test_tmdb_import_keeps_cross_criteria_entries()
         test_import_tmdb_module_normalizes_schema_and_keeps_unknown_fields()

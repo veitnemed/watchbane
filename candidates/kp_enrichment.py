@@ -7,13 +7,121 @@ from typing import Any, Callable
 from apis import kp_api
 
 
+# Labels match candidates.tmdb_country_options.COUNTRY_NAMES_RU_BY_CODE (TMDb build UI).
+KR_COUNTRY_ALIASES = (
+    "Южная Корея",
+    "Корея Южная",
+    "Республика Корея",
+    "South Korea",
+    "Republic of Korea",
+    "Korea, Republic of",
+    "KR",
+)
+
 KP_COUNTRY_BY_ISO2 = {
     "RU": "Россия",
-    "KR": "Южная Корея",
     "US": "США",
     "GB": "Великобритания",
+    "KR": "Южная Корея",
+    "JP": "Япония",
+    "FR": "Франция",
     "DE": "Германия",
+    "ES": "Испания",
+    "IT": "Италия",
+    "TR": "Турция",
+    "CN": "Китай",
+    "IN": "Индия",
+    "CA": "Канада",
+    "AU": "Австралия",
+    "BR": "Бразилия",
+    "MX": "Мексика",
+    "AR": "Аргентина",
+    "SE": "Швеция",
+    "NO": "Норвегия",
+    "DK": "Дания",
+    "FI": "Финляндия",
+    "PL": "Польша",
+    "NL": "Нидерланды",
+    "BE": "Бельгия",
+    "IE": "Ирландия",
+    "UA": "Украина",
 }
+
+_COUNTRY_ALIAS_TO_CANONICAL: dict[str, str] = {}
+
+
+def _normalize_country_key(value: str) -> str:
+    text = str(value or "").strip().casefold().replace("ё", "е")
+    while "  " in text:
+        text = text.replace("  ", " ")
+    return text.strip()
+
+
+def _register_country_aliases(canonical: str, *aliases: str) -> None:
+    for alias in aliases:
+        key = _normalize_country_key(alias)
+        if key:
+            _COUNTRY_ALIAS_TO_CANONICAL[key] = canonical
+
+
+def _init_country_alias_map() -> None:
+    for iso2, ru_name in KP_COUNTRY_BY_ISO2.items():
+        _register_country_aliases(iso2, iso2, ru_name)
+    _register_country_aliases("KR", *KR_COUNTRY_ALIASES)
+
+
+_init_country_alias_map()
+
+
+def normalize_country_alias(value: str) -> str:
+    """Maps a country label/code to canonical ISO-2 when alias is known."""
+    key = _normalize_country_key(value)
+    if key == "":
+        return ""
+    return _COUNTRY_ALIAS_TO_CANONICAL.get(key, key)
+
+
+def extract_kp_country_values(source: Any) -> list[str]:
+    """Reads country labels from KP API shapes: str, list, dict(name/country), movie.countries."""
+    if source is None:
+        return []
+    if isinstance(source, str):
+        text = source.strip()
+        return [text] if text else []
+    if isinstance(source, list):
+        values: list[str] = []
+        for item in source:
+            values.extend(extract_kp_country_values(item))
+        return unique_non_empty(values)
+    if isinstance(source, dict):
+        if "countries" in source:
+            return extract_kp_country_values(source.get("countries"))
+        values: list[str] = []
+        for field in ("name", "country"):
+            raw = source.get(field)
+            if isinstance(raw, str) and raw.strip():
+                values.append(raw.strip())
+            elif isinstance(raw, list):
+                values.extend(extract_kp_country_values(raw))
+        return unique_non_empty(values)
+    return []
+
+
+def countries_match(expected_country: str, kp_country_values: list[str]) -> bool:
+    """Returns True when expected country matches any KP country label via explicit aliases."""
+    expected = str(expected_country or "").strip()
+    if expected == "" or len(kp_country_values) == 0:
+        return False
+
+    expected_canonical = normalize_country_alias(expected)
+    expected_key = _normalize_country_key(expected)
+    for kp_value in kp_country_values:
+        kp_canonical = normalize_country_alias(str(kp_value))
+        if kp_canonical == expected_canonical:
+            return True
+        if _normalize_country_key(str(kp_value)) == expected_key:
+            return True
+    return False
 
 
 def normalize_iso2_country(value: str | None) -> str:
@@ -109,6 +217,7 @@ def lookup_kp_via_api(
     *,
     find_series_raw: Callable[..., dict[str, Any]] | None = None,
     continue_on_reject: bool = False,
+    attempt_traces: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Looks up KP data for candidate queries and applies shared match-check."""
     find_series_raw = find_series_raw or kp_api.find_series_raw
@@ -129,9 +238,20 @@ def lookup_kp_via_api(
     attempts = 0
     for query in queries:
         attempts += 1
-        result = find_series_raw(str(query), country, year=year)
+        attempt_trace = None
+        query_finder = find_series_raw
+        if attempt_traces is not None:
+            from candidates import kp_tmdb_build_debug
+
+            attempt_trace = kp_tmdb_build_debug.new_attempt_record(candidate, str(query), country, year)
+            query_finder = kp_tmdb_build_debug.make_tracing_find_series_raw(attempt_trace)
+
+        result = query_finder(str(query), country, year=year)
         if result.get("ok") is False:
             error_code = result.get("error") or "unknown"
+            if attempt_trace is not None:
+                attempt_trace["lookup_status"] = "api_error"
+                attempt_traces.append(attempt_trace)
             if error_code in {"not_found", "country_not_found", "empty_title"}:
                 last_error = error_code
                 continue
@@ -146,6 +266,20 @@ def lookup_kp_via_api(
 
         movie = result.get("data") or {}
         is_safe, reason = kp_match_is_safe(candidate, movie)
+        if attempt_trace is not None:
+            from candidates import kp_tmdb_build_debug
+
+            lookup_status = "found" if is_safe else "rejected"
+            kp_tmdb_build_debug.fill_match_trace(
+                attempt_trace,
+                candidate,
+                movie,
+                is_safe,
+                reason,
+                lookup_status=lookup_status,
+            )
+            attempt_traces.append(attempt_trace)
+
         if is_safe is False:
             last_reject = reason
             last_error = f"rejected_{reason}"

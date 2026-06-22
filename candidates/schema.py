@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from candidates.keys import DEFAULT_CRITERIA_NAME
+from candidates import country_schema
+from candidates import genre_schema
 
 
 PREDICTION_REQUIRED_FIELDS = (
@@ -13,7 +15,14 @@ PREDICTION_REQUIRED_FIELDS = (
     "imdb_score",
     "imdb_votes",
 )
-_PRESERVED_KP_STATUSES = {"not_found", "error", "pending_limit", "cache_hit", "not_requested"}
+_PRESERVED_KP_STATUSES = {
+    "not_found",
+    "error",
+    "pending_limit",
+    "cache_hit",
+    "not_requested",
+    "skipped_network_errors",
+}
 
 
 def _copy_candidate(candidate: dict | None) -> dict:
@@ -71,6 +80,10 @@ def ensure_candidate_defaults(candidate: dict) -> dict:
     updated["signals"] = _normalize_list(updated.get("signals"))
     updated["genres"] = _normalize_list(updated.get("genres"))
     updated["countries"] = _normalize_list(updated.get("countries"))
+    updated["country_codes"] = country_schema.build_country_codes(updated)
+    updated["country_display"] = country_schema.build_country_display(updated["country_codes"])
+    updated["genre_keys"] = genre_schema.build_genre_keys(updated)
+    updated["genres_display"] = genre_schema.build_genres_display(updated["genre_keys"])
     updated.setdefault("kp_score", None)
     updated.setdefault("kp_votes", None)
     updated.setdefault("imdb_score", None)

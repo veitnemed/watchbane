@@ -20,7 +20,28 @@ SECONDARY_TOKEN = (
     or os.getenv("POISKKINO_API_KEY_SECONDARY")
 )
 DEFAULT_LIMIT = 10
-SERIES_TYPES = {"tv-series", "series", "mini-series", "animated-series"}
+SERIES_TYPES = {
+    "tv-series",
+    "series",
+    "mini-series",
+    "animated-series",
+    "anime",
+    "tv-show",
+}
+ANIMATED_SERIAL_TYPES = {
+    "cartoon",
+    "anime",
+    "animated-series",
+}
+MOVIE_TYPES = {
+    "movie",
+    "film",
+    "video",
+    "short",
+    "short-film",
+    "music-video",
+}
+SERIES_TYPE_NUMBERS = {2, 3, 4, 5, 6}
 
 if TOKEN is None:
     try:
@@ -278,17 +299,113 @@ def normalize_country_name(country: str) -> str:
 
 def movie_has_country(movie: dict, country: str) -> bool:
     """Проверяет, есть ли нужная страна среди стран объекта."""
-    expected = normalize_country_name(country)
-    for item in movie.get("countries", []) or []:
-        if normalize_country_name(item.get("name")) == expected:
-            return True
+    from candidates import kp_enrichment
+
+    kp_countries = kp_enrichment.extract_kp_country_values(movie)
+    return kp_enrichment.countries_match(country, kp_countries)
+
+
+def _normalize_kp_type(value) -> str:
+    text = normalize_text(value).casefold()
+    text = text.replace("_", "-")
+    while "  " in text:
+        text = text.replace("  ", " ")
+    return text.replace(" ", "-")
+
+
+def _normalized_type_set(values: set[str]) -> set[str]:
+    return {_normalize_kp_type(item) for item in values}
+
+
+_NORMALIZED_SERIES_TYPES = _normalized_type_set(SERIES_TYPES)
+_NORMALIZED_ANIMATED_SERIAL_TYPES = _normalized_type_set(ANIMATED_SERIAL_TYPES)
+_NORMALIZED_MOVIE_TYPES = _normalized_type_set(MOVIE_TYPES)
+
+
+def _truthy_flag(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value in (None, ""):
+        return False
+    return str(value).strip().casefold() in {"1", "true", "yes", "y", "да"}
+
+
+def _positive_int(value) -> int | None:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def _has_serial_length_markers(movie: dict) -> bool:
+    if _truthy_flag(movie.get("isSeries")):
+        return True
+    seasons = movie.get("seasonsInfo")
+    if isinstance(seasons, list) and len(seasons) > 0:
+        return True
+    if _positive_int(movie.get("seriesLength")) is not None:
+        return True
+    if _positive_int(movie.get("totalSeriesLength")) is not None:
+        return True
     return False
+
+
+def series_type_check(movie: dict) -> tuple[bool, str]:
+    """Returns whether KP item is an allowed serial candidate and why."""
+    if isinstance(movie, dict) is False:
+        return False, "blocked_not_a_dict"
+
+    kp_type = _normalize_kp_type(movie.get("type"))
+    type_number = movie.get("typeNumber")
+    has_serial_markers = _has_serial_length_markers(movie)
+
+    if kp_type in _NORMALIZED_SERIES_TYPES:
+        return True, f"allowed_type:{kp_type or 'empty'}"
+
+    if kp_type == "" and has_serial_markers:
+        return True, "allowed_empty_type_with_serial_markers"
+
+    try:
+        if int(type_number) in SERIES_TYPE_NUMBERS:
+            return True, f"allowed_type_number:{int(type_number)}"
+    except (TypeError, ValueError):
+        pass
+
+    if kp_type in _NORMALIZED_ANIMATED_SERIAL_TYPES and has_serial_markers:
+        return True, f"allowed_animated_serial:{kp_type}"
+
+    if has_serial_markers and kp_type not in _NORMALIZED_MOVIE_TYPES:
+        return True, f"allowed_serial_markers:{kp_type or 'empty'}"
+
+    if kp_type in _NORMALIZED_MOVIE_TYPES:
+        return False, f"blocked_movie_type:{kp_type}"
+
+    if kp_type == "cartoon" and has_serial_markers is False:
+        return False, "blocked_cartoon_film"
+
+    return False, f"blocked_type:{kp_type or 'empty'}"
+
+
+def describe_kp_type_filter(movie: dict) -> dict:
+    """Returns raw KP type fields and type-filter decision for debug JSON."""
+    accepted, reason = series_type_check(movie)
+    return {
+        "title": movie.get("name") if isinstance(movie, dict) else None,
+        "year": movie.get("year") if isinstance(movie, dict) else None,
+        "type": movie.get("type") if isinstance(movie, dict) else None,
+        "typeNumber": movie.get("typeNumber") if isinstance(movie, dict) else None,
+        "isSeries": movie.get("isSeries") if isinstance(movie, dict) else None,
+        "seriesLength": movie.get("seriesLength") if isinstance(movie, dict) else None,
+        "totalSeriesLength": movie.get("totalSeriesLength") if isinstance(movie, dict) else None,
+        "accepted_as_series": accepted,
+        "type_filter_reason": reason,
+    }
 
 
 def is_series(movie: dict) -> bool:
     """Проверяет, похож ли найденный объект на сериал."""
-    movie_type = normalize_text(movie.get("type"))
-    return movie_type in SERIES_TYPES
+    return series_type_check(movie)[0]
 
 
 def choose_series(docs: list, country: str) -> dict:

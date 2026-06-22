@@ -9,6 +9,8 @@ from pathlib import Path
 from config import constant
 from common import format_score as format
 from candidates import candidate_pool
+from candidates import country_schema
+from candidates import genre_schema
 from candidates import service as candidate_service
 from candidates import tmdb_country_options
 from candidates import tmdb_genre_options
@@ -833,6 +835,8 @@ def _print_tmdb_candidate_stats(result: dict) -> None:
     print(f"Удалено дублей: {stats.get('duplicates_removed', 0)}")
     print(f"Пропущено уже просмотренных: {stats.get('watched_skipped', 0)}")
     print(f"Запрошено TMDb Details: {stats.get('details_requested', 0)}")
+    print(f"TMDb Details ошибок сети: {stats.get('tmdb_details_errors', 0)}")
+    print(f"TMDb Details пропущено после ошибок: {stats.get('tmdb_details_skipped_after_errors', 0)}")
     print(f"С IMDb ID: {stats.get('has_imdb_id', 0)}")
     print(f"Найдено в IMDb dataset: {stats.get('found_in_imdb_sql', 0)}")
     print(f"KP найдено в кэше: {stats.get('kp_cache_hit', 0)}")
@@ -841,6 +845,7 @@ def _print_tmdb_candidate_stats(result: dict) -> None:
     print(f"KP API не найдено: {stats.get('kp_api_not_found', 0)}")
     print(f"KP API отклонено match-check: {stats.get('kp_api_rejected_by_match', 0)}")
     print(f"KP API ошибок: {stats.get('kp_api_errors', 0)}")
+    print(f"KP API пропущено после ошибок: {stats.get('kp_api_skipped_after_errors', 0)}")
     print(f"KP API пропущено из-за кэша: {stats.get('kp_api_skipped_cache', 0)}")
     print(f"KP ожидает добора из-за лимита: {stats.get('kp_pending_limit', 0)}")
     print(f"Неполных кандидатов по KP: {stats.get('kp_incomplete_candidates', 0)}")
@@ -1168,6 +1173,16 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     print(f"CSV: {csv_path}")
     _print_tmdb_candidate_stats(result)
 
+    kp_debug = result.get("kp_debug")
+    if isinstance(kp_debug, dict):
+        from candidates import kp_tmdb_build_debug
+
+        for line in kp_tmdb_build_debug.format_kp_debug_lines(kp_debug):
+            print(line)
+        debug_path = json_path.with_name(f"{json_path.stem}_kp_debug.json")
+        if debug_path.is_file():
+            print(f"KP debug JSON: {debug_path}")
+
     candidates = result.get("candidates") or []
     if len(candidates) > 0:
         if is_test_run:
@@ -1371,7 +1386,7 @@ def show_candidate_pool() -> None:
         kp_score = candidate.get("kp_score")
         imdb_score = candidate.get("imdb_score")
         kp_votes = candidate.get("kp_votes")
-        genres = ", ".join(candidate.get("genres", [])) or "нет"
+        genres = ", ".join(genre_schema.candidate_genres_for_display(candidate)) or "нет"
         description = request.short_text(candidate.get("description"), 80) or "без описания"
         kp_status = candidate.get("kp_status")
         is_complete = candidate.get("is_complete")
@@ -1496,8 +1511,8 @@ def _format_card_score(value) -> str:
 def _print_prediction_candidate_card(index: int, candidate: dict) -> None:
     title = candidate.get("title") or candidate.get("name") or candidate.get("title_ru") or "Без названия"
     year = candidate.get("year") or "?"
-    countries = candidate.get("countries") or candidate.get("country")
-    genres = candidate.get("genres") or []
+    countries = country_schema.candidate_country_for_display(candidate)
+    genres = genre_schema.candidate_genres_for_display(candidate)
     description = candidate_pool.format_candidate_description(candidate, limit=200)
     predict = candidate.get("predict_score", candidate.get("predict"))
     try:
