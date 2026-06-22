@@ -865,7 +865,7 @@ def _tmdb_mode_label(mode: str) -> str:
 
 def _parse_tmdb_genre_indexes(value: str, options: list[dict] | None = None) -> list[int] | None:
     text = str(value or "").strip()
-    if text in {"", "0"}:
+    if text == "":
         return []
     options = options or tmdb_genre_options.TV_GENRE_OPTIONS
     indexes = []
@@ -895,7 +895,7 @@ def _input_tmdb_genre_ids(
     output_func=print,
 ) -> list[int]:
     while True:
-        answer = input_func(f"{label} [0] >> ").strip()
+        answer = input_func(f"{label} [не важно] >> ").strip()
         if allow_all and answer.casefold() in {"все", "all", "*"}:
             return [int(option["id"]) for option in options]
         indexes = _parse_tmdb_genre_indexes(answer, options)
@@ -924,9 +924,8 @@ def _input_tmdb_include_mode(input_func=input, output_func=print) -> str:
 def request_tmdb_discover_genre_filters(input_func=input, output_func=print) -> tuple[str | None, str | None]:
     output_func(f"\n{tmdb_genre_options.TMDB_DISCOVER_GENRE_TITLE}")
     output_func("Выбери жанры, которые должны попасть в поиск:")
-    output_func(" 0 >> без include-фильтра")
     _print_tmdb_genre_options(tmdb_genre_options.INCLUDE_TV_GENRE_OPTIONS, output_func)
-    output_func("\nВвод через запятую, например 1,2,3.")
+    output_func("\nВвод через запятую, например 1,2,3. Пустой ввод = не важно.")
     include_ids = _input_tmdb_genre_ids(
         "Include жанры",
         tmdb_genre_options.INCLUDE_TV_GENRE_OPTIONS,
@@ -946,10 +945,9 @@ def request_tmdb_discover_genre_filters(input_func=input, output_func=print) -> 
 
     output_func(f"\n{tmdb_genre_options.TMDB_EXCLUDE_LABEL}")
     output_func("Выбери жанры, которые нужно исключить:")
-    output_func(" 0 >> без exclude-фильтра")
     output_func(" все >> все перечисленные exclude-жанры")
     _print_tmdb_genre_options(tmdb_genre_options.EXCLUDE_TV_GENRE_OPTIONS, output_func)
-    output_func("\nВвод через запятую, например 1,2,3,4. Можно ввести все.")
+    output_func("\nВвод через запятую, например 1,2,3,4. Пустой ввод = не важно. Можно ввести все.")
     exclude_ids = _input_tmdb_genre_ids(
         "Exclude жанры",
         tmdb_genre_options.EXCLUDE_TV_GENRE_OPTIONS,
@@ -1563,6 +1561,80 @@ def _input_optional_prediction_float(label: str, default, min_value: float, max_
     return _parse_optional_bounded_float(answer, min_value, max_value)
 
 
+def _parse_prediction_country_indexes(value: str, options_count: int) -> list[int] | None:
+    text = str(value or "").strip()
+    if text == "":
+        return []
+    indexes = []
+    for part in text.replace(",", " ").split():
+        try:
+            index = int(part)
+        except ValueError:
+            return None
+        if index < 1 or index > options_count:
+            return None
+        if index not in indexes:
+            indexes.append(index)
+    return indexes
+
+
+def _choose_prediction_country() -> list[str]:
+    options = tmdb_country_options.country_options()
+    print("\nСтрана:")
+    print("Введите номера стран из списка (можно несколько через запятую):")
+    _print_tmdb_country_options()
+
+    while True:
+        answer = input("\nВыбор [не важно] >> ").strip()
+        if answer == "":
+            return []
+        indexes = _parse_prediction_country_indexes(answer, len(options))
+        if indexes is None:
+            print("Введите номера стран через запятую, например: 1,4")
+            continue
+        return [options[index - 1]["code"] for index in indexes]
+
+
+def _parse_prediction_genre_indexes(value: str, options_count: int) -> list[int] | None:
+    text = str(value or "").strip()
+    if text == "":
+        return []
+    indexes = []
+    for part in text.replace(",", " ").split():
+        try:
+            index = int(part)
+        except ValueError:
+            return None
+        if index < 1 or index > options_count:
+            return None
+        if index not in indexes:
+            indexes.append(index)
+    return indexes
+
+
+def _print_prediction_genre_options(genre_options: list[str], output_func=print) -> None:
+    for index, label in enumerate(genre_options, start=1):
+        output_func(f" {index} >> {label}")
+
+
+def _choose_prediction_genre_list(label: str, genre_options: list[str]) -> list[str]:
+    if len(genre_options) == 0:
+        return _input_optional_prediction_csv_list(label, [])
+
+    print(f"\n{label}")
+    _print_prediction_genre_options(genre_options)
+
+    while True:
+        answer = input("\nВыбор [не важно] >> ").strip()
+        if answer == "":
+            return []
+        indexes = _parse_prediction_genre_indexes(answer, len(genre_options))
+        if indexes is None:
+            print("Введите номера жанров через запятую, например: 1,3,5")
+            continue
+        return [genre_options[index - 1] for index in indexes]
+
+
 def _input_optional_prediction_csv_list(label: str, default: list) -> list[str]:
     answer = input(f"{label} [{_format_prediction_default(default)}] >> ").strip()
     if answer == "":
@@ -1590,35 +1662,12 @@ def _choose_prediction_criteria_name() -> str | None:
     return criteria_names[int(selected) - 1]
 
 
-def _choose_prediction_source(candidates: list) -> str | None:
-    sources = sorted({
-        str(candidate.get("source") or "").strip()
-        for candidate in candidates
-        if str(candidate.get("source") or "").strip() != ""
-    })
-    if len(sources) == 0:
-        return None
-
-    print("\nВыбрать source?")
-    print(" 0 >> Все")
-    for idx, source in enumerate(sources, start=1):
-        print(f" {idx} >> {source}")
-
-    selected = request.loop_input(
-        text="\nSource [0] >> ",
-        funcs_list=[lambda value: value == "" or (value.isdigit() and 0 <= int(value) <= len(sources))]
-    )
-    if selected in {"", "0"}:
-        return None
-    return sources[int(selected) - 1]
-
-
 def _request_prediction_candidate_filters(candidates: list) -> dict:
     print("\nФильтр кандидатов перед предиктом:")
     print("Жанры для top prediction (по сохранённым данным pool).")
     print("Жанры (saved pool / KP-IMDb-TMDb data).")
     print("Это не пересобирает pool и не делает новый TMDb-запрос.")
-    print("Enter = оставить saved default.\n")
+    print("Enter в списках стран/жанров = не важно; в числовых полях = saved default.\n")
 
     criteria_name = _choose_prediction_criteria_name()
     defaults_view = candidate_service.get_prediction_filter_defaults_view(criteria_name)
@@ -1629,15 +1678,9 @@ def _request_prediction_candidate_filters(candidates: list) -> dict:
             print(f"  {line}")
 
     genre_options_view = candidate_service.get_prediction_genre_options_view(criteria_name)
-    if genre_options_view["count"] > 0:
-        print("\nДоступные жанры для top prediction (по сохранённым данным pool):")
-        print(", ".join(genre_options_view["genres"]))
-    else:
-        print("\nДоступные жанры для top prediction (по сохранённым данным pool): нет данных")
+    genre_options = genre_options_view["genres"]
 
-    source = _choose_prediction_source(candidates)
-    country_answer = input(f"\nСтрана [{_format_prediction_default(defaults.get('country'))}] >> ").strip()
-    country = country_answer or defaults.get("country")
+    country = _choose_prediction_country()
     year_min = _input_optional_prediction_int(
         "Минимальный год",
         defaults.get("year_min"),
@@ -1650,13 +1693,13 @@ def _request_prediction_candidate_filters(candidates: list) -> dict:
         1900,
         constant.NOW_YEAR,
     )
-    include_genres = _input_optional_prediction_csv_list(
-        "Включить жанры (saved pool) через запятую",
-        defaults.get("include_genres") or [],
+    include_genres = _choose_prediction_genre_list(
+        "Включить жанры (saved pool)?",
+        genre_options,
     )
-    exclude_genres = _input_optional_prediction_csv_list(
-        "Исключить жанры (saved pool) через запятую",
-        defaults.get("exclude_genres") or [],
+    exclude_genres = _choose_prediction_genre_list(
+        "Исключить жанры (saved pool)?",
+        genre_options,
     )
     min_kp_score = _input_optional_prediction_float(
         "Минимальный KP",
@@ -1694,7 +1737,7 @@ def _request_prediction_candidate_filters(candidates: list) -> dict:
 
     return {
         "criteria_name": criteria_name,
-        "source": source,
+        "source": None,
         "country": country,
         "year_min": year_min,
         "year_max": year_max,

@@ -654,16 +654,18 @@ def format_prediction_filter_default_lines(defaults: dict) -> list[str]:
 
 def collect_prediction_genre_options(candidates: list) -> list[str]:
     """Returns unique saved-pool genre labels for runtime top prediction filters."""
-    seen = set()
+    seen_keys = set()
     options = []
     for candidate in candidates:
         normalized = normalize_candidate_record(candidate)
-        for label in normalized.get("genres_display") or []:
-            text = str(label or "").strip()
-            if text == "" or text in seen:
+        for genre_key in normalized.get("genre_keys") or []:
+            if genre_key in seen_keys:
                 continue
-            seen.add(text)
-            options.append(text)
+            label = genre_schema.GENRE_KEY_TO_DISPLAY.get(genre_key)
+            if label is None:
+                continue
+            seen_keys.add(genre_key)
+            options.append(label)
     return sorted(options, key=lambda value: str(value).casefold())
 
 
@@ -680,18 +682,24 @@ def _candidate_list_values(candidate: dict, field_name: str) -> list[str]:
     return values
 
 
-def _matches_optional_country(candidate: dict, country_filter: str | None) -> bool:
-    if str(country_filter or "").strip() == "":
-        return True
-
-    expected_iso2 = country_schema.normalize_country_filter(country_filter)
-    if expected_iso2 is None:
+def _matches_optional_country(candidate: dict, country_filter) -> bool:
+    required_codes = country_schema.normalize_country_filter_list(country_filter)
+    has_country_filter = False
+    if isinstance(country_filter, str):
+        has_country_filter = country_filter.strip() != ""
+    elif isinstance(country_filter, (list, tuple, set)):
+        has_country_filter = any(str(item or "").strip() for item in country_filter)
+    elif country_filter not in (None, ""):
+        has_country_filter = True
+    if has_country_filter and len(required_codes) == 0:
         return False
+    if len(required_codes) == 0:
+        return True
 
     candidate_codes = _candidate_list_values(candidate, "country_codes")
     if len(candidate_codes) == 0:
         return False
-    return expected_iso2 in candidate_codes
+    return country_schema.country_codes_match_any(candidate_codes, required_codes)
 
 
 def _matches_optional_genres(candidate: dict, include_genres: list[str], exclude_genres: list[str]) -> bool:

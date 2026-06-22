@@ -1724,6 +1724,11 @@ def test_canonical_runtime_filters_use_genre_keys_and_country_codes() -> None:
         countries=["RU", "Россия"],
         genres=["Drama"],
     )
+    jp_drama = _ready(
+        "JP Drama",
+        countries=["JP", "Япония"],
+        genres=["Drama"],
+    )
     unknown_country = _ready(
         "Unknown Country",
         countries=["Atlantis"],
@@ -1762,6 +1767,14 @@ def test_canonical_runtime_filters_use_genre_keys_and_country_codes() -> None:
     assert_check(
         "Country filter KR не пропускает RU candidate",
         len(_filter_candidates([ru_drama], country="KR")) == 0,
+    )
+    assert_check(
+        "Country filter KR,JP матчит обе страны (OR)",
+        len(_filter_candidates([kr_drama_crime, ru_drama, jp_drama], country=["KR", "JP"])) == 2,
+    )
+    assert_check(
+        "Country filter KR,JP через запятую в строке",
+        len(_filter_candidates([kr_drama_crime, ru_drama, jp_drama], country="KR, JP")) == 2,
     )
     assert_check(
         "Unknown country filter не матчит candidate и не падает",
@@ -2207,6 +2220,29 @@ def test_top_prediction_ui_read_only_helpers() -> None:
     assert_check("Genre options view подписан как saved pool", "saved" in genre_view["label"] or "сохранённым" in genre_view["label"])
     assert_check("Top prediction не применяет min_tmdb_score/min_tmdb_votes", len(filtered) == 3)
     assert_check("Top prediction UI больше не спрашивает TMDb filters", "Минимальный TMDb" not in filter_source and "Минимум голосов TMDb" not in filter_source)
+    assert_check("Top prediction UI жанры через numbered list", "_choose_prediction_genre_list" in filter_source)
+    assert_check("Top prediction UI страна через numbered list", "_choose_prediction_country" in filter_source)
+    assert_check("Top prediction UI не спрашивает source", "_choose_prediction_source" not in filter_source)
+    assert_check(
+        "Top prediction country index parser принимает multi-select",
+        interface_funcs._parse_prediction_country_indexes("1, 2", 26) == [1, 2],
+    )
+    assert_check(
+        "Top prediction country index parser принимает пробелы",
+        interface_funcs._parse_prediction_country_indexes("1 2", 26) == [1, 2],
+    )
+    assert_check(
+        "Top prediction genre index parser принимает multi-select",
+        interface_funcs._parse_prediction_genre_indexes("1, 3", 5) == [1, 3],
+    )
+    assert_check(
+        "Top prediction genre index parser пустой ввод = не важно",
+        interface_funcs._parse_prediction_genre_indexes("", 5) == [],
+    )
+    assert_check(
+        "TMDb genre index parser пустой ввод = не важно",
+        interface_funcs._parse_tmdb_genre_indexes("") == [],
+    )
     assert_check("Dedupe оставляет один title/year с лучшим predict", len(deduped) == 2 and deduped[0]["predict"] == 8.20)
     assert_check("Описание режется до 200 символов", len(short_description) <= 200 and short_description.endswith("..."))
     assert_check("Пустое описание даёт нет данных", missing_description == "нет данных")
@@ -3711,25 +3747,19 @@ def test_tmdb_candidate_pool_discover_genre_filters() -> None:
         return with_genres, without_genres, "\n".join(helper_output), "\n".join(helper_prompts)
 
     enter_with_genres, enter_without_genres, enter_output, _enter_prompts = run_tmdb_genre_helper(["", ""])
-    zero_with_genres, zero_without_genres, zero_output, _zero_prompts = run_tmdb_genre_helper(["0", "0"])
-    single_with_genres, single_without_genres, single_output, _single_prompts = run_tmdb_genre_helper(["1", "0"])
-    or_with_genres, or_without_genres, helper_output_text, _or_prompts = run_tmdb_genre_helper(["1,2,3", "1", "0"])
-    and_with_genres, _and_without_genres, and_output, _and_prompts = run_tmdb_genre_helper(["1,2,3", "2", "0"])
-    _exclude_with_genres, exclude_without_genres, exclude_output, _exclude_prompts = run_tmdb_genre_helper(["0", "1,2,3,4"])
-    _all_exclude_with_genres, all_exclude_without_genres, all_exclude_output, _all_exclude_prompts = run_tmdb_genre_helper(["0", "все"])
+    single_with_genres, single_without_genres, single_output, _single_prompts = run_tmdb_genre_helper(["1", ""])
+    or_with_genres, or_without_genres, helper_output_text, _or_prompts = run_tmdb_genre_helper(["1,2,3", "1", ""])
+    and_with_genres, _and_without_genres, and_output, _and_prompts = run_tmdb_genre_helper(["1,2,3", "2", ""])
+    _exclude_with_genres, exclude_without_genres, exclude_output, _exclude_prompts = run_tmdb_genre_helper(["", "1,2,3,4"])
+    _all_exclude_with_genres, all_exclude_without_genres, all_exclude_output, _all_exclude_prompts = run_tmdb_genre_helper(["", "все"])
 
     assert_check(
         "TMDb genre helper Enter include/exclude возвращает no filter",
         enter_with_genres is None and enter_without_genres is None,
     )
     assert_check(
-        "TMDb genre helper 0 include/exclude возвращает no filter",
-        zero_with_genres is None and zero_without_genres is None,
-    )
-    assert_check(
         "TMDb genre helper не спрашивает OR/AND при пустом include",
-        "Как применять выбранные жанры (TMDb)?" not in enter_output
-        and "Как применять выбранные жанры (TMDb)?" not in zero_output,
+        "Как применять выбранные жанры (TMDb)?" not in enter_output,
     )
     assert_check(
         "TMDb genre helper один include-жанр не спрашивает OR/AND",

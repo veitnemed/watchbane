@@ -57,6 +57,52 @@ def normalize_country_filter(value: str | None) -> str | None:
     return country_value_to_iso2(text)
 
 
+def normalize_country_filter_list(values) -> list[str]:
+    """Normalizes user/runtime country filters to ordered unique ISO-2 codes."""
+    codes: list[str] = []
+    seen: set[str] = set()
+
+    def add_raw(raw_value: str) -> None:
+        text = str(raw_value or "").strip()
+        if text == "":
+            return
+        iso2 = country_value_to_iso2(text)
+        if iso2 is None or iso2 in seen:
+            return
+        seen.add(iso2)
+        codes.append(iso2)
+
+    if values is None:
+        return []
+    if isinstance(values, str):
+        text = values.strip()
+        if text == "":
+            return []
+        if "," in text:
+            for part in text.split(","):
+                add_raw(part)
+        else:
+            add_raw(text)
+        return codes
+    if isinstance(values, (list, tuple, set)):
+        for item in values:
+            if isinstance(item, str) and "," in item:
+                for part in item.split(","):
+                    add_raw(part)
+            else:
+                add_raw(str(item or ""))
+        return codes
+    add_raw(str(values))
+    return codes
+
+
+def country_codes_match_any(candidate_codes: list[str], required_codes: list[str]) -> bool:
+    """True when candidate country_codes intersect required ISO-2 filters."""
+    if len(required_codes) == 0:
+        return True
+    return len(set(candidate_codes) & set(required_codes)) > 0
+
+
 def build_country_codes(candidate: dict) -> list[str]:
     """Builds ordered unique ISO-2 country codes from available candidate fields."""
     codes: list[str] = []
