@@ -1005,26 +1005,103 @@ def rank_candidates_by_predict(candidates: list, weights: dict) -> list:
     return scored_candidates
 
 
+def _safe_rank_float(value) -> float:
+    try:
+        if value in (None, ""):
+            return 0.0
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _candidate_prediction_score(candidate: dict) -> float | None:
+    raw = candidate.get("predict")
+    if raw in (None, ""):
+        raw = candidate.get("predict_score")
+    if raw in (None, ""):
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _filled_score_votes_count(candidate: dict) -> int:
+    count = 0
+    for field_name in ("kp_score", "kp_votes", "imdb_score", "imdb_votes", "tmdb_score", "tmdb_votes"):
+        if candidate.get(field_name) not in (None, ""):
+            count += 1
+    return count
+
+
+def _prediction_duplicate_tiebreak_key(candidate: dict, order_index: int) -> tuple:
+    return (
+        1 if schema_is_ready_for_predict(candidate) else 0,
+        1 if candidate.get("is_complete") is True else 0,
+        _filled_score_votes_count(candidate),
+        _safe_rank_float(candidate.get("final_score")),
+        _safe_rank_float(candidate.get("quality_score")),
+        _safe_rank_float(candidate.get("kp_score")),
+        _safe_rank_float(candidate.get("imdb_score")),
+        -order_index,
+    )
+
+
+def _is_better_prediction_duplicate(
+    challenger: dict,
+    incumbent: dict,
+    challenger_index: int,
+    incumbent_index: int,
+) -> bool:
+    challenger_predict = _candidate_prediction_score(challenger)
+    incumbent_predict = _candidate_prediction_score(incumbent)
+
+    if challenger_predict is not None and incumbent_predict is not None:
+        if challenger_predict != incumbent_predict:
+            return challenger_predict > incumbent_predict
+    elif challenger_predict is not None:
+        return True
+    elif incumbent_predict is not None:
+        return False
+
+    return _prediction_duplicate_tiebreak_key(challenger, challenger_index) > _prediction_duplicate_tiebreak_key(
+        incumbent,
+        incumbent_index,
+    )
+
+
 def dedupe_ranked_predictions_by_title_identity(ranked_candidates: list) -> list:
-    """Keeps one best scored candidate per normalized title/year for display."""
-    best_by_identity = {}
-    order = []
-    for candidate in ranked_candidates:
+    """Keeps one best candidate per normalized title/year for top prediction display."""
+    best_by_identity: dict[str, dict] = {}
+    best_index_by_identity: dict[str, int] = {}
+    order: list[str] = []
+
+    for index, candidate in enumerate(ranked_candidates):
         identity = title_identity_key(candidate)
         if identity == "|":
-            identity = f"__row_{len(order)}"
+            identity = f"__row_{index}"
+
         current = best_by_identity.get(identity)
         if current is None:
             best_by_identity[identity] = candidate
+            best_index_by_identity[identity] = index
             order.append(identity)
             continue
-        if float(candidate.get("predict") or candidate.get("predict_score") or 0) > float(
-            current.get("predict") or current.get("predict_score") or 0
+
+        if _is_better_prediction_duplicate(
+            candidate,
+            current,
+            index,
+            best_index_by_identity[identity],
         ):
             best_by_identity[identity] = candidate
+            best_index_by_identity[identity] = index
 
     deduped = [best_by_identity[identity] for identity in order]
-    deduped.sort(key=lambda item: float(item.get("predict") or item.get("predict_score") or 0), reverse=True)
+    deduped.sort(
+        key=lambda item: _candidate_prediction_score(item) if _candidate_prediction_score(item) is not None else float("-inf"),
+        reverse=True,
+    )
     return deduped
 
 

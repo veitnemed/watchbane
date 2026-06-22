@@ -1450,7 +1450,11 @@ def show_global_candidate_top() -> None:
 
     weights = storage_data.load_weights()
     scored_candidates = candidate_pool.rank_candidates_by_predict(ready_candidates, weights)
+    before_dedupe_count = len(scored_candidates)
     scored_candidates = candidate_pool.dedupe_ranked_predictions_by_title_identity(scored_candidates)
+    hidden_duplicates = before_dedupe_count - len(scored_candidates)
+    if hidden_duplicates > 0:
+        print(f"Дублей скрыто: {hidden_duplicates}")
     top_n = min(top_n, len(scored_candidates))
 
     print(f"\nТоп {top_n} из общего пула:\n")

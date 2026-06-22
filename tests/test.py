@@ -1801,6 +1801,94 @@ def test_canonical_runtime_filters_use_genre_keys_and_country_codes() -> None:
     assert_check("Genre options показывают display labels", set(genre_options) == {"Драма", "Криминал", "Комедия"})
 
 
+def test_top_prediction_title_identity_dedupe() -> None:
+    """Проверяет read-only dedupe top prediction по title_identity_key без изменения pool JSON."""
+    print("\n20c) Проверяем top prediction dedupe по title_identity_key")
+
+    def _candidate(**fields) -> dict:
+        base = {
+            "title": "Same Show",
+            "year": 2020,
+            "kp_score": 7.0,
+            "kp_votes": 1000,
+            "imdb_score": 7.0,
+            "imdb_votes": 1000,
+            "kp_status": "done",
+            "is_complete": True,
+            "genres": ["Drama"],
+            "countries": ["RU"],
+        }
+        base.update(fields)
+        return candidate_schema.normalize_candidate_record(base)
+
+    crit_a = _candidate(criteria_name="crit_a", predict=7.5)
+    crit_b = _candidate(criteria_name="crit_b", predict=8.2)
+    deduped = candidate_pool.dedupe_ranked_predictions_by_title_identity([crit_a, crit_b])
+    assert_check(
+        "Same title/year из разных criteria -> один кандидат",
+        len(deduped) == 1 and deduped[0]["criteria_name"] == "crit_b",
+    )
+
+    low_predict = _candidate(criteria_name="low", predict=7.0)
+    high_predict = _candidate(criteria_name="high", predict=9.0)
+    deduped_score = candidate_pool.dedupe_ranked_predictions_by_title_identity([low_predict, high_predict])
+    assert_check(
+        "При разных predicted score остаётся кандидат с большим score",
+        len(deduped_score) == 1 and deduped_score[0]["criteria_name"] == "high",
+    )
+
+    incomplete = _candidate(
+        criteria_name="incomplete",
+        kp_score=None,
+        kp_votes=None,
+        imdb_score=None,
+        imdb_votes=None,
+        kp_status="missing",
+        is_complete=False,
+    )
+    ready = _candidate(criteria_name="ready", kp_score=8.5, kp_votes=5000)
+    deduped_ready = candidate_pool.dedupe_ranked_predictions_by_title_identity([incomplete, ready])
+    assert_check(
+        "Без predict остаётся ready/complete кандидат",
+        len(deduped_ready) == 1 and deduped_ready[0]["criteria_name"] == "ready",
+    )
+
+    other_year = _candidate(title="Same Show", year=2021, criteria_name="other_year", predict=8.0)
+    deduped_years = candidate_pool.dedupe_ranked_predictions_by_title_identity([crit_a, other_year])
+    assert_check("Same title, different year не склеиваются", len(deduped_years) == 2)
+
+    other_title = _candidate(title="Other Show", year=2020, criteria_name="other_title", predict=8.0)
+    deduped_titles = candidate_pool.dedupe_ranked_predictions_by_title_identity([crit_a, other_title])
+    assert_check("Same year, different title не склеиваются", len(deduped_titles) == 2)
+
+    equal_first = _candidate(criteria_name="first", predict=8.0, kp_score=7.0)
+    equal_second = _candidate(criteria_name="second", predict=8.0, kp_score=7.0)
+    deduped_order = candidate_pool.dedupe_ranked_predictions_by_title_identity([equal_first, equal_second])
+    assert_check(
+        "При полном равенстве остаётся первый по исходному порядку",
+        len(deduped_order) == 1 and deduped_order[0]["criteria_name"] == "first",
+    )
+
+    candidate_pool.save_candidate_pool({
+        "dup_a": crit_a,
+        "dup_b": crit_b,
+        "unique": other_title,
+    })
+    before_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+    weights = storage_data.load_weights()
+    ranked = candidate_pool.rank_candidates_by_predict(candidate_pool.get_all_candidates(), weights)
+    deduped_flow = candidate_pool.dedupe_ranked_predictions_by_title_identity(ranked)
+    after_mtime = Path(constant.CANDIDATE_POOL_JSON).stat().st_mtime_ns
+
+    assert_check("Top prediction dedupe не переписывает candidate_pool.json", before_mtime == after_mtime)
+    assert_check(
+        "Rank+dedupe flow склеивает title/year дубли",
+        len(deduped_flow) == 2 and all(
+            item["title"] in {"Same Show", "Other Show"} for item in deduped_flow
+        ),
+    )
+
+
 def test_contributions_readiness_gate() -> None:
     """Проверяет readiness gate для feature contributions без изменения pool/model."""
     print("\n21) Проверяем readiness gate для contributions")
@@ -4403,6 +4491,7 @@ def run_tests() -> None:
         test_prediction_filters_apply_saved_criteria_defaults()
         test_genre_normalization_runtime_filters()
         test_canonical_runtime_filters_use_genre_keys_and_country_codes()
+        test_top_prediction_title_identity_dedupe()
         test_contributions_readiness_gate()
         test_candidate_service_read_only_facade()
         test_candidate_service_top_prediction_view()
