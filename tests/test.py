@@ -772,6 +772,20 @@ def test_build_genre_defaults_ignores_unknown() -> None:
     assert_check("Неизвестный жанр не включается в defaults", "has_future_micro_genre_x" not in defaults)
 
 
+def test_build_genre_defaults_maps_mystery_to_detective() -> None:
+    """Manual genre defaults map Mystery to has_detective via shared raw mapper."""
+    print("\n11.4b) Проверяем Mystery -> has_detective в build_genre_defaults")
+
+    defaults = title_resolve.build_genre_defaults(["Mystery", "детектив"])
+
+    assert_check("Mystery -> has_detective", defaults.get("has_detective") == 1)
+    assert_check("has_mystery не создаётся", "has_mystery" not in defaults)
+    assert_check(
+        "полный набор constant.GENRE",
+        set(defaults.keys()) == set(constant.GENRE),
+    )
+
+
 def test_manual_add_defaults_when_lookup_fails() -> None:
     """Проверяет ручной fallback, если SQL/API ничего не нашли."""
     print("\n11.5) Проверяем ручной fallback добавления")
@@ -3663,6 +3677,83 @@ def test_candidate_genre_keys_to_dataset_genres_missing() -> None:
         )
 
 
+def test_raw_genres_to_dataset_genres_maps_mystery_to_detective() -> None:
+    """Raw EN/RU mystery labels map to has_detective, not has_mystery."""
+    print("\n20a.4b) Проверяем raw genres -> has_detective")
+
+    for raw_genres in (["Mystery"], ["детектив"], ["Mystery", "детектив"]):
+        result = candidate_to_dataset.raw_genres_to_dataset_genres(raw_genres)
+        assert_check(
+            f"has_detective for {raw_genres!r}",
+            result["dataset_genre"]["has_detective"] == 1,
+        )
+        assert_check(
+            f"has_mystery не создаётся for {raw_genres!r}",
+            "has_mystery" not in result["dataset_genre"],
+        )
+        assert_check(
+            f"genre_keys содержит mystery for {raw_genres!r}",
+            "mystery" in result["genre_keys"],
+        )
+
+
+def test_raw_genres_to_dataset_genres_maps_en_ru_supported() -> None:
+    """Raw EN/RU supported genres map to current dataset has_* features."""
+    print("\n20a.4c) Проверяем raw EN/RU genres -> has_*")
+
+    result = candidate_to_dataset.raw_genres_to_dataset_genres(
+        ["Drama", "Crime", "драма", "криминал"]
+    )
+
+    assert_check("status ok", result["status"] == "ok")
+    assert_check("has_drama = 1", result["dataset_genre"]["has_drama"] == 1)
+    assert_check("has_crime = 1", result["dataset_genre"]["has_crime"] == 1)
+    assert_check(
+        "полный набор constant.GENRE",
+        set(result["dataset_genre"].keys()) == set(constant.GENRE),
+    )
+    assert_check(
+        "дубли raw не дублируют genre_keys",
+        result["genre_keys"] == ["drama", "crime"],
+    )
+
+
+def test_raw_genres_to_dataset_genres_reports_unmapped_raw() -> None:
+    """Unknown raw genres are reported without raising."""
+    print("\n20a.4d) Проверяем unmapped raw genres")
+
+    result = candidate_to_dataset.raw_genres_to_dataset_genres(
+        ["Drama", "TotallyUnknownGenreXYZ", "history"]
+    )
+
+    assert_check("status partial", result["status"] == "partial")
+    assert_check("has_drama = 1", result["dataset_genre"]["has_drama"] == 1)
+    assert_check(
+        "unknown raw in unmapped_raw_genres",
+        result["unmapped_raw_genres"] == ["TotallyUnknownGenreXYZ"],
+    )
+    assert_check(
+        "history key unmapped for current model",
+        result["unmapped_genre_keys"] == ["history"],
+    )
+
+
+def test_raw_genres_to_dataset_genres_missing() -> None:
+    """Empty or fully unresolvable raw genres return missing status."""
+    print("\n20a.4e) Проверяем missing status для raw genres")
+
+    for raw_genres in ([], None, ["TotallyUnknownGenreXYZ"]):
+        result = candidate_to_dataset.raw_genres_to_dataset_genres(raw_genres)
+        assert_check(
+            f"missing status for {raw_genres!r}",
+            result["status"] == "missing",
+        )
+        assert_check(
+            f"all genre values are 0 for {raw_genres!r}",
+            all(value == 0 for value in result["dataset_genre"].values()),
+        )
+
+
 def test_candidate_transfer_payload_uses_genre_keys_mapper() -> None:
     """Candidate transfer defaults use pool genre_keys mapper for has_* features."""
     print("\n20a.5) Проверяем build_candidate_transfer_payload + genre_keys mapper")
@@ -5102,6 +5193,10 @@ def run_tests() -> None:
         test_candidate_genre_keys_to_dataset_genres_maps_mystery_to_detective()
         test_candidate_genre_keys_to_dataset_genres_reports_unmapped()
         test_candidate_genre_keys_to_dataset_genres_missing()
+        test_raw_genres_to_dataset_genres_maps_mystery_to_detective()
+        test_raw_genres_to_dataset_genres_maps_en_ru_supported()
+        test_raw_genres_to_dataset_genres_reports_unmapped_raw()
+        test_raw_genres_to_dataset_genres_missing()
         test_candidate_transfer_payload_uses_genre_keys_mapper()
         test_candidate_transfer_payload_falls_back_to_raw_genres_without_genre_keys()
         test_candidate_transfer_payload_does_not_mutate_candidate()

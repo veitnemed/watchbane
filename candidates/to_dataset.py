@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from config import constant
+from candidates import genre_schema
 
 
 GENRE_KEY_TO_DATASET_FEATURE: dict[str, str] = {
@@ -60,5 +61,66 @@ def candidate_genre_keys_to_dataset_genres(genre_keys: Any) -> dict[str, Any]:
         "dataset_genre": dataset_genre,
         "mapped_genre_keys": mapped_genre_keys,
         "unmapped_genre_keys": unmapped_genre_keys,
+        "status": status,
+    }
+
+
+def _normalize_raw_genre_list(raw_genres: Any) -> list[str]:
+    if raw_genres is None:
+        return []
+    if isinstance(raw_genres, list) is False:
+        raw_genres = [raw_genres]
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in raw_genres:
+        if isinstance(item, dict) and item.get("name"):
+            text = str(item["name"]).strip()
+        elif isinstance(item, str):
+            text = item.strip()
+        else:
+            text = str(item or "").strip()
+        if text == "" or text in seen:
+            continue
+        seen.add(text)
+        normalized.append(text)
+    return normalized
+
+
+def raw_genres_to_dataset_genres(raw_genres: Any) -> dict[str, Any]:
+    """Translates EN/RU raw genre labels into the current dataset genre vector."""
+    raw_list = _normalize_raw_genre_list(raw_genres)
+    genre_keys: list[str] = []
+    mapped_raw_genres: list[str] = []
+    unmapped_raw_genres: list[str] = []
+    seen_keys: set[str] = set()
+
+    for raw_genre in raw_list:
+        genre_key = genre_schema.normalize_genre_to_key(raw_genre)
+        if genre_key is None:
+            unmapped_raw_genres.append(raw_genre)
+            continue
+
+        mapped_raw_genres.append(raw_genre)
+        if genre_key in seen_keys:
+            continue
+        seen_keys.add(genre_key)
+        genre_keys.append(genre_key)
+
+    key_result = candidate_genre_keys_to_dataset_genres(genre_keys)
+    if len(key_result["mapped_genre_keys"]) == 0:
+        status = "missing"
+    elif len(unmapped_raw_genres) == 0 and len(key_result["unmapped_genre_keys"]) == 0:
+        status = "ok"
+    else:
+        status = "partial"
+
+    return {
+        "dataset_genre": key_result["dataset_genre"],
+        "genre_keys": genre_keys,
+        "mapped_raw_genres": mapped_raw_genres,
+        "unmapped_raw_genres": unmapped_raw_genres,
+        "mapped_genre_keys": key_result["mapped_genre_keys"],
+        "unmapped_genre_keys": key_result["unmapped_genre_keys"],
         "status": status,
     }
