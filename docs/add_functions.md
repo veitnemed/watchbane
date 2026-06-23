@@ -94,7 +94,8 @@ UI/CLI регистрируют печать через `candidates.tmdb_candida
 - Удалять старые функции.
 - Делать массовые переименования/рефакторинги.
 - Трогать или коммитить секреты (`.env.local`, `tmdb.env`, `api_token.py`).
-- Вызывать KP API в TMDb candidate_pool v1; делать TMDb Details по всем ID подряд.
+- Вызывать TMDb Details по всем ID подряд без лимита и без skip-gate по сетевым ошибкам.
+- Считать, что TMDb candidate build не использует KP API: после IMDb SQL build может добирать KP из cache и затем из KP API с match-check и лимитом.
 
 ## 6. Обязательные проверки перед коммитом
 

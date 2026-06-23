@@ -23,6 +23,15 @@
 - `tmdb_genre_options.py` — TMDb TV genre IDs для Discover.
 - `tmdb_country_options.py` — страны для TMDb Discover UI.
 - `kp_enrichment.py` — KP lookup/match/fill helpers.
+- `to_dataset.py` — mapper pool `genre_keys` / raw genres → dataset `has_*` (не смешивать с UI/runtime filters).
+
+## Три слоя жанров
+
+- `tmdb_genre_options.py` — TMDb Discover genre IDs.
+- `genre_schema.py` / `genre_keys` — canonical keys в pool record.
+- `to_dataset.py` + `config/genre_tags.json` — бинарные `has_*` для dataset/model.
+
+При задачах на жанры переноса candidate → dataset сначала смотри `to_dataset.py` и [docs/ADD_RECORD_RULES.md](../docs/ADD_RECORD_RULES.md).
 
 ## Перед правкой
 

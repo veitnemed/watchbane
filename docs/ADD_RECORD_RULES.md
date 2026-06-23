@@ -158,6 +158,7 @@ interface_funcs.mark_candidate_as_watched()
 Особенности:
 
 - запись не добавляется автоматически без формы;
+- перед формой UI печатает read-only preview жанров (`build_candidate_genre_transfer_preview`);
 - после успеха кандидат удаляется из общего пула;
 - для incomplete-кандидата UI показывает предупреждение, но не блокирует перенос.
 
@@ -200,13 +201,34 @@ interface_funcs.mark_candidate_as_watched()
 
 ## Жанры
 
-Если у кандидата есть `candidate["genres"]`, они используются как defaults.
+Жанровая разметка в dataset — это фиксированный набор бинарных `has_*` из [config/genre_tags.json](../config/genre_tags.json). Новые `has_*` без переобучения модели не добавляются.
 
-Нормализация жанров идёт через текущую проектную логику:
+Общий mapper живёт в [candidates/to_dataset.py](../candidates/to_dataset.py):
 
-- известные жанры маппятся в существующие `has_*`;
-- смешанные русские и английские названия проходят через общую нормализацию;
-- пользователь всё равно может подтвердить или поправить жанры в форме.
+- `candidate_genre_keys_to_dataset_genres(genre_keys)` — canonical pool keys → `has_*`;
+- `raw_genres_to_dataset_genres(raw_genres)` — EN/RU raw labels → pool keys → `has_*`.
+
+Важное правило: pool key `mystery` и raw labels `Mystery` / `детектив` → `has_detective`, а не `has_mystery`.
+
+### Ручное добавление
+
+`build_genre_defaults()` в [dataset/title_resolve.py](../dataset/title_resolve.py) использует `raw_genres_to_dataset_genres()`.
+
+`split_known_genres()` для confirm UI в [ui/console/request.py](../ui/console/request.py) использует тот же mapper: в known попадают только raw-жанры, которые реально маппятся в текущие `has_*`.
+
+### Перенос candidate → dataset
+
+`build_candidate_transfer_genre_defaults()` выбирает источник так:
+
+1. если есть непустой `candidate["genre_keys"]` и mapper status не `missing` → `candidate_genre_keys_to_dataset_genres()`;
+2. иначе fallback через `extract_candidate_fallback_genres()` (`imdb_genres`, `genres_tmdb`, `genres`) и `build_genre_defaults()`.
+
+Перед формой `mark_candidate_as_watched()` печатает read-only preview:
+
+- pool `genre_keys` → активные `has_*`;
+- fallback / partial / empty warning — без блокировки переноса.
+
+Пользователь всё равно подтверждает или правит жанры в форме `request_all_scores()`.
 
 ## Meta при добавлении
 
