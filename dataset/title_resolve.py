@@ -6,6 +6,7 @@ from config import constant
 from config import genre_tags
 from config import scheme
 from candidates.to_dataset import candidate_genre_keys_to_dataset_genres, raw_genres_to_dataset_genres
+from candidates import genre_schema
 from apis import imdb_sql as sql_search
 from apis import kp_api as api
 
@@ -50,16 +51,18 @@ def print_progress_step(source: str, status: str) -> None:
 
 def split_known_genres(genres: list) -> tuple[list, list]:
     """Разделяет жанры на известные модели и неизвестные подсказки."""
-    known_features = set(genre_tags.get_genre_fields())
-    known = []
-    unknown = []
+    mapping = raw_genres_to_dataset_genres(genres)
+    unmapped_keys = set(mapping["unmapped_genre_keys"])
+    known: list[str] = []
+    unknown = list(mapping["unmapped_raw_genres"])
 
-    for genre_name in unique_preserve_order(genres):
-        feature = genre_tags.genre_to_feature_name(genre_name)
-        if feature in known_features:
-            known.append(genre_name)
-        else:
-            unknown.append(genre_name)
+    for raw_genre in unique_preserve_order(mapping["mapped_raw_genres"]):
+        genre_key = genre_schema.normalize_genre_to_key(raw_genre)
+        if genre_key is None or genre_key in unmapped_keys:
+            if raw_genre not in unknown:
+                unknown.append(raw_genre)
+            continue
+        known.append(raw_genre)
 
     return known, unknown
 

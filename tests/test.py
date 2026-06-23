@@ -786,6 +786,18 @@ def test_build_genre_defaults_maps_mystery_to_detective() -> None:
     )
 
 
+def test_split_known_genres_uses_shared_raw_mapper() -> None:
+    """split_known_genres aligns confirm UI hints with shared raw genre mapper."""
+    print("\n11.4c) Проверяем split_known_genres через shared mapper")
+
+    known, unknown = title_resolve.split_known_genres(["Mystery", "TotallyUnknownGenreXYZ", "history"])
+
+    assert_check("Mystery считается known", "Mystery" in known)
+    assert_check("unknown raw остаётся unknown", "TotallyUnknownGenreXYZ" in unknown)
+    assert_check("history без has_* остаётся unknown", "history" in unknown)
+    assert_check("Mystery не попадает в unknown", "Mystery" not in unknown)
+
+
 def test_manual_add_defaults_when_lookup_fails() -> None:
     """Проверяет ручной fallback, если SQL/API ничего не нашли."""
     print("\n11.5) Проверяем ручной fallback добавления")
@@ -5135,6 +5147,7 @@ def run_tests() -> None:
         test_merge_defaults_prefers_api_and_keeps_sql()
         test_build_genre_defaults_ignores_unknown()
         test_build_genre_defaults_maps_mystery_to_detective()
+        test_split_known_genres_uses_shared_raw_mapper()
         test_manual_add_defaults_when_lookup_fails()
         test_add_defaults_rejects_sql_api_identity_mismatch()
         test_add_defaults_accepts_sql_when_imdb_id_matches()
