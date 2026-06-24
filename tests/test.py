@@ -23,6 +23,7 @@ from model import linear_regression_train
 from model import noise_experiment
 from model import train_report
 from model import feature_ablation
+from model import genre_markup_efficiency
 from storage import data as storage_data
 from storage import files as storage_files
 from storage import normalize as storage_normalize
@@ -49,6 +50,7 @@ from ui.console import request as request_ui
 from apis import kp_api as api
 from apis import tmdb_api
 from common import valid
+from web import export as web_export
 
 
 def show_check(text: str, result: bool) -> None:
@@ -101,6 +103,91 @@ def make_movie(title="Test Movie", user_score=8.0, raw_score=8.0) -> dict:
         constant.TAGS_VIBE_SECTION: tags_vibe,
         constant.GENRE_SECTION: genre_tags
     }
+
+
+def test_build_watched_movie_card() -> None:
+    """Проверяет compact card для будущего web-экспорта."""
+    print("\n0w.1) Проверяем build_watched_movie_card")
+    movie = make_movie(title="Русская драма", user_score=9.5, raw_score=8.9)
+    movie["main_info"]["year"] = 2008
+    original = copy.deepcopy(movie)
+
+    card = web_export.build_watched_movie_card(movie)
+
+    assert_check("Card возвращает title", card["title"] == "Русская драма")
+    assert_check("Card возвращает year", card["year"] == 2008)
+    assert_check("Card возвращает user_score", card["user_score"] == 9.5)
+    assert_check("Card возвращает kp_score", card["kp_score"] == 8.9)
+    assert_check("Card возвращает imdb_score", card["imdb_score"] == 8.9)
+    assert_check("Card не падает без poster", card["poster_url"] is None and card["poster_path"] is None)
+    assert_check("Card не падает без overview", card["overview"] is None)
+    assert_check("Card ставит runtime_status", card["runtime_status"] == "watched")
+    assert_check("Card не мутирует исходную запись", movie == original)
+
+
+def test_export_watched_movies_json() -> None:
+    """Проверяет JSON payload и UTF-8 export для будущего web UI."""
+    print("\n0w.2) Проверяем export_watched_movies_json")
+    data = {
+        "Русская драма": make_movie(title="Русская драма", user_score=9.5, raw_score=8.9),
+        "Second Movie": make_movie(title="Second Movie", user_score=7.0, raw_score=7.5),
+    }
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        path = Path(temp_root) / "nested" / "watched_movies.json"
+        result_path = web_export.export_watched_movies_json(data, path=path)
+        file_exists = path.exists()
+        raw_text = path.read_text(encoding="utf-8")
+        payload = json.loads(raw_text)
+
+    assert_check("Export возвращает путь", result_path == path)
+    assert_check("Export создаёт JSON", file_exists)
+    assert_check("report_type watched_movies", payload["report_type"] == "watched_movies")
+    assert_check("created_at записан", isinstance(payload.get("created_at"), str) and payload["created_at"] != "")
+    assert_check("count записан", payload["count"] == 2)
+    assert_check("items записаны", len(payload["items"]) == 2)
+    assert_check("Русские строки сохраняются без unicode escape", "Русская драма" in raw_text and "\\u0420" not in raw_text)
+
+
+def test_watched_movies_export_is_read_only() -> None:
+    """Проверяет, что web export не трогает dataset/pool/model и сетевые API."""
+    print("\n0w.3) Проверяем read-only защиту watched web export")
+    data = {"Read Only": make_movie(title="Read Only", user_score=8.0, raw_score=8.1)}
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        path = Path(temp_root) / "watched_movies.json"
+        with contextlib.ExitStack() as stack:
+            save_dataset_mock = stack.enter_context(
+                patch("storage.data.save_dataset", side_effect=AssertionError("save_dataset не должен вызываться"))
+            )
+            save_pool_mock = stack.enter_context(
+                patch("candidates.candidate_pool.save_candidate_pool", side_effect=AssertionError("save_candidate_pool не должен вызываться"))
+            )
+            save_weights_mock = stack.enter_context(
+                patch("storage.data.save_weights", side_effect=AssertionError("save_weights не должен вызываться"))
+            )
+            save_metrics_mock = stack.enter_context(
+                patch("storage.data.save_model_metrics", side_effect=AssertionError("save_model_metrics не должен вызываться"))
+            )
+            kp_api_mock = stack.enter_context(
+                patch("apis.kp_api.find_series_raw", side_effect=AssertionError("KP API не должен вызываться"))
+            )
+            tmdb_search_mock = stack.enter_context(
+                patch("apis.tmdb_api.search_tv_by_name", side_effect=AssertionError("TMDb API не должен вызываться"))
+            )
+            tmdb_details_mock = stack.enter_context(
+                patch("apis.tmdb_api.get_tv_details", side_effect=AssertionError("TMDb API не должен вызываться"))
+            )
+
+            web_export.export_watched_movies_json(data, path=path)
+
+    assert_check("save_dataset не вызван", save_dataset_mock.call_count == 0)
+    assert_check("save_candidate_pool не вызван", save_pool_mock.call_count == 0)
+    assert_check("save_weights не вызван", save_weights_mock.call_count == 0)
+    assert_check("save_model_metrics не вызван", save_metrics_mock.call_count == 0)
+    assert_check("KP API не вызван", kp_api_mock.call_count == 0)
+    assert_check("TMDb search не вызван", tmdb_search_mock.call_count == 0)
+    assert_check("TMDb details не вызван", tmdb_details_mock.call_count == 0)
 
 
 def setup_temp_project():
@@ -963,9 +1050,259 @@ def test_feature_ablation_console_report() -> None:
     assert_check("Console report не вызывает train_linear_model", train_model_mock.call_count == 0)
 
 
+def test_genre_markup_efficiency_coverage_and_conclusion() -> None:
+    """Проверяет coverage и выводы для эффективности жанровой разметки."""
+    print("\n8g) Проверяем coverage жанровой эффективности")
+
+    data = {
+        "A": make_movie("A", user_score=8.0, raw_score=8.0),
+        "B": make_movie("B", user_score=6.0, raw_score=6.2),
+        "C": make_movie("C", user_score=9.0, raw_score=8.7),
+        "D": make_movie("D", user_score=None, raw_score=8.0),
+    }
+    for movie in data.values():
+        movie[constant.GENRE_SECTION]["has_drama"] = 0
+    data["A"][constant.GENRE_SECTION]["has_drama"] = 1
+    data["B"][constant.GENRE_SECTION]["has_drama"] = 0.2
+    data["D"][constant.GENRE_SECTION]["has_drama"] = 1
+    data_before = copy.deepcopy(data)
+
+    coverage = genre_markup_efficiency.collect_genre_coverage(data, "has_drama")
+    assert_check("Coverage возвращает genre", coverage["genre"] == "has_drama")
+    assert_check("Coverage считает count по > 0", coverage["count"] == 2)
+    assert_check("Coverage пропускает записи без user_score", coverage["total_count"] == 3)
+    assert_check("Coverage считает percent", abs(coverage["coverage_percent"] - 66.6667) < 0.01)
+    assert_check("Coverage не мутирует dataset", data == data_before)
+
+    assert_check(
+        "Conclusion count < 5 = мало данных",
+        genre_markup_efficiency.build_genre_efficiency_conclusion(0.5, 4) == "мало данных",
+    )
+    assert_check(
+        "Conclusion delta > 0.01 = помогает",
+        genre_markup_efficiency.build_genre_efficiency_conclusion(0.02, 5) == "помогает",
+    )
+    assert_check(
+        "Conclusion delta < -0.01 = ухудшает",
+        genre_markup_efficiency.build_genre_efficiency_conclusion(-0.02, 5) == "ухудшает",
+    )
+    assert_check(
+        "Conclusion маленький delta = почти нет эффекта",
+        genre_markup_efficiency.build_genre_efficiency_conclusion(0.005, 5) == "почти нет эффекта",
+    )
+
+
+def test_genre_markup_efficiency_report_is_read_only() -> None:
+    """Проверяет read-only сбор и форматирование эффективности жанров."""
+    print("\n8h) Проверяем read-only genre markup efficiency report")
+
+    data = {
+        "A": make_movie("A", user_score=8.0, raw_score=8.0),
+        "B": make_movie("B", user_score=6.0, raw_score=6.2),
+        "C": make_movie("C", user_score=9.0, raw_score=8.7),
+        "D": make_movie("D", user_score=7.0, raw_score=7.1),
+        "E": make_movie("E", user_score=5.0, raw_score=5.5),
+    }
+    for movie in data.values():
+        for genre_feature in feature_ablation.GENRE_FEATURES:
+            movie[constant.GENRE_SECTION][genre_feature] = 0
+    data["A"][constant.GENRE_SECTION]["has_drama"] = 1
+    data["B"][constant.GENRE_SECTION]["has_drama"] = 1
+    data["C"][constant.GENRE_SECTION]["has_crime"] = 1
+    data_before = copy.deepcopy(data)
+
+    def fake_alpha_selection(_data, features, alpha_grid=None, variant=None):
+        selected_features = list(features)
+        if selected_features == feature_ablation.PUBLIC_FEATURES:
+            mae = 1.0
+            alpha = 10.0
+        else:
+            genre_feature = selected_features[-1]
+            mae_by_genre = {
+                "has_drama": 0.8,
+                "has_crime": 1.2,
+            }
+            mae = mae_by_genre.get(genre_feature, 0.95)
+            alpha = 30.0
+        return {
+            "best_alpha": alpha,
+            "best_mae": mae,
+            "alpha_results": [{"alpha": alpha, "mae": mae}],
+            "best_errors": [{
+                "title": "A",
+                "year": 2024,
+                "user_score": 8.0,
+                "predicted_score": 7.5,
+                "error": 0.5,
+                "variant": variant,
+                "contributions": [],
+            }],
+        }
+
+    def fake_weights(_data, features, alpha):
+        weights = {"bias": 0.1}
+        for feature in features:
+            weights[feature] = {
+                "has_drama": 0.3,
+                "has_crime": -0.2,
+            }.get(feature, 0.05)
+        return weights
+
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(
+            patch("model.genre_markup_efficiency.feature_ablation.select_best_alpha_by_loo", side_effect=fake_alpha_selection)
+        )
+        stack.enter_context(
+            patch("model.genre_markup_efficiency.feature_ablation.fit_subset_ridge_weights", side_effect=fake_weights)
+        )
+        save_weights_mock = stack.enter_context(
+            patch("storage.data.save_weights", side_effect=AssertionError("save_weights не должен вызываться"))
+        )
+        save_metrics_mock = stack.enter_context(
+            patch("storage.data.save_model_metrics", side_effect=AssertionError("save_model_metrics не должен вызываться"))
+        )
+        set_loo_mock = stack.enter_context(
+            patch("storage.data.set_saved_loo_mae", side_effect=AssertionError("set_saved_loo_mae не должен вызываться"))
+        )
+        save_dataset_mock = stack.enter_context(
+            patch("storage.data.save_dataset", side_effect=AssertionError("save_dataset не должен вызываться"))
+        )
+        save_pool_mock = stack.enter_context(
+            patch("candidates.candidate_pool.save_candidate_pool", side_effect=AssertionError("save_candidate_pool не должен вызываться"))
+        )
+        loo_training_mock = stack.enter_context(
+            patch("model.linear_regression_train.run_loo_training", side_effect=AssertionError("run_loo_training не должен вызываться"))
+        )
+        train_model_mock = stack.enter_context(
+            patch("ui.console.train_menu.train_linear_model", side_effect=AssertionError("train_linear_model не должен вызываться"))
+        )
+
+        report = genre_markup_efficiency.collect_genre_markup_efficiency_report(data)
+
+    assert_check("Genre efficiency возвращает report_type", report["report_type"] == "genre_markup_efficiency")
+    assert_check("Genre efficiency возвращает base_result", "base_result" in report)
+    assert_check("Genre efficiency возвращает genre_results", len(report["genre_results"]) == len(feature_ablation.GENRE_FEATURES))
+
+    required_fields = {
+        "count",
+        "coverage_percent",
+        "base_loo_mae",
+        "genre_loo_mae",
+        "delta",
+        "best_alpha",
+        "genre_weight",
+        "conclusion",
+    }
+    assert_check(
+        "Genre result содержит обязательные поля",
+        all(required_fields.issubset(result) for result in report["genre_results"]),
+    )
+    deltas = [result["delta"] for result in report["genre_results"]]
+    assert_check("Genre results отсортированы по delta", deltas == sorted(deltas, reverse=True))
+    assert_check("Delta считается как base - genre", abs(report["genre_results"][0]["delta"] - 0.2) < 1e-9)
+    assert_check("Genre weight берётся из диагностических весов", report["genre_results"][0]["genre_weight"] == 0.3)
+    assert_check("Genre efficiency не мутирует dataset", data == data_before)
+    assert_check("Genre efficiency не вызывает save_weights", save_weights_mock.call_count == 0)
+    assert_check("Genre efficiency не вызывает save_model_metrics", save_metrics_mock.call_count == 0)
+    assert_check("Genre efficiency не вызывает set_saved_loo_mae", set_loo_mock.call_count == 0)
+    assert_check("Genre efficiency не вызывает save_dataset", save_dataset_mock.call_count == 0)
+    assert_check("Genre efficiency не вызывает save_candidate_pool", save_pool_mock.call_count == 0)
+    assert_check("Genre efficiency не вызывает run_loo_training", loo_training_mock.call_count == 0)
+    assert_check("Genre efficiency не вызывает train_linear_model", train_model_mock.call_count == 0)
+
+    lines = genre_markup_efficiency.format_genre_markup_efficiency_report(report)
+    assert_check("Genre efficiency formatter выводит заголовок", lines[0] == "Эффективность жанровой разметки")
+    header = next(line for line in lines if "Жанр" in line and "Кол-во" in line)
+    assert_check("Genre efficiency formatter выводит Кол-во", "Кол-во" in header)
+    assert_check("Genre efficiency formatter выводит Доля", "Доля" in header)
+    assert_check("Genre efficiency formatter выводит LOO MAE", "LOO MAE" in header)
+    assert_check("Genre efficiency formatter выводит Delta", "Delta" in header)
+    assert_check("Genre efficiency formatter выводит Вес", "Вес" in header)
+    assert_check("Genre efficiency formatter выводит Вывод", "Вывод" in header)
+    assert_check(
+        "Genre efficiency formatter выводит диагностическое примечание",
+        any("не сохраняются как рабочая модель" in line for line in lines),
+    )
+
+
+def test_genre_markup_efficiency_console_report() -> None:
+    """Проверяет консольный показ genre markup efficiency report без write-вызовов."""
+    print("\n8i) Проверяем консольный genre markup efficiency report")
+
+    data = {
+        "A": make_movie("A", user_score=8.0, raw_score=8.0),
+        "B": make_movie("B", user_score=6.0, raw_score=6.2),
+    }
+    fake_report = {
+        "report_type": "genre_markup_efficiency",
+        "base_result": {"loo_mae": 0.5},
+        "genre_results": [],
+    }
+    fake_lines = [
+        "Эффективность жанровой разметки",
+        "",
+        "Жанр              Кол-во   Доля    Alpha   LOO MAE   Delta    Вес     Вывод",
+        "Примечание: это диагностический отчёт. Веса и alpha не сохраняются как рабочая модель.",
+    ]
+
+    with contextlib.ExitStack() as stack:
+        collect_mock = stack.enter_context(
+            patch(
+                "ui.console.interface_funcs.genre_markup_efficiency.collect_genre_markup_efficiency_report",
+                return_value=fake_report,
+            )
+        )
+        format_mock = stack.enter_context(
+            patch(
+                "ui.console.interface_funcs.genre_markup_efficiency.format_genre_markup_efficiency_report",
+                return_value=fake_lines,
+            )
+        )
+        press_enter_mock = stack.enter_context(patch("ui.console.interface_funcs.ui.press_enter"))
+        stack.enter_context(patch("ui.console.interface_funcs.ui.clean_terminal"))
+        save_weights_mock = stack.enter_context(
+            patch("storage.data.save_weights", side_effect=AssertionError("save_weights не должен вызываться"))
+        )
+        save_metrics_mock = stack.enter_context(
+            patch("storage.data.save_model_metrics", side_effect=AssertionError("save_model_metrics не должен вызываться"))
+        )
+        set_loo_mock = stack.enter_context(
+            patch("storage.data.set_saved_loo_mae", side_effect=AssertionError("set_saved_loo_mae не должен вызываться"))
+        )
+        save_dataset_mock = stack.enter_context(
+            patch("storage.data.save_dataset", side_effect=AssertionError("save_dataset не должен вызываться"))
+        )
+        save_pool_mock = stack.enter_context(
+            patch("candidates.candidate_pool.save_candidate_pool", side_effect=AssertionError("save_candidate_pool не должен вызываться"))
+        )
+        loo_training_mock = stack.enter_context(
+            patch("model.linear_regression_train.run_loo_training", side_effect=AssertionError("run_loo_training не должен вызываться"))
+        )
+        train_model_mock = stack.enter_context(
+            patch("ui.console.train_menu.train_linear_model", side_effect=AssertionError("train_linear_model не должен вызываться"))
+        )
+
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            interface_funcs.show_genre_markup_efficiency_report(data)
+
+    collect_mock.assert_called_once_with(data)
+    format_mock.assert_called_once_with(fake_report)
+    assert_check("Genre console report печатает заголовок", "Эффективность жанровой разметки" in output.getvalue())
+    assert_check("Genre console report печатает строки отчёта", "Кол-во" in output.getvalue())
+    assert_check("Genre console report ждёт Enter", press_enter_mock.call_count == 1)
+    assert_check("Genre console report не вызывает save_weights", save_weights_mock.call_count == 0)
+    assert_check("Genre console report не вызывает save_model_metrics", save_metrics_mock.call_count == 0)
+    assert_check("Genre console report не вызывает set_saved_loo_mae", set_loo_mock.call_count == 0)
+    assert_check("Genre console report не вызывает save_dataset", save_dataset_mock.call_count == 0)
+    assert_check("Genre console report не вызывает save_candidate_pool", save_pool_mock.call_count == 0)
+    assert_check("Genre console report не вызывает run_loo_training", loo_training_mock.call_count == 0)
+    assert_check("Genre console report не вызывает train_linear_model", train_model_mock.call_count == 0)
+
+
 def test_biggest_error_cards_in_report() -> None:
     """Проверяет карточки «САМЫЕ БОЛЬШИЕ ОШИБКИ» и fallback описаний."""
-    print("\n8g) Проверяем карточки ошибок в train_report")
+    print("\n8j) Проверяем карточки ошибок в train_report")
 
     long_text = "Описание " + ("очень длинное " * 80)
     assert_check(
@@ -5646,6 +5983,9 @@ def run_tests() -> None:
     temp_dir, old_paths = setup_temp_project()
     try:
         print("=== Тесты проекта recommended ===")
+        test_build_watched_movie_card()
+        test_export_watched_movies_json()
+        test_watched_movies_export_is_read_only()
         test_files_created()
         test_add_new_movie()
         test_meta_overrides_raw_scores()
@@ -5670,6 +6010,9 @@ def run_tests() -> None:
         test_feature_ablation_error_rows()
         test_feature_ablation_collect_report_is_read_only()
         test_feature_ablation_console_report()
+        test_genre_markup_efficiency_coverage_and_conclusion()
+        test_genre_markup_efficiency_report_is_read_only()
+        test_genre_markup_efficiency_console_report()
         test_biggest_error_cards_in_report()
         test_backup_restore()
         test_api_fallback_to_secondary_token()
