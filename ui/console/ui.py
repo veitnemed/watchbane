@@ -150,6 +150,9 @@ def show_extra_menu(movies_counter: int, error: int):
     print(' 1 >> Просмотр API признаков')
     print(' 2 >> Показать все жанры датасета')
     print(' 3 >> Поиск в SQL по названию')
+    print(' 4 >> Обновить описания и poster-cache для просмотренных')
+    print(' 5 >> Загрузить poster URL из TMDb (metadata)')
+    print(' 6 >> Скачать poster images локально')
     print(' 0 >> Главное меню\n')
 
 

@@ -1592,7 +1592,7 @@ def test_manual_add_defaults_when_lookup_fails() -> None:
     with patch("ui.console.request.title_resolve.resolve_title_data_for_add", return_value=resolved):
         with patch("builtins.input", return_value="y"):
             with contextlib.redirect_stdout(output):
-                defaults = request_ui.resolve_title_for_training("Manual Missing Title", confirm_genres=True)
+                defaults, _, _ = request_ui.resolve_title_for_training("Manual Missing Title", confirm_genres=True)
 
     assert_check("Fallback возвращает defaults", defaults is not None)
     assert_check("Title берётся из ручного ввода", defaults["main_info"]["title"] == "Manual Missing Title")
@@ -1760,11 +1760,11 @@ def test_add_record_country_selection() -> None:
 
     with patch("ui.console.request.loop_input", return_value="Euphoria"):
         with patch("ui.console.request.tmdb_country_options.choose_single_country_label", return_value="США"):
-            with patch("ui.console.request.resolve_title_for_training", return_value={"title": "Euphoria"}) as resolve_training:
+            with patch("ui.console.request.resolve_title_for_training", return_value=({"title": "Euphoria"}, {}, {})) as resolve_training:
                 result = request_ui.request_api_defaults()
 
     resolve_training.assert_called_once_with("Euphoria", "США", False)
-    assert_check("request_api_defaults передаёт выбранную страну", result == {"title": "Euphoria"})
+    assert_check("request_api_defaults передаёт выбранную страну", result == ({"title": "Euphoria"}, {}, {}))
 
 
 def test_add_resolver_second_pass_sql_after_identity_mismatch() -> None:

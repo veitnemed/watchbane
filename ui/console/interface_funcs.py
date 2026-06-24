@@ -431,7 +431,7 @@ def change_user_score_from_rows(rows: list[dict]) -> None:
 
 def get_predict(weights: dict) -> None:
     """Запрашивает признаки и показывает прогноз модели."""
-    defaults = request.request_api_defaults()
+    defaults, _, _ = request.request_api_defaults()
     if defaults is None:
         return
 
@@ -445,12 +445,17 @@ def request_object() -> None:
     """Запрашивает фильм и добавляет его в датасет."""
     ui.clean_terminal()
 
-    defaults = request.request_api_defaults(confirm_genres=True)
+    defaults, meta_payload, poster_hints = request.request_api_defaults(confirm_genres=True)
     if defaults is None:
         return
 
     movie_request = request.request_all_scores(defaults)
-    result = storage_movie.add_movie(movie_request, print_message=False)
+    result = storage_movie.add_movie(
+        movie_request,
+        meta_payload=meta_payload,
+        poster_hints=poster_hints,
+        print_message=False,
+    )
     print(result.message)
 
 
@@ -509,9 +514,15 @@ def mark_candidate_as_watched() -> None:
     for idx, candidate in enumerate(candidates, start=1):
         title = candidate.get("title") or "Без названия"
         year = candidate.get("year") or "?"
-        description = request.short_text(candidate.get("description"), 50) or "без описания"
+        description = request.short_text(
+            candidate.get("description") or candidate.get("overview"),
+            50,
+        ) or "без описания"
+        poster_url = candidate.get("poster_url")
+        poster_label = request.short_text(poster_url, 60) if poster_url else "без постера"
         print(f"{idx}) {title} ({year})")
         print(f"   Описание: {description}")
+        print(f"   Постер: {poster_label}")
 
     selected_index = request.loop_input(
         text="\nНомер просмотренного кандидата >> ",
@@ -741,6 +752,61 @@ def search_sql_title_by_name() -> None:
         return
 
     print_sql_title_result(result["data"])
+
+
+def sync_watched_descriptions_and_posters() -> None:
+    """Backfills meta descriptions and poster-cache for watched dataset records."""
+    from posters.sync_watched import sync_watched_metadata
+
+    print("Обновление описаний и poster-cache для просмотренных...\n")
+
+    def progress(current: int, total: int, title: str) -> None:
+        print(f"{current}/{total} | {title}")
+
+    stats = sync_watched_metadata(write_meta=True, progress_callback=progress)
+    print("\nИтог:")
+    print(f"  Записей: {stats['total']}")
+    print(f"  Описаний найдено: {stats['description_found']}")
+    print(f"  Описаний записано в meta: {stats['description_updated']}")
+    print(f"  Poster found: {stats['poster_found']}")
+    print(f"  Poster missing: {stats['poster_missing']}")
+
+
+def fetch_tmdb_poster_metadata() -> None:
+    """Fetches missing poster metadata from TMDb cache/API into poster-cache."""
+    from posters.fetch_metadata import fetch_poster_metadata_for_watched
+
+    print("Загрузка poster metadata из TMDb...\n")
+
+    def progress(current: int, total: int, title: str) -> None:
+        print(f"{current}/{total} | {title}")
+
+    stats = fetch_poster_metadata_for_watched(use_api=True, progress_callback=progress)
+    print("\nИтог:")
+    print(f"  Записей dataset: {stats['total']}")
+    print(f"  Уже было poster: {stats['skipped_found']}")
+    print(f"  Обновлено из TMDb cache: {stats['updated_from_cache']}")
+    print(f"  Обновлено через TMDb API: {stats['updated_from_api']}")
+    print(f"  Без tmdb_id: {stats['missing_tmdb_id']}")
+    print(f"  Всё ещё missing: {stats['still_missing']}")
+
+
+def download_poster_images_local() -> None:
+    """Downloads poster images for poster-cache entries with poster_url."""
+    from posters.download_images import download_poster_images
+
+    print("Скачивание poster images в data/cache/posters/images/...\n")
+
+    def progress(current: int, total: int, title: str) -> None:
+        print(f"{current}/{total} | {title}")
+
+    stats = download_poster_images(progress_callback=progress)
+    print("\nИтог:")
+    print(f"  Записей в cache: {stats['total_entries']}")
+    print(f"  Кандидатов на скачивание: {stats['candidates']}")
+    print(f"  Скачано: {stats['downloaded']}")
+    print(f"  Уже были локально: {stats['skipped_existing']}")
+    print(f"  Ошибок: {stats['failed']}")
 
 
 def show_dataset_genres() -> None:

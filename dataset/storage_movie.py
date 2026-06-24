@@ -51,13 +51,21 @@ def rework_formated_scores() -> int:
     return updated_count
 
 
-def add_movie(movie: dict, *, meta_payload=None, pool_candidate=None, print_message: bool = True):
+def add_movie(
+    movie: dict,
+    *,
+    meta_payload=None,
+    pool_candidate=None,
+    poster_hints=None,
+    print_message: bool = True,
+):
     """Добавляет фильм в датасет."""
     result = add_dataset_record(
         movie,
         meta_payload=meta_payload,
         source_name="add_movie",
         pool_candidate=pool_candidate,
+        poster_hints=poster_hints,
     )
     if print_message:
         print(result.message)

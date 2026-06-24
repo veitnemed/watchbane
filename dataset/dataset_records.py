@@ -121,6 +121,7 @@ def add_dataset_record(
     meta_payload=None,
     source_name: str = "",
     pool_candidate=None,
+    poster_hints=None,
 ) -> AddRecordResult:
     """Adds a new record to dataset using the current add_movie behavior."""
     try:
@@ -285,6 +286,25 @@ def add_dataset_record(
             message=f"Ошибка добавления! Не удалось сохранить dataset: {error}",
             reason="save_error",
         )
+
+    try:
+        from posters.cache import sync_poster_cache_from_meta_and_sources
+
+        extra_sources = poster_hints if isinstance(poster_hints, dict) else None
+        if isinstance(pool_candidate, dict):
+            from dataset.title_resolve import build_poster_hints_from_candidate
+
+            if build_poster_hints_from_candidate(pool_candidate).get("status") == "found":
+                extra_sources = pool_candidate
+        sync_poster_cache_from_meta_and_sources(
+            title,
+            year,
+            meta_obj=get_meta_obj(title),
+            movie=new_movie,
+            extra_sources=extra_sources,
+        )
+    except Exception as error:
+        print(f"Предупреждение: не удалось обновить poster-cache: {error}")
 
     _cleanup_candidate_pool(pool_candidate)
     return AddRecordResult(

@@ -313,9 +313,15 @@ def ask_manual_addition() -> bool:
     return answer in {"y", "yes", "да", "д"}
 
 
-def resolve_title_for_training(title: str, country: str = "Россия", confirm_genres: bool = False) -> dict | None:
+def resolve_title_for_training(
+    title: str,
+    country: str = "Россия",
+    confirm_genres: bool = False,
+) -> tuple[dict | None, dict | None, dict | None]:
     """Ищет объект через SQL, затем обогащает через API и собирает defaults."""
     resolved = title_resolve.resolve_title_data_for_add(title, country)
+    meta_payload = title_resolve.build_add_meta_payload(resolved)
+    poster_hints = title_resolve.build_poster_hints_from_resolve(resolved)
     sql_data = resolved["sql_data"]
     api_data = resolved["api_data"]
 
@@ -339,11 +345,11 @@ def resolve_title_for_training(title: str, country: str = "Россия", confir
     if resolved["found"] is False:
         print("\nНе удалось найти объект ни в SQL, ни в API.")
         if ask_manual_addition() is False:
-            return None
+            return None, None, None
 
         defaults = build_manual_defaults(resolved["title"])
         print_autofill_status(resolved, manual_mode=True)
-        return defaults
+        return defaults, meta_payload, poster_hints
 
     defaults = resolved["defaults"]
     if confirm_genres and api_data is not None:
@@ -354,12 +360,12 @@ def resolve_title_for_training(title: str, country: str = "Россия", confir
     answer = input("\nЭто нужный объект? Введи yes >> ").strip().lower()
     if answer != "yes":
         print("Операция отменена.")
-        return None
+        return None, None, None
 
-    return defaults
+    return defaults, meta_payload, poster_hints
 
 
-def request_api_defaults(confirm_genres: bool = False) -> dict:
+def request_api_defaults(confirm_genres: bool = False) -> tuple[dict | None, dict | None, dict | None]:
     """Ищет сериал через API и возвращает значения для ручной формы."""
     title = loop_input(
         text="Название сериала >> ",
