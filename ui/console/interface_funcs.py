@@ -809,6 +809,28 @@ def download_poster_images_local() -> None:
     print(f"  Ошибок: {stats['failed']}")
 
 
+def fetch_watched_tmdb_metadata() -> None:
+    """Loads TMDb metadata for watched records by title + year."""
+    from posters.fetch_watched_tmdb import fetch_watched_tmdb_metadata as run_fetch
+
+    print("Загрузка TMDb metadata для просмотренных...\n")
+
+    def progress(current: int, total: int, title: str) -> None:
+        print(f"{current}/{total} | {title}")
+
+    stats = run_fetch(progress_callback=progress)
+    print("\nИтог:")
+    print(f"  Проверено записей: {stats['checked']}")
+    print(f"  Уже были tmdb_id: {stats['already_had_tmdb_id']}")
+    print(f"  Найдено tmdb_id: {stats['found_tmdb_id']}")
+    print(f"  Добавлено description: {stats['added_description']}")
+    print(f"  Добавлено poster_url: {stats['added_poster_url']}")
+    print(f"  Обновлено poster-cache: {stats['poster_cache_updated']}")
+    print(f"  Пропущено, не найдено: {stats['skipped_not_found']}")
+    print(f"  Пропущено, сомнительный match: {stats['skipped_uncertain_match']}")
+    print(f"  Ошибки сети: {stats['network_errors']}")
+
+
 def show_dataset_genres() -> None:
     """Показывает все жанры текущего датасета через API."""
     ui.clean_terminal()

@@ -174,7 +174,7 @@ def open_extra_menu():
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         ui.show_extra_menu(movies_counter, round(abs_error, 2))
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 7)])
         if command == "0":
             return
         if command == "1":
@@ -189,6 +189,8 @@ def open_extra_menu():
             interface_funcs.fetch_tmdb_poster_metadata()
         elif command == "6":
             interface_funcs.download_poster_images_local()
+        elif command == "7":
+            interface_funcs.fetch_watched_tmdb_metadata()
         ui.press_enter()
 
 

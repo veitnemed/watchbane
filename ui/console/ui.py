@@ -153,6 +153,7 @@ def show_extra_menu(movies_counter: int, error: int):
     print(' 4 >> Обновить описания и poster-cache для просмотренных')
     print(' 5 >> Загрузить poster URL из TMDb (metadata)')
     print(' 6 >> Скачать poster images локально')
+    print(' 7 >> Загрузить TMDb metadata для просмотренных')
     print(' 0 >> Главное меню\n')
 
 
