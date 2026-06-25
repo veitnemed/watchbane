@@ -21,6 +21,8 @@ storage_movie.add_movie(...)
 
 - [ui/console/interface_funcs.py](../ui/console/interface_funcs.py)
 - [ui/console/request.py](../ui/console/request.py)
+- [desktop/app.py](../desktop/app.py)
+- [desktop/watched_view.py](../desktop/watched_view.py)
 
 Отвечает за:
 
@@ -32,6 +34,8 @@ storage_movie.add_movie(...)
 - печать финального сообщения пользователю.
 
 UI не должен молча добавлять запись в dataset.
+
+Desktop GUI использует тот же принцип: изменение `user_score` идёт через `dataset.dataset_records.update_dataset_record()` и helper `save_watched_user_score()`, а не через прямую запись JSON из PyQt.
 
 ### Storage / service-слой
 
@@ -288,6 +292,7 @@ update_dataset_record(title, patch_payload, source_name="") -> UpdateRecordResul
 `user_score` можно менять несколькими UI-сценариями, но все они должны идти через общий update-service:
 
 - ручное изменение одной оценки из `Показать мои оценки`;
+- изменение оценки в desktop GUI через ПКМ -> dialog;
 - попарное уточнение порядка оценок (`rating_comparison`);
 - применение draft линейного распределения оценок.
 

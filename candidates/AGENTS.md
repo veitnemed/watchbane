@@ -10,6 +10,7 @@
 - Не меняй формат `candidate_pool.json` и `candidate_criteria.json` без отдельной задачи, миграции и тестов.
 - Не смешивай `tmdb_genre_options.py` и `genres.py`.
 - Не меняй `keys.py` без понимания cross-criteria dedupe.
+- Не трогай candidate pool ради desktop GUI-polish. Визуальный контракт PyQt GUI живёт в [../docs/DESKTOP_STYLE_CONTRACT.md](../docs/DESKTOP_STYLE_CONTRACT.md).
 
 ## Быстрая карта
 
@@ -50,4 +51,3 @@ C:\Users\super\AppData\Local\Programs\Python\Python313\python.exe tests\test.py
 ```
 
 Если менялся только markdown, тесты можно не запускать, но финально явно скажи, что изменение документационное.
-

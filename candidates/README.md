@@ -4,6 +4,8 @@
 
 Главная идея: здесь живёт логика candidate pool. UI должен обращаться сюда через `candidates.service`, а не напрямую менять JSON или вызывать низкоуровневые функции.
 
+Desktop GUI visual-polish не должен менять код этой папки. Контракт внешнего вида PyQt GUI описан в [../docs/DESKTOP_STYLE_CONTRACT.md](../docs/DESKTOP_STYLE_CONTRACT.md).
+
 ## Основные файлы
 
 `service.py`
@@ -223,4 +225,3 @@ C:\Users\super\AppData\Local\Programs\Python\Python313\python.exe tests\test.py
 ```
 
 Для новых сетевых сценариев добавляй offline-тесты с `patch(...)`. Реальные TMDb/KP запросы в tests не нужны.
-

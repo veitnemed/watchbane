@@ -7,6 +7,7 @@
 - [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md) - слои и правила зависимостей.
 - [PROJECT_MAP.md](PROJECT_MAP.md) - где какой код лежит сейчас.
 - [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления/изменения записей dataset.
+- [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - контракт внешнего вида PyQt desktop GUI.
 
 ## 1. Слои и направление зависимостей
 
@@ -42,6 +43,7 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 ## 3. Куда класть новый код
 
 - Новый пункт меню / экран / форма / prompt → `ui/console/` (`global_menu.py`, `interface_funcs.py`, `request.py`, `ui.py`).
+- Новый desktop PyQt экран / карточка / dialog → `desktop/`; visual-polish сверять с [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md).
 - Новый сценарий над пользовательским dataset (add/update/stats/excel/tags/genre) → `dataset/`.
 - Новая логика пулов кандидатов (сбор, фильтры, dedupe, ranking, retry) → `candidates/`.
 - Новый расчёт/метрика/режим обучения (без ввода-вывода) → `model/`.
@@ -91,6 +93,7 @@ UI/CLI регистрируют печать через `candidates.tmdb_candida
 - Менять JSON-форматы `dataset.json`, `meta_data.json`, `weights.json`, `candidate_pool.json`, `config/tags.json`.
 - Менять структуру меню и тексты пунктов.
 - Менять бизнес-логику добавления записей, обучения, сбора пула.
+- Делать GUI-polish, который меняет dataset/model/pool или источники данных.
 - Удалять старые функции.
 - Делать массовые переименования/рефакторинги.
 - Трогать или коммитить секреты (`.env.local`, `tmdb.env`, `api_token.py`).

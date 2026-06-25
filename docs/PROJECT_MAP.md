@@ -11,6 +11,8 @@
 - [PROJECT_MAP.md](PROJECT_MAP.md) - карта проекта.
 - [add_functions.md](add_functions.md) - правила добавления/изменения функционала.
 - [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления и изменения записей.
+- [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - визуальный контракт PyQt desktop GUI.
+- [DESKTOP_GUI_REPORT_2026-06-25.md](DESKTOP_GUI_REPORT_2026-06-25.md) - отчёт о последнем visual-polish карточки watched title.
 
 ## Слои и направление зависимостей
 
@@ -136,6 +138,17 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 - [ui/console/rating_comparison.py](../ui/console/rating_comparison.py) - попарное сравнение оценок.
 - [ui/console/menu_state.py](../ui/console/menu_state.py) - сбор состояния меню.
 - [ui/gui/](../ui/gui) - место под будущий GUI.
+
+### `desktop/`
+
+PyQt desktop GUI для watched-базы и read-only аналитики.
+
+- [desktop/app.py](../desktop/app.py) - главное окно, вкладки, контекстное меню и dialog редактирования `user_score`.
+- [desktop/watched_view.py](../desktop/watched_view.py) - watched-список, read-only карточка выбранного тайтла и helpers отображения.
+- [desktop/analytics_view.py](../desktop/analytics_view.py) - вкладка `Аналитика`.
+- [desktop/plotly_charts.py](../desktop/plotly_charts.py) - helpers для Plotly-графика, если доступен WebEngine.
+
+Style contract desktop GUI: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). Desktop GUI не должен напрямую писать dataset JSON и не должен запускать обучение.
 
 ### `tests/`
 

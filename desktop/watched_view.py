@@ -186,19 +186,15 @@ def format_rating_score_display(score) -> str | None:
 
 
 def build_meta_pill_items(card: dict) -> list[dict]:
-    """Build year/IMDb/KP pill display items for the detail card."""
+    """Build IMDb/KP pill display items for the detail card."""
     items: list[dict] = []
-    year = card.get("year")
-    if year not in (None, ""):
-        items.append({"text": format_year_pill(year), "rich": False})
-
     imdb = format_rating_score_display(card.get("imdb_score"))
     if imdb is not None:
-        items.append({"text": format_imdb_pill(imdb), "rich": False})
+        items.append(format_imdb_pill(imdb))
 
     kp = format_rating_score_display(card.get("kp_score"))
     if kp is not None:
-        items.append({"text": format_kp_pill(kp), "rich": True})
+        items.append(format_kp_pill(kp))
 
     return items
 
@@ -222,55 +218,48 @@ def build_meta_pill_labels(card: dict) -> list[str]:
 
 
 def format_year_pill(year) -> str:
-    return f"📅 {year}"
+    return str(year)
 
 
-def format_imdb_pill(score: str) -> str:
-    return f"★ IMDb {score}"
+def _rating_indicator_item(source: str, score: str, label: str) -> dict:
+    return {
+        "kind": "rating_indicator",
+        "source": source,
+        "label": label,
+        "score": score,
+        "accent": "#8b949e" if source == "imdb" else "#87978f",
+    }
 
 
-def format_kp_pill(score: str) -> str:
-    return f'<span style="color:#10a37f;font-weight:600">КП</span> {score}'
+def format_imdb_pill(score: str) -> dict:
+    return _rating_indicator_item("imdb", score, "IMDb")
 
 
-GENRE_ICONS: dict[str, str] = {
-    "драма": "🎭",
-    "триллер": "🎯",
-    "боевик": "🛡",
-    "криминал": "🔫",
-    "комедия": "😄",
-    "фантастика": "🚀",
-    "фэнтези": "✨",
-    "ужасы": "👻",
-    "мелодрама": "💕",
-    "детектив": "🔍",
-    "приключения": "🧭",
-    "семейный": "👨‍👩‍👧",
-    "история": "📜",
-    "военный": "⚔",
-    "биография": "📖",
-    "музыка": "🎵",
-    "спорт": "⚽",
-    "вестерн": "🤠",
-    "аниме": "🎌",
-    "мультфильм": "🎬",
-}
+def format_kp_pill(score: str) -> dict:
+    return _rating_indicator_item("kp", score, "КП")
 
 
 def format_genre_pill_label(genre: str) -> str:
-    text = str(genre).strip()
-    if text == "":
-        return text
-    icon = GENRE_ICONS.get(text.lower())
-    if icon:
-        return f"{icon} {text}"
-    return text
+    return str(genre).strip()
 
 
 def build_genre_pill_labels(card: dict) -> list[str]:
     """Build genre pill labels for the detail card."""
     genres = card.get("genres") or []
     return [format_genre_pill_label(genre) for genre in genres if str(genre).strip()]
+
+
+def build_detail_info_pill_labels(card: dict) -> list[str]:
+    """Build lower info pills shown near genres."""
+    labels: list[str] = []
+    year = card.get("year")
+    if year not in (None, ""):
+        labels.append(format_year_pill(year))
+    labels.extend(build_genre_pill_labels(card))
+    country = get_country_display(card)
+    if country is not None:
+        labels.append(country)
+    return labels
 
 
 def get_country_display(card: dict) -> str | None:
@@ -344,7 +333,9 @@ def _nested_poster_value(movie: dict, field: str) -> str | None:
 POSTER_WIDTH = 220
 POSTER_HEIGHT = 330
 GENRES_PER_ROW = 4
-CARD_PADDING = 18
+CARD_PADDING = 22
+RATING_CIRCLE_WIDGET_SIZE = 88
+RATING_CIRCLE_DIAMETER = 78
 
 POSTER_PLACEHOLDER_STYLE = (
     "background-color: #171719; border: 1px solid #2a2a2e; border-radius: 16px; color: #71717a;"
@@ -357,33 +348,20 @@ QFrame#detailCard {
     border: 1px solid #2a2a2e;
     border-radius: 18px;
 }
-QFrame#scoreCard {
-    background-color: transparent;
-    border: 1px solid #10a37f;
-    border-radius: 14px;
-}
-QLabel#scoreCardCaption {
-    color: #10a37f;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-}
-QLabel#scoreCardValue {
-    color: #f4f4f5;
-    font-size: 24px;
-    font-weight: 700;
-}
 QLabel#detailTitle {
     background: transparent;
     color: #f4f4f5;
+    font-size: 26px;
+    font-weight: 700;
+    padding: 0 0 2px 0;
 }
-QLabel#metaPill, QLabel#genrePill {
+QLabel#genrePill {
     background-color: #1c1c1f;
     border: 1px solid #2a2a2e;
-    border-radius: 14px;
-    padding: 5px 11px;
-    color: #d4d4d8;
-    font-size: 13px;
+    border-radius: 12px;
+    padding: 7px 12px;
+    color: #c7c7ce;
+    font-size: 14px;
 }
 QFrame#overviewBlock {
     background-color: #1c1c1f;
@@ -393,21 +371,13 @@ QFrame#overviewBlock {
 QLabel#overviewTitle {
     background: transparent;
     color: #f4f4f5;
-    font-size: 13px;
+    font-size: 16px;
     font-weight: 600;
 }
 QLabel#overviewText {
     background: transparent;
     color: #d4d4d8;
     font-size: 15px;
-}
-QLabel#countryHeader {
-    color: #71717a;
-    font-size: 12px;
-}
-QLabel#countryValue {
-    color: #f4f4f5;
-    font-size: 14px;
 }
 """
 
@@ -436,26 +406,109 @@ def _make_pill_label(text: str, object_name: str, rich: bool = False):
     return pill
 
 
+class RatingCircleIndicator:
+    """Small circular score indicator with a radial progress ring."""
+
+    def __new__(cls, label: str, score=None, accent: str = "#10a37f"):
+        from PyQt6.QtWidgets import QWidget
+
+        class _RatingCircleWidget(QWidget):
+            def __init__(self, label_text: str, score_value, accent_color: str) -> None:
+                super().__init__()
+                self._label = label_text
+                self._score = score_value
+                self._accent = accent_color
+                self.setFixedSize(RATING_CIRCLE_WIDGET_SIZE, RATING_CIRCLE_WIDGET_SIZE)
+                self.setStyleSheet("background: transparent;")
+
+            def set_score(self, score_value) -> None:
+                self._score = score_value
+                self.update()
+
+            def paintEvent(self, _event) -> None:
+                from PyQt6.QtCore import QRectF, Qt
+                from PyQt6.QtGui import QColor, QFont, QPainter, QPen
+
+                painter = QPainter(self)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+                left = (self.width() - RATING_CIRCLE_DIAMETER) / 2
+                top = (self.height() - RATING_CIRCLE_DIAMETER) / 2
+                rect = QRectF(left, top, RATING_CIRCLE_DIAMETER, RATING_CIRCLE_DIAMETER)
+                inner_rect = rect.adjusted(6, 6, -6, -6)
+
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor("#111113"))
+                painter.drawEllipse(rect)
+
+                ring_rect = rect.adjusted(5, 5, -5, -5)
+                track_pen = QPen(QColor("#2a2a2e"), 5)
+                track_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                painter.setPen(track_pen)
+                painter.drawArc(ring_rect, 90 * 16, -360 * 16)
+
+                progress = _score_progress(self._score)
+                if progress > 0:
+                    accent_pen = QPen(QColor(self._accent), 5)
+                    accent_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+                    painter.setPen(accent_pen)
+                    painter.drawArc(ring_rect, 90 * 16, -int(360 * 16 * progress))
+
+                painter.setPen(QColor("#f4f4f5"))
+                value_font = QFont("Segoe UI")
+                value_font.setPointSize(16)
+                value_font.setBold(True)
+                painter.setFont(value_font)
+                painter.drawText(inner_rect.adjusted(0, -8, 0, 0), Qt.AlignmentFlag.AlignCenter, _score_text(self._score))
+
+                painter.setPen(QColor("#a1a1aa"))
+                label_font = QFont("Segoe UI")
+                label_font.setPointSize(8)
+                label_font.setBold(True)
+                painter.setFont(label_font)
+                painter.drawText(inner_rect.adjusted(0, 38, 0, -4), Qt.AlignmentFlag.AlignCenter, self._label)
+
+        return _RatingCircleWidget(label, score, accent)
+
+
+def _score_progress(score) -> float:
+    try:
+        value = float(score)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(1.0, value / 10.0))
+
+
+def _score_text(score) -> str:
+    return format_user_score_display(score)
+
+
+def _make_meta_pill(item: dict):
+    return RatingCircleIndicator(
+        item.get("label", ""),
+        item.get("score"),
+        item.get("accent", "#10a37f"),
+    )
+
+
 def _fill_meta_pill_row(layout, items: list[dict]) -> None:
     _clear_layout(layout)
     layout.setSpacing(8)
     for item in items:
-        layout.addWidget(
-            _make_pill_label(item["text"], "metaPill", rich=item.get("rich", False))
-        )
+        layout.addWidget(_make_meta_pill(item))
     layout.addStretch()
 
 
 def _fill_pill_rows(container_layout, labels: list[str], object_name: str) -> None:
     _clear_layout(container_layout)
-    container_layout.setSpacing(6)
+    container_layout.setSpacing(8)
     if len(labels) == 0:
         return
     from PyQt6.QtWidgets import QHBoxLayout
 
     for index in range(0, len(labels), GENRES_PER_ROW):
         row = QHBoxLayout()
-        row.setSpacing(6)
+        row.setSpacing(8)
         for text in labels[index : index + GENRES_PER_ROW]:
             row.addWidget(_make_pill_label(text, object_name))
         row.addStretch()
@@ -467,7 +520,6 @@ class WatchedDetailCard:
 
     def __init__(self, parent=None) -> None:
         from PyQt6.QtCore import Qt
-        from PyQt6.QtGui import QFont
         from PyQt6.QtWidgets import (
             QFrame,
             QHBoxLayout,
@@ -480,9 +532,12 @@ class WatchedDetailCard:
         self._frame.setObjectName("detailCard")
         self._frame.setStyleSheet(DETAIL_CARD_STYLE)
 
-        root = QHBoxLayout(self._frame)
+        root = QVBoxLayout(self._frame)
         root.setContentsMargins(CARD_PADDING, CARD_PADDING, CARD_PADDING, CARD_PADDING)
-        root.setSpacing(16)
+        root.setSpacing(22)
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(22)
 
         self._poster_label = QLabel("Нет постера")
         self._poster_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -491,15 +546,14 @@ class WatchedDetailCard:
         self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
 
         info_column = QVBoxLayout()
-        info_column.setSpacing(14)
+        info_column.setSpacing(12)
 
         self._title_label = QLabel("Выберите тайтл слева")
         self._title_label.setObjectName("detailTitle")
-        title_font = QFont()
-        title_font.setPointSize(20)
-        title_font.setBold(True)
-        self._title_label.setFont(title_font)
         self._title_label.setWordWrap(True)
+        self._title_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self._title_label.setMinimumHeight(36)
+        self._title_label.setMaximumHeight(70)
 
         metrics_row_widget = QWidget()
         metrics_row_widget.setStyleSheet("background: transparent;")
@@ -507,28 +561,15 @@ class WatchedDetailCard:
         self._metrics_row.setContentsMargins(0, 0, 0, 0)
         self._metrics_row.setSpacing(10)
 
-        self._score_card = QFrame()
-        self._score_card.setObjectName("scoreCard")
-        score_layout = QVBoxLayout(self._score_card)
-        score_layout.setContentsMargins(10, 8, 14, 8)
-        score_layout.setSpacing(2)
-
-        self._score_caption = QLabel("МОЯ ОЦЕНКА")
-        self._score_caption.setObjectName("scoreCardCaption")
-
-        self._score_value = QLabel("—")
-        self._score_value.setObjectName("scoreCardValue")
-
-        score_layout.addWidget(self._score_caption)
-        score_layout.addWidget(self._score_value)
+        self._score_indicator = RatingCircleIndicator("моя", None, "#10a37f")
 
         self._meta_pills_widget = QWidget()
         self._meta_pills_widget.setStyleSheet("background: transparent;")
         self._meta_pills_layout = QHBoxLayout(self._meta_pills_widget)
         self._meta_pills_layout.setContentsMargins(0, 0, 0, 0)
-        self._meta_pills_layout.setSpacing(8)
+        self._meta_pills_layout.setSpacing(10)
 
-        self._metrics_row.addWidget(self._score_card, alignment=Qt.AlignmentFlag.AlignLeft)
+        self._metrics_row.addWidget(self._score_indicator, alignment=Qt.AlignmentFlag.AlignLeft)
         self._metrics_row.addWidget(self._meta_pills_widget, alignment=Qt.AlignmentFlag.AlignVCenter)
         self._metrics_row.addStretch()
 
@@ -538,27 +579,14 @@ class WatchedDetailCard:
         self._genre_pills_layout.setContentsMargins(0, 0, 0, 0)
         self._genre_pills_layout.setSpacing(8)
 
-        self._country_section = QWidget()
-        self._country_section.setStyleSheet("background: transparent;")
-        country_layout = QVBoxLayout(self._country_section)
-        country_layout.setContentsMargins(0, 0, 0, 0)
-        country_layout.setSpacing(4)
-
-        self._country_header_label = QLabel("🌐 Страна")
-        self._country_header_label.setObjectName("countryHeader")
-        self._country_value_label = QLabel("")
-        self._country_value_label.setObjectName("countryValue")
-        country_layout.addWidget(self._country_header_label)
-        country_layout.addWidget(self._country_value_label)
-
         self._overview_frame = QFrame()
         self._overview_frame.setObjectName("overviewBlock")
         self._overview_frame.setFrameShape(QFrame.Shape.NoFrame)
         overview_layout = QVBoxLayout(self._overview_frame)
-        overview_layout.setContentsMargins(14, 12, 14, 12)
-        overview_layout.setSpacing(8)
+        overview_layout.setContentsMargins(16, 16, 16, 16)
+        overview_layout.setSpacing(10)
 
-        self._overview_title_label = QLabel("📄 Описание")
+        self._overview_title_label = QLabel("Описание")
         self._overview_title_label.setObjectName("overviewTitle")
         self._overview_label = QLabel("")
         self._overview_label.setObjectName("overviewText")
@@ -569,14 +597,16 @@ class WatchedDetailCard:
         overview_layout.addWidget(self._overview_label)
 
         info_column.addWidget(self._title_label)
-        info_column.addWidget(metrics_row_widget)
+        info_column.addSpacing(2)
         info_column.addWidget(self._genre_section)
-        info_column.addWidget(self._country_section)
-        info_column.addWidget(self._overview_frame)
+        info_column.addSpacing(2)
+        info_column.addWidget(metrics_row_widget)
         info_column.addStretch()
 
-        root.addWidget(self._poster_label, alignment=Qt.AlignmentFlag.AlignTop)
-        root.addLayout(info_column, stretch=1)
+        top_row.addWidget(self._poster_label, alignment=Qt.AlignmentFlag.AlignTop)
+        top_row.addLayout(info_column, stretch=1)
+        root.addLayout(top_row)
+        root.addWidget(self._overview_frame)
 
     @property
     def widget(self):
@@ -611,36 +641,26 @@ class WatchedDetailCard:
     def show_empty(self, title: str = "Выберите тайтл слева") -> None:
         self._set_poster_placeholder()
         self._title_label.setText(title)
-        self._score_value.setText("—")
+        self._score_indicator.set_score(None)
         _fill_meta_pill_row(self._meta_pills_layout, [])
         self._meta_pills_widget.setVisible(False)
         _fill_pill_rows(self._genre_pills_layout, [], "genrePill")
         self._genre_section.setVisible(False)
-        self._country_value_label.setText("")
-        self._country_section.setVisible(False)
         self._overview_label.setText("")
         self._overview_frame.setVisible(False)
 
     def show_entry(self, entry: WatchedEntry) -> None:
         _, movie, card = entry
         self._title_label.setText(card.get("title") or entry[0])
-        self._score_value.setText(format_user_score_display(card.get("user_score")))
+        self._score_indicator.set_score(card.get("user_score"))
 
         meta_pills = build_meta_pill_items(card)
         _fill_meta_pill_row(self._meta_pills_layout, meta_pills)
         self._meta_pills_widget.setVisible(len(meta_pills) > 0)
 
-        genre_pills = build_genre_pill_labels(card)
-        _fill_pill_rows(self._genre_pills_layout, genre_pills, "genrePill")
-        self._genre_section.setVisible(len(genre_pills) > 0)
-
-        country = get_country_display(card)
-        if country is None:
-            self._country_value_label.setText("")
-            self._country_section.setVisible(False)
-        else:
-            self._country_value_label.setText(country)
-            self._country_section.setVisible(True)
+        detail_pills = build_detail_info_pill_labels(card)
+        _fill_pill_rows(self._genre_pills_layout, detail_pills, "genrePill")
+        self._genre_section.setVisible(len(detail_pills) > 0)
 
         self._overview_label.setText(get_overview_display(card))
         self._overview_frame.setVisible(True)

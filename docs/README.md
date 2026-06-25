@@ -17,6 +17,7 @@
 - запускать read-only диагностику feature ablation для public-признаков и жанров;
 - уточнять порядок личных оценок через попарное сравнение;
 - создавать draft линейного распределения оценок без изменения dataset и применять его после LOO-preview;
+- открывать desktop PyQt GUI для watched-базы с read-only карточкой тайтла, постером, метаданными, круговыми оценками и аналитикой;
 - собирать старый общий candidate pool;
 - собирать TMDb candidate pool v1 с ранними TMDb-фильтрами;
 - импортировать TMDb result в общий пул;
@@ -278,6 +279,7 @@ Flow поддерживает:
 - `main.py` - точка входа.
 - `ui/console/` - текущее консольное меню, запросы, формы, UI-оркестрация.
 - `ui/gui/` - место под будущий GUI.
+- `desktop/` - текущий PyQt desktop GUI: watched-список, карточка тайтла, dialog оценки и read-only аналитика.
 - `storage/` - низкоуровневое хранение (dataset/meta/weights, файлы, backup, нормализация).
 - `dataset/` - записи, meta, Excel, статистика, теги, резолв тайтлов.
 - `candidates/` - общий candidate pool и TMDb pipeline.
@@ -289,7 +291,7 @@ Flow поддерживает:
 - `data/candidate_pool/` - TMDb JSON/CSV артефакты.
 - `data/cache/tmdb/` - локальный кэш TMDb.
 
-Архитектура слоёв и правила зависимостей: [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md). Правила добавления функционала: [add_functions.md](add_functions.md).
+Архитектура слоёв и правила зависимостей: [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md). Правила добавления функционала: [add_functions.md](add_functions.md). Визуальный контракт desktop GUI: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). Последний отчёт по desktop-card polish: [DESKTOP_GUI_REPORT_2026-06-25.md](DESKTOP_GUI_REPORT_2026-06-25.md).
 
 ## Полезные команды
 

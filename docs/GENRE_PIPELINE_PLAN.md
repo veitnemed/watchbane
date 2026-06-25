@@ -4,6 +4,8 @@
 Статус: черновик плана  
 Связанные документы: [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md), [candidates/README.md](../candidates/README.md)
 
+Примечание: desktop GUI visual-polish описан отдельно в [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) и не меняет жанровый pipeline, mapper или формат dataset.
+
 ## Цель
 
 Сделать цепочку **TMDb → IMDb SQL → KP → candidate pool → dataset** предсказуемой по жанрам:

@@ -136,11 +136,17 @@ def test_build_meta_pill_items() -> None:
         }
     )
 
-    assert items[0] == {"text": "📅 2025", "rich": False}
-    assert items[1] == {"text": "★ IMDb 7.3", "rich": False}
-    assert items[2]["rich"] is True
-    assert "КП" in items[2]["text"]
-    assert "7.8" in items[2]["text"]
+    assert len(items) == 2
+    assert items[0]["kind"] == "rating_indicator"
+    assert items[0]["source"] == "imdb"
+    assert items[0]["label"] == "IMDb"
+    assert items[0]["score"] == "7.3"
+    assert items[0]["accent"] == "#8b949e"
+    assert items[1]["kind"] == "rating_indicator"
+    assert items[1]["source"] == "kp"
+    assert items[1]["label"] == "КП"
+    assert items[1]["score"] == "7.8"
+    assert items[1]["accent"] == "#87978f"
 
 
 def test_build_meta_pill_labels() -> None:
@@ -162,8 +168,23 @@ def test_build_genre_pill_labels_hides_empty() -> None:
 
     assert build_genre_pill_labels({"genres": []}) == []
     assert build_genre_pill_labels({"genres": ["Драма", "Криминал"]}) == [
-        "🎭 Драма",
-        "🔫 Криминал",
+        "Драма",
+        "Криминал",
+    ]
+
+
+def test_build_detail_info_pill_labels_moves_year_to_genres() -> None:
+    from desktop.watched_view import build_detail_info_pill_labels
+
+    assert build_detail_info_pill_labels({"year": 2025, "genres": ["Драма"]}) == [
+        "2025",
+        "Драма",
+    ]
+    assert build_detail_info_pill_labels({"genres": ["Драма"]}) == ["Драма"]
+    assert build_detail_info_pill_labels({"year": 2025, "genres": ["Драма"], "country": "Россия"}) == [
+        "2025",
+        "Драма",
+        "Россия",
     ]
 
 
