@@ -33,14 +33,24 @@ def show_header(movies_counter: int, error: int):
     print(' ' * 12, f"MAE: {round(error * 10, 2)} %\n")
 
 
-def show_global_menu(movies_counter: int, error: int, kp_error: int, loo_mae=None):
+def format_loo_mae_display(loo_mae=None, model_metrics_status: dict | None = None) -> str:
+    if loo_mae is None and isinstance(model_metrics_status, dict):
+        loo_mae = model_metrics_status.get("loo_mae")
+
+    if loo_mae is None:
+        return "LOO MAE: не рассчитан"
+
+    suffix = ""
+    if isinstance(model_metrics_status, dict) and model_metrics_status.get("is_stale") is True:
+        suffix = " (устарело после изменения dataset)"
+    return f"LOO MAE: {float(loo_mae):.4f}{suffix}"
+
+
+def show_global_menu(movies_counter: int, error: int, kp_error: int, loo_mae=None, model_metrics_status: dict | None = None):
     """Печатает главное меню."""
     show_header(movies_counter, error)
     print(' ' * 9, f"KP_MAE: {round(kp_error * 10, 2)} %\n")
-    if loo_mae is None:
-        print(' ' * 8, "LOO MAE: не рассчитан\n")
-    else:
-        print(' ' * 8, f"LOO MAE: {float(loo_mae):.4f}\n")
+    print(' ' * 8, f"{format_loo_mae_display(loo_mae, model_metrics_status)}\n")
     print(' 1 >> Данные')
     print(' 2 >> Обучение')
     print(' 3 >> Модель')

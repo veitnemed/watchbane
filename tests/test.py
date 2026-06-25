@@ -553,7 +553,10 @@ def test_apply_rating_order_draft() -> None:
     assert_check("LOO comparison вызывается для текущего и draft dataset", loo_mock.call_count == 2)
     assert_check("user_score обновлён после применения", updated["B"]["main_info"]["user_score"] == 7.5)
     assert_check("Веса не меняются при применении draft", storage_data.load_weights() == before_weights)
-    assert_check("model_metrics не меняется при применении draft", storage_data.load_model_metrics() == before_metrics)
+    after_metrics = storage_data.load_model_metrics()
+    assert_check("model_metrics сохраняет прежний LOO при применении draft", after_metrics["loo_mae"] == before_metrics["loo_mae"])
+    assert_check("model_metrics помечается устаревшим при изменении user_score", after_metrics["is_stale"] is True)
+    assert_check("model_metrics хранит причину устаревания", after_metrics["stale_reason"] == "user_score_changed")
 
 
 def test_apply_rating_order_draft_stops_on_stale_or_missing_data() -> None:

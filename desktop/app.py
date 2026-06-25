@@ -22,10 +22,12 @@ from PyQt6.QtWidgets import (
     QMenu,
     QScrollArea,
     QSplitter,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from desktop.analytics_view import AnalyticsView
 from desktop.watched_view import (
     SORT_OPTIONS,
     USER_SCORE_MAX,
@@ -84,6 +86,26 @@ QListWidget::item:hover {
 QScrollArea {
     border: none;
     background-color: transparent;
+}
+QTabWidget::pane {
+    border: none;
+}
+QTabBar::tab {
+    background-color: #222228;
+    border: 1px solid #3a3a44;
+    border-bottom: none;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    color: #bfc4ce;
+    padding: 9px 16px;
+    margin-right: 4px;
+}
+QTabBar::tab:selected {
+    background-color: #2a2d35;
+    color: #ffffff;
+}
+QTabBar::tab:hover {
+    background-color: #303542;
 }
 """
 
@@ -263,9 +285,11 @@ class WatchedMoviesWindow(QMainWindow):
         self.setStyleSheet(DARK_STYLE)
         self.statusBar().showMessage("")
 
-        root = QWidget()
-        self.setCentralWidget(root)
-        layout = QHBoxLayout(root)
+        tabs = QTabWidget()
+        self.setCentralWidget(tabs)
+
+        watched_tab = QWidget()
+        layout = QHBoxLayout(watched_tab)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(16)
 
@@ -278,6 +302,10 @@ class WatchedMoviesWindow(QMainWindow):
         splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 2)
         splitter.setStretchFactor(1, 3)
+
+        tabs.addTab(watched_tab, "Watched")
+        self._analytics_view = AnalyticsView(self._entries)
+        tabs.addTab(self._analytics_view.widget, "Аналитика")
 
         self._refresh_list()
         if self._list_widget.count() > 0:
@@ -324,6 +352,7 @@ class WatchedMoviesWindow(QMainWindow):
 
     def _refresh_after_user_score_save(self, current_key: str, result) -> None:
         self._entries = load_watched_entries()
+        self._analytics_view.update_entries(self._entries)
         self._refresh_list()
 
         for index, (key, _, _) in enumerate(self._visible_entries):

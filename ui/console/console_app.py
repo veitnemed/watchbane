@@ -22,8 +22,8 @@ def run_console_app():
         ui.clean_terminal()
         data, weights, movies_counter, abs_error = menu_state.get_menu_state()
         kp_error = model.kp_mean_absolute_error(data)
-        loo_mae = storage_data.get_saved_loo_mae()
-        ui.show_global_menu(movies_counter, round(abs_error, 2), kp_error, loo_mae)
+        model_metrics_status = storage_data.get_model_metrics_status()
+        ui.show_global_menu(movies_counter, round(abs_error, 2), kp_error, model_metrics_status.get("loo_mae"), model_metrics_status)
 
         command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
         if command == "0":

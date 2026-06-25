@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from config import constant
 from common import format_score
 from common import valid
+from storage import data as storage_data
 from storage.data import add_movies_to_meta, get_meta_obj, load_dataset, load_meta, save_dataset, save_meta
 from storage.normalize import (
     is_valid_genre_tags,
@@ -510,6 +511,8 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
         save_dataset(data)
         if raw_patch is not None:
             _sync_raw_scores_to_meta(dataset_title, new_main_info, new_raw_scores)
+        if "main_info.user_score" in changed_fields:
+            storage_data.mark_model_metrics_stale("user_score_changed")
     except Exception as error:
         return UpdateRecordResult(
             ok=False,

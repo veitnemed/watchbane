@@ -2,12 +2,30 @@
 
 import json
 import os
+from datetime import datetime, timezone
 
 from config import constant
 from config import genre_tags
 from common import valid
 from storage.files import is_json_exists
 from storage.normalize import LEGACY_TAG_FIELDS, normalize_main_info, normalize_movie_tags, normalize_raw_scores
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _normalize_model_metrics(metrics: dict | None) -> dict:
+    normalized = dict(metrics) if isinstance(metrics, dict) else {}
+
+    normalized["loo_mae"] = None if normalized.get("loo_mae") is None else float(normalized["loo_mae"])
+    normalized["is_stale"] = bool(normalized.get("is_stale", False))
+    normalized["stale_reason"] = str(normalized.get("stale_reason") or "dataset_changed") if normalized["is_stale"] else None
+    normalized["updated_at"] = normalized.get("updated_at") if isinstance(normalized.get("updated_at"), str) else None
+    normalized["dataset_changed_at"] = (
+        normalized.get("dataset_changed_at") if isinstance(normalized.get("dataset_changed_at"), str) else None
+    )
+    return normalized
 
 
 def init_dataset():
@@ -231,7 +249,7 @@ def init_model_metrics() -> None:
     """Создает файл метрик модели, если его нет."""
     if is_json_exists(constant.MODEL_METRICS_JSON) is False:
         os.makedirs(os.path.dirname(constant.MODEL_METRICS_JSON), exist_ok=True)
-        save_model_metrics({"loo_mae": None})
+        save_model_metrics({"loo_mae": None, "is_stale": False, "stale_reason": None, "updated_at": None, "dataset_changed_at": None})
 
 
 def load_model_metrics() -> dict:
@@ -240,23 +258,24 @@ def load_model_metrics() -> dict:
     with open(constant.MODEL_METRICS_JSON, 'r', encoding='utf-8-sig') as file:
         metrics = json.load(file)
 
-    if isinstance(metrics, dict) is False:
-        metrics = {}
+    normalized = _normalize_model_metrics(metrics)
+    if normalized != metrics:
+        save_model_metrics(normalized)
 
-    if "loo_mae" not in metrics:
-        metrics["loo_mae"] = None
-        save_model_metrics(metrics)
-
-    return metrics
+    return normalized
 
 
 def save_model_metrics(metrics: dict) -> None:
     """Сохраняет метрики модели в JSON-файл."""
     os.makedirs(os.path.dirname(constant.MODEL_METRICS_JSON), exist_ok=True)
     with open(constant.MODEL_METRICS_JSON, 'w', encoding='UTF-8') as file:
-        normalized = dict(metrics) if isinstance(metrics, dict) else {}
-        normalized["loo_mae"] = None if normalized.get("loo_mae") is None else float(normalized["loo_mae"])
+        normalized = _normalize_model_metrics(metrics)
         json.dump(normalized, file, ensure_ascii=False, indent=4)
+
+
+def get_model_metrics_status() -> dict:
+    """Return normalized saved model metrics with freshness metadata."""
+    return load_model_metrics()
 
 
 def get_saved_loo_mae() -> float | None:
@@ -271,4 +290,17 @@ def set_saved_loo_mae(value: float | None) -> None:
     """Сохраняет текущее значение leave-one-out MAE."""
     metrics = load_model_metrics()
     metrics["loo_mae"] = None if value is None else float(value)
+    metrics["is_stale"] = False
+    metrics["stale_reason"] = None
+    metrics["updated_at"] = _utc_now_iso()
+    metrics["dataset_changed_at"] = None
+    save_model_metrics(metrics)
+
+
+def mark_model_metrics_stale(reason: str = "dataset_changed") -> None:
+    """Mark saved model metrics as stale after a dataset change."""
+    metrics = load_model_metrics()
+    metrics["is_stale"] = True
+    metrics["stale_reason"] = str(reason or "dataset_changed")
+    metrics["dataset_changed_at"] = _utc_now_iso()
     save_model_metrics(metrics)
