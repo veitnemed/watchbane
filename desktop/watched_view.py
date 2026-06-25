@@ -524,13 +524,23 @@ class WatchedDetailCard:
             QFrame,
             QHBoxLayout,
             QLabel,
+            QSizePolicy,
             QVBoxLayout,
             QWidget,
         )
 
-        self._frame = QFrame(parent)
+        self._poster_source_pixmap = None
+        card = self
+
+        class DetailCardFrame(QFrame):
+            def resizeEvent(self, event) -> None:
+                super().resizeEvent(event)
+                card._schedule_poster_height_sync()
+
+        self._frame = DetailCardFrame(parent)
         self._frame.setObjectName("detailCard")
         self._frame.setStyleSheet(DETAIL_CARD_STYLE)
+        self._frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         root = QVBoxLayout(self._frame)
         root.setContentsMargins(CARD_PADDING, CARD_PADDING, CARD_PADDING, CARD_PADDING)
@@ -541,11 +551,19 @@ class WatchedDetailCard:
 
         self._poster_label = QLabel("Нет постера")
         self._poster_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._poster_label.setFixedSize(POSTER_WIDTH, POSTER_HEIGHT)
+        self._poster_label.setFixedWidth(POSTER_WIDTH)
+        self._poster_label.setMaximumHeight(POSTER_HEIGHT)
         self._poster_label.setScaledContents(False)
         self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
 
-        info_column = QVBoxLayout()
+        self._info_column_widget = QWidget()
+        self._info_column_widget.setStyleSheet("background: transparent;")
+        self._info_column_widget.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Minimum,
+        )
+        info_column = QVBoxLayout(self._info_column_widget)
+        info_column.setContentsMargins(0, 0, 0, 0)
         info_column.setSpacing(12)
 
         self._title_label = QLabel("Выберите тайтл слева")
@@ -553,10 +571,14 @@ class WatchedDetailCard:
         self._title_label.setWordWrap(True)
         self._title_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
         self._title_label.setMinimumHeight(36)
-        self._title_label.setMaximumHeight(70)
+        self._title_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Minimum,
+        )
 
         metrics_row_widget = QWidget()
         metrics_row_widget.setStyleSheet("background: transparent;")
+        self._metrics_row_widget = metrics_row_widget
         self._metrics_row = QHBoxLayout(metrics_row_widget)
         self._metrics_row.setContentsMargins(0, 0, 0, 0)
         self._metrics_row.setSpacing(10)
@@ -582,16 +604,19 @@ class WatchedDetailCard:
         self._overview_frame = QFrame()
         self._overview_frame.setObjectName("overviewBlock")
         self._overview_frame.setFrameShape(QFrame.Shape.NoFrame)
+        self._overview_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         overview_layout = QVBoxLayout(self._overview_frame)
         overview_layout.setContentsMargins(16, 16, 16, 16)
         overview_layout.setSpacing(10)
 
         self._overview_title_label = QLabel("Описание")
         self._overview_title_label.setObjectName("overviewTitle")
+        self._overview_title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         self._overview_label = QLabel("")
         self._overview_label.setObjectName("overviewText")
         self._overview_label.setWordWrap(True)
         self._overview_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self._overview_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         overview_layout.addWidget(self._overview_title_label)
         overview_layout.addWidget(self._overview_label)
@@ -601,41 +626,105 @@ class WatchedDetailCard:
         info_column.addWidget(self._genre_section)
         info_column.addSpacing(2)
         info_column.addWidget(metrics_row_widget)
-        info_column.addStretch()
 
         top_row.addWidget(self._poster_label, alignment=Qt.AlignmentFlag.AlignTop)
-        top_row.addLayout(info_column, stretch=1)
+        top_row.addWidget(self._info_column_widget, stretch=1, alignment=Qt.AlignmentFlag.AlignTop)
         root.addLayout(top_row)
         root.addWidget(self._overview_frame)
+        root.addStretch(1)
 
     @property
     def widget(self):
         return self._frame
 
+    def _info_column_content_width(self) -> int:
+        width = self._info_column_widget.width()
+        if width > 0:
+            return width
+        frame_width = self._frame.width()
+        if frame_width <= 0:
+            return 0
+        return max(120, frame_width - POSTER_WIDTH - 22 - (2 * CARD_PADDING))
+
+    def _measure_info_column_height(self) -> int:
+        content_width = self._info_column_content_width()
+        if content_width > 0:
+            title_height = self._title_label.heightForWidth(content_width)
+        else:
+            title_height = self._title_label.sizeHint().height()
+        title_height = max(title_height, self._title_label.minimumHeight())
+
+        parts = [title_height]
+        if self._genre_section.isVisible():
+            self._genre_section.adjustSize()
+            parts.append(self._genre_section.sizeHint().height())
+        self._metrics_row_widget.adjustSize()
+        parts.append(self._metrics_row_widget.sizeHint().height())
+
+        layout = self._info_column_widget.layout()
+        spacing = layout.spacing() if layout is not None else 12
+        extra_spacing = 0
+        if len(parts) >= 2:
+            extra_spacing += 2
+        if self._genre_section.isVisible() and len(parts) >= 3:
+            extra_spacing += 2
+
+        gaps = max(0, len(parts) - 1)
+        return sum(parts) + gaps * spacing + extra_spacing
+
+    def _target_poster_height(self) -> int:
+        info_height = self._measure_info_column_height()
+        if info_height <= 0:
+            return POSTER_HEIGHT
+        return min(POSTER_HEIGHT, info_height)
+
+    def _sync_poster_height_to_info(self) -> None:
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QPixmap
+
+        height = self._target_poster_height()
+        self._poster_label.setFixedSize(POSTER_WIDTH, height)
+
+        if self._poster_source_pixmap is not None and not self._poster_source_pixmap.isNull():
+            scaled = self._poster_source_pixmap.scaled(
+                POSTER_WIDTH,
+                height,
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+            self._poster_label.setStyleSheet(POSTER_IMAGE_STYLE)
+            self._poster_label.setText("")
+            self._poster_label.setPixmap(scaled)
+            return
+
+        if self._poster_label.pixmap() is None or self._poster_label.pixmap().isNull():
+            self._poster_label.setPixmap(QPixmap())
+            if self._poster_label.text() == "":
+                self._poster_label.setText("Нет постера")
+            self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
+
+    def _schedule_poster_height_sync(self) -> None:
+        from PyQt6.QtCore import QTimer
+
+        QTimer.singleShot(0, self._sync_poster_height_to_info)
+
     def _set_poster_placeholder(self) -> None:
         from PyQt6.QtGui import QPixmap
 
+        self._poster_source_pixmap = None
         self._poster_label.setPixmap(QPixmap())
         self._poster_label.setText("Нет постера")
         self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
 
     def _set_poster_image(self, poster_path: str) -> bool:
-        from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QPixmap
 
         pixmap = QPixmap(poster_path)
         if pixmap.isNull():
             return False
 
-        scaled = pixmap.scaled(
-            POSTER_WIDTH,
-            POSTER_HEIGHT,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        self._poster_label.setStyleSheet(POSTER_IMAGE_STYLE)
-        self._poster_label.setText("")
-        self._poster_label.setPixmap(scaled)
+        self._poster_source_pixmap = pixmap
+        self._sync_poster_height_to_info()
         return True
 
     def show_empty(self, title: str = "Выберите тайтл слева") -> None:
@@ -648,6 +737,7 @@ class WatchedDetailCard:
         self._genre_section.setVisible(False)
         self._overview_label.setText("")
         self._overview_frame.setVisible(False)
+        self._schedule_poster_height_sync()
 
     def show_entry(self, entry: WatchedEntry) -> None:
         _, movie, card = entry
@@ -668,3 +758,4 @@ class WatchedDetailCard:
         poster_path = resolve_local_poster_path(movie, card)
         if poster_path is None or self._set_poster_image(poster_path) is False:
             self._set_poster_placeholder()
+        self._schedule_poster_height_sync()
