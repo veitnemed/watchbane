@@ -6,7 +6,11 @@ import os
 import sys
 import tempfile
 
-from dataset.score_analytics import build_score_analytics
+from dataset.score_analytics import (
+    DATASET_COMPLETENESS_DISPLAY_KEYS,
+    build_score_analytics,
+    summarize_dataset_completeness,
+)
 from desktop.theme import (
     COLOR_CARD,
     FONT_BASE,
@@ -62,25 +66,25 @@ ANALYTICS_FONT_FALLBACK = FONT_BASE
 ANALYTICS_ROOT_MARGIN = 14
 # Поля вкладки от края прокручиваемой области.
 
-ANALYTICS_ROOT_SPACING = 10
+ANALYTICS_ROOT_SPACING = 14
 # Расстояние между заголовком, KPI-строкой и секциями.
 
-ANALYTICS_SUMMARY_SPACING = 8
+ANALYTICS_SUMMARY_SPACING = 10
 # Зазор между KPI-карточками в одной строке.
 
-ANALYTICS_INSIGHT_LINE_SPACING = 4
+ANALYTICS_INSIGHT_LINE_SPACING = 8
 # Расстояние между строками внутри блока «Коротко».
 
-ANALYTICS_SECTION_PADDING = 10
+ANALYTICS_SECTION_PADDING = 16
 # Внутренний отступ серых карточек секций от рамки.
 
-ANALYTICS_SECTION_SPACING = 6
+ANALYTICS_SECTION_SPACING = 10
 # Зазор между заголовком секции и её содержимым.
 
-ANALYTICS_SUMMARY_CARD_PADDING = 8
+ANALYTICS_SUMMARY_CARD_PADDING = 12
 # Внутренний отступ KPI-карточки от рамки.
 
-ANALYTICS_SUMMARY_CARD_SPACING = 6
+ANALYTICS_SUMMARY_CARD_SPACING = 2
 # Расстояние между подписью и числом внутри KPI-карточки.
 
 ANALYTICS_DENSE_ROW_PADDING_X = 8
@@ -92,17 +96,42 @@ ANALYTICS_DENSE_ROW_PADDING_Y = 6
 ANALYTICS_DENSE_ROW_SPACING = 12
 # Расстояние между badge с оценкой и текстовой колонкой.
 
-ANALYTICS_DENSE_TEXT_SPACING = 2
-# Расстояние между «N тайтлов» и списком названий.
+ANALYTICS_COMPLETENESS_ROW_SPACING = 4
+# Расстояние между строками в раскрываемых деталях полноты.
+
+ANALYTICS_COMPLETENESS_BAR_HEIGHT = 6
+# Высота progress bar в деталях полноты.
+
+COMPLETENESS_DOT_SIZE = 8
+# Диаметр индикатора полноты dataset.
 
 
 # --- Размеры виджетов ---
 
-SUMMARY_CARD_WIDTH = 124
-# Ширина KPI-карточки «Всего» / «Средняя» / …
+SHOW_DENSE_SCORES_SECTION = False
+# Секция «Одинаковые оценки» скрыта: insights в «Коротко» покрывают mode.
 
-SUMMARY_CARD_HEIGHT = 80
+SUMMARY_CARD_HEIGHT = 88
 # Высота KPI-карточки.
+
+SUMMARY_ICON_BADGE_SIZE = 36
+# Диаметр круглого badge с иконкой в KPI-карточке.
+
+SECTION_HEADER_ICON_BADGE_SIZE = 28
+# Диаметр badge иконки в заголовке секции.
+
+SUMMARY_CARD_ICONS = {
+    "Всего": "▦",
+    "Средняя": "↗",
+    "Медиана": "◎",
+    "Минимум": "↓",
+    "Максимум": "↑",
+}
+
+SECTION_ICONS = {
+    "Коротко": "☰",
+    "Распределение оценок": "▤",
+}
 
 DENSE_SCORE_BADGE_SIZE = 56
 # Сторона квадратного badge с оценкой в «Одинаковые оценки».
@@ -200,15 +229,32 @@ class AnalyticsView:
         self._summary_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         root_layout.addLayout(self._summary_layout)
 
+        self._completeness_details_expanded = False
+        self._completeness_items_by_key: dict[str, dict] = {}
+        self._completeness_root, self._completeness_layout = self._make_completeness_indicator()
+        root_layout.addWidget(self._completeness_root)
+
         self._insights_layout = QVBoxLayout()
         self._insights_layout.setSpacing(ANALYTICS_INSIGHT_LINE_SPACING)
-        root_layout.addWidget(self._make_section("Коротко", self._insights_layout))
+        root_layout.addWidget(
+            self._make_section("Коротко", self._insights_layout, SECTION_ICONS["Коротко"])
+        )
 
         self._distribution_layout = QVBoxLayout()
-        root_layout.addWidget(self._make_section("Распределение оценок", self._distribution_layout))
+        root_layout.addWidget(
+            self._make_section(
+                "Распределение оценок",
+                self._distribution_layout,
+                SECTION_ICONS["Распределение оценок"],
+                show_menu_stub=True,
+            )
+        )
 
         self._dense_layout = QVBoxLayout()
-        root_layout.addWidget(self._make_section("Одинаковые оценки", self._dense_layout))
+        if SHOW_DENSE_SCORES_SECTION:
+            root_layout.addWidget(
+                self._make_section("Одинаковые оценки", self._dense_layout, "◎")
+            )
 
         root_layout.addStretch()
         self.update_entries(entries or [])
@@ -218,11 +264,13 @@ class AnalyticsView:
         return self._scroll
 
     def update_entries(self, entries: list[tuple[str, dict, dict]]) -> None:
-        analytics = build_score_analytics(_entries_to_records(entries))
+        analytics = build_score_analytics(_entries_to_records(entries), entries=entries)
         self._fill_summary(analytics["summary"])
+        self._fill_completeness(analytics["dataset_completeness"])
         self._fill_insights(analytics["insights"])
         self._fill_distribution(analytics["score_count_points"])
-        self._fill_dense_scores(analytics["dense_scores"])
+        if SHOW_DENSE_SCORES_SECTION:
+            self._fill_dense_scores(analytics["dense_scores"])
 
     def _clear_plotly_html_files(self) -> None:
         while self._plotly_html_paths:
@@ -245,8 +293,15 @@ class AnalyticsView:
         self._plotly_html_paths.append(handle.name)
         return handle.name
 
-    def _make_section(self, title_text: str, content_layout):
-        from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout
+    def _make_section(
+        self,
+        title_text: str,
+        content_layout,
+        icon_text: str = "",
+        *,
+        show_menu_stub: bool = False,
+    ):
+        from PyQt6.QtWidgets import QFrame, QVBoxLayout
 
         frame = QFrame()
         frame.setObjectName("analyticsSection")
@@ -259,11 +314,46 @@ class AnalyticsView:
         )
         layout.setSpacing(ANALYTICS_SECTION_SPACING)
 
-        title = QLabel(title_text)
-        title.setObjectName("sectionTitle")
-        layout.addWidget(title)
+        layout.addWidget(
+            self._make_section_header(title_text, icon_text, show_menu_stub=show_menu_stub)
+        )
         layout.addLayout(content_layout)
         return frame
+
+    def _make_section_header(self, title_text: str, icon_text: str, *, show_menu_stub: bool = False):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+
+        header = QWidget()
+        header.setObjectName("sectionHeader")
+        row = QHBoxLayout(header)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+
+        icon_badge = QFrame()
+        icon_badge.setObjectName("sectionHeaderIconBadge")
+        icon_badge.setFixedSize(
+            SECTION_HEADER_ICON_BADGE_SIZE,
+            SECTION_HEADER_ICON_BADGE_SIZE,
+        )
+        icon_layout = QVBoxLayout(icon_badge)
+        icon_layout.setContentsMargins(0, 0, 0, 0)
+        icon = QLabel(icon_text)
+        icon.setObjectName("sectionHeaderIcon")
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_layout.addWidget(icon)
+
+        title = QLabel(title_text)
+        title.setObjectName("sectionTitle")
+
+        row.addWidget(icon_badge, alignment=Qt.AlignmentFlag.AlignVCenter)
+        row.addWidget(title, alignment=Qt.AlignmentFlag.AlignVCenter)
+        row.addStretch()
+        if show_menu_stub:
+            menu = QLabel("⋮")
+            menu.setObjectName("sectionHeaderMenu")
+            row.addWidget(menu, alignment=Qt.AlignmentFlag.AlignVCenter)
+        return header
 
     def _fill_summary(self, summary: dict) -> None:
         _clear_layout(self._summary_layout)
@@ -275,35 +365,170 @@ class AnalyticsView:
             ("Максимум", summary["maximum"]),
         )
         for label, value in items:
-            self._summary_layout.addWidget(self._make_summary_card(label, _format_metric(value)))
-        self._summary_layout.addStretch()
+            icon = SUMMARY_CARD_ICONS.get(label, "•")
+            self._summary_layout.addWidget(
+                self._make_summary_card(label, _format_metric(value), icon),
+                stretch=1,
+            )
 
-    def _make_summary_card(self, label_text: str, value_text: str):
+    def _make_summary_card(self, label_text: str, value_text: str, icon_text: str):
         from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout
+        from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout
 
         frame = QFrame()
         frame.setObjectName("summaryCard")
-        frame.setFixedSize(SUMMARY_CARD_WIDTH, SUMMARY_CARD_HEIGHT)
-        layout = QVBoxLayout(frame)
+        frame.setFixedHeight(SUMMARY_CARD_HEIGHT)
+        frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        layout = QHBoxLayout(frame)
         layout.setContentsMargins(
             ANALYTICS_SUMMARY_CARD_PADDING,
             ANALYTICS_SUMMARY_CARD_PADDING,
             ANALYTICS_SUMMARY_CARD_PADDING,
             ANALYTICS_SUMMARY_CARD_PADDING,
         )
-        layout.setSpacing(ANALYTICS_SUMMARY_CARD_SPACING)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(10)
+
+        icon_badge = QFrame()
+        icon_badge.setObjectName("summaryIconBadge")
+        icon_badge.setFixedSize(SUMMARY_ICON_BADGE_SIZE, SUMMARY_ICON_BADGE_SIZE)
+        badge_layout = QVBoxLayout(icon_badge)
+        badge_layout.setContentsMargins(0, 0, 0, 0)
+        icon = QLabel(icon_text)
+        icon.setObjectName("summaryIcon")
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge_layout.addWidget(icon)
+
+        text_column = QVBoxLayout()
+        text_column.setContentsMargins(0, 0, 0, 0)
+        text_column.setSpacing(ANALYTICS_SUMMARY_CARD_SPACING)
 
         label = QLabel(label_text)
         label.setObjectName("summaryLabel")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         value = QLabel(value_text)
         value.setObjectName("summaryValue")
-        value.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(label)
-        layout.addWidget(value)
+        text_column.addWidget(label)
+        text_column.addWidget(value)
+        text_column.addStretch()
+
+        layout.addWidget(icon_badge, alignment=Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(text_column, stretch=1)
         return frame
+
+    def _make_completeness_indicator(self):
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+
+        root = QWidget()
+        root.setObjectName("completenessIndicatorRoot")
+        root_layout = QVBoxLayout(root)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(6)
+
+        indicator_row = QWidget()
+        indicator_row.setObjectName("completenessIndicator")
+        row_layout = QHBoxLayout(indicator_row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
+
+        dot = QFrame()
+        dot.setObjectName("completenessDot")
+        dot.setFixedSize(COMPLETENESS_DOT_SIZE, COMPLETENESS_DOT_SIZE)
+
+        status_label = QLabel("Полнота dataset")
+        status_label.setObjectName("completenessStatus")
+
+        details_button = QPushButton("Подробнее")
+        details_button.setObjectName("completenessDetailsButton")
+        details_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        details_button.setFlat(True)
+        details_button.setVisible(False)
+        details_button.clicked.connect(self._toggle_completeness_details)
+
+        row_layout.addWidget(dot, alignment=Qt.AlignmentFlag.AlignVCenter)
+        row_layout.addWidget(status_label, alignment=Qt.AlignmentFlag.AlignVCenter)
+        row_layout.addStretch()
+        row_layout.addWidget(details_button, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        details_frame = QFrame()
+        details_frame.setObjectName("analyticsCompletenessDetails")
+        details_frame.setVisible(False)
+        details_layout = QVBoxLayout(details_frame)
+        details_layout.setContentsMargins(12, 10, 12, 10)
+        details_layout.setSpacing(ANALYTICS_COMPLETENESS_ROW_SPACING)
+
+        root_layout.addWidget(indicator_row)
+        root_layout.addWidget(details_frame)
+
+        self._completeness_dot = dot
+        self._completeness_status_label = status_label
+        self._completeness_details_button = details_button
+        self._completeness_details_frame = details_frame
+        return root, details_layout
+
+    def _set_completeness_dot_status(self, is_ok: bool) -> None:
+        status = "ok" if is_ok else "bad"
+        if self._completeness_dot.property("status") == status:
+            return
+        self._completeness_dot.setProperty("status", status)
+        self._completeness_dot.style().unpolish(self._completeness_dot)
+        self._completeness_dot.style().polish(self._completeness_dot)
+
+    def _toggle_completeness_details(self) -> None:
+        self._completeness_details_expanded = not self._completeness_details_expanded
+        self._completeness_details_frame.setVisible(self._completeness_details_expanded)
+        self._completeness_details_button.setText(
+            "Скрыть" if self._completeness_details_expanded else "Подробнее"
+        )
+
+    def _fill_completeness(self, completeness: dict) -> None:
+        summary = summarize_dataset_completeness(completeness)
+        self._completeness_items_by_key = {
+            str(item.get("key")): item for item in completeness.get("items", []) if isinstance(item, dict)
+        }
+
+        self._set_completeness_dot_status(summary["is_ok"])
+        self._completeness_status_label.setText(summary["status_text"])
+        self._completeness_details_button.setVisible(summary["is_ok"] is False)
+
+        if summary["is_ok"]:
+            self._completeness_details_expanded = False
+            self._completeness_details_frame.setVisible(False)
+            self._completeness_details_button.setText("Подробнее")
+
+        _clear_layout(self._completeness_layout)
+        items_by_key = self._completeness_items_by_key
+        issue_keys = {str(item.get("key")) for item in summary["issues"]}
+        for field_key in DATASET_COMPLETENESS_DISPLAY_KEYS:
+            if field_key not in issue_keys:
+                continue
+            item = items_by_key.get(field_key)
+            if item is None:
+                continue
+            self._completeness_layout.addWidget(self._make_completeness_row(item))
+
+    def _make_completeness_row(self, item: dict):
+        from PyQt6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QWidget
+
+        row = QWidget()
+        row.setObjectName("completenessRow")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        label = QLabel(f"{item['label']} {item['count']}/{item['total']}")
+        label.setObjectName("completenessRowLabel")
+        label.setMinimumWidth(150)
+
+        progress = QProgressBar()
+        progress.setObjectName("completenessProgress")
+        progress.setRange(0, 100)
+        progress.setValue(int(round(float(item.get("percent") or 0))))
+        progress.setTextVisible(False)
+        progress.setFixedHeight(ANALYTICS_COMPLETENESS_BAR_HEIGHT)
+
+        layout.addWidget(label)
+        layout.addWidget(progress, stretch=1)
+        return row
 
     def _fill_insights(self, insights: list[str]) -> None:
         _clear_layout(self._insights_layout)
@@ -311,12 +536,28 @@ class AnalyticsView:
             self._insights_layout.addWidget(self._make_insight_line(text))
 
     def _make_insight_line(self, text: str):
-        from PyQt6.QtWidgets import QLabel
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QWidget
+
+        row = QWidget()
+        row.setObjectName("insightRow")
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        bullet = QLabel("●")
+        bullet.setObjectName("insightBullet")
+        bullet.setFixedWidth(12)
+        bullet.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
         label = QLabel(text)
         label.setObjectName("insightText")
         label.setWordWrap(True)
-        return label
+        label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
+
+        layout.addWidget(bullet, alignment=Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(label, stretch=1)
+        return row
 
     def _fill_distribution(self, points: list[dict]) -> None:
         _clear_layout(self._distribution_layout)

@@ -40,6 +40,7 @@ PyQt widget (desktop/*)
 | Редактирование `user_score` | `app.py` → `update_dataset_record` | done |
 | Удаление watched | `app.py` → `delete_record.delete_watched_record` | done |
 | Analytics KPI / dense / insights | [desktop/analytics_view.py](../desktop/analytics_view.py) | done |
+| Analytics «Полнота dataset» | `score_analytics.py` + `analytics_view.py` | done |
 | Bar «Распределение оценок» | `analytics_view.py` + [desktop/plotly_charts.py](../desktop/plotly_charts.py) + [dataset/score_analytics.py](../dataset/score_analytics.py) (`chart_distribution`) | done |
 | Layout-контракт | [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) | done |
 
@@ -90,6 +91,7 @@ Pipeline для **каждого** нового графика:
 
 Порядок добавления:
 
+- [x] **2.2.0** Read-only «Полнота dataset» — done (`build_dataset_completeness*`, блок между KPI и «Коротко»).
 - [x] **2.2.1** Распределение по корзинам — done (`chart_distribution`).
 - [ ] **2.2.2** Мои оценки по годам (bar/line).
 - [ ] **2.2.3** Средняя оценка по годам.

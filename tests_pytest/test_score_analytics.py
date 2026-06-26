@@ -1,5 +1,7 @@
 from dataset.score_analytics import (
     build_dense_score_rows,
+    build_dataset_completeness,
+    build_dataset_completeness_from_entries,
     build_score_analytics,
     build_score_count_points,
     build_score_distribution,
@@ -7,6 +9,7 @@ from dataset.score_analytics import (
     build_score_insights,
     build_score_summary,
     collect_user_scores,
+    summarize_dataset_completeness,
 )
 
 
@@ -210,3 +213,109 @@ def test_build_score_analytics() -> None:
     ]
     assert analytics["dense_scores"][0]["titles"] == ["Bravo"]
     assert len(analytics["insights"]) == 3
+    assert analytics["dataset_completeness"]["total"] == 2
+
+
+def _full_card(**overrides) -> dict:
+    card = {
+        "user_score": 8.0,
+        "year": 2020,
+        "genres": ["Драма"],
+        "imdb_score": 7.5,
+        "kp_score": 7.0,
+        "overview": "Описание фильма.",
+        "poster_url": "https://example.com/poster.jpg",
+        "poster_path": None,
+        "poster_src": "https://example.com/poster.jpg",
+    }
+    card.update(overrides)
+    return card
+
+
+def test_dataset_completeness_empty() -> None:
+    result = build_dataset_completeness({})
+
+    assert result["total"] == 0
+    assert result["overall_percent"] == 0.0
+    assert len(result["items"]) == 7
+    assert all(item["count"] == 0 for item in result["items"])
+    assert all(item["percent"] == 0.0 for item in result["items"])
+
+
+def test_dataset_completeness_full_entries() -> None:
+    movie = _movie(8.0, "Alpha")
+    result = build_dataset_completeness_from_entries([("Alpha", movie, _full_card())])
+
+    assert result["total"] == 1
+    assert result["overall_percent"] == 100.0
+    assert all(item["percent"] == 100.0 for item in result["items"])
+
+
+def test_dataset_completeness_partial_entries() -> None:
+    movie = _movie(8.0, "Alpha")
+    entries = [
+        ("A", movie, _full_card()),
+        ("B", movie, _full_card(poster_url=None, poster_path=None, poster_src=None)),
+        ("C", movie, _full_card(overview="")),
+        ("D", movie, _full_card(imdb_score=None)),
+        ("E", movie, _full_card(kp_score=None)),
+        ("F", movie, _full_card(genres=[])),
+        ("G", movie, _full_card(year=None)),
+    ]
+    result = build_dataset_completeness_from_entries(entries)
+
+    assert result["total"] == 7
+    by_key = {item["key"]: item for item in result["items"]}
+    assert by_key["poster"]["count"] == 6
+    assert by_key["description"]["count"] == 6
+    assert by_key["imdb"]["count"] == 6
+    assert by_key["kp"]["count"] == 6
+    assert by_key["genres"]["count"] == 6
+    assert by_key["year"]["count"] == 6
+    assert by_key["user_score"]["count"] == 7
+
+
+def test_dataset_completeness_reads_raw_scores_without_card_fields() -> None:
+    movie = {
+        "main_info": {"title": "Alpha", "user_score": 8.0, "year": 2020},
+        "raw_scores": {"imdb_score": 7.8, "kp_score": 6.9},
+        "genres": ["Драма"],
+        "overview": "Есть описание.",
+        "poster_url": "https://example.com/a.jpg",
+    }
+    result = build_dataset_completeness_from_entries([("Alpha", movie, {})])
+
+    by_key = {item["key"]: item for item in result["items"]}
+    assert by_key["imdb"]["count"] == 1
+    assert by_key["kp"]["count"] == 1
+    assert by_key["description"]["count"] == 1
+    assert by_key["poster"]["count"] == 1
+
+
+def test_summarize_dataset_completeness_ok() -> None:
+    movie = _movie(8.0, "Alpha")
+    completeness = build_dataset_completeness_from_entries([("Alpha", movie, _full_card())])
+    summary = summarize_dataset_completeness(completeness)
+
+    assert summary["is_ok"] is True
+    assert summary["issues"] == []
+    assert summary["status_text"] == "Dataset заполнен полностью"
+
+
+def test_summarize_dataset_completeness_with_issues() -> None:
+    movie = _movie(8.0, "Alpha")
+    completeness = build_dataset_completeness_from_entries(
+        [("Alpha", movie, _full_card(kp_score=None))]
+    )
+    summary = summarize_dataset_completeness(completeness)
+
+    assert summary["is_ok"] is False
+    assert any(item["key"] == "kp" for item in summary["issues"])
+    assert summary["status_text"].startswith("Полнота dataset —")
+
+
+def test_summarize_dataset_completeness_empty() -> None:
+    summary = summarize_dataset_completeness(build_dataset_completeness({}))
+
+    assert summary["is_ok"] is False
+    assert summary["status_text"] == "Нет записей в watched-базе"

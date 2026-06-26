@@ -173,7 +173,16 @@ Layout-правила обязательны при GUI-polish. Точечные
 2. `QScrollArea` с `widgetResizable=True`: контент analytics **не** растягивается на всю высоту viewport.
 3. Read-only текстовые блоки (insights, overview-подобные секции, fallback): vertical size policy **`Minimum`**.
 4. Один `addStretch(1)` в **конце** root-layout analytics — пустота **под** контентом, не внутри серых карточек.
-5. Секции (`Коротко`, `Распределение`, `Одинаковые оценки`) — в `#analyticsSection`; padding/spacing менять **шкалой** (root → section → row), не точечно в одном месте.
+5. Секции (`Коротко`, `Распределение`, `Одинаковые оценки`) — в `#analyticsSection`; блок полноты — `#analyticsCompleteness`; padding/spacing менять **шкалой** (root → section → row), не точечно в одном месте.
+
+### Analytics: «Полнота dataset»
+
+Реализация: `dataset/score_analytics.py` (`build_dataset_completeness*`, `summarize_dataset_completeness`) + `AnalyticsView._fill_completeness`.
+
+1. Компактный read-only индикатор между KPI и «Коротко»: `#completenessDot` + `#completenessStatus`.
+2. Зелёный dot — все поля 100%; красный — есть пропуски или база пуста.
+3. Кнопка «Подробнее» только при проблемах; раскрывает `#analyticsCompletenessDetails` со строками только для неполных полей.
+4. Без иконок/emoji; без Plotly; без write в JSON.
 
 ### Analytics: KPI-карточки (Всего / Средняя / …)
 

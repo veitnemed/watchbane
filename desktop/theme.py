@@ -23,6 +23,7 @@ COLOR_ACCENT = "#10a37f"
 COLOR_ACCENT_HOVER = "#13b98f"
 COLOR_ACCENT_SOFT = "#1f3f36"
 COLOR_ACCENT_PLOT_HOVER = "#35caa5"
+COLOR_ACCENT_PLOT_FILL = "rgba(16, 163, 127, 0.22)"
 
 COLOR_ADD_BUTTON = "#1f4d3d"
 COLOR_ADD_BUTTON_BORDER = "#1a4234"
@@ -652,11 +653,29 @@ QLabel#analyticsSubtitle {{
 }}
 QFrame#summaryCard,
 QFrame#analyticsSection,
+QFrame#analyticsCompletenessDetails,
 QFrame#insightCard,
 QFrame#sameScoreCard {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
     border-radius: {RADIUS_CARD}px;
+}}
+QFrame#summaryIconBadge,
+QFrame#sectionHeaderIconBadge {{
+    background-color: {COLOR_ACCENT_SOFT};
+    border: 1px solid {COLOR_ACCENT};
+    border-radius: 18px;
+}}
+QLabel#summaryIcon,
+QLabel#sectionHeaderIcon {{
+    background: transparent;
+    color: {COLOR_ACCENT_PLOT_HOVER};
+    font-size: 15px;
+    font-weight: 700;
+}}
+QWidget#sectionHeader,
+QWidget#insightRow {{
+    background: transparent;
 }}
 QLabel#summaryLabel,
 QLabel#barLabel,
@@ -665,6 +684,11 @@ QLabel#denseTitles {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
     font-size: {font_summary_label}px;
+}}
+QLabel#insightBullet {{
+    background: transparent;
+    color: {COLOR_ACCENT};
+    font-size: 10px;
 }}
 QLabel#insightText {{
     background: transparent;
@@ -682,6 +706,65 @@ QLabel#sectionTitle {{
     color: {COLOR_TEXT};
     font-size: {font_section_title}px;
     font-weight: 700;
+}}
+QLabel#sectionHeaderMenu {{
+    background: transparent;
+    color: {COLOR_TEXT_MUTED};
+    font-size: 18px;
+    font-weight: 700;
+    padding: 0 2px;
+}}
+QLabel#completenessStatus {{
+    background: transparent;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {font_summary_label}px;
+}}
+QWidget#completenessIndicator,
+QWidget#completenessIndicatorRoot {{
+    background: transparent;
+}}
+QFrame#completenessDot {{
+    border: none;
+    border-radius: 4px;
+    min-width: 8px;
+    max-width: 8px;
+    min-height: 8px;
+    max-height: 8px;
+}}
+QFrame#completenessDot[status="ok"] {{
+    background-color: {COLOR_ACCENT};
+}}
+QFrame#completenessDot[status="bad"] {{
+    background-color: {COLOR_DELETE_BUTTON};
+}}
+QPushButton#completenessDetailsButton {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    border: none;
+    font-size: {font_summary_label}px;
+    padding: 0 4px;
+}}
+QPushButton#completenessDetailsButton:hover {{
+    color: {COLOR_TEXT};
+}}
+QWidget#completenessRow {{
+    background: transparent;
+}}
+QLabel#completenessRowLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {font_summary_label}px;
+}}
+QProgressBar#completenessProgress {{
+    background-color: {COLOR_CARD_ALT};
+    border: none;
+    border-radius: {RADIUS_BAR}px;
+    min-height: 6px;
+    max-height: 6px;
+}}
+QProgressBar#completenessProgress::chunk {{
+    background-color: {COLOR_ACCENT};
+    border-radius: {RADIUS_BAR}px;
 }}
 QFrame#barTrack {{
     background-color: {COLOR_CARD_ALT};

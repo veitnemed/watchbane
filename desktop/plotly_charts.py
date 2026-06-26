@@ -6,6 +6,7 @@ from html import escape
 
 from desktop.theme import (
     COLOR_ACCENT,
+    COLOR_ACCENT_PLOT_FILL,
     COLOR_ACCENT_PLOT_HOVER,
     COLOR_BORDER,
     COLOR_CARD,
@@ -25,7 +26,7 @@ GRID_COLOR = COLOR_BORDER
 BAR_COLOR = COLOR_ACCENT
 BAR_HOVER_COLOR = COLOR_ACCENT_PLOT_HOVER
 PLOT_FONT_FAMILY = f"{FONT_FAMILY}, {FONT_FAMILY_FALLBACK}"
-SCORE_CHART_HEIGHT = 280
+SCORE_CHART_HEIGHT = 320
 SCORE_DISTRIBUTION_CHART_HEIGHT = 280
 
 
@@ -143,7 +144,7 @@ def _format_score_count_hover(point: dict) -> str:
 
     lines = [
         f"Оценка: {score:.1f}",
-        f"{count} сериалов",
+        f"{count} тайтлов",
     ]
     if examples:
         lines.append(f"Примеры: {', '.join(examples)}")
@@ -169,12 +170,14 @@ def build_score_count_figure(points: list[dict]):
                 x=scores,
                 y=counts,
                 mode="lines+markers",
-                line={"color": BAR_COLOR, "width": 2, "shape": "spline"},
+                line={"color": BAR_COLOR, "width": 2.5, "shape": "spline"},
                 marker={
-                    "size": 9,
+                    "size": 8,
                     "color": BAR_COLOR,
-                    "line": {"color": BAR_HOVER_COLOR, "width": 1},
+                    "line": {"color": BAR_HOVER_COLOR, "width": 1.5},
                 },
+                fill="tozeroy",
+                fillcolor=COLOR_ACCENT_PLOT_FILL,
                 hovertext=hover_texts,
                 hovertemplate="%{hovertext}<extra></extra>",
             )
@@ -185,7 +188,7 @@ def build_score_count_figure(points: list[dict]):
         plot_bgcolor=PLOT_BG,
         font={"color": TEXT_COLOR, "family": PLOT_FONT_FAMILY, "size": 12},
         height=SCORE_CHART_HEIGHT,
-        margin={"l": 48, "r": 12, "t": 6, "b": 48},
+        margin={"l": 52, "r": 16, "t": 8, "b": 52},
         hoverlabel={
             "bgcolor": COLOR_CARD_ALT,
             "bordercolor": GRID_COLOR,

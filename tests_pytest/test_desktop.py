@@ -817,9 +817,28 @@ def test_analytics_distribution_uses_score_count_points() -> None:
 
     source = inspect.getsource(analytics_view_module.AnalyticsView.update_entries)
     assert 'analytics["score_count_points"]' in source
+    assert 'analytics["dataset_completeness"]' in source
+    assert "_fill_completeness" in source
     fill_distribution_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_distribution)
     assert "build_score_count_html" in fill_distribution_source
     assert "SCORE_CHART_HEIGHT" in fill_distribution_source
+
+
+def test_analytics_renders_dataset_completeness_block() -> None:
+    import inspect
+
+    import desktop.analytics_view as analytics_view_module
+
+    indicator_source = inspect.getsource(analytics_view_module.AnalyticsView._make_completeness_indicator)
+    assert "completenessDot" in indicator_source
+    assert "completenessStatus" in indicator_source
+    assert "completenessDetailsButton" in indicator_source
+    init_source = inspect.getsource(analytics_view_module.AnalyticsView.__init__)
+    assert "_make_completeness_indicator" in init_source
+    fill_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_completeness)
+    assert "summarize_dataset_completeness" in fill_source
+    row_source = inspect.getsource(analytics_view_module.AnalyticsView._make_completeness_row)
+    assert "completenessProgress" in row_source
 
 
 def test_score_count_chart_height_matches_plotly_constant() -> None:
@@ -827,6 +846,38 @@ def test_score_count_chart_height_matches_plotly_constant() -> None:
 
     figure = build_score_count_figure([{"score": 8.5, "count": 2, "example_titles": ["A"], "extra_count": 0}])
     assert figure.layout.height == SCORE_CHART_HEIGHT
+    assert figure.data[0].fill == "tozeroy"
+
+
+def test_analytics_summary_cards_use_icon_badges() -> None:
+    import inspect
+
+    import desktop.analytics_view as analytics_view_module
+
+    source = inspect.getsource(analytics_view_module.AnalyticsView._make_summary_card)
+    assert "summaryIconBadge" in source
+    assert "summaryIcon" in source
+    assert "Expanding" in source
+
+
+def test_analytics_insights_use_bullet_rows() -> None:
+    import inspect
+
+    import desktop.analytics_view as analytics_view_module
+
+    source = inspect.getsource(analytics_view_module.AnalyticsView._make_insight_line)
+    assert "insightBullet" in source
+    assert "insightRow" in source
+
+
+def test_analytics_section_headers_use_icons() -> None:
+    import inspect
+
+    import desktop.analytics_view as analytics_view_module
+
+    source = inspect.getsource(analytics_view_module.AnalyticsView._make_section_header)
+    assert "sectionHeaderIconBadge" in source
+    assert "sectionTitle" in source
 
 
 def test_format_list_label() -> None:
