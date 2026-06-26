@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
@@ -132,6 +133,49 @@ def filter_entries_by_user_score(
     return result
 
 
+def _coerce_filter_year(value) -> int | None:
+    if value is None:
+        return None
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        return None
+    return year
+
+
+def _entry_year(entry: WatchedEntry) -> int | None:
+    _key, movie, card = entry
+    main_info = movie.get("main_info", {}) if isinstance(movie, dict) else {}
+    if isinstance(main_info, dict):
+        year = _coerce_filter_year(main_info.get("year"))
+        if year is not None:
+            return year
+    return _coerce_filter_year(card.get("year"))
+
+
+def filter_entries_by_year(
+    entries: list[WatchedEntry],
+    year_from: int | None = None,
+    year_to: int | None = None,
+) -> list[WatchedEntry]:
+    """Return entries whose main year is inside the inclusive range."""
+    lower = YEAR_FILTER_MIN if year_from is None else int(year_from)
+    upper = YEAR_FILTER_MAX if year_to is None else int(year_to)
+    if lower > upper:
+        lower, upper = upper, lower
+    if lower <= YEAR_FILTER_MIN and upper >= YEAR_FILTER_MAX:
+        return list(entries)
+
+    result: list[WatchedEntry] = []
+    for entry in entries:
+        year = _entry_year(entry)
+        if year is None:
+            continue
+        if lower <= year <= upper:
+            result.append(entry)
+    return result
+
+
 def sort_entries(entries: list[WatchedEntry], sort_key: str) -> list[WatchedEntry]:
     """Return a sorted copy of entries without mutating source data."""
     items = list(entries)
@@ -157,10 +201,13 @@ def apply_view(
     sort_key: str,
     min_score: float | None = None,
     max_score: float | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
 ) -> list[WatchedEntry]:
     """Filter and sort entries for display."""
     filtered = filter_by_title(entries, query)
     filtered = filter_entries_by_user_score(filtered, min_score, max_score)
+    filtered = filter_entries_by_year(filtered, year_from, year_to)
     return sort_entries(filtered, sort_key)
 
 
@@ -183,6 +230,10 @@ def format_user_score_display(user_score) -> str:
 USER_SCORE_MIN = 0.0
 USER_SCORE_MAX = 10.0
 USER_SCORE_STEP = 0.1
+YEAR_FILTER_MIN = 1900
+YEAR_FILTER_MAX = 2100
+YEAR_FILTER_DEFAULT_FROM = 2000
+YEAR_FILTER_DEFAULT_TO = date.today().year
 
 
 def normalize_user_score_value(score) -> float:
@@ -363,12 +414,14 @@ def format_watched_list_status(
     total_count: int,
     query: str = "",
     has_score_filter: bool = False,
+    has_year_filter: bool = False,
 ) -> str:
     """Status bar text for watched list filter results."""
     normalized = query.strip()
+    has_filter = bool(normalized) or has_score_filter or has_year_filter
     if visible_count == 0:
-        return "Ничего не найдено" if normalized or has_score_filter else "Список пуст"
-    if normalized or has_score_filter:
+        return "Ничего не найдено" if has_filter else "Список пуст"
+    if has_filter:
         return f"Показано {visible_count} из {total_count}"
     return f"Всего {visible_count}"
 

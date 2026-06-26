@@ -149,17 +149,87 @@ def test_filter_entries_by_user_score_swaps_invalid_range() -> None:
     assert [entry[0] for entry in filtered] == ["Alpha", "Charlie"]
 
 
-def test_apply_view_combines_title_score_filter_and_sort() -> None:
+def test_filter_entries_by_year_empty() -> None:
+    from desktop.watched_view import filter_entries_by_year
+
+    assert filter_entries_by_year([], 2015, 2026) == []
+
+
+def test_filter_entries_by_year_range() -> None:
+    from desktop.watched_view import filter_entries_by_year
+
+    entries = _make_entries()
+
+    filtered = filter_entries_by_year(entries, 2015, 2026)
+
+    assert [entry[0] for entry in filtered] == ["Alpha", "Bravo", "Charlie"]
+
+
+def test_filter_entries_by_year_exact_year() -> None:
+    from desktop.watched_view import filter_entries_by_year
+
+    entries = [
+        ("Old", _make_movie("Old", 7.0, 2022), {"title": "Old", "user_score": 7.0, "year": 2022}),
+        ("Exact", _make_movie("Exact", 8.0, 2023), {"title": "Exact", "user_score": 8.0, "year": 2023}),
+    ]
+
+    filtered = filter_entries_by_year(entries, 2023, 2023)
+
+    assert [entry[0] for entry in filtered] == ["Exact"]
+
+
+def test_filter_entries_by_year_string_and_invalid_years() -> None:
+    from desktop.watched_view import filter_entries_by_year
+
+    entries = [
+        ("String Year", {"main_info": {"year": "2020"}}, {"title": "String Year", "user_score": 7.5}),
+        ("Missing Year", {"main_info": {}}, {"title": "Missing Year", "user_score": 8.0}),
+        ("Invalid Year", {"main_info": {"year": "abc"}}, {"title": "Invalid Year", "user_score": 8.0}),
+    ]
+
+    filtered = filter_entries_by_year(entries, 2019, 2021)
+
+    assert [entry[0] for entry in filtered] == ["String Year"]
+
+
+def test_filter_entries_by_year_swaps_invalid_range() -> None:
+    from desktop.watched_view import filter_entries_by_year
+
+    entries = _make_entries()
+
+    filtered = filter_entries_by_year(entries, 2022, 2020)
+
+    assert [entry[0] for entry in filtered] == ["Alpha", "Charlie"]
+
+
+def test_apply_view_combines_title_score_year_filter_and_sort() -> None:
     from desktop.watched_view import apply_view
 
     entries = [
         *_make_entries(),
         ("Bravo Low", _make_movie("Bravo Low", 6.0, 2017, 7.0), {"title": "Bravo Low", "user_score": 6.0, "year": 2017}),
+        ("Bravo New", _make_movie("Bravo New", 8.5, 2024, 7.0), {"title": "Bravo New", "user_score": 8.5, "year": 2024}),
     ]
 
-    filtered = apply_view(entries, "bravo", "user_score", 7.0, 10.0)
+    filtered = apply_view(entries, "bravo", "user_score", 7.0, 10.0, 2018, 2023)
 
     assert [entry[0] for entry in filtered] == ["Bravo"]
+
+
+def test_apply_view_empty_after_year_filter() -> None:
+    from desktop.watched_view import apply_view
+
+    filtered = apply_view(_make_entries(), "", "user_score", 0.0, 10.0, 1990, 1995)
+
+    assert filtered == []
+
+
+def test_apply_view_sorts_after_year_filter() -> None:
+    from desktop.watched_view import apply_view
+
+    filtered = apply_view(_make_entries(), "", "year", 0.0, 10.0, 2019, 2022)
+
+    assert [entry[0] for entry in filtered] == ["Charlie", "Alpha"]
 
 
 def test_sort_by_user_score() -> None:
@@ -354,8 +424,10 @@ def test_format_watched_list_status() -> None:
     assert format_watched_list_status(12, 12, "") == "Всего 12"
     assert format_watched_list_status(3, 12, "alpha") == "Показано 3 из 12"
     assert format_watched_list_status(3, 12, "", True) == "Показано 3 из 12"
+    assert format_watched_list_status(3, 12, "", False, True) == "Показано 3 из 12"
     assert format_watched_list_status(0, 12, "missing") == "Ничего не найдено"
     assert format_watched_list_status(0, 12, "", True) == "Ничего не найдено"
+    assert format_watched_list_status(0, 12, "", False, True) == "Ничего не найдено"
     assert format_watched_list_status(0, 0, "") == "Список пуст"
 
 
