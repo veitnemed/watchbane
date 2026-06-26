@@ -96,6 +96,42 @@ def filter_by_title(entries: list[WatchedEntry], query: str) -> list[WatchedEntr
     return result
 
 
+def _coerce_filter_score(value) -> float | None:
+    if value is None:
+        return None
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    if score < USER_SCORE_MIN or score > USER_SCORE_MAX:
+        return None
+    return score
+
+
+def filter_entries_by_user_score(
+    entries: list[WatchedEntry],
+    min_score: float | None = None,
+    max_score: float | None = None,
+) -> list[WatchedEntry]:
+    """Return entries whose user_score is inside the inclusive range."""
+    lower = USER_SCORE_MIN if min_score is None else float(min_score)
+    upper = USER_SCORE_MAX if max_score is None else float(max_score)
+    if lower > upper:
+        lower, upper = upper, lower
+    if lower <= USER_SCORE_MIN and upper >= USER_SCORE_MAX:
+        return list(entries)
+
+    result: list[WatchedEntry] = []
+    for entry in entries:
+        _key, _movie, card = entry
+        score = _coerce_filter_score(card.get("user_score"))
+        if score is None:
+            continue
+        if lower <= score <= upper:
+            result.append(entry)
+    return result
+
+
 def sort_entries(entries: list[WatchedEntry], sort_key: str) -> list[WatchedEntry]:
     """Return a sorted copy of entries without mutating source data."""
     items = list(entries)
@@ -115,9 +151,17 @@ def sort_entries(entries: list[WatchedEntry], sort_key: str) -> list[WatchedEntr
     return sorted(items, key=numeric_sort_key, reverse=True)
 
 
-def apply_view(entries: list[WatchedEntry], query: str, sort_key: str) -> list[WatchedEntry]:
+def apply_view(
+    entries: list[WatchedEntry],
+    query: str,
+    sort_key: str,
+    min_score: float | None = None,
+    max_score: float | None = None,
+) -> list[WatchedEntry]:
     """Filter and sort entries for display."""
-    return sort_entries(filter_by_title(entries, query), sort_key)
+    filtered = filter_by_title(entries, query)
+    filtered = filter_entries_by_user_score(filtered, min_score, max_score)
+    return sort_entries(filtered, sort_key)
 
 
 def _round_one_decimal(value) -> str:
@@ -314,12 +358,17 @@ def format_list_label(card: dict) -> str:
     return label
 
 
-def format_watched_list_status(visible_count: int, total_count: int, query: str = "") -> str:
+def format_watched_list_status(
+    visible_count: int,
+    total_count: int,
+    query: str = "",
+    has_score_filter: bool = False,
+) -> str:
     """Status bar text for watched list filter results."""
     normalized = query.strip()
     if visible_count == 0:
-        return "Ничего не найдено" if normalized else "Список пуст"
-    if normalized:
+        return "Ничего не найдено" if normalized or has_score_filter else "Список пуст"
+    if normalized or has_score_filter:
         return f"Показано {visible_count} из {total_count}"
     return f"Всего {visible_count}"
 

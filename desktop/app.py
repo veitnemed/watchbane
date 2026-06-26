@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMenu,
+    QPushButton,
     QScrollArea,
     QSplitter,
     QTabWidget,
@@ -197,6 +198,8 @@ class WatchedMoviesWindow(QMainWindow):
         self._sort_combo.currentIndexChanged.connect(self._on_filters_changed)
         layout.addWidget(self._sort_combo)
 
+        layout.addWidget(self._build_score_filter_panel())
+
         self._list_widget = QListWidget()
         self._list_widget.setObjectName("watchedList")
         self._list_widget.setSpacing(2)
@@ -207,6 +210,86 @@ class WatchedMoviesWindow(QMainWindow):
         layout.addWidget(self._list_widget, stretch=1)
 
         return panel
+
+    def _build_score_filter_panel(self) -> QWidget:
+        frame = QFrame()
+        frame.setObjectName("watchedScoreFilter")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(10, 8, 10, 10)
+        layout.setSpacing(8)
+
+        header_row = QHBoxLayout()
+        header_row.setContentsMargins(0, 0, 0, 0)
+        title = QLabel("Оценка")
+        title.setObjectName("watchedScoreFilterTitle")
+        header_row.addWidget(title)
+        header_row.addStretch()
+
+        reset_button = QPushButton("Сбросить")
+        reset_button.setObjectName("watchedScoreReset")
+        reset_button.clicked.connect(self._reset_score_filter)
+        header_row.addWidget(reset_button)
+        layout.addLayout(header_row)
+
+        score_row = QHBoxLayout()
+        score_row.setContentsMargins(0, 0, 0, 0)
+        score_row.setSpacing(6)
+
+        min_label = QLabel("от")
+        min_label.setObjectName("watchedScoreFilterLabel")
+        score_row.addWidget(min_label)
+        self._score_min_input = QDoubleSpinBox()
+        self._score_min_input.setObjectName("watchedScoreMin")
+        self._configure_score_filter_spinbox(self._score_min_input, USER_SCORE_MIN)
+        self._score_min_input.valueChanged.connect(self._on_score_min_changed)
+        score_row.addWidget(self._score_min_input)
+
+        max_label = QLabel("до")
+        max_label.setObjectName("watchedScoreFilterLabel")
+        score_row.addWidget(max_label)
+        self._score_max_input = QDoubleSpinBox()
+        self._score_max_input.setObjectName("watchedScoreMax")
+        self._configure_score_filter_spinbox(self._score_max_input, USER_SCORE_MAX)
+        self._score_max_input.valueChanged.connect(self._on_score_max_changed)
+        score_row.addWidget(self._score_max_input)
+        layout.addLayout(score_row)
+        return frame
+
+    def _configure_score_filter_spinbox(self, spinbox: QDoubleSpinBox, value: float) -> None:
+        spinbox.setRange(USER_SCORE_MIN, USER_SCORE_MAX)
+        spinbox.setSingleStep(USER_SCORE_STEP)
+        spinbox.setDecimals(1)
+        spinbox.setValue(value)
+
+    def _score_filter_range(self) -> tuple[float, float]:
+        return (self._score_min_input.value(), self._score_max_input.value())
+
+    def _score_filter_active(self) -> bool:
+        min_score, max_score = self._score_filter_range()
+        return min_score > USER_SCORE_MIN or max_score < USER_SCORE_MAX
+
+    def _on_score_min_changed(self, value: float) -> None:
+        if value > self._score_max_input.value():
+            self._score_max_input.blockSignals(True)
+            self._score_max_input.setValue(value)
+            self._score_max_input.blockSignals(False)
+        self._on_filters_changed()
+
+    def _on_score_max_changed(self, value: float) -> None:
+        if value < self._score_min_input.value():
+            self._score_min_input.blockSignals(True)
+            self._score_min_input.setValue(value)
+            self._score_min_input.blockSignals(False)
+        self._on_filters_changed()
+
+    def _reset_score_filter(self) -> None:
+        self._score_min_input.blockSignals(True)
+        self._score_max_input.blockSignals(True)
+        self._score_min_input.setValue(USER_SCORE_MIN)
+        self._score_max_input.setValue(USER_SCORE_MAX)
+        self._score_min_input.blockSignals(False)
+        self._score_max_input.blockSignals(False)
+        self._on_filters_changed()
 
     def _build_right_panel(self) -> QWidget:
         scroll = QScrollArea()
@@ -300,7 +383,8 @@ class WatchedMoviesWindow(QMainWindow):
 
     def _refresh_list(self) -> None:
         query = self._search_input.text()
-        self._visible_entries = apply_view(self._entries, query, self._sort_key)
+        min_score, max_score = self._score_filter_range()
+        self._visible_entries = apply_view(self._entries, query, self._sort_key, min_score, max_score)
 
         self._list_widget.blockSignals(True)
         self._list_widget.clear()
@@ -318,7 +402,9 @@ class WatchedMoviesWindow(QMainWindow):
     def _update_list_status(self) -> None:
         visible = len(self._visible_entries)
         total = len(self._entries)
-        self.statusBar().showMessage(format_watched_list_status(visible, total, self._search_input.text()))
+        self.statusBar().showMessage(
+            format_watched_list_status(visible, total, self._search_input.text(), self._score_filter_active())
+        )
 
     def _on_selection_changed(self, row: int) -> None:
         if row < 0 or row >= len(self._visible_entries):

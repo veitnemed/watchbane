@@ -69,7 +69,7 @@ PyQt widget (desktop/*)
 
 ### 2.1 Watched (только отображение)
 
-- [ ] **2.1.1** Фильтр по диапазону `user_score`.
+- [x] **2.1.1** Фильтр по диапазону `user_score` — done (`desktop.watched_view.filter_entries_by_user_score`, UI min/max в watched left panel).
 - [ ] **2.1.2** Фильтр по году / жанру.
 - [ ] **2.1.3** Счётчик «найдено N» в status bar.
 - [ ] **2.1.4** Быстрый сброс фильтров.

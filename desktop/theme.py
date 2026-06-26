@@ -89,7 +89,7 @@ QMainWindow, QWidget {{
     font-family: {FONT_FAMILY_QSS};
     font-size: {FONT_APP}px;
 }}
-QLineEdit, QComboBox {{
+QLineEdit, QComboBox, QDoubleSpinBox {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
     border-radius: {RADIUS_INPUT}px;
@@ -97,8 +97,18 @@ QLineEdit, QComboBox {{
     color: {COLOR_TEXT};
     selection-background-color: {COLOR_ACCENT};
 }}
-QLineEdit:focus, QComboBox:focus {{
+QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus {{
     border: 1px solid {COLOR_ACCENT};
+}}
+QDoubleSpinBox::up-button,
+QDoubleSpinBox::down-button {{
+    background-color: {COLOR_CARD_ALT};
+    border: none;
+    width: 16px;
+}}
+QDoubleSpinBox::up-button:hover,
+QDoubleSpinBox::down-button:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
 }}
 QComboBox::drop-down {{
     border: none;
@@ -142,6 +152,41 @@ QLineEdit#watchedSearch {{
 }}
 QComboBox#watchedSort {{
     font-size: {FONT_SMALL}px;
+}}
+QFrame#watchedScoreFilter {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_INPUT}px;
+}}
+QLabel#watchedScoreFilterTitle {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+    font-weight: 600;
+}}
+QLabel#watchedScoreFilterLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+}}
+QDoubleSpinBox#watchedScoreMin,
+QDoubleSpinBox#watchedScoreMax {{
+    background-color: {COLOR_SURFACE};
+    font-size: {FONT_SMALL}px;
+    padding: 5px 8px;
+}}
+QPushButton#watchedScoreReset {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON_SMALL}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SMALL}px;
+    font-weight: 600;
+    padding: 6px 10px;
+}}
+QPushButton#watchedScoreReset:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
 }}
 QScrollArea {{
     border: none;

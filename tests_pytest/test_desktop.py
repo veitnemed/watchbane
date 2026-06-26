@@ -99,6 +99,69 @@ def test_filter_by_title() -> None:
     assert [entry[0] for entry in filtered] == ["Bravo"]
 
 
+def test_filter_entries_by_user_score_empty() -> None:
+    from desktop.watched_view import filter_entries_by_user_score
+
+    assert filter_entries_by_user_score([], 7.0, 10.0) == []
+
+
+def test_filter_entries_by_user_score_range() -> None:
+    from desktop.watched_view import filter_entries_by_user_score
+
+    entries = _make_entries()
+
+    filtered = filter_entries_by_user_score(entries, 7.0, 10.0)
+
+    assert [entry[0] for entry in filtered] == ["Alpha", "Bravo", "Charlie"]
+
+
+def test_filter_entries_by_user_score_narrow_range() -> None:
+    from desktop.watched_view import filter_entries_by_user_score
+
+    entries = _make_entries()
+
+    filtered = filter_entries_by_user_score(entries, 8.0, 8.9)
+
+    assert [entry[0] for entry in filtered] == ["Charlie"]
+
+
+def test_filter_entries_by_user_score_string_and_invalid_scores() -> None:
+    from desktop.watched_view import filter_entries_by_user_score
+
+    entries = [
+        ("String Score", {}, {"title": "String Score", "user_score": "7.5"}),
+        ("Missing Score", {}, {"title": "Missing Score"}),
+        ("Invalid Score", {}, {"title": "Invalid Score", "user_score": "bad"}),
+    ]
+
+    filtered = filter_entries_by_user_score(entries, 7.0, 8.0)
+
+    assert [entry[0] for entry in filtered] == ["String Score"]
+
+
+def test_filter_entries_by_user_score_swaps_invalid_range() -> None:
+    from desktop.watched_view import filter_entries_by_user_score
+
+    entries = _make_entries()
+
+    filtered = filter_entries_by_user_score(entries, 9.0, 8.0)
+
+    assert [entry[0] for entry in filtered] == ["Alpha", "Charlie"]
+
+
+def test_apply_view_combines_title_score_filter_and_sort() -> None:
+    from desktop.watched_view import apply_view
+
+    entries = [
+        *_make_entries(),
+        ("Bravo Low", _make_movie("Bravo Low", 6.0, 2017, 7.0), {"title": "Bravo Low", "user_score": 6.0, "year": 2017}),
+    ]
+
+    filtered = apply_view(entries, "bravo", "user_score", 7.0, 10.0)
+
+    assert [entry[0] for entry in filtered] == ["Bravo"]
+
+
 def test_sort_by_user_score() -> None:
     from desktop.watched_view import sort_entries
 
@@ -290,7 +353,9 @@ def test_format_watched_list_status() -> None:
 
     assert format_watched_list_status(12, 12, "") == "Всего 12"
     assert format_watched_list_status(3, 12, "alpha") == "Показано 3 из 12"
+    assert format_watched_list_status(3, 12, "", True) == "Показано 3 из 12"
     assert format_watched_list_status(0, 12, "missing") == "Ничего не найдено"
+    assert format_watched_list_status(0, 12, "", True) == "Ничего не найдено"
     assert format_watched_list_status(0, 0, "") == "Список пуст"
 
 
