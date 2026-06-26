@@ -77,6 +77,22 @@ def test_score_edit_dialog_is_custom_dark_dialog() -> None:
     assert "scoreEditSaveButton" in source
 
 
+def test_add_title_button_is_ui_stub_only() -> None:
+    import desktop.app as app_module
+
+    source = inspect.getsource(app_module.WatchedMoviesWindow)
+    handler_source = inspect.getsource(app_module.WatchedMoviesWindow._show_add_title_stub)
+
+    assert "watchedAddTitle" in source
+    assert "+ Добавить тайтл" in source
+    assert "Добавление тайтла будет добавлено позже." in handler_source
+    assert "План: поиск по названию" in handler_source
+    assert "QMessageBox.information" in handler_source
+    assert "save_" not in handler_source
+    assert "update_dataset_record" not in handler_source
+    assert "load_watched_entries" not in handler_source
+
+
 def test_prepare_card_for_display_does_not_mutate_movie() -> None:
     from desktop.watched_view import prepare_card_for_display
 

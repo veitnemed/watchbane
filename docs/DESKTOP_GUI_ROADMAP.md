@@ -104,6 +104,7 @@ Pipeline для **каждого** нового графика:
 
 ### Задачи
 
+- [x] **3.0** UI-stub будущего добавления watched-тайтла — done (`+ Добавить тайтл` показывает заглушку, без записи данных).
 - [ ] **3.1** Удаление записи — **первый новый write** в GUI:
   - ПКМ → «Удалить запись»;
   - preview dialog через `build_watched_delete_preview()` ([dataset/delete_record.py](../dataset/delete_record.py));

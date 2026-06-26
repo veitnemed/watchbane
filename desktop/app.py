@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QMainWindow,
     QMenu,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSplitter,
@@ -319,6 +320,11 @@ class WatchedMoviesWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
+        self._add_title_button = QPushButton("+ Добавить тайтл")
+        self._add_title_button.setObjectName("watchedAddTitle")
+        self._add_title_button.clicked.connect(self._show_add_title_stub)
+        layout.addWidget(self._add_title_button)
+
         self._search_input = QLineEdit()
         self._search_input.setObjectName("watchedSearch")
         self._search_input.setPlaceholderText("Поиск по названию")
@@ -493,6 +499,13 @@ class WatchedMoviesWindow(QMainWindow):
         self._genre_combo.currentIndexChanged.connect(self._on_filters_changed)
         layout.addWidget(self._genre_combo)
         return frame
+
+    def _show_add_title_stub(self) -> None:
+        QMessageBox.information(
+            self,
+            "Добавить тайтл",
+            "Добавление тайтла будет добавлено позже.\n\nПлан: поиск по названию → preview → подтверждение.",
+        )
 
     def _selected_genre_filter(self) -> str | None:
         genre = self._genre_combo.currentData()

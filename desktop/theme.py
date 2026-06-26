@@ -154,6 +154,19 @@ QListWidget::item:hover {{
 QLineEdit#watchedSearch {{
     font-size: {FONT_BASE}px;
 }}
+QPushButton#watchedAddTitle {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    font-weight: 600;
+    padding: 8px 10px;
+}}
+QPushButton#watchedAddTitle:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
+}}
 QComboBox#watchedSort {{
     font-size: {FONT_SMALL}px;
 }}
