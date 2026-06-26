@@ -22,7 +22,7 @@
 - `desktop/watched_view.py`
 - `tests_pytest/test_desktop.py`
 - `docs/DESKTOP_STYLE_CONTRACT.md`
-- `docs/DESKTOP_GUI_REPORT_2026-06-25.md`
+- `docs/reports/DESKTOP_GUI_REPORT_2026-06-25.md`
 - существующие `.md` документы обновлены ссылками на desktop style contract/report.
 
 ## Как теперь выглядит карточка
@@ -86,4 +86,3 @@ C:\Users\super\AppData\Local\Programs\Python\Python313\python.exe -m pytest
 - `compileall` завершился с exit code 0;
 - `tests/test.py`: `Все проверки пройдены: True`;
 - `pytest`: `91 passed`.
-

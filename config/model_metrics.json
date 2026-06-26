@@ -1,7 +1,7 @@
 {
     "loo_mae": 0.7366230544955431,
-    "is_stale": false,
-    "stale_reason": null,
+    "is_stale": true,
+    "stale_reason": "user_score_changed",
     "updated_at": null,
-    "dataset_changed_at": null
+    "dataset_changed_at": "2026-06-25T15:46:40+00:00"
 }

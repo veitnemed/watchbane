@@ -12,7 +12,8 @@ MUTED_TEXT = "#a1a1aa"
 GRID_COLOR = "#2a2a2e"
 BAR_COLOR = "#10a37f"
 BAR_HOVER_COLOR = "#35caa5"
-SCORE_CHART_HEIGHT = 300
+SCORE_CHART_HEIGHT = 280
+SCORE_DISTRIBUTION_CHART_HEIGHT = 280
 
 
 def _format_hover(row: dict) -> str:
@@ -56,28 +57,29 @@ def build_score_distribution_figure(rows: list[dict]):
         ]
     )
     fig.update_layout(
-        title={"text": "Распределение оценок user_score", "x": 0.02, "xanchor": "left"},
         paper_bgcolor=CHART_BG,
         plot_bgcolor=PLOT_BG,
-        font={"color": TEXT_COLOR, "family": "Arial, sans-serif", "size": 13},
-        height=330,
-        margin={"l": 54, "r": 20, "t": 54, "b": 54},
+        font={"color": TEXT_COLOR, "family": "Segoe UI, Arial, sans-serif", "size": 12},
+        height=SCORE_DISTRIBUTION_CHART_HEIGHT,
+        margin={"l": 48, "r": 12, "t": 6, "b": 48},
+        bargap=0.28,
         hoverlabel={
             "bgcolor": "#1c1c1f",
             "bordercolor": "#2a2a2e",
             "font": {"color": TEXT_COLOR, "size": 12},
         },
         xaxis={
-            "title": "Оценка",
+            "title": {"text": ""},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT},
+            "tickfont": {"color": MUTED_TEXT, "size": 11},
+            "showgrid": False,
         },
         yaxis={
-            "title": "Количество тайтлов",
+            "title": {"text": "Тайтлов", "font": {"color": MUTED_TEXT, "size": 11}},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT},
+            "tickfont": {"color": MUTED_TEXT, "size": 11},
             "rangemode": "tozero",
             "dtick": 1,
         },
@@ -107,6 +109,7 @@ def build_score_distribution_html(rows: list[dict]) -> str:
             padding: 0;
             background: {CHART_BG};
             overflow: hidden;
+            min-height: {SCORE_DISTRIBUTION_CHART_HEIGHT}px;
         }}
         .plotly-graph-div {{
             width: 100% !important;
@@ -165,30 +168,30 @@ def build_score_count_figure(points: list[dict]):
         ]
     )
     fig.update_layout(
-        title={"text": "Сколько сериалов у каждой моей оценки", "x": 0.02, "xanchor": "left"},
         paper_bgcolor=CHART_BG,
         plot_bgcolor=PLOT_BG,
-        font={"color": TEXT_COLOR, "family": "Arial, sans-serif", "size": 13},
+        font={"color": TEXT_COLOR, "family": "Segoe UI, Arial, sans-serif", "size": 12},
         height=SCORE_CHART_HEIGHT,
-        margin={"l": 54, "r": 18, "t": 48, "b": 46},
+        margin={"l": 48, "r": 12, "t": 6, "b": 48},
         hoverlabel={
             "bgcolor": "#1c1c1f",
             "bordercolor": "#2a2a2e",
             "font": {"color": TEXT_COLOR, "size": 12},
         },
         xaxis={
-            "title": "Моя оценка user_score",
+            "title": {"text": "Моя оценка", "font": {"color": MUTED_TEXT, "size": 11}},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT},
+            "tickfont": {"color": MUTED_TEXT, "size": 11},
             "range": _score_axis_range(scores),
             "dtick": 0.5,
+            "showgrid": False,
         },
         yaxis={
-            "title": "Количество сериалов",
+            "title": {"text": "Тайтлов", "font": {"color": MUTED_TEXT, "size": 11}},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT},
+            "tickfont": {"color": MUTED_TEXT, "size": 11},
             "rangemode": "tozero",
             "dtick": 1,
         },
@@ -229,6 +232,7 @@ def build_score_count_html(points: list[dict]) -> str:
             padding: 0;
             background: {CHART_BG};
             overflow: hidden;
+            min-height: {SCORE_CHART_HEIGHT}px;
         }}
         .plotly-graph-div {{
             width: 100% !important;

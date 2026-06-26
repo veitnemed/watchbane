@@ -273,3 +273,102 @@ def test_get_country_display() -> None:
     assert get_country_display({"country": "Россия"}) == "Россия"
     assert get_country_display({"country": ""}) is None
     assert get_country_display({}) is None
+
+
+def test_has_overview_text() -> None:
+    from desktop.watched_view import get_overview_display, has_overview_text
+
+    assert has_overview_text({"overview": "Короткое описание."}) is True
+    assert get_overview_display({"overview": "  Текст  "}) == "Текст"
+    assert has_overview_text({"overview": ""}) is False
+    assert has_overview_text({"overview": "   "}) is False
+    assert has_overview_text({}) is False
+
+
+def test_format_watched_list_status() -> None:
+    from desktop.watched_view import format_watched_list_status
+
+    assert format_watched_list_status(12, 12, "") == "Всего 12"
+    assert format_watched_list_status(3, 12, "alpha") == "Показано 3 из 12"
+    assert format_watched_list_status(0, 12, "missing") == "Ничего не найдено"
+    assert format_watched_list_status(0, 0, "") == "Список пуст"
+
+
+def test_watched_detail_card_layout_contract() -> None:
+    import inspect
+
+    import desktop.watched_view as watched_view_module
+
+    source = inspect.getsource(watched_view_module.WatchedDetailCard)
+    init_source = source.split("def _info_column_content_width", 1)[0]
+
+    assert "info_column.addStretch" not in init_source
+    assert "root.addStretch(1)" in init_source
+    assert "QSizePolicy.Policy.Minimum" in init_source
+    assert "setWordWrap(True)" in init_source
+    assert "maximumHeight" not in init_source
+
+
+def test_watched_detail_card_hides_overview_without_text() -> None:
+    import inspect
+
+    import desktop.watched_view as watched_view_module
+
+    source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
+    assert "has_overview_text(card)" in source
+    assert "_overview_frame.setVisible(False)" in source
+
+
+def test_build_score_count_html_smoke() -> None:
+    from desktop.plotly_charts import build_score_count_html
+
+    html = build_score_count_html(
+        [
+            {
+                "score": 8.5,
+                "count": 3,
+                "example_titles": ["Alpha", "Bravo"],
+                "extra_count": 0,
+            }
+        ]
+    )
+
+    assert "plotly" in html.lower()
+
+
+def test_build_score_distribution_html_smoke() -> None:
+    from desktop.plotly_charts import build_score_distribution_html
+
+    html = build_score_distribution_html(
+        [
+            {
+                "label": "7.0-7.9",
+                "count": 3,
+                "percent": 60.0,
+                "example_titles": ["Alpha", "Bravo"],
+                "extra_count": 0,
+            }
+        ]
+    )
+
+    assert "plotly" in html.lower()
+    assert "7.0-7.9" in html
+
+
+def test_analytics_distribution_uses_score_count_points() -> None:
+    import inspect
+
+    import desktop.analytics_view as analytics_view_module
+
+    source = inspect.getsource(analytics_view_module.AnalyticsView.update_entries)
+    assert 'analytics["score_count_points"]' in source
+    fill_distribution_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_distribution)
+    assert "build_score_count_html" in fill_distribution_source
+    assert "SCORE_CHART_HEIGHT" in fill_distribution_source
+
+
+def test_score_count_chart_height_matches_plotly_constant() -> None:
+    from desktop.plotly_charts import SCORE_CHART_HEIGHT, build_score_count_figure
+
+    figure = build_score_count_figure([{"score": 8.5, "count": 2, "example_titles": ["A"], "extra_count": 0}])
+    assert figure.layout.height == SCORE_CHART_HEIGHT

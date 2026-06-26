@@ -40,6 +40,7 @@ from desktop.watched_view import (
     format_list_label,
     format_save_user_score_status,
     format_user_score_display,
+    format_watched_list_status,
     get_user_score_spin_value,
     load_watched_entries,
     save_watched_user_score,
@@ -79,18 +80,33 @@ QListWidget {
     border: 1px solid #2a2a2e;
     border-radius: 16px;
     padding: 6px;
+    outline: none;
+}
+QListWidget#watchedList {
+    padding: 8px;
 }
 QListWidget::item {
     padding: 10px 12px;
     border-radius: 10px;
     color: #d4d4d8;
+    margin: 1px 0;
 }
 QListWidget::item:selected {
     background-color: #1f3f36;
     color: #f4f4f5;
 }
+QListWidget::item:selected:!active {
+    background-color: #1f3f36;
+    color: #f4f4f5;
+}
 QListWidget::item:hover {
     background-color: #1c1c1f;
+}
+QLineEdit#watchedSearch {
+    font-size: 14px;
+}
+QComboBox#watchedSort {
+    font-size: 13px;
 }
 QScrollArea {
     border: none;
@@ -384,17 +400,23 @@ class WatchedMoviesWindow(QMainWindow):
         layout.setSpacing(10)
 
         self._search_input = QLineEdit()
+        self._search_input.setObjectName("watchedSearch")
         self._search_input.setPlaceholderText("Поиск по названию")
+        self._search_input.setClearButtonEnabled(True)
         self._search_input.textChanged.connect(self._on_filters_changed)
         layout.addWidget(self._search_input)
 
         self._sort_combo = QComboBox()
+        self._sort_combo.setObjectName("watchedSort")
         for sort_key, label in SORT_OPTIONS:
             self._sort_combo.addItem(label, sort_key)
         self._sort_combo.currentIndexChanged.connect(self._on_filters_changed)
         layout.addWidget(self._sort_combo)
 
         self._list_widget = QListWidget()
+        self._list_widget.setObjectName("watchedList")
+        self._list_widget.setSpacing(2)
+        self._list_widget.setUniformItemSizes(True)
         self._list_widget.currentRowChanged.connect(self._on_selection_changed)
         self._list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._list_widget.customContextMenuRequested.connect(self._open_list_context_menu)
@@ -405,6 +427,7 @@ class WatchedMoviesWindow(QMainWindow):
     def _build_right_panel(self) -> QWidget:
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
+        scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         self._detail_card = WatchedDetailCard()
         scroll.setWidget(self._detail_card.widget)
@@ -506,6 +529,12 @@ class WatchedMoviesWindow(QMainWindow):
 
         if self._list_widget.count() == 0:
             self._show_empty_details()
+        self._update_list_status()
+
+    def _update_list_status(self) -> None:
+        visible = len(self._visible_entries)
+        total = len(self._entries)
+        self.statusBar().showMessage(format_watched_list_status(visible, total, self._search_input.text()))
 
     def _on_selection_changed(self, row: int) -> None:
         if row < 0 or row >= len(self._visible_entries):

@@ -95,9 +95,6 @@ SUMMARY_CARD_HEIGHT = 80
 DENSE_SCORE_BADGE_SIZE = 56
 # Сторона квадратного badge с оценкой в «Одинаковые оценки».
 
-PLOTLY_VIEW_HEIGHT = 318
-# Высота интерактивного графика в секции «Распределение оценок».
-
 BAR_TRACK_WIDTH = 330
 # Ширина полосы fallback-графика (legacy helper, сейчас не используется в UI).
 
@@ -388,54 +385,66 @@ class AnalyticsView:
         label.setWordWrap(True)
         return label
 
-    def _fill_distribution(self, distribution: list[dict]) -> None:
+    def _fill_distribution(self, points: list[dict]) -> None:
         _clear_layout(self._distribution_layout)
         self._clear_plotly_html_files()
+
         try:
             from PyQt6.QtCore import QUrl
             from PyQt6.QtWebEngineWidgets import QWebEngineView
         except ImportError as error:
-            self._distribution_layout.addWidget(
-                self._make_fallback_message(
-                    "Интерактивные графики требуют PyQt6-WebEngine\n"
-                    f"Python: {sys.executable}\n"
-                    f"Ошибка: {error}"
-                )
-            )
+            self._fill_distribution_fallback(points, str(error))
             return
 
         try:
-            from desktop.plotly_charts import build_score_count_html
+            from desktop.plotly_charts import SCORE_CHART_HEIGHT, build_score_count_html
 
-            html = build_score_count_html(distribution)
+            html = build_score_count_html(points)
         except ImportError as error:
-            self._distribution_layout.addWidget(
-                self._make_fallback_message(
-                    "Интерактивные графики требуют plotly\n"
-                    f"Python: {sys.executable}\n"
-                    f"Ошибка: {error}"
-                )
-            )
+            self._fill_distribution_fallback(points, str(error))
             return
 
         try:
             from PyQt6.QtWidgets import QSizePolicy
 
             view = QWebEngineView()
-            view.setFixedHeight(PLOTLY_VIEW_HEIGHT)
+            view.setFixedHeight(SCORE_CHART_HEIGHT)
             view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            view.setStyleSheet("background-color: #171719;")
+            view.setStyleSheet("background-color: #171719; border: none;")
             html_path = self._write_plotly_html_file(html)
             view.setUrl(QUrl.fromLocalFile(html_path))
             self._distribution_layout.addWidget(view)
         except Exception as error:
+            self._fill_distribution_fallback(points, str(error))
+
+    def _points_to_fallback_rows(self, points: list[dict]) -> list[dict]:
+        total = sum(int(point.get("count") or 0) for point in points)
+        rows: list[dict] = []
+        for point in points:
+            count = int(point.get("count") or 0)
+            percent = point.get("percent")
+            if percent is None:
+                percent = 0.0 if total == 0 else round(count * 100 / total, 1)
+            label = point.get("label")
+            if label is None and point.get("score") is not None:
+                label = f"{float(point['score']):.1f}"
+            rows.append({"label": str(label or ""), "count": count, "percent": float(percent)})
+        return rows
+
+    def _fill_distribution_fallback(self, points: list[dict], error: str | None = None) -> None:
+        if error is not None:
             self._distribution_layout.addWidget(
                 self._make_fallback_message(
-                    "Не удалось открыть интерактивный график\n"
+                    "Интерактивный график недоступен, показаны упрощённые полосы.\n"
                     f"Python: {sys.executable}\n"
                     f"Ошибка: {error}"
                 )
             )
+
+        rows = self._points_to_fallback_rows(points)
+        max_count = max((int(row.get("count") or 0) for row in rows), default=0)
+        for row in rows:
+            self._distribution_layout.addWidget(self._make_bar_row(row, max_count))
 
     def _make_fallback_message(self, text: str):
         from PyQt6.QtWidgets import QLabel

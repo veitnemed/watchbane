@@ -291,7 +291,7 @@ Flow поддерживает:
 - `data/candidate_pool/` - TMDb JSON/CSV артефакты.
 - `data/cache/tmdb/` - локальный кэш TMDb.
 
-Архитектура слоёв и правила зависимостей: [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md). Правила добавления функционала: [add_functions.md](add_functions.md). Визуальный контракт desktop GUI: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). Последний отчёт по desktop-card polish: [DESKTOP_GUI_REPORT_2026-06-25.md](DESKTOP_GUI_REPORT_2026-06-25.md).
+Архитектура слоёв и правила зависимостей: [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md). Правила добавления функционала: [add_functions.md](add_functions.md). Визуальный контракт desktop GUI: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). План переноса в desktop GUI: [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md). Отчёты лежат в [reports/](reports/), последний отчёт по desktop-card polish: [DESKTOP_GUI_REPORT_2026-06-25.md](reports/DESKTOP_GUI_REPORT_2026-06-25.md).
 
 ## Полезные команды
 

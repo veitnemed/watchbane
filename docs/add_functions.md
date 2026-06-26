@@ -8,6 +8,7 @@
 - [PROJECT_MAP.md](PROJECT_MAP.md) - где какой код лежит сейчас.
 - [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления/изменения записей dataset.
 - [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - контракт внешнего вида PyQt desktop GUI.
+- [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) - что и в каком порядке переносить в PyQt desktop GUI.
 
 ## 1. Слои и направление зависимостей
 

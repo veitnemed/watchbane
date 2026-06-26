@@ -271,12 +271,17 @@ def get_country_display(card: dict) -> str | None:
     return text if text else None
 
 
-def get_overview_display(card: dict) -> str:
-    """Return overview text for detail card."""
+def has_overview_text(card: dict) -> bool:
+    """Return True when the card has non-empty overview text."""
     overview = card.get("overview")
     if overview in (None, ""):
-        return "Описание отсутствует."
-    return str(overview).strip()
+        return False
+    return bool(str(overview).strip())
+
+
+def get_overview_display(card: dict) -> str:
+    """Return overview text for detail card."""
+    return str(card.get("overview", "")).strip()
 
 
 def format_list_label(card: dict) -> str:
@@ -291,6 +296,16 @@ def format_list_label(card: dict) -> str:
     if score_label != "—":
         label = f"{label}  ·  {score_label}"
     return label
+
+
+def format_watched_list_status(visible_count: int, total_count: int, query: str = "") -> str:
+    """Status bar text for watched list filter results."""
+    normalized = query.strip()
+    if visible_count == 0:
+        return "Ничего не найдено" if normalized else "Список пуст"
+    if normalized:
+        return f"Показано {visible_count} из {total_count}"
+    return f"Всего {visible_count}"
 
 
 def resolve_local_poster_path(movie: dict, card: dict | None = None) -> str | None:
@@ -552,7 +567,6 @@ class WatchedDetailCard:
         self._poster_label = QLabel("Нет постера")
         self._poster_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._poster_label.setFixedWidth(POSTER_WIDTH)
-        self._poster_label.setMaximumHeight(POSTER_HEIGHT)
         self._poster_label.setScaledContents(False)
         self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
 
@@ -752,8 +766,12 @@ class WatchedDetailCard:
         _fill_pill_rows(self._genre_pills_layout, detail_pills, "genrePill")
         self._genre_section.setVisible(len(detail_pills) > 0)
 
-        self._overview_label.setText(get_overview_display(card))
-        self._overview_frame.setVisible(True)
+        if has_overview_text(card):
+            self._overview_label.setText(get_overview_display(card))
+            self._overview_frame.setVisible(True)
+        else:
+            self._overview_label.setText("")
+            self._overview_frame.setVisible(False)
 
         poster_path = resolve_local_poster_path(movie, card)
         if poster_path is None or self._set_poster_image(poster_path) is False:

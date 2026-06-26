@@ -344,7 +344,7 @@ common      → stdlib only (очень нижние безопасные зав
 9. `dataset` не содержит меню.
 10. `integrations` / `apis` не принимают пользовательские решения.
 
-Desktop GUI относится к UI-слою. Его visual-polish должен следовать [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) и не менять dataset, model, candidate_pool, poster cache или console UI.
+Desktop GUI относится к UI-слою. Его visual-polish должен следовать [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md), этапы миграции — [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md); не менять dataset, model, candidate_pool, poster cache или console UI.
 
 ---
 

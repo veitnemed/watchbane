@@ -75,7 +75,7 @@
 - `desktop/watched_view.py`
 - `desktop/analytics_view.py`
 - `docs/DESKTOP_STYLE_CONTRACT.md`
-- `docs/DESKTOP_GUI_REPORT_2026-06-25_layout-polish.md` (этот отчёт)
+- `docs/reports/DESKTOP_GUI_REPORT_2026-06-25_layout-polish.md` (этот отчёт)
 
 ## Проверки
 

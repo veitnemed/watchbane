@@ -12,7 +12,9 @@
 - [add_functions.md](add_functions.md) - правила добавления/изменения функционала.
 - [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления и изменения записей.
 - [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - визуальный контракт PyQt desktop GUI.
-- [DESKTOP_GUI_REPORT_2026-06-25.md](DESKTOP_GUI_REPORT_2026-06-25.md) - отчёт о последнем visual-polish карточки watched title.
+- [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) - поэтапный план переноса функционала в PyQt desktop GUI.
+- [reports/](reports/) - отчёты по сессиям и GUI-polish.
+- [DESKTOP_GUI_REPORT_2026-06-25.md](reports/DESKTOP_GUI_REPORT_2026-06-25.md) - отчёт о последнем visual-polish карточки watched title.
 
 ## Слои и направление зависимостей
 
@@ -148,7 +150,7 @@ PyQt desktop GUI для watched-базы и read-only аналитики.
 - [desktop/analytics_view.py](../desktop/analytics_view.py) - вкладка `Аналитика`.
 - [desktop/plotly_charts.py](../desktop/plotly_charts.py) - helpers для Plotly-графика, если доступен WebEngine.
 
-Style contract desktop GUI: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). Desktop GUI не должен напрямую писать dataset JSON и не должен запускать обучение.
+Style contract desktop GUI: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). Этапы миграции и приоритеты: [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md). Desktop GUI не должен напрямую писать dataset JSON и не должен запускать обучение.
 
 ### `tests/`
 
