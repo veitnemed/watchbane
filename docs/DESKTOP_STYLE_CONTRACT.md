@@ -173,16 +173,30 @@ Layout-правила обязательны при GUI-polish. Точечные
 2. `QScrollArea` с `widgetResizable=True`: контент analytics **не** растягивается на всю высоту viewport.
 3. Read-only текстовые блоки (insights, overview-подобные секции, fallback): vertical size policy **`Minimum`**.
 4. Один `addStretch(1)` в **конце** root-layout analytics — пустота **под** контентом, не внутри серых карточек.
-5. Секции (`Коротко`, `Распределение`, `Одинаковые оценки`) — в `#analyticsSection`; блок полноты — `#analyticsCompleteness`; padding/spacing менять **шкалой** (root → section → row), не точечно в одном месте.
+5. Секции (`Коротко`, `Распределение`, …) — в `#analyticsSection`; padding/spacing менять **шкалой** (root → section → row), не точечно в одном месте.
+
+Порядок секций (Analytics MVP freeze):
+
+1. KPI-карточки
+2. «Коротко» (+ полнота dataset, insights)
+3. «Распределение оценок»
+4. «Количество тайтлов по жанрам»
+5. «Средняя моя оценка по годам»
+6. «Отличие моих оценок от IMDb»
+7. «Я сильно выше IMDb»
+8. «Я сильно ниже IMDb»
+9. «Подозрительные оценки»
+
+После п.8 новые секции — только по отдельному решению (см. `DESKTOP_GUI_ROADMAP.md`, Analytics MVP freeze).
 
 ### Analytics: «Полнота dataset»
 
 Реализация: `dataset/score_analytics.py` (`build_dataset_completeness*`, `summarize_dataset_completeness`) + `AnalyticsView._fill_completeness`.
 
-1. Компактный read-only индикатор между KPI и «Коротко»: `#completenessDot` + `#completenessStatus`.
-2. Зелёный dot — все поля 100%; красный — есть пропуски или база пуста.
-3. Кнопка «Подробнее» только при проблемах; раскрывает `#analyticsCompletenessDetails` со строками только для неполных полей.
-4. Без иконок/emoji; без Plotly; без write в JSON.
+1. Две строки внутри секции «Коротко»: `#completenessHeadline`, `#completenessSubline`.
+2. Формат: `Полнота dataset: 86%` + `Нужно заполнить: КП 43/51 · ...` (до 4 худших полей).
+3. Если всё заполнено: `База почти полная.` без детализации всех пунктов.
+4. Read-only; без Plotly; без write в JSON.
 
 ### Analytics: KPI-карточки (Всего / Средняя / …)
 

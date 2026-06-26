@@ -7,8 +7,9 @@ import sys
 import tempfile
 
 from dataset.score_analytics import (
-    DATASET_COMPLETENESS_DISPLAY_KEYS,
     build_score_analytics,
+    format_rating_gap_line,
+    format_suspicious_rating_line,
     summarize_dataset_completeness,
 )
 from desktop.theme import (
@@ -96,17 +97,8 @@ ANALYTICS_DENSE_ROW_PADDING_Y = 6
 ANALYTICS_DENSE_ROW_SPACING = 12
 # Расстояние между badge с оценкой и текстовой колонкой.
 
-ANALYTICS_COMPLETENESS_ROW_SPACING = 4
-# Расстояние между строками в раскрываемых деталях полноты.
-
-ANALYTICS_COMPLETENESS_BAR_HEIGHT = 6
-# Высота progress bar в деталях полноты.
-
-COMPLETENESS_DOT_SIZE = 8
-# Диаметр индикатора полноты dataset.
-
-
-# --- Размеры виджетов ---
+ANALYTICS_DENSE_TEXT_SPACING = 2
+# Расстояние между «N тайтлов» и списком названий.
 
 SHOW_DENSE_SCORES_SECTION = False
 # Секция «Одинаковые оценки» скрыта: insights в «Коротко» покрывают mode.
@@ -131,6 +123,12 @@ SUMMARY_CARD_ICONS = {
 SECTION_ICONS = {
     "Коротко": "☰",
     "Распределение оценок": "▤",
+    "Количество тайтлов по жанрам": "▥",
+    "Средняя моя оценка по годам": "↗",
+    "Отличие моих оценок от IMDb": "±",
+    "Я сильно выше IMDb": "↑",
+    "Я сильно ниже IMDb": "↓",
+    "Подозрительные оценки": "!",
 }
 
 DENSE_SCORE_BADGE_SIZE = 56
@@ -229,15 +227,22 @@ class AnalyticsView:
         self._summary_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         root_layout.addLayout(self._summary_layout)
 
-        self._completeness_details_expanded = False
-        self._completeness_items_by_key: dict[str, dict] = {}
-        self._completeness_root, self._completeness_layout = self._make_completeness_indicator()
-        root_layout.addWidget(self._completeness_root)
-
         self._insights_layout = QVBoxLayout()
         self._insights_layout.setSpacing(ANALYTICS_INSIGHT_LINE_SPACING)
+
+        self._completeness_headline = QLabel("Полнота dataset: 0%")
+        self._completeness_headline.setObjectName("completenessHeadline")
+        self._completeness_subline = QLabel("")
+        self._completeness_subline.setObjectName("completenessSubline")
+        self._completeness_subline.setWordWrap(True)
+
         root_layout.addWidget(
-            self._make_section("Коротко", self._insights_layout, SECTION_ICONS["Коротко"])
+            self._make_section(
+                "Коротко",
+                self._insights_layout,
+                SECTION_ICONS["Коротко"],
+                prefix_widgets=[self._completeness_headline, self._completeness_subline],
+            )
         )
 
         self._distribution_layout = QVBoxLayout()
@@ -247,6 +252,60 @@ class AnalyticsView:
                 self._distribution_layout,
                 SECTION_ICONS["Распределение оценок"],
                 show_menu_stub=True,
+            )
+        )
+
+        self._genre_count_layout = QVBoxLayout()
+        root_layout.addWidget(
+            self._make_section(
+                "Количество тайтлов по жанрам",
+                self._genre_count_layout,
+                SECTION_ICONS["Количество тайтлов по жанрам"],
+            )
+        )
+
+        self._year_average_layout = QVBoxLayout()
+        root_layout.addWidget(
+            self._make_section(
+                "Средняя моя оценка по годам",
+                self._year_average_layout,
+                SECTION_ICONS["Средняя моя оценка по годам"],
+            )
+        )
+
+        self._imdb_delta_layout = QVBoxLayout()
+        root_layout.addWidget(
+            self._make_section(
+                "Отличие моих оценок от IMDb",
+                self._imdb_delta_layout,
+                SECTION_ICONS["Отличие моих оценок от IMDb"],
+            )
+        )
+
+        self._rating_higher_layout = QVBoxLayout()
+        root_layout.addWidget(
+            self._make_section(
+                "Я сильно выше IMDb",
+                self._rating_higher_layout,
+                SECTION_ICONS["Я сильно выше IMDb"],
+            )
+        )
+
+        self._rating_lower_layout = QVBoxLayout()
+        root_layout.addWidget(
+            self._make_section(
+                "Я сильно ниже IMDb",
+                self._rating_lower_layout,
+                SECTION_ICONS["Я сильно ниже IMDb"],
+            )
+        )
+
+        self._suspicious_layout = QVBoxLayout()
+        root_layout.addWidget(
+            self._make_section(
+                "Подозрительные оценки",
+                self._suspicious_layout,
+                SECTION_ICONS["Подозрительные оценки"],
             )
         )
 
@@ -265,10 +324,29 @@ class AnalyticsView:
 
     def update_entries(self, entries: list[tuple[str, dict, dict]]) -> None:
         analytics = build_score_analytics(_entries_to_records(entries), entries=entries)
+        self._clear_plotly_html_files()
         self._fill_summary(analytics["summary"])
         self._fill_completeness(analytics["dataset_completeness"])
         self._fill_insights(analytics["insights"])
         self._fill_distribution(analytics["score_count_points"])
+        self._fill_genre_count(analytics["genre_count_rows"])
+        self._fill_year_average(analytics["year_average_points"])
+        self._fill_imdb_delta(
+            analytics["imdb_delta_rows"],
+            analytics["imdb_delta_extra_count"],
+        )
+        self._fill_rating_higher(
+            analytics["rating_higher_than_public"],
+            analytics["rating_higher_extra_count"],
+        )
+        self._fill_rating_lower(
+            analytics["rating_lower_than_public"],
+            analytics["rating_lower_extra_count"],
+        )
+        self._fill_suspicious(
+            analytics["suspicious_ratings"],
+            analytics["suspicious_extra_count"],
+        )
         if SHOW_DENSE_SCORES_SECTION:
             self._fill_dense_scores(analytics["dense_scores"])
 
@@ -299,6 +377,7 @@ class AnalyticsView:
         content_layout,
         icon_text: str = "",
         *,
+        prefix_widgets=None,
         show_menu_stub: bool = False,
     ):
         from PyQt6.QtWidgets import QFrame, QVBoxLayout
@@ -317,6 +396,9 @@ class AnalyticsView:
         layout.addWidget(
             self._make_section_header(title_text, icon_text, show_menu_stub=show_menu_stub)
         )
+        if prefix_widgets:
+            for widget in prefix_widgets:
+                layout.addWidget(widget)
         layout.addLayout(content_layout)
         return frame
 
@@ -414,121 +496,10 @@ class AnalyticsView:
         layout.addLayout(text_column, stretch=1)
         return frame
 
-    def _make_completeness_indicator(self):
-        from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
-
-        root = QWidget()
-        root.setObjectName("completenessIndicatorRoot")
-        root_layout = QVBoxLayout(root)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(6)
-
-        indicator_row = QWidget()
-        indicator_row.setObjectName("completenessIndicator")
-        row_layout = QHBoxLayout(indicator_row)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(8)
-
-        dot = QFrame()
-        dot.setObjectName("completenessDot")
-        dot.setFixedSize(COMPLETENESS_DOT_SIZE, COMPLETENESS_DOT_SIZE)
-
-        status_label = QLabel("Полнота dataset")
-        status_label.setObjectName("completenessStatus")
-
-        details_button = QPushButton("Подробнее")
-        details_button.setObjectName("completenessDetailsButton")
-        details_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        details_button.setFlat(True)
-        details_button.setVisible(False)
-        details_button.clicked.connect(self._toggle_completeness_details)
-
-        row_layout.addWidget(dot, alignment=Qt.AlignmentFlag.AlignVCenter)
-        row_layout.addWidget(status_label, alignment=Qt.AlignmentFlag.AlignVCenter)
-        row_layout.addStretch()
-        row_layout.addWidget(details_button, alignment=Qt.AlignmentFlag.AlignVCenter)
-
-        details_frame = QFrame()
-        details_frame.setObjectName("analyticsCompletenessDetails")
-        details_frame.setVisible(False)
-        details_layout = QVBoxLayout(details_frame)
-        details_layout.setContentsMargins(12, 10, 12, 10)
-        details_layout.setSpacing(ANALYTICS_COMPLETENESS_ROW_SPACING)
-
-        root_layout.addWidget(indicator_row)
-        root_layout.addWidget(details_frame)
-
-        self._completeness_dot = dot
-        self._completeness_status_label = status_label
-        self._completeness_details_button = details_button
-        self._completeness_details_frame = details_frame
-        return root, details_layout
-
-    def _set_completeness_dot_status(self, is_ok: bool) -> None:
-        status = "ok" if is_ok else "bad"
-        if self._completeness_dot.property("status") == status:
-            return
-        self._completeness_dot.setProperty("status", status)
-        self._completeness_dot.style().unpolish(self._completeness_dot)
-        self._completeness_dot.style().polish(self._completeness_dot)
-
-    def _toggle_completeness_details(self) -> None:
-        self._completeness_details_expanded = not self._completeness_details_expanded
-        self._completeness_details_frame.setVisible(self._completeness_details_expanded)
-        self._completeness_details_button.setText(
-            "Скрыть" if self._completeness_details_expanded else "Подробнее"
-        )
-
     def _fill_completeness(self, completeness: dict) -> None:
         summary = summarize_dataset_completeness(completeness)
-        self._completeness_items_by_key = {
-            str(item.get("key")): item for item in completeness.get("items", []) if isinstance(item, dict)
-        }
-
-        self._set_completeness_dot_status(summary["is_ok"])
-        self._completeness_status_label.setText(summary["status_text"])
-        self._completeness_details_button.setVisible(summary["is_ok"] is False)
-
-        if summary["is_ok"]:
-            self._completeness_details_expanded = False
-            self._completeness_details_frame.setVisible(False)
-            self._completeness_details_button.setText("Подробнее")
-
-        _clear_layout(self._completeness_layout)
-        items_by_key = self._completeness_items_by_key
-        issue_keys = {str(item.get("key")) for item in summary["issues"]}
-        for field_key in DATASET_COMPLETENESS_DISPLAY_KEYS:
-            if field_key not in issue_keys:
-                continue
-            item = items_by_key.get(field_key)
-            if item is None:
-                continue
-            self._completeness_layout.addWidget(self._make_completeness_row(item))
-
-    def _make_completeness_row(self, item: dict):
-        from PyQt6.QtWidgets import QHBoxLayout, QLabel, QProgressBar, QWidget
-
-        row = QWidget()
-        row.setObjectName("completenessRow")
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
-
-        label = QLabel(f"{item['label']} {item['count']}/{item['total']}")
-        label.setObjectName("completenessRowLabel")
-        label.setMinimumWidth(150)
-
-        progress = QProgressBar()
-        progress.setObjectName("completenessProgress")
-        progress.setRange(0, 100)
-        progress.setValue(int(round(float(item.get("percent") or 0))))
-        progress.setTextVisible(False)
-        progress.setFixedHeight(ANALYTICS_COMPLETENESS_BAR_HEIGHT)
-
-        layout.addWidget(label)
-        layout.addWidget(progress, stretch=1)
-        return row
+        self._completeness_headline.setText(summary["headline_text"])
+        self._completeness_subline.setText(summary["subline_text"])
 
     def _fill_insights(self, insights: list[str]) -> None:
         _clear_layout(self._insights_layout)
@@ -560,36 +531,150 @@ class AnalyticsView:
         return row
 
     def _fill_distribution(self, points: list[dict]) -> None:
-        _clear_layout(self._distribution_layout)
-        self._clear_plotly_html_files()
+        from desktop.plotly_charts import SCORE_CHART_HEIGHT, build_score_count_html
+
+        self._fill_plotly_chart(
+            self._distribution_layout,
+            points,
+            build_html=build_score_count_html,
+            chart_height=SCORE_CHART_HEIGHT,
+            fallback=self._fill_distribution_fallback,
+        )
+
+    def _fill_genre_count(self, rows: list[dict]) -> None:
+        from desktop.plotly_charts import GENRE_COUNT_CHART_HEIGHT, build_genre_count_html
+
+        height = max(GENRE_COUNT_CHART_HEIGHT, 120 + len(rows) * 24)
+        self._fill_plotly_chart(
+            self._genre_count_layout,
+            rows,
+            build_html=build_genre_count_html,
+            chart_height=height,
+            fallback=self._fill_genre_count_fallback,
+        )
+
+    def _fill_year_average(self, points: list[dict]) -> None:
+        from desktop.plotly_charts import YEAR_AVERAGE_CHART_HEIGHT, build_year_average_html
+
+        self._fill_plotly_chart(
+            self._year_average_layout,
+            points,
+            build_html=build_year_average_html,
+            chart_height=YEAR_AVERAGE_CHART_HEIGHT,
+            fallback=self._fill_year_average_fallback,
+        )
+
+    def _fill_imdb_delta(self, rows: list[dict], extra_count: int) -> None:
+        from desktop.plotly_charts import IMDB_DELTA_CHART_HEIGHT, build_imdb_delta_html
+
+        _clear_layout(self._imdb_delta_layout)
+        if not rows:
+            self._imdb_delta_layout.addWidget(
+                self._make_list_placeholder("Нет тайтлов с вашей оценкой и IMDb для сравнения.")
+            )
+            return
+
+        height = max(IMDB_DELTA_CHART_HEIGHT, 120 + len(rows) * 24)
+        self._fill_plotly_chart(
+            self._imdb_delta_layout,
+            rows,
+            build_html=build_imdb_delta_html,
+            chart_height=height,
+            fallback=lambda data, error: self._fill_imdb_delta_fallback(data, extra_count, error),
+        )
+
+    def _fill_plotly_chart(
+        self,
+        layout,
+        data,
+        *,
+        build_html,
+        chart_height: int,
+        fallback,
+    ) -> None:
+        _clear_layout(layout)
 
         try:
             from PyQt6.QtCore import QUrl
             from PyQt6.QtWebEngineWidgets import QWebEngineView
         except ImportError as error:
-            self._fill_distribution_fallback(points, str(error))
+            fallback(data, str(error))
             return
 
         try:
-            from desktop.plotly_charts import SCORE_CHART_HEIGHT, build_score_count_html
-
-            html = build_score_count_html(points)
+            html = build_html(data)
         except ImportError as error:
-            self._fill_distribution_fallback(points, str(error))
+            fallback(data, str(error))
             return
 
         try:
             from PyQt6.QtWidgets import QSizePolicy
 
             view = QWebEngineView()
-            view.setFixedHeight(SCORE_CHART_HEIGHT)
+            view.setFixedHeight(chart_height)
             view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             view.setStyleSheet(f"background-color: {COLOR_CARD}; border: none;")
             html_path = self._write_plotly_html_file(html)
             view.setUrl(QUrl.fromLocalFile(html_path))
-            self._distribution_layout.addWidget(view)
+            layout.addWidget(view)
         except Exception as error:
-            self._fill_distribution_fallback(points, str(error))
+            fallback(data, str(error))
+
+    def _fill_rating_higher(self, rows: list[dict], extra_count: int) -> None:
+        self._fill_text_list(
+            self._rating_higher_layout,
+            [format_rating_gap_line(row) for row in rows],
+            empty_text="Нет тайтлов, где ваша оценка сильно выше IMDb.",
+            extra_count=extra_count,
+        )
+
+    def _fill_rating_lower(self, rows: list[dict], extra_count: int) -> None:
+        self._fill_text_list(
+            self._rating_lower_layout,
+            [format_rating_gap_line(row) for row in rows],
+            empty_text="Нет тайтлов, где ваша оценка сильно ниже IMDb.",
+            extra_count=extra_count,
+        )
+
+    def _fill_suspicious(self, rows: list[dict], extra_count: int) -> None:
+        self._fill_text_list(
+            self._suspicious_layout,
+            [format_suspicious_rating_line(row) for row in rows],
+            empty_text="Подозрительных оценок не найдено.",
+            extra_count=extra_count,
+        )
+
+    def _fill_text_list(
+        self,
+        layout,
+        lines: list[str],
+        *,
+        empty_text: str,
+        extra_count: int = 0,
+    ) -> None:
+        _clear_layout(layout)
+        if not lines:
+            layout.addWidget(self._make_list_placeholder(empty_text))
+            return
+        for line in lines:
+            layout.addWidget(self._make_insight_line(line))
+        if extra_count > 0:
+            layout.addWidget(self._make_list_extra(f"ещё {extra_count}"))
+
+    def _make_list_placeholder(self, text: str):
+        from PyQt6.QtWidgets import QLabel
+
+        label = QLabel(text)
+        label.setObjectName("insightText")
+        label.setWordWrap(True)
+        return label
+
+    def _make_list_extra(self, text: str):
+        from PyQt6.QtWidgets import QLabel
+
+        label = QLabel(text)
+        label.setObjectName("completenessSubline")
+        return label
 
     def _points_to_fallback_rows(self, points: list[dict]) -> list[dict]:
         total = sum(int(point.get("count") or 0) for point in points)
@@ -619,6 +704,97 @@ class AnalyticsView:
         max_count = max((int(row.get("count") or 0) for row in rows), default=0)
         for row in rows:
             self._distribution_layout.addWidget(self._make_bar_row(row, max_count))
+
+    def _fill_genre_count_fallback(self, rows: list[dict], error: str | None = None) -> None:
+        if error is not None:
+            self._genre_count_layout.addWidget(
+                self._make_fallback_message(
+                    "Интерактивный график недоступен, показаны упрощённые полосы.\n"
+                    f"Python: {sys.executable}\n"
+                    f"Ошибка: {error}"
+                )
+            )
+
+        if not rows:
+            self._genre_count_layout.addWidget(
+                self._make_list_placeholder("Нет жанров в watched-базе.")
+            )
+            return
+
+        total = sum(int(row.get("count") or 0) for row in rows)
+        fallback_rows = [
+            {
+                "label": str(row["label"]),
+                "count": int(row["count"]),
+                "percent": 0.0 if total == 0 else round(int(row["count"]) * 100 / total, 1),
+            }
+            for row in rows
+        ]
+        max_count = max((row["count"] for row in fallback_rows), default=0)
+        for row in fallback_rows:
+            self._genre_count_layout.addWidget(self._make_bar_row(row, max_count))
+
+    def _fill_year_average_fallback(self, points: list[dict], error: str | None = None) -> None:
+        if error is not None:
+            self._year_average_layout.addWidget(
+                self._make_fallback_message(
+                    "Интерактивный график недоступен, показаны упрощённые строки.\n"
+                    f"Python: {sys.executable}\n"
+                    f"Ошибка: {error}"
+                )
+            )
+
+        if not points:
+            self._year_average_layout.addWidget(
+                self._make_list_placeholder("Нет данных по годам выхода.")
+            )
+            return
+
+        for point in points:
+            year = int(point["year"])
+            average = float(point["average"])
+            count = int(point["count"])
+            self._year_average_layout.addWidget(
+                self._make_insight_line(f"{year} · средняя {average:.1f} · {count} тайтлов")
+            )
+
+    def _format_imdb_delta_fallback_line(self, row: dict) -> str:
+        year = row.get("year")
+        year_text = f" ({year})" if year not in (None, "") else ""
+        delta = float(row["delta"])
+        sign = "+" if delta > 0 else ""
+        return (
+            f"{row['title']}{year_text} · моя {float(row['user_score']):.1f} · "
+            f"IMDb {float(row['imdb_score']):.1f} · {sign}{delta:.1f}"
+        )
+
+    def _fill_imdb_delta_fallback(
+        self,
+        rows: list[dict],
+        extra_count: int,
+        error: str | None = None,
+    ) -> None:
+        if error is not None:
+            self._imdb_delta_layout.addWidget(
+                self._make_fallback_message(
+                    "Интерактивный график недоступен, показаны упрощённые строки.\n"
+                    f"Python: {sys.executable}\n"
+                    f"Ошибка: {error}"
+                )
+            )
+
+        if not rows:
+            self._imdb_delta_layout.addWidget(
+                self._make_list_placeholder("Нет тайтлов с вашей оценкой и IMDb для сравнения.")
+            )
+            return
+
+        for row in rows:
+            self._imdb_delta_layout.addWidget(
+                self._make_insight_line(self._format_imdb_delta_fallback_line(row))
+            )
+        if extra_count > 0:
+            self._imdb_delta_layout.addWidget(self._make_list_extra(f"ещё {extra_count}"))
 
     def _make_fallback_message(self, text: str):
         from PyQt6.QtWidgets import QLabel

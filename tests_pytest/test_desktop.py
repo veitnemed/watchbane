@@ -810,6 +810,45 @@ def test_build_score_distribution_html_smoke() -> None:
     assert "7.0-7.9" in html
 
 
+def test_build_genre_count_html_smoke() -> None:
+    from desktop.plotly_charts import build_genre_count_html
+
+    html = build_genre_count_html(
+        [{"label": "Драма", "count": 5, "example_titles": ["Alpha"], "extra_count": 0}]
+    )
+
+    assert "plotly" in html.lower()
+    assert "bar" in html.lower()
+
+
+def test_build_year_average_html_smoke() -> None:
+    from desktop.plotly_charts import build_year_average_html
+
+    html = build_year_average_html(
+        [
+            {"year": 2020, "average": 8.0, "count": 3},
+            {"year": 2021, "average": 7.5, "count": 2},
+        ]
+    )
+
+    assert "plotly" in html.lower()
+    assert "2020" in html
+
+
+def test_build_imdb_delta_html_smoke() -> None:
+    from desktop.plotly_charts import build_imdb_delta_html
+
+    html = build_imdb_delta_html(
+        [
+            {"title": "Alpha", "year": 2020, "user_score": 9.0, "imdb_score": 6.0, "delta": 3.0},
+            {"title": "Bravo", "year": 2021, "user_score": 4.0, "imdb_score": 8.0, "delta": -4.0},
+        ]
+    )
+
+    assert "plotly" in html.lower()
+    assert "bar" in html.lower()
+
+
 def test_analytics_distribution_uses_score_count_points() -> None:
     import inspect
 
@@ -818,10 +857,42 @@ def test_analytics_distribution_uses_score_count_points() -> None:
     source = inspect.getsource(analytics_view_module.AnalyticsView.update_entries)
     assert 'analytics["score_count_points"]' in source
     assert 'analytics["dataset_completeness"]' in source
+    assert 'analytics["genre_count_rows"]' in source
+    assert 'analytics["year_average_points"]' in source
+    assert 'analytics["imdb_delta_rows"]' in source
+    assert 'analytics["rating_higher_than_public"]' in source
+    assert 'analytics["suspicious_ratings"]' in source
     assert "_fill_completeness" in source
     fill_distribution_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_distribution)
     assert "build_score_count_html" in fill_distribution_source
-    assert "SCORE_CHART_HEIGHT" in fill_distribution_source
+    assert "_fill_plotly_chart" in fill_distribution_source
+
+
+def test_analytics_mvp_sections_wired() -> None:
+    import inspect
+
+    import desktop.analytics_view as analytics_view_module
+
+    init_source = inspect.getsource(analytics_view_module.AnalyticsView.__init__)
+    assert "Количество тайтлов по жанрам" in init_source
+    assert "Средняя моя оценка по годам" in init_source
+    assert "Отличие моих оценок от IMDb" in init_source
+    assert "Я сильно выше IMDb" in init_source
+    assert "Я сильно ниже IMDb" in init_source
+    assert "Подозрительные оценки" in init_source
+
+    update_source = inspect.getsource(analytics_view_module.AnalyticsView.update_entries)
+    assert "_fill_genre_count" in update_source
+    assert "_fill_year_average" in update_source
+    assert "_fill_imdb_delta" in update_source
+    assert "_fill_rating_higher" in update_source
+    assert "_fill_suspicious" in update_source
+
+    fill_higher_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_rating_higher)
+    assert "format_rating_gap_line" in fill_higher_source
+
+    fill_suspicious_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_suspicious)
+    assert "format_suspicious_rating_line" in fill_suspicious_source
 
 
 def test_analytics_renders_dataset_completeness_block() -> None:
@@ -829,16 +900,13 @@ def test_analytics_renders_dataset_completeness_block() -> None:
 
     import desktop.analytics_view as analytics_view_module
 
-    indicator_source = inspect.getsource(analytics_view_module.AnalyticsView._make_completeness_indicator)
-    assert "completenessDot" in indicator_source
-    assert "completenessStatus" in indicator_source
-    assert "completenessDetailsButton" in indicator_source
     init_source = inspect.getsource(analytics_view_module.AnalyticsView.__init__)
-    assert "_make_completeness_indicator" in init_source
+    assert "completenessHeadline" in init_source
+    assert "completenessSubline" in init_source
     fill_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_completeness)
     assert "summarize_dataset_completeness" in fill_source
-    row_source = inspect.getsource(analytics_view_module.AnalyticsView._make_completeness_row)
-    assert "completenessProgress" in row_source
+    assert "headline_text" in fill_source
+    assert "subline_text" in fill_source
 
 
 def test_score_count_chart_height_matches_plotly_constant() -> None:

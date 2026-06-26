@@ -243,6 +243,19 @@ DATASET_COMPLETENESS_DISPLAY_KEYS: tuple[str, ...] = (
     "year",
 )
 
+DATASET_COMPLETENESS_WORST_LIMIT = 4
+
+RATING_STRONG_GAP = 1.5
+GENRE_COUNT_CHART_LIMIT = 15
+IMDB_DELTA_CHART_LIMIT = 20
+ANALYTICS_LIST_LIMIT = 12
+GENRE_COUNT_TITLE_LIMIT = 3
+
+SUSPICIOUS_HIGH_PUBLIC = 7.5
+SUSPICIOUS_LOW_USER = 5.5
+SUSPICIOUS_LOW_PUBLIC = 5.5
+SUSPICIOUS_HIGH_USER = 8.0
+
 
 def _movie_section(movie: dict, key: str) -> dict:
     section = movie.get(key)
@@ -466,31 +479,280 @@ def build_dataset_completeness(records) -> dict:
 
 
 def summarize_dataset_completeness(completeness: dict) -> dict:
-    """Build compact GUI status for dataset completeness indicator."""
+    """Build compact read-only summary lines from precomputed completeness data."""
     total = int(completeness.get("total") or 0)
     overall_percent = float(completeness.get("overall_percent") or 0.0)
     items = [item for item in completeness.get("items", []) if isinstance(item, dict)]
-    issues = [item for item in items if float(item.get("percent") or 0) < 100.0]
+    headline_text = f"Полнота dataset: {overall_percent:.0f}%"
 
     if total == 0:
         return {
-            "is_ok": False,
             "overall_percent": 0.0,
-            "issues": issues,
-            "status_text": "Нет записей в watched-базе",
+            "worst_items": [],
+            "headline_text": headline_text,
+            "subline_text": "Нет записей в watched-базе.",
         }
 
-    is_ok = len(issues) == 0
-    if is_ok:
-        status_text = "Dataset заполнен полностью"
+    incomplete = [item for item in items if float(item.get("percent") or 0) < 100.0]
+    incomplete.sort(
+        key=lambda item: (float(item.get("percent") or 0), str(item.get("key") or "")),
+    )
+    worst_items = incomplete[:DATASET_COMPLETENESS_WORST_LIMIT]
+
+    if len(worst_items) == 0:
+        subline_text = "База почти полная."
     else:
-        status_text = f"Полнота dataset — {overall_percent:.0f}%"
+        parts = [f"{item['label']} {item['count']}/{item['total']}" for item in worst_items]
+        subline_text = "Нужно заполнить: " + " · ".join(parts)
 
     return {
-        "is_ok": is_ok,
         "overall_percent": overall_percent,
-        "issues": issues,
-        "status_text": status_text,
+        "worst_items": worst_items,
+        "headline_text": headline_text,
+        "subline_text": subline_text,
+    }
+
+
+def _external_score(value) -> float | None:
+    if not _has_rating_value(value):
+        return None
+    return normalize_score(value)
+
+
+def _normalize_analytics_entries(entries: list[tuple[str, dict, dict]]) -> list[tuple[str, dict, dict]]:
+    normalized: list[tuple[str, dict, dict]] = []
+    for entry in entries:
+        if isinstance(entry, tuple) and len(entry) == 3:
+            key, movie, card = entry
+            if isinstance(movie, dict):
+                normalized.append((str(key), movie, card if isinstance(card, dict) else {}))
+    return normalized
+
+
+def collect_analytics_entry_items(entries: list[tuple[str, dict, dict]]) -> list[dict]:
+    """Build normalized read-only analytics rows from watched GUI entries."""
+    items: list[dict] = []
+    for key, movie, card in _normalize_analytics_entries(entries):
+        display = card if card else _completeness_card_from_movie(movie)
+        title = _clean_text(display.get("title")) or str(key)
+        genres = display.get("genres")
+        if genres is None:
+            genres = _genres_from_movie(movie)
+        if isinstance(genres, str):
+            genre_values = [genres] if genres.strip() else []
+        else:
+            genre_values = [_clean_text(genre) for genre in genres]
+        genre_values = [genre for genre in genre_values if genre is not None]
+
+        overview = display.get("overview", _overview_from_movie(movie))
+        items.append(
+            {
+                "title": title,
+                "year": display.get("year", _movie_section(movie, "main_info").get("year", movie.get("year"))),
+                "user_score": normalize_score(
+                    display.get("user_score", _movie_section(movie, "main_info").get("user_score", movie.get("user_score")))
+                ),
+                "genres": genre_values,
+                "imdb_score": _external_score(
+                    display.get("imdb_score", _movie_section(movie, "raw_scores").get("imdb_score", movie.get("imdb_score")))
+                ),
+                "kp_score": _external_score(
+                    display.get("kp_score", _movie_section(movie, "raw_scores").get("kp_score", movie.get("kp_score")))
+                ),
+                "has_overview": overview not in (None, "") and bool(str(overview).strip()),
+            }
+        )
+    return items
+
+
+def build_genre_count_rows(
+    entries: list[tuple[str, dict, dict]],
+    *,
+    limit: int = GENRE_COUNT_CHART_LIMIT,
+    title_limit: int = GENRE_COUNT_TITLE_LIMIT,
+) -> list[dict]:
+    """Count watched titles per genre label."""
+    grouped: dict[str, list[str]] = defaultdict(list)
+    for item in collect_analytics_entry_items(entries):
+        for genre in item["genres"]:
+            grouped[genre].append(item["title"])
+
+    rows = [
+        {
+            "label": genre,
+            "count": len(titles),
+            "example_titles": titles[:title_limit],
+            "extra_count": max(0, len(titles) - title_limit),
+        }
+        for genre, titles in grouped.items()
+    ]
+    rows.sort(key=lambda row: (-int(row["count"]), str(row["label"]).casefold()))
+    return rows[:limit]
+
+
+def build_year_average_points(entries: list[tuple[str, dict, dict]]) -> list[dict]:
+    """Average user_score grouped by release year."""
+    grouped: dict[int, list[float]] = defaultdict(list)
+    for item in collect_analytics_entry_items(entries):
+        user_score = item.get("user_score")
+        if user_score is None:
+            continue
+        try:
+            year = int(item.get("year"))
+        except (TypeError, ValueError):
+            continue
+        if year <= 0:
+            continue
+        grouped[year].append(float(user_score))
+
+    points: list[dict] = []
+    for year in sorted(grouped):
+        scores = grouped[year]
+        average = normalize_score(sum(scores) / len(scores))
+        points.append({"year": year, "average": average, "count": len(scores)})
+    return points
+
+
+def _format_rating_gap_delta(delta: float) -> str:
+    sign = "+" if delta > 0 else ""
+    return f"{sign}{delta:.1f}"
+
+
+def format_rating_gap_line(row: dict) -> str:
+    """Format one public-rating gap row for analytics lists."""
+    year = row.get("year")
+    year_text = f" ({year})" if year not in (None, "") else ""
+    return (
+        f"{row['title']}{year_text} · моя {float(row['user_score']):.1f} · "
+        f"{row['source_label']} {float(row['external_score']):.1f} · "
+        f"{_format_rating_gap_delta(float(row['delta']))}"
+    )
+
+
+def build_rating_gap_lists(
+    entries: list[tuple[str, dict, dict]],
+    *,
+    gap: float = RATING_STRONG_GAP,
+    limit: int = ANALYTICS_LIST_LIMIT,
+) -> dict:
+    """Split titles where user score differs strongly from IMDb."""
+    higher: list[dict] = []
+    lower: list[dict] = []
+    for item in collect_analytics_entry_items(entries):
+        user_score = item.get("user_score")
+        if user_score is None:
+            continue
+        external_score = item.get("imdb_score")
+        if external_score is None:
+            continue
+        delta = round(float(user_score) - float(external_score), 1)
+        row = {
+            "title": item["title"],
+            "year": item.get("year"),
+            "user_score": user_score,
+            "source": "imdb",
+            "source_label": "IMDb",
+            "external_score": external_score,
+            "delta": delta,
+        }
+        if delta >= gap:
+            higher.append(row)
+        elif delta <= -gap:
+            lower.append(row)
+
+    higher.sort(key=lambda row: (-float(row["delta"]), str(row["title"]).casefold()))
+    lower.sort(key=lambda row: (float(row["delta"]), str(row["title"]).casefold()))
+    return {
+        "higher_than_public": higher[:limit],
+        "lower_than_public": lower[:limit],
+        "higher_extra_count": max(0, len(higher) - limit),
+        "lower_extra_count": max(0, len(lower) - limit),
+    }
+
+
+def build_imdb_delta_chart_rows(
+    entries: list[tuple[str, dict, dict]],
+    *,
+    limit: int = IMDB_DELTA_CHART_LIMIT,
+) -> dict:
+    """Build chart rows for user_score minus IMDb per watched title."""
+    rows: list[dict] = []
+    for item in collect_analytics_entry_items(entries):
+        user_score = item.get("user_score")
+        imdb_score = item.get("imdb_score")
+        if user_score is None or imdb_score is None:
+            continue
+        delta = round(float(user_score) - float(imdb_score), 1)
+        rows.append(
+            {
+                "title": item["title"],
+                "year": item.get("year"),
+                "user_score": user_score,
+                "imdb_score": imdb_score,
+                "delta": delta,
+            }
+        )
+
+    rows.sort(key=lambda row: (-float(row["delta"]), str(row["title"]).casefold()))
+    return {
+        "rows": rows[:limit],
+        "extra_count": max(0, len(rows) - limit),
+    }
+
+
+def format_suspicious_rating_line(row: dict) -> str:
+    """Format one suspicious rating row for analytics lists."""
+    year = row.get("year")
+    year_text = f" ({year})" if year not in (None, "") else ""
+    user_score = row.get("user_score")
+    score_text = f" · моя {float(user_score):.1f}" if user_score is not None else ""
+    return f"{row['title']}{year_text}{score_text} · {row['reason']}"
+
+
+def build_suspicious_ratings(
+    entries: list[tuple[str, dict, dict]],
+    *,
+    limit: int = ANALYTICS_LIST_LIMIT,
+) -> dict:
+    """Find watched titles with suspicious user/public rating patterns."""
+    rows: list[dict] = []
+    for item in collect_analytics_entry_items(entries):
+        user_score = item.get("user_score")
+        if user_score is None:
+            continue
+
+        reasons: list[str] = []
+        for source_label, external_score in (
+            ("IMDb", item.get("imdb_score")),
+            ("КП", item.get("kp_score")),
+        ):
+            if external_score is None:
+                continue
+            if float(external_score) >= SUSPICIOUS_HIGH_PUBLIC and float(user_score) <= SUSPICIOUS_LOW_USER:
+                reasons.append(f"{source_label} высокий, моя низкая")
+            if float(external_score) <= SUSPICIOUS_LOW_PUBLIC and float(user_score) >= SUSPICIOUS_HIGH_USER:
+                reasons.append(f"{source_label} низкий, моя высокая")
+
+        if item.get("has_overview") is False:
+            reasons.append("нет описания")
+
+        if len(reasons) == 0:
+            continue
+
+        rows.append(
+            {
+                "title": item["title"],
+                "year": item.get("year"),
+                "user_score": user_score,
+                "reason": reasons[0],
+                "reasons": reasons,
+            }
+        )
+
+    rows.sort(key=lambda row: str(row["title"]).casefold())
+    return {
+        "items": rows[:limit],
+        "extra_count": max(0, len(rows) - limit),
     }
 
 
@@ -508,6 +770,12 @@ def build_score_analytics(records, entries=None) -> dict:
         if entries is not None
         else build_dataset_completeness(records)
     )
+    analytics_entries = entries if entries is not None else []
+    genre_count_rows = build_genre_count_rows(analytics_entries)
+    year_average_points = build_year_average_points(analytics_entries)
+    rating_gap_lists = build_rating_gap_lists(analytics_entries)
+    imdb_delta_chart = build_imdb_delta_chart_rows(analytics_entries)
+    suspicious_ratings = build_suspicious_ratings(analytics_entries)
     return {
         "scores": scores,
         "score_items": score_items,
@@ -518,4 +786,14 @@ def build_score_analytics(records, entries=None) -> dict:
         "dense_scores": dense_scores,
         "insights": build_score_insights(summary, distribution, dense_scores),
         "dataset_completeness": dataset_completeness,
+        "genre_count_rows": genre_count_rows,
+        "year_average_points": year_average_points,
+        "rating_higher_than_public": rating_gap_lists["higher_than_public"],
+        "rating_lower_than_public": rating_gap_lists["lower_than_public"],
+        "rating_higher_extra_count": rating_gap_lists["higher_extra_count"],
+        "rating_lower_extra_count": rating_gap_lists["lower_extra_count"],
+        "imdb_delta_rows": imdb_delta_chart["rows"],
+        "imdb_delta_extra_count": imdb_delta_chart["extra_count"],
+        "suspicious_ratings": suspicious_ratings["items"],
+        "suspicious_extra_count": suspicious_ratings["extra_count"],
     }

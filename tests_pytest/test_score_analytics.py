@@ -2,19 +2,46 @@ from dataset.score_analytics import (
     build_dense_score_rows,
     build_dataset_completeness,
     build_dataset_completeness_from_entries,
+    build_genre_count_rows,
+    build_imdb_delta_chart_rows,
+    build_rating_gap_lists,
     build_score_analytics,
     build_score_count_points,
     build_score_distribution,
     build_score_distribution_chart_rows,
     build_score_insights,
     build_score_summary,
+    build_suspicious_ratings,
+    build_year_average_points,
     collect_user_scores,
+    format_rating_gap_line,
+    format_suspicious_rating_line,
     summarize_dataset_completeness,
 )
 
 
 def _movie(score, title: str = "Title"):
     return {"main_info": {"title": title, "user_score": score}}
+
+
+def _entry(key: str, movie: dict, card: dict) -> tuple[str, dict, dict]:
+    return key, movie, card
+
+
+def _full_card(**overrides) -> dict:
+    card = {
+        "user_score": 8.0,
+        "year": 2020,
+        "genres": ["Драма"],
+        "imdb_score": 7.5,
+        "kp_score": 7.0,
+        "overview": "Описание фильма.",
+        "poster_url": "https://example.com/poster.jpg",
+        "poster_path": None,
+        "poster_src": "https://example.com/poster.jpg",
+    }
+    card.update(overrides)
+    return card
 
 
 def test_score_summary() -> None:
@@ -214,22 +241,126 @@ def test_build_score_analytics() -> None:
     assert analytics["dense_scores"][0]["titles"] == ["Bravo"]
     assert len(analytics["insights"]) == 3
     assert analytics["dataset_completeness"]["total"] == 2
+    assert analytics["genre_count_rows"] == []
+    assert analytics["year_average_points"] == []
+    assert analytics["rating_higher_than_public"] == []
+    assert analytics["rating_lower_than_public"] == []
+    assert analytics["suspicious_ratings"] == []
+    assert analytics["imdb_delta_rows"] == []
 
 
-def _full_card(**overrides) -> dict:
-    card = {
-        "user_score": 8.0,
-        "year": 2020,
-        "genres": ["Драма"],
-        "imdb_score": 7.5,
-        "kp_score": 7.0,
-        "overview": "Описание фильма.",
-        "poster_url": "https://example.com/poster.jpg",
-        "poster_path": None,
-        "poster_src": "https://example.com/poster.jpg",
-    }
-    card.update(overrides)
-    return card
+def test_build_imdb_delta_chart_rows() -> None:
+    movie = _movie(8.0, "Alpha")
+    entries = [
+        _entry("A", movie, _full_card(title="Higher", user_score=9.0, imdb_score=6.0)),
+        _entry("B", movie, _full_card(title="Lower", user_score=4.0, imdb_score=8.0)),
+        _entry("C", movie, _full_card(title="NoImdb", user_score=7.0, imdb_score=None)),
+    ]
+
+    result = build_imdb_delta_chart_rows(entries, limit=10)
+
+    assert [(row["title"], row["delta"]) for row in result["rows"]] == [
+        ("Higher", 3.0),
+        ("Lower", -4.0),
+    ]
+    assert result["extra_count"] == 0
+
+
+def test_build_genre_count_rows() -> None:
+    movie = _movie(8.0, "Alpha")
+    entries = [
+        _entry("A", movie, _full_card(title="Alpha", genres=["Драма", "Комедия"])),
+        _entry("B", movie, _full_card(title="Bravo", genres=["Драма"])),
+    ]
+
+    rows = build_genre_count_rows(entries)
+
+    assert [(row["label"], row["count"]) for row in rows] == [("Драма", 2), ("Комедия", 1)]
+    assert rows[0]["example_titles"] == ["Alpha", "Bravo"]
+
+
+def test_build_year_average_points() -> None:
+    movie = _movie(8.0, "Alpha")
+    entries = [
+        _entry("A", movie, _full_card(title="Alpha", year=2020, user_score=8.0)),
+        _entry("B", movie, _full_card(title="Bravo", year=2020, user_score=6.0)),
+        _entry("C", movie, _full_card(title="Charlie", year=2021, user_score=9.0)),
+    ]
+
+    points = build_year_average_points(entries)
+
+    assert points == [
+        {"year": 2020, "average": 7.0, "count": 2},
+        {"year": 2021, "average": 9.0, "count": 1},
+    ]
+
+
+def test_build_rating_gap_lists() -> None:
+    movie = _movie(9.0, "Alpha")
+    entries = [
+        _entry("A", movie, _full_card(title="Higher", user_score=9.0, imdb_score=6.0, kp_score=7.0)),
+        _entry("B", movie, _full_card(title="Lower", user_score=4.0, imdb_score=8.0, kp_score=7.5)),
+        _entry("C", movie, _full_card(title="Close", user_score=7.0, imdb_score=6.5, kp_score=7.0)),
+    ]
+
+    gaps = build_rating_gap_lists(entries, gap=1.5, limit=10)
+
+    assert len(gaps["higher_than_public"]) == 1
+    assert gaps["higher_than_public"][0]["title"] == "Higher"
+    assert gaps["higher_than_public"][0]["delta"] == 3.0
+    assert gaps["higher_than_public"][0]["source_label"] == "IMDb"
+    assert len(gaps["lower_than_public"]) == 1
+    assert gaps["lower_than_public"][0]["title"] == "Lower"
+    assert gaps["lower_than_public"][0]["delta"] == -4.0
+    assert format_rating_gap_line(gaps["higher_than_public"][0]).startswith("Higher")
+
+
+def test_build_suspicious_ratings() -> None:
+    movie = _movie(5.0, "Alpha")
+    entries = [
+        _entry(
+            "A",
+            movie,
+            _full_card(title="HighPublic", user_score=5.0, imdb_score=8.0, overview="Есть."),
+        ),
+        _entry(
+            "B",
+            movie,
+            _full_card(title="NoOverview", user_score=7.0, imdb_score=7.0, overview=""),
+        ),
+        _entry(
+            "C",
+            movie,
+            _full_card(title="Normal", user_score=7.0, imdb_score=7.0, overview="Ок."),
+        ),
+    ]
+
+    result = build_suspicious_ratings(entries, limit=10)
+
+    titles = [row["title"] for row in result["items"]]
+    assert "HighPublic" in titles
+    assert "NoOverview" in titles
+    assert "Normal" not in titles
+    assert format_suspicious_rating_line(result["items"][0]).startswith(result["items"][0]["title"])
+
+
+def test_build_score_analytics_mvp_with_entries() -> None:
+    movie = _movie(9.0, "Alpha")
+    entries = [
+        _entry(
+            "A",
+            movie,
+            _full_card(title="Gap", user_score=9.0, imdb_score=6.0, year=2020, genres=["Драма"]),
+        )
+    ]
+    analytics = build_score_analytics({"A": movie}, entries=entries)
+
+    assert analytics["genre_count_rows"][0]["label"] == "Драма"
+    assert analytics["year_average_points"] == [{"year": 2020, "average": 9.0, "count": 1}]
+    assert len(analytics["rating_higher_than_public"]) == 1
+    assert analytics["rating_higher_extra_count"] == 0
+    assert analytics["imdb_delta_rows"][0]["delta"] == 3.0
+    assert analytics["imdb_delta_extra_count"] == 0
 
 
 def test_dataset_completeness_empty() -> None:
@@ -297,9 +428,10 @@ def test_summarize_dataset_completeness_ok() -> None:
     completeness = build_dataset_completeness_from_entries([("Alpha", movie, _full_card())])
     summary = summarize_dataset_completeness(completeness)
 
-    assert summary["is_ok"] is True
-    assert summary["issues"] == []
-    assert summary["status_text"] == "Dataset заполнен полностью"
+    assert summary["overall_percent"] == 100.0
+    assert summary["worst_items"] == []
+    assert summary["headline_text"] == "Полнота dataset: 100%"
+    assert summary["subline_text"] == "База почти полная."
 
 
 def test_summarize_dataset_completeness_with_issues() -> None:
@@ -309,13 +441,34 @@ def test_summarize_dataset_completeness_with_issues() -> None:
     )
     summary = summarize_dataset_completeness(completeness)
 
-    assert summary["is_ok"] is False
-    assert any(item["key"] == "kp" for item in summary["issues"])
-    assert summary["status_text"].startswith("Полнота dataset —")
+    assert summary["overall_percent"] < 100.0
+    assert len(summary["worst_items"]) == 1
+    assert summary["worst_items"][0]["key"] == "kp"
+    assert summary["headline_text"].startswith("Полнота dataset:")
+    assert summary["subline_text"].startswith("Нужно заполнить:")
+    assert "КП 0/1" in summary["subline_text"]
+
+
+def test_summarize_dataset_completeness_limits_worst_items() -> None:
+    movie = _movie(8.0, "Alpha")
+    entries = [
+        ("A", movie, _full_card(poster_url=None, poster_path=None, poster_src=None)),
+        ("B", movie, _full_card(overview="")),
+        ("C", movie, _full_card(imdb_score=None)),
+        ("D", movie, _full_card(kp_score=None)),
+        ("E", movie, _full_card(genres=[])),
+        ("F", movie, _full_card(year=None)),
+    ]
+    summary = summarize_dataset_completeness(build_dataset_completeness_from_entries(entries))
+
+    assert len(summary["worst_items"]) == 4
+    assert summary["subline_text"].startswith("Нужно заполнить:")
 
 
 def test_summarize_dataset_completeness_empty() -> None:
     summary = summarize_dataset_completeness(build_dataset_completeness({}))
 
-    assert summary["is_ok"] is False
-    assert summary["status_text"] == "Нет записей в watched-базе"
+    assert summary["overall_percent"] == 0.0
+    assert summary["worst_items"] == []
+    assert summary["headline_text"] == "Полнота dataset: 0%"
+    assert summary["subline_text"] == "Нет записей в watched-базе."

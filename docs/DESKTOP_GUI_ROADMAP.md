@@ -41,6 +41,7 @@ PyQt widget (desktop/*)
 | Удаление watched | `app.py` → `delete_record.delete_watched_record` | done |
 | Analytics KPI / dense / insights | [desktop/analytics_view.py](../desktop/analytics_view.py) | done |
 | Analytics «Полнота dataset» | `score_analytics.py` + `analytics_view.py` | done |
+| Analytics MVP (жанры, годы, gaps, suspicious) | `score_analytics.py` + `plotly_charts.py` + `analytics_view.py` | done |
 | Bar «Распределение оценок» | `analytics_view.py` + [desktop/plotly_charts.py](../desktop/plotly_charts.py) + [dataset/score_analytics.py](../dataset/score_analytics.py) (`chart_distribution`) | done |
 | Layout-контракт | [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) | done |
 
@@ -91,12 +92,21 @@ Pipeline для **каждого** нового графика:
 
 Порядок добавления:
 
-- [x] **2.2.0** Read-only «Полнота dataset» — done (`build_dataset_completeness*`, блок между KPI и «Коротко»).
-- [x] **2.2.1** Распределение по корзинам — done (`chart_distribution`).
-- [ ] **2.2.2** Мои оценки по годам (bar/line).
-- [ ] **2.2.3** Средняя оценка по годам.
-- [ ] **2.2.4** Моя vs IMDb (scatter или bar).
-- [ ] **2.2.5** Опционально: моя vs КП.
+- [x] **2.2.0** Read-only «Полнота dataset» — done (`build_dataset_completeness*`, две строки в «Коротко»).
+- [x] **2.2.1** Распределение по корзинам — done (`score_count_points` + Plotly).
+- [x] **2.2.2** Количество тайтлов по жанрам — done (`genre_count_rows`, horizontal bar).
+- [x] **2.2.3** Средняя моя оценка по годам — done (`year_average_points`, line chart; **без** count-by-year).
+- [x] **2.2.4** Я сильно выше IMDb — done (text list, Δ ≥ 1.5, только IMDb).
+- [x] **2.2.5** Я сильно ниже IMDb — done (text list, Δ ≤ −1.5, только IMDb).
+- [x] **2.2.6** Подозрительные оценки — done (text list + reason).
+- [x] **2.2.7** Отличие моих оценок от IMDb — done (horizontal bar, моя − IMDb, до 20 тайтлов).
+
+**Analytics MVP freeze (2026-06-26):** после блока «Подозрительные оценки» **не добавлять** новые analytics-секции без отдельного решения. Исключение: **2.2.7** добавлен по запросу. Вне scope: страны, pie charts, scatter, график количества оценок по годам, экспорт, drill-down в watched.
+
+Отменено / перенесено из старого плана:
+
+- ~~2.2.x «Мои оценки по годам (count)»~~ — не входит в MVP;
+- ~~scatter/bar «моя vs IMDb/КП»~~ — заменено text lists 2.2.4–2.2.5.
 
 ### Критерий готовности
 
