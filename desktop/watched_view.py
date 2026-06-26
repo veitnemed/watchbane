@@ -9,7 +9,10 @@ from pathlib import Path
 
 from desktop.theme import (
     COLOR_ACCENT,
+    COLOR_ACCENT_SOFT,
     COLOR_BORDER,
+    COLOR_CARD,
+    COLOR_CARD_ALT,
     COLOR_IMDB_ACCENT,
     COLOR_KP_ACCENT,
     COLOR_SURFACE,
@@ -22,6 +25,9 @@ from desktop.theme import (
     build_detail_card_style,
     build_poster_image_style,
     build_poster_placeholder_style,
+    OVERVIEW_DIVIDER_TEXT_SPACING,
+    OVERVIEW_SECTION_TOP_SPACING,
+    OVERVIEW_TITLE_DIVIDER_SPACING,
 )
 from storage import data as storage_data
 from web.export import build_export_lookup_cache, build_watched_movie_card
@@ -468,6 +474,88 @@ def format_watched_list_status(
     return f"Всего {visible_count}"
 
 
+def format_watched_list_counter(
+    visible_count: int,
+    total_count: int,
+    query: str = "",
+    has_score_filter: bool = False,
+    has_year_filter: bool = False,
+    has_genre_filter: bool = False,
+) -> str:
+    """Compact counter shown above the watched list."""
+    normalized = query.strip()
+    has_filter = bool(normalized) or has_score_filter or has_year_filter or has_genre_filter
+    if visible_count == 0:
+        return "Ничего не найдено" if has_filter else "Список пуст"
+    if has_filter or visible_count != total_count:
+        return f"{visible_count} из {total_count}"
+    return f"Всего {visible_count}"
+
+
+def count_active_filters(
+    has_score_filter: bool = False,
+    has_year_filter: bool = False,
+    has_genre_filter: bool = False,
+) -> int:
+    """Return the number of active score/year/genre filters (search excluded)."""
+    return int(has_score_filter) + int(has_year_filter) + int(has_genre_filter)
+
+
+def score_filter_is_active(min_score: float, max_score: float) -> bool:
+    """Return True when user score range differs from the default 0.0–10.0."""
+    return float(min_score) > USER_SCORE_MIN or float(max_score) < USER_SCORE_MAX
+
+
+def year_filter_is_active(year_from: int, year_to: int) -> bool:
+    """Return True when year range differs from the default 2000–current year."""
+    return int(year_from) != YEAR_FILTER_DEFAULT_FROM or int(year_to) != YEAR_FILTER_DEFAULT_TO
+
+
+def genre_filter_is_active(genre: str | None) -> bool:
+    """Return True when a specific genre is selected instead of all genres."""
+    if genre is None:
+        return False
+    selected = str(genre).strip()
+    return selected != "" and selected != GENRE_FILTER_ALL
+
+
+def watched_filters_are_active(
+    has_score_filter: bool = False,
+    has_year_filter: bool = False,
+    has_genre_filter: bool = False,
+) -> bool:
+    """Return True when at least one score/year/genre filter is active."""
+    return bool(has_score_filter or has_year_filter or has_genre_filter)
+
+
+def watched_filters_are_active_from_ranges(
+    min_score: float = USER_SCORE_MIN,
+    max_score: float = USER_SCORE_MAX,
+    year_from: int = YEAR_FILTER_DEFAULT_FROM,
+    year_to: int = YEAR_FILTER_DEFAULT_TO,
+    genre: str | None = None,
+) -> bool:
+    """Return True when any filter range/genre differs from defaults."""
+    return (
+        score_filter_is_active(min_score, max_score)
+        or year_filter_is_active(year_from, year_to)
+        or genre_filter_is_active(genre)
+    )
+
+
+def format_watched_filters_label(
+    has_score_filter: bool = False,
+    has_year_filter: bool = False,
+    has_genre_filter: bool = False,
+    is_expanded: bool = False,
+) -> str:
+    """Build the watched filters toggle label for the sidebar."""
+    arrow = "▾" if is_expanded else "▸"
+    if watched_filters_are_active(has_score_filter, has_year_filter, has_genre_filter):
+        return f"{arrow} Фильтры активны"
+    return f"{arrow} Фильтры"
+
+
 def resolve_local_poster_path(movie: dict, card: dict | None = None) -> str | None:
     """Return a local filesystem poster path when available. Never uses network."""
     display_card = card if card is not None else build_watched_movie_card(movie)
@@ -507,6 +595,12 @@ def _nested_poster_value(movie: dict, field: str) -> str | None:
 
 POSTER_WIDTH = 220
 POSTER_HEIGHT = 330
+LIST_ITEM_HEIGHT = 72
+LIST_THUMB_WIDTH = 40
+LIST_THUMB_HEIGHT = 60
+LIST_ITEM_H_PADDING = 10
+LIST_ITEM_V_PADDING = 6
+LIST_TEXT_GAP = 10
 GENRES_PER_ROW = 4
 CARD_PADDING = 22
 RATING_CIRCLE_WIDGET_SIZE = 88
@@ -515,6 +609,141 @@ RATING_CIRCLE_DIAMETER = 78
 POSTER_PLACEHOLDER_STYLE = build_poster_placeholder_style()
 POSTER_IMAGE_STYLE = build_poster_image_style()
 DETAIL_CARD_STYLE = build_detail_card_style()
+
+_thumb_pixmap_cache: dict[str, object] = {}
+
+
+def _load_list_thumb_pixmap(poster_path: str | None):
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtGui import QPixmap
+
+    if poster_path is None:
+        return None
+    cached = _thumb_pixmap_cache.get(poster_path)
+    if cached is not None:
+        return cached if cached is not False else None
+    pixmap = QPixmap(poster_path)
+    if pixmap.isNull():
+        _thumb_pixmap_cache[poster_path] = False
+        return None
+    scaled = pixmap.scaled(
+        LIST_THUMB_WIDTH,
+        LIST_THUMB_HEIGHT,
+        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    _thumb_pixmap_cache[poster_path] = scaled
+    return scaled
+
+
+class WatchedListItemDelegate:
+    """Rich list row: thumbnail, title, year and user score."""
+
+    def __new__(cls, parent=None):
+        from PyQt6.QtCore import QRect, QSize, Qt
+        from PyQt6.QtGui import QColor, QFont, QPainter, QPen
+        from PyQt6.QtWidgets import QStyledItemDelegate, QStyle
+
+        class _WatchedListItemDelegate(QStyledItemDelegate):
+            def sizeHint(self, option, index):
+                width = option.rect.width() if option.rect.width() > 0 else 280
+                return QSize(width, LIST_ITEM_HEIGHT)
+
+            def paint(self, painter, option, index) -> None:
+                entry = index.data(Qt.ItemDataRole.UserRole)
+                if not isinstance(entry, tuple) or len(entry) != 3:
+                    super().paint(painter, option, index)
+                    return
+
+                _key, movie, card = entry
+                rect = option.rect.adjusted(2, 1, -2, -1)
+                is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
+                is_hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
+
+                painter.save()
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+
+                if is_selected:
+                    painter.setPen(QPen(QColor(COLOR_ACCENT), 2))
+                    painter.setBrush(QColor(COLOR_ACCENT_SOFT))
+                elif is_hovered:
+                    painter.setPen(QPen(QColor(COLOR_BORDER), 1))
+                    painter.setBrush(QColor(COLOR_CARD_ALT))
+                else:
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(Qt.BrushStyle.NoBrush)
+
+                if is_selected or is_hovered:
+                    painter.drawRoundedRect(rect, 10, 10)
+
+                thumb_left = rect.left() + LIST_ITEM_H_PADDING
+                thumb_top = rect.top() + (rect.height() - LIST_THUMB_HEIGHT) // 2
+                thumb_rect = QRect(thumb_left, thumb_top, LIST_THUMB_WIDTH, LIST_THUMB_HEIGHT)
+
+                poster_path = resolve_local_poster_path(movie, card)
+                thumb = _load_list_thumb_pixmap(poster_path)
+                if thumb is not None:
+                    clip = thumb_rect.adjusted(1, 1, -1, -1)
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(QColor(COLOR_CARD))
+                    painter.drawRoundedRect(clip, 6, 6)
+                    painter.drawPixmap(clip, thumb)
+                else:
+                    painter.setPen(QPen(QColor(COLOR_BORDER), 1))
+                    painter.setBrush(QColor(COLOR_CARD))
+                    painter.drawRoundedRect(thumb_rect, 6, 6)
+                    placeholder_font = QFont(FONT_FAMILY, 8)
+                    painter.setFont(placeholder_font)
+                    painter.setPen(QColor(COLOR_TEXT_SECONDARY))
+                    painter.drawText(thumb_rect, Qt.AlignmentFlag.AlignCenter, "—")
+
+                text_left = thumb_rect.right() + LIST_TEXT_GAP
+                text_right = rect.right() - LIST_ITEM_H_PADDING
+                text_width = max(40, text_right - text_left)
+
+                title = str(card.get("title") or _key or "Без названия")
+                year = card.get("year")
+                year_text = str(year) if year not in (None, "") else ""
+                score_text = format_user_score_display(card.get("user_score"))
+                meta_parts = [part for part in (year_text, score_text if score_text != "—" else "") if part]
+                meta_text = " · ".join(meta_parts)
+
+                title_font = QFont(FONT_FAMILY)
+                title_font.setPointSize(10)
+                title_font.setBold(True)
+                meta_font = QFont(FONT_FAMILY)
+                meta_font.setPointSize(9)
+
+                title_rect = QRect(text_left, rect.top() + LIST_ITEM_V_PADDING, text_width, 28)
+                meta_rect = QRect(text_left, title_rect.bottom(), text_width, 20)
+
+                painter.setFont(title_font)
+                painter.setPen(QColor(COLOR_TEXT if is_selected else COLOR_TEXT))
+                painter.drawText(
+                    title_rect,
+                    Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                    _elide_text(painter, title, title_rect.width()),
+                )
+
+                if meta_text:
+                    painter.setFont(meta_font)
+                    painter.setPen(QColor(COLOR_ACCENT if is_selected else COLOR_TEXT_SECONDARY))
+                    painter.drawText(
+                        meta_rect,
+                        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                        meta_text,
+                    )
+
+                painter.restore()
+
+        return _WatchedListItemDelegate(parent)
+
+
+def _elide_text(painter, text: str, max_width: int) -> str:
+    from PyQt6.QtCore import Qt
+
+    metrics = painter.fontMetrics()
+    return metrics.elidedText(text, Qt.TextElideMode.ElideRight, max(20, max_width))
 
 
 def _clear_layout(layout) -> None:
@@ -679,7 +908,7 @@ class WatchedDetailCard:
 
         root = QVBoxLayout(self._frame)
         root.setContentsMargins(CARD_PADDING, CARD_PADDING, CARD_PADDING, CARD_PADDING)
-        root.setSpacing(22)
+        root.setSpacing(OVERVIEW_SECTION_TOP_SPACING)
 
         top_row = QHBoxLayout()
         top_row.setSpacing(22)
@@ -740,12 +969,18 @@ class WatchedDetailCard:
         self._overview_frame.setFrameShape(QFrame.Shape.NoFrame)
         self._overview_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         overview_layout = QVBoxLayout(self._overview_frame)
-        overview_layout.setContentsMargins(16, 16, 16, 16)
-        overview_layout.setSpacing(10)
+        overview_layout.setContentsMargins(0, 0, 0, 0)
+        overview_layout.setSpacing(0)
 
         self._overview_title_label = QLabel("Описание")
         self._overview_title_label.setObjectName("overviewTitle")
         self._overview_title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+        self._overview_divider = QFrame()
+        self._overview_divider.setObjectName("overviewDivider")
+        self._overview_divider.setFrameShape(QFrame.Shape.HLine)
+        self._overview_divider.setFixedHeight(1)
+
         self._overview_label = QLabel("")
         self._overview_label.setObjectName("overviewText")
         self._overview_label.setWordWrap(True)
@@ -753,6 +988,9 @@ class WatchedDetailCard:
         self._overview_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         overview_layout.addWidget(self._overview_title_label)
+        overview_layout.addSpacing(OVERVIEW_TITLE_DIVIDER_SPACING)
+        overview_layout.addWidget(self._overview_divider)
+        overview_layout.addSpacing(OVERVIEW_DIVIDER_TEXT_SPACING)
         overview_layout.addWidget(self._overview_label)
 
         info_column.addWidget(self._title_label)

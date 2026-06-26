@@ -24,6 +24,12 @@ COLOR_ACCENT_HOVER = "#13b98f"
 COLOR_ACCENT_SOFT = "#1f3f36"
 COLOR_ACCENT_PLOT_HOVER = "#35caa5"
 
+COLOR_ADD_BUTTON = "#1f4d3d"
+COLOR_ADD_BUTTON_BORDER = "#1a4234"
+COLOR_ADD_BUTTON_TOP = "#2a6b55"
+COLOR_ADD_BUTTON_HOVER = "#266552"
+COLOR_ADD_BUTTON_HOVER_TOP = "#327a62"
+
 COLOR_IMDB_ACCENT = "#8b949e"
 COLOR_KP_ACCENT = "#87978f"
 
@@ -43,7 +49,8 @@ FONT_TITLE_LARGE = 26
 FONT_DIALOG_TITLE = 18
 FONT_KPI_VALUE = 26
 FONT_DENSE_SCORE = 22
-FONT_OVERVIEW_TEXT = 15
+FONT_OVERVIEW_TITLE = 20
+FONT_OVERVIEW_TEXT = 16
 FONT_RATING_VALUE_POINT = 16
 FONT_RATING_LABEL_POINT = 8
 
@@ -71,6 +78,10 @@ SPACING_XXLARGE = 22
 ROOT_MARGIN = 14
 SECTION_PADDING = 10
 CARD_PADDING = 22
+OVERVIEW_SECTION_TOP_SPACING = 36
+OVERVIEW_TITLE_DIVIDER_SPACING = 12
+OVERVIEW_DIVIDER_TEXT_SPACING = 12
+OVERVIEW_TEXT_LINE_HEIGHT = 155
 INPUT_PADDING_Y = 8
 INPUT_PADDING_X = 10
 BUTTON_PADDING_Y = 8
@@ -135,47 +146,128 @@ QListWidget#watchedList {{
     padding: 8px;
 }}
 QListWidget::item {{
-    padding: {SPACING_MEDIUM}px 12px;
-    border-radius: {RADIUS_LIST_ITEM}px;
+    padding: 0;
+    border: none;
     color: {COLOR_TEXT_SOFT};
     margin: 1px 0;
+    background: transparent;
 }}
 QListWidget::item:selected {{
-    background-color: {COLOR_ACCENT_SOFT};
+    background: transparent;
     color: {COLOR_TEXT};
 }}
 QListWidget::item:selected:!active {{
-    background-color: {COLOR_ACCENT_SOFT};
+    background: transparent;
     color: {COLOR_TEXT};
 }}
 QListWidget::item:hover {{
-    background-color: {COLOR_CARD_ALT};
+    background: transparent;
+}}
+QWidget#watchedSidebar {{
+    background: transparent;
 }}
 QLineEdit#watchedSearch {{
     font-size: {FONT_BASE}px;
 }}
 QPushButton#watchedAddTitle {{
-    background-color: {COLOR_CARD_ALT};
-    border: 1px solid {COLOR_BORDER};
+    background-color: {COLOR_ADD_BUTTON};
+    border: 1px solid {COLOR_ADD_BUTTON_BORDER};
     border-radius: {RADIUS_BUTTON}px;
     color: {COLOR_TEXT};
     font-size: {FONT_BASE}px;
     font-weight: 600;
-    padding: 8px 10px;
+    padding: 12px 14px;
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 {COLOR_ADD_BUTTON_TOP},
+        stop:1 {COLOR_ADD_BUTTON}
+    );
 }}
 QPushButton#watchedAddTitle:hover {{
+    border-color: {COLOR_ADD_BUTTON_HOVER};
+    background: qlineargradient(
+        x1:0, y1:0, x2:0, y2:1,
+        stop:0 {COLOR_ADD_BUTTON_HOVER_TOP},
+        stop:1 {COLOR_ADD_BUTTON_HOVER}
+    );
+}}
+QPushButton#watchedFilterToggle {{
+    background-color: transparent;
+    border: none;
+    border-radius: {RADIUS_BUTTON_SMALL}px;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+    font-weight: 600;
+    padding: 6px 4px;
+    text-align: left;
+}}
+QPushButton#watchedFilterToggle:hover {{
+    color: {COLOR_TEXT};
+    background-color: {COLOR_CARD_ALT};
+}}
+QPushButton#watchedFilterToggle[watchedFiltersActive="true"] {{
+    color: {COLOR_TEXT};
+}}
+QFrame#watchedFiltersPanel {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_INPUT}px;
+}}
+QPushButton#watchedFilterResetAll {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON_SMALL}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SMALL}px;
+    font-weight: 600;
+    padding: 8px 10px;
+}}
+QPushButton#watchedFilterResetAll:hover {{
     background-color: {COLOR_CONTROL_HOVER};
     border-color: {COLOR_BORDER_HOVER};
 }}
-QComboBox#watchedSort {{
+QLabel#watchedListCounter {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
     font-size: {FONT_SMALL}px;
+    font-weight: 600;
+    padding: 0 4px;
+}}
+QWidget#watchedSortRow {{
+    background: transparent;
+}}
+QLabel#watchedSortLabel {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    font-weight: 600;
+}}
+QComboBox#watchedSort {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_INPUT}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    padding: {INPUT_PADDING_Y}px {INPUT_PADDING_X}px;
+    min-height: 20px;
+}}
+QComboBox#watchedSort:focus {{
+    border: 1px solid {COLOR_ACCENT};
+}}
+QComboBox#watchedSort::drop-down {{
+    border: none;
+    width: 28px;
+}}
+QComboBox#watchedSort::down-arrow {{
+    width: 10px;
+    height: 10px;
 }}
 QFrame#watchedScoreFilter,
 QFrame#watchedYearFilter,
 QFrame#watchedGenreFilter {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_INPUT}px;
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
 }}
 QLabel#watchedScoreFilterTitle,
 QLabel#watchedYearFilterTitle,
@@ -205,21 +297,6 @@ QLabel#watchedFilterValue {{
 QWidget#watchedScoreRange,
 QWidget#watchedYearRange {{
     background: transparent;
-}}
-QPushButton#watchedScoreReset,
-QPushButton#watchedYearReset {{
-    background-color: {COLOR_CARD_ALT};
-    border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON_SMALL}px;
-    color: {COLOR_TEXT};
-    font-size: {FONT_SMALL}px;
-    font-weight: 600;
-    padding: 6px 10px;
-}}
-QPushButton#watchedScoreReset:hover,
-QPushButton#watchedYearReset:hover {{
-    background-color: {COLOR_CONTROL_HOVER};
-    border-color: {COLOR_BORDER_HOVER};
 }}
 QScrollArea {{
     border: none;
@@ -407,20 +484,27 @@ QLabel#genrePill {{
     font-size: {FONT_BASE}px;
 }}
 QFrame#overviewBlock {{
-    background-color: {COLOR_CARD_ALT};
-    border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CARD}px;
+    background: transparent;
+    border: none;
+}}
+QFrame#overviewDivider {{
+    background-color: {COLOR_BORDER};
+    min-height: 1px;
+    max-height: 1px;
+    border: none;
 }}
 QLabel#overviewTitle {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {FONT_SECTION}px;
-    font-weight: 600;
+    font-size: {FONT_OVERVIEW_TITLE}px;
+    font-weight: 700;
+    padding: 0;
 }}
 QLabel#overviewText {{
     background: transparent;
-    color: {COLOR_TEXT_SOFT};
+    color: {COLOR_TEXT_SECONDARY};
     font-size: {FONT_OVERVIEW_TEXT}px;
+    line-height: {OVERVIEW_TEXT_LINE_HEIGHT}%;
 }}
 """
 

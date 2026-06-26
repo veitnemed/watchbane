@@ -73,7 +73,7 @@ PyQt widget (desktop/*)
 - [x] **2.1.2** Фильтр по году — done (`desktop.watched_view.filter_entries_by_year`, UI `year_from/year_to` в watched left panel).
 - [x] **2.1.3** Фильтр по жанру — done (`desktop.watched_view.get_available_genres`, `filter_entries_by_genre`, UI genre combo в watched left panel).
 - [ ] **2.1.4** Счётчик «найдено N» в status bar.
-- [ ] **2.1.5** Быстрый сброс фильтров.
+- [x] **2.1.5** Быстрый сброс фильтров — done (`Сбросить фильтры`, score/year/genre → defaults; поиск не сбрасывается).
 
 Данные: `load_watched_entries()` + filter/sort, без записи.
 

@@ -532,6 +532,158 @@ def test_format_watched_list_status() -> None:
     assert format_watched_list_status(0, 0, "") == "Список пуст"
 
 
+def test_format_watched_list_counter() -> None:
+    from desktop.watched_view import format_watched_list_counter
+
+    assert format_watched_list_counter(12, 12, "") == "Всего 12"
+    assert format_watched_list_counter(3, 12, "alpha") == "3 из 12"
+    assert format_watched_list_counter(3, 12, "", True) == "3 из 12"
+    assert format_watched_list_counter(0, 12, "missing") == "Ничего не найдено"
+    assert format_watched_list_counter(0, 0, "") == "Список пуст"
+
+
+def test_count_active_filters() -> None:
+    from desktop.watched_view import count_active_filters
+
+    assert count_active_filters() == 0
+    assert count_active_filters(True, False, False) == 1
+    assert count_active_filters(True, True, True) == 3
+
+
+def test_score_filter_is_active() -> None:
+    from desktop.watched_view import USER_SCORE_MAX, USER_SCORE_MIN, score_filter_is_active
+
+    assert score_filter_is_active(USER_SCORE_MIN, USER_SCORE_MAX) is False
+    assert score_filter_is_active(8.0, USER_SCORE_MAX) is True
+    assert score_filter_is_active(USER_SCORE_MIN, 7.5) is True
+
+
+def test_year_filter_is_active() -> None:
+    from datetime import date
+
+    from desktop.watched_view import (
+        YEAR_FILTER_DEFAULT_FROM,
+        YEAR_FILTER_DEFAULT_TO,
+        year_filter_is_active,
+    )
+
+    current_year = date.today().year
+    assert year_filter_is_active(YEAR_FILTER_DEFAULT_FROM, YEAR_FILTER_DEFAULT_TO) is False
+    assert year_filter_is_active(2015, current_year) is True
+    assert year_filter_is_active(YEAR_FILTER_DEFAULT_FROM, current_year - 1) is True
+
+
+def test_genre_filter_is_active() -> None:
+    from desktop.watched_view import GENRE_FILTER_ALL, genre_filter_is_active
+
+    assert genre_filter_is_active(None) is False
+    assert genre_filter_is_active(GENRE_FILTER_ALL) is False
+    assert genre_filter_is_active("Триллер") is True
+
+
+def test_watched_filters_are_active_from_ranges() -> None:
+    from datetime import date
+
+    from desktop.watched_view import (
+        USER_SCORE_MAX,
+        USER_SCORE_MIN,
+        YEAR_FILTER_DEFAULT_FROM,
+        watched_filters_are_active_from_ranges,
+    )
+
+    current_year = date.today().year
+    assert (
+        watched_filters_are_active_from_ranges(
+            USER_SCORE_MIN,
+            USER_SCORE_MAX,
+            YEAR_FILTER_DEFAULT_FROM,
+            current_year,
+            None,
+        )
+        is False
+    )
+    assert watched_filters_are_active_from_ranges(8.0, USER_SCORE_MAX) is True
+    assert watched_filters_are_active_from_ranges(year_from=2015, year_to=current_year) is True
+    assert watched_filters_are_active_from_ranges(genre="Триллер") is True
+    assert (
+        watched_filters_are_active_from_ranges(
+            8.0,
+            USER_SCORE_MAX,
+            2015,
+            current_year,
+            "Триллер",
+        )
+        is True
+    )
+
+
+def test_format_watched_filters_label() -> None:
+    from desktop.watched_view import format_watched_filters_label
+
+    assert format_watched_filters_label() == "▸ Фильтры"
+    assert format_watched_filters_label(is_expanded=True) == "▾ Фильтры"
+    assert format_watched_filters_label(has_score_filter=True) == "▸ Фильтры активны"
+    assert format_watched_filters_label(has_year_filter=True, is_expanded=True) == "▾ Фильтры активны"
+    assert format_watched_filters_label(has_genre_filter=True) == "▸ Фильтры активны"
+    assert " (" not in format_watched_filters_label(has_score_filter=True)
+
+
+def test_apply_view_after_default_filter_reset_respects_search() -> None:
+    from desktop.watched_view import (
+        USER_SCORE_MAX,
+        USER_SCORE_MIN,
+        YEAR_FILTER_DEFAULT_FROM,
+        YEAR_FILTER_DEFAULT_TO,
+        apply_view,
+    )
+
+    entries = _make_entries()
+    narrowed = apply_view(
+        entries,
+        "",
+        "user_score",
+        USER_SCORE_MIN,
+        USER_SCORE_MAX,
+        2022,
+        2022,
+        None,
+    )
+    assert [entry[0] for entry in narrowed] == ["Charlie"]
+
+    reset = apply_view(
+        entries,
+        "bravo",
+        "user_score",
+        USER_SCORE_MIN,
+        USER_SCORE_MAX,
+        YEAR_FILTER_DEFAULT_FROM,
+        YEAR_FILTER_DEFAULT_TO,
+        None,
+    )
+    assert [entry[0] for entry in reset] == ["Bravo"]
+
+
+def test_watched_layout_uses_collapsible_filters_and_rich_list() -> None:
+    import inspect
+
+    import desktop.app as app_module
+
+    source = inspect.getsource(app_module.WatchedMoviesWindow)
+
+    assert "_build_filters_panel" in source
+    assert "watchedFiltersPanel" in source
+    assert "format_watched_filters_label" in source
+    assert "watchedFilterResetAll" in source
+    assert "WatchedListItemDelegate" in source
+    assert "watchedListCounter" in source
+    assert "watchedSortRow" in source
+    assert "watchedSortLabel" in source
+    assert "Сортировка" in source
+    assert "_reset_all_filters" in source
+    assert "watchedScoreReset" not in source
+    assert "watchedYearReset" not in source
+
+
 def test_watched_detail_card_layout_contract() -> None:
     import inspect
 
@@ -553,8 +705,11 @@ def test_watched_detail_card_hides_overview_without_text() -> None:
     import desktop.watched_view as watched_view_module
 
     source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
+    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
     assert "has_overview_text(card)" in source
     assert "_overview_frame.setVisible(False)" in source
+    assert "overviewDivider" in init_source
+    assert "OVERVIEW_SECTION_TOP_SPACING" in init_source
 
 
 def test_build_score_count_html_smoke() -> None:
