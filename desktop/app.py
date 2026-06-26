@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.analytics_view import AnalyticsView
+from desktop.delete_dialog import WatchedDeleteDialog
 from desktop.theme import (
     COLOR_ACCENT,
     COLOR_ACCENT_SOFT,
@@ -70,6 +71,11 @@ from desktop.watched_view import (
     validate_score_edit_entry,
     watched_filters_are_active,
     year_filter_is_active,
+)
+from desktop.watched_delete import (
+    execute_watched_delete,
+    format_delete_status_message,
+    load_delete_preview,
 )
 
 DARK_STYLE = build_app_style()
@@ -645,9 +651,67 @@ class WatchedMoviesWindow(QMainWindow):
         self._list_widget.setCurrentItem(item)
         menu = QMenu(self._list_widget)
         edit_action = menu.addAction("Изменить оценку")
+        delete_action = menu.addAction("Удалить запись")
         chosen_action = menu.exec(self._list_widget.viewport().mapToGlobal(position))
         if chosen_action is edit_action:
             self._edit_user_score(entry)
+        elif chosen_action is delete_action:
+            self._delete_watched_entry(entry)
+
+    def _delete_watched_entry(self, entry: WatchedEntry | None) -> None:
+        is_valid, message = validate_score_edit_entry(entry)
+        if is_valid is False:
+            self.statusBar().showMessage(message, 4000)
+            return
+
+        dataset_key, _movie, _card = entry
+        preview = load_delete_preview(dataset_key)
+        if preview is None:
+            self.statusBar().showMessage("Запись не найдена", 4000)
+            return
+
+        dialog = WatchedDeleteDialog(preview, parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        result = execute_watched_delete(dataset_key)
+        if result.get("ok"):
+            self._refresh_after_delete(result)
+            return
+
+        self.statusBar().showMessage(format_delete_status_message(result), 4000)
+
+    def _reload_genre_filter_options(self) -> None:
+        current = self._selected_genre_filter()
+        self._genre_combo.blockSignals(True)
+        self._genre_combo.clear()
+        self._genre_combo.addItem(GENRE_FILTER_ALL, None)
+        for genre in get_available_genres(self._entries):
+            self._genre_combo.addItem(genre, genre)
+        if current is not None:
+            index = self._genre_combo.findData(current)
+            self._genre_combo.setCurrentIndex(index if index >= 0 else 0)
+        else:
+            self._genre_combo.setCurrentIndex(0)
+        self._genre_combo.blockSignals(False)
+
+    def _refresh_after_delete(self, result: dict) -> None:
+        previous_row = self._list_widget.currentRow()
+        self._entries = load_watched_entries()
+        self._analytics_view.update_entries(self._entries)
+        self._reload_genre_filter_options()
+        self._refresh_list()
+
+        if self._list_widget.count() > 0:
+            row_to_select = min(max(previous_row, 0), self._list_widget.count() - 1)
+            self._list_widget.blockSignals(True)
+            self._list_widget.setCurrentRow(row_to_select)
+            self._list_widget.blockSignals(False)
+            self._detail_card.show_entry(self._visible_entries[row_to_select])
+        else:
+            self._show_empty_details()
+
+        self.statusBar().showMessage(format_delete_status_message(result), 4000)
 
     def _edit_user_score(self, entry: WatchedEntry | None) -> None:
         is_valid, message = validate_score_edit_entry(entry)

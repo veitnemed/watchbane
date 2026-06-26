@@ -682,6 +682,66 @@ def test_watched_layout_uses_collapsible_filters_and_rich_list() -> None:
     assert "_reset_all_filters" in source
     assert "watchedScoreReset" not in source
     assert "watchedYearReset" not in source
+    assert "Удалить запись" in source
+    assert "_delete_watched_entry" in source
+    assert "execute_watched_delete" in source
+
+
+def test_is_delete_confirmation_valid() -> None:
+    from desktop.watched_delete import is_delete_confirmation_valid
+
+    assert is_delete_confirmation_valid("DELETE") is True
+    assert is_delete_confirmation_valid(" DELETE ") is True
+    assert is_delete_confirmation_valid("delete") is False
+    assert is_delete_confirmation_valid("") is False
+    assert is_delete_confirmation_valid("REMOVE") is False
+
+
+def test_format_delete_preview_lines() -> None:
+    from desktop.watched_delete import format_delete_preview_lines
+
+    lines = format_delete_preview_lines(
+        {
+            "title": "Alpha",
+            "year": 2020,
+            "user_score": 8.0,
+            "kp_score": 7.5,
+            "imdb_score": 8.1,
+            "has_meta": True,
+            "has_poster_cache": False,
+        }
+    )
+    assert "Название: Alpha" in lines
+    assert "Год: 2020" in lines
+    assert "Моя оценка: 8.0" in lines
+    assert "КП: 7.5" in lines
+    assert "IMDb: 8.1" in lines
+    assert "Meta: есть" in lines
+    assert "Poster-cache: нет" in lines
+
+
+def test_format_delete_preview_lines_handles_missing_fields() -> None:
+    from desktop.watched_delete import format_delete_preview_lines
+
+    lines = format_delete_preview_lines({"title": "No Meta"})
+    joined = "\n".join(lines)
+    assert "Название: No Meta" in joined
+    assert "Meta: нет" in joined
+    assert "Poster-cache: нет" in joined
+    assert "КП:" not in joined
+    assert "IMDb:" not in joined
+
+
+def test_watched_delete_entry_uses_service_helper() -> None:
+    import inspect
+
+    import desktop.app as app_module
+
+    source = inspect.getsource(app_module.WatchedMoviesWindow._delete_watched_entry)
+    assert "load_delete_preview" in source
+    assert "WatchedDeleteDialog" in source
+    assert "execute_watched_delete" in source
+    assert "storage_data.save_dataset" not in source
 
 
 def test_watched_detail_card_layout_contract() -> None:

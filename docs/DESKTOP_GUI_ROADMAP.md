@@ -36,7 +36,9 @@ PyQt widget (desktop/*)
 | Область | Файлы | Статус |
 | --- | --- | --- |
 | Watched list + карточка | [desktop/watched_view.py](../desktop/watched_view.py), [desktop/app.py](../desktop/app.py) | done |
+| Watched sidebar (фильтры, thumbnails, delete) | `app.py`, `watched_delete.py`, `delete_dialog.py` | done |
 | Редактирование `user_score` | `app.py` → `update_dataset_record` | done |
+| Удаление watched | `app.py` → `delete_record.delete_watched_record` | done |
 | Analytics KPI / dense / insights | [desktop/analytics_view.py](../desktop/analytics_view.py) | done |
 | Bar «Распределение оценок» | `analytics_view.py` + [desktop/plotly_charts.py](../desktop/plotly_charts.py) + [dataset/score_analytics.py](../dataset/score_analytics.py) (`chart_distribution`) | done |
 | Layout-контракт | [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) | done |
@@ -50,8 +52,8 @@ PyQt widget (desktop/*)
 
 ### Задачи
 
-- [ ] **1.1** Visual QA watched card: короткий title, длинный title (2–3 строки), без IMDb/КП, без постера — overview сразу под info, нет пустот.
-- [ ] **1.2** Polish левой панели списка: spacing, selected item, пустой поиск.
+- [x] **1.1** Visual QA watched card — done (чеклист в [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md); helper-тесты sparse card в `test_desktop.py`).
+- [x] **1.2** Polish левой панели списка — done (sidebar: thumbnails, collapsible filters, sort row, counter, forest-green add button).
 - [ ] **1.3** Plotly bar «Распределение оценок»: высота, отступы, стиль под `#analyticsSection`.
 - [ ] **1.4** Мелкие визуальные правки analytics (KPI, dense, «Коротко») — через именованные константы `ANALYTICS_*`.
 
@@ -72,7 +74,7 @@ PyQt widget (desktop/*)
 - [x] **2.1.1** Фильтр по диапазону `user_score` — done (`desktop.watched_view.filter_entries_by_user_score`, UI min/max в watched left panel).
 - [x] **2.1.2** Фильтр по году — done (`desktop.watched_view.filter_entries_by_year`, UI `year_from/year_to` в watched left panel).
 - [x] **2.1.3** Фильтр по жанру — done (`desktop.watched_view.get_available_genres`, `filter_entries_by_genre`, UI genre combo в watched left panel).
-- [ ] **2.1.4** Счётчик «найдено N» в status bar.
+- [x] **2.1.4** Счётчик «найдено N» — done (`format_watched_list_counter` над списком + status bar).
 - [x] **2.1.5** Быстрый сброс фильтров — done (`Сбросить фильтры`, score/year/genre → defaults; поиск не сбрасывается).
 
 Данные: `load_watched_entries()` + filter/sort, без записи.
@@ -88,7 +90,7 @@ Pipeline для **каждого** нового графика:
 
 Порядок добавления:
 
-- [ ] **2.2.1** ~~Распределение по корзинам~~ — done (`chart_distribution`).
+- [x] **2.2.1** Распределение по корзинам — done (`chart_distribution`).
 - [ ] **2.2.2** Мои оценки по годам (bar/line).
 - [ ] **2.2.3** Средняя оценка по годам.
 - [ ] **2.2.4** Моя vs IMDb (scatter или bar).
@@ -105,17 +107,12 @@ Pipeline для **каждого** нового графика:
 ### Задачи
 
 - [x] **3.0** UI-stub будущего добавления watched-тайтла — done (`+ Добавить тайтл` показывает заглушку, без записи данных).
-- [ ] **3.1** Удаление записи — **первый новый write** в GUI:
-  - ПКМ → «Удалить запись»;
-  - preview dialog через `build_watched_delete_preview()` ([dataset/delete_record.py](../dataset/delete_record.py));
-  - подтверждение (например, ввод `DELETE`);
-  - `delete_watched_record()` — удаление dataset/meta + poster cache (как в [ui/console/interface_funcs.py](../ui/console/interface_funcs.py));
-  - обновить list + card.
+- [x] **3.1** Удаление записи — done (ПКМ → «Удалить запись», preview dialog, подтверждение `DELETE`, `delete_watched_record()` через `desktop/watched_delete.py`).
 - [ ] **3.2** Read-only сервисные пункты (опционально): «Открыть локальный постер», «Показать путь poster-cache».
 
 ### Тесты
 
-[tests_pytest/test_delete_watched_record.py](../tests_pytest/test_delete_watched_record.py) — уже покрывает service; добавить wiring-тест GUI при реализации.
+[tests_pytest/test_delete_watched_record.py](../tests_pytest/test_delete_watched_record.py) — service layer; wiring GUI — `tests_pytest/test_desktop.py` (`test_watched_delete_*`, context menu).
 
 ### Не делать на этом этапе
 
@@ -214,28 +211,28 @@ TMDb build, массовые операции, сложный import.
 
 ## Ближайшие 8 шагов
 
-| # | Шаг | Этап |
-| --- | --- | --- |
-| 1 | Visual QA + polish watched/analytics | 1 |
-| 2 | Plotly bar: высота/стиль под секцию | 1 |
-| 3 | Polish watched list (left panel) | 1 |
-| 4 | График «оценки по годам» | 2 |
-| 5 | GUI delete watched | 3 |
-| 6 | Structure-тесты на новые wiring | — |
-| 7 | Вкладка «Модель» read-only summary | 4 |
-| 8 | Вкладка «Рекомендации» read-only top-N | 5 |
+| # | Шаг | Этап | Статус |
+| --- | --- | --- | --- |
+| 1 | Visual QA watched card | 1 | done |
+| 2 | Plotly bar: высота/стиль под секцию | 1 | next |
+| 3 | Polish watched list (left panel) | 1 | done |
+| 4 | График «оценки по годам» | 2 | next |
+| 5 | GUI delete watched | 3 | done |
+| 6 | Structure-тесты на новые wiring | — | done |
+| 7 | Вкладка «Модель» read-only summary | 4 | planned |
+| 8 | Вкладка «Рекомендации» read-only top-N | 5 | planned |
 
 ---
 
 ## Чеклист перед GUI-PR
 
-- [ ] Нет прямой записи JSON из PyQt.
-- [ ] Write идёт через documented service + `source_name`.
-- [ ] Layout/size policy по [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md).
+- [x] Нет прямой записи JSON из PyQt (delete → `delete_watched_record`, score → `update_dataset_record`).
+- [x] Write идёт через documented service + `source_name` (score edit).
+- [x] Layout/size policy по [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) (watched card + sidebar).
 - [ ] Spacing/fonts через именованные константы в `analytics_view.py`.
-- [ ] Три крайних кейса вручную (см. style contract).
-- [ ] `tests_pytest/test_desktop.py` (+ smoke для plotly при графиках).
-- [ ] Не тронуты: training, pool build, weights без отдельного этапа.
+- [x] Helper-тесты edge cases watched card в `test_desktop.py`; ручной чеклист — style contract.
+- [x] `tests_pytest/test_desktop.py` (+ smoke для plotly при графиках).
+- [x] Не тронуты: training, pool build, weights без отдельного этапа.
 
 ## Что не трогать без отдельного решения
 

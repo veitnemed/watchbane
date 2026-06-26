@@ -30,6 +30,9 @@ COLOR_ADD_BUTTON_TOP = "#2a6b55"
 COLOR_ADD_BUTTON_HOVER = "#266552"
 COLOR_ADD_BUTTON_HOVER_TOP = "#327a62"
 
+COLOR_DELETE_BUTTON = "#7a3f3f"
+COLOR_DELETE_BUTTON_HOVER = "#8f4a4a"
+
 COLOR_IMDB_ACCENT = "#8b949e"
 COLOR_KP_ACCENT = "#87978f"
 
@@ -456,6 +459,85 @@ QPushButton#scoreEditSaveButton {{
 QPushButton#scoreEditSaveButton:hover {{
     background-color: {COLOR_ACCENT_HOVER};
     border-color: {COLOR_ACCENT_HOVER};
+}}
+"""
+
+
+def build_delete_dialog_style() -> str:
+    """Return the watched delete confirmation dialog stylesheet."""
+    return f"""
+QDialog#deleteRecordDialog {{
+    background-color: {COLOR_BG};
+    font-family: {FONT_FAMILY_QSS};
+}}
+QFrame#deleteRecordCard {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CARD_LARGE}px;
+}}
+QLabel#deleteRecordTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_DIALOG_TITLE}px;
+    font-weight: 700;
+}}
+QLabel#deleteRecordWarning {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+}}
+QLabel#deleteRecordPreviewLine {{
+    background: transparent;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {FONT_SMALL}px;
+}}
+QLabel#deleteRecordFieldLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_TINY}px;
+}}
+QLineEdit#deleteRecordConfirmInput {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    font-weight: 600;
+    padding: 7px {SPACING_MEDIUM}px;
+}}
+QLineEdit#deleteRecordConfirmInput:focus {{
+    border: 1px solid {COLOR_DELETE_BUTTON};
+}}
+QDialogButtonBox {{
+    background: transparent;
+}}
+QPushButton {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SMALL}px;
+    font-weight: 600;
+    padding: {BUTTON_PADDING_Y}px {BUTTON_PADDING_X}px;
+    min-width: 92px;
+}}
+QPushButton:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
+}}
+QPushButton#deleteRecordConfirmButton {{
+    background-color: {COLOR_DELETE_BUTTON};
+    border-color: {COLOR_DELETE_BUTTON};
+    color: {COLOR_TEXT};
+}}
+QPushButton#deleteRecordConfirmButton:hover {{
+    background-color: {COLOR_DELETE_BUTTON_HOVER};
+    border-color: {COLOR_DELETE_BUTTON_HOVER};
+}}
+QPushButton#deleteRecordConfirmButton:disabled {{
+    background-color: {COLOR_CARD_ALT};
+    border-color: {COLOR_BORDER};
+    color: {COLOR_TEXT_MUTED};
 }}
 """
 
