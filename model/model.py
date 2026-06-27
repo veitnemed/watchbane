@@ -109,7 +109,11 @@ def save_weights_if_loo_improved(
     new_loo_mae: float,
     source_name: str = "Обучение модели",
 ) -> bool:
-    """Сохраняет веса только если новый LOO MAE лучше сохраненного значения."""
+    """Сохраняет веса только если новый LOO MAE лучше сохраненного значения.
+
+    Используется для интерактивного линейного обучения (не явный LOO training).
+    Явное LOO обучение должно вызывать save_weights_after_explicit_loo_training().
+    """
     current_loo_mae = storage_data.get_saved_loo_mae()
 
     print(f"LOO MAE новых весов: {new_loo_mae:.4f}")
@@ -126,6 +130,39 @@ def save_weights_if_loo_improved(
     storage_data.set_saved_loo_mae(new_loo_mae)
     print(f"Веса сохранены: LOO MAE улучшился ({source_name}).")
     return True
+
+
+def save_weights_after_explicit_loo_training(
+    new_weights: dict,
+    new_loo_mae: float,
+    *,
+    source_name: str = "LOO обучение",
+) -> dict:
+    """Сохраняет weights и model_metrics после успешного явного LOO training.
+
+    Новый LOO всегда записывается для текущего dataset, даже если хуже старого
+    saved LOO или metrics были stale. Старый LOO используется только для отчёта.
+    """
+    previous_status = storage_data.get_model_metrics_status()
+    previous_loo_mae = previous_status.get("loo_mae")
+    if previous_loo_mae is not None:
+        previous_loo_mae = float(previous_loo_mae)
+
+    new_loo = float(new_loo_mae)
+    storage_data.save_weights(new_weights)
+    storage_data.set_saved_loo_mae(new_loo)
+
+    delta = None if previous_loo_mae is None else new_loo - previous_loo_mae
+    return {
+        "source_name": source_name,
+        "previous_loo_mae": previous_loo_mae,
+        "previous_is_stale": bool(previous_status.get("is_stale")),
+        "previous_stale_reason": previous_status.get("stale_reason"),
+        "previous_updated_at": previous_status.get("updated_at"),
+        "new_loo_mae": new_loo,
+        "delta": delta,
+        "saved": True,
+    }
 
 
 def mean_error(data: list, weights=constant.DEFAULT_WEIGHTS) -> float:

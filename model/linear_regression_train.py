@@ -283,6 +283,48 @@ def print_loo_metrics_summary(before_metrics: dict[str, float | None], after_met
     print("Веса сохранены.")
 
 
+def print_previous_saved_metrics_status(status: dict) -> None:
+    print("Сохранённые metrics до обучения:")
+    loo_mae = status.get("loo_mae")
+    if loo_mae is None:
+        print("  LOO MAE: не рассчитан")
+    else:
+        print(f"  LOO MAE: {float(loo_mae):.4f}")
+    if status.get("is_stale") is True:
+        reason = status.get("stale_reason") or "dataset_changed"
+        print(f"  Статус: устарело ({reason})")
+    else:
+        print("  Статус: актуально")
+    updated_at = status.get("updated_at")
+    if updated_at:
+        print(f"  Обновлено: {updated_at}")
+    print("")
+
+
+def print_explicit_loo_training_save_report(save_result: dict) -> None:
+    previous_loo = save_result.get("previous_loo_mae")
+    new_loo = save_result["new_loo_mae"]
+    delta = save_result.get("delta")
+
+    print("Сохранение после явного LOO обучения:")
+    if previous_loo is None:
+        print(f"  Новый LOO MAE: {new_loo:.4f} (ранее не был рассчитан)")
+    else:
+        print(f"  Предыдущий LOO MAE: {previous_loo:.4f}")
+        print(f"  Новый LOO MAE: {new_loo:.4f}")
+        if delta is not None:
+            if abs(delta) < 0.00005:
+                print("  Изменение: без изменений")
+            elif delta < 0:
+                print(f"  Изменение: лучше на {abs(delta):.4f}")
+            else:
+                print(f"  Изменение: хуже на +{delta:.4f}")
+    if save_result.get("previous_is_stale") is True:
+        print("  Предыдущий LOO был устаревшим — сравнение справочное, сохранение выполнено.")
+    print("  weights.json и config/model_metrics.json обновлены.")
+    print("  Статус metrics: актуально.")
+
+
 def _format_baseline_comparison(model_loo_mae: float, baseline_mae: float, baseline_name: str) -> str:
     delta = abs(model_loo_mae - baseline_mae)
     if abs(model_loo_mae - baseline_mae) < 0.00005:
@@ -397,13 +439,16 @@ def run_loo_training(data, weights) -> None:
         print(f"LOO обучение недоступно: не установлен метод {BENCHMARK_METHOD_LABEL}.")
         return
 
+    previous_status = storage_data.get_model_metrics_status()
+
     print("LOO обучение")
     print(f"Метод: {BENCHMARK_METHOD_LABEL}")
     print(f"Записей в датасете: {len(movies)}\n")
+    print_previous_saved_metrics_status(previous_status)
     before_metrics = collect_loo_metrics(
         data=movies,
         weights=weights,
-        loo_mae=storage_data.get_saved_loo_mae(),
+        loo_mae=previous_status.get("loo_mae"),
     )
     print_metrics_report(
         title="ДО LOO ОБУЧЕНИЯ",
@@ -444,30 +489,31 @@ def run_loo_training(data, weights) -> None:
         start_weights=weights,
         alpha=best_alpha,
     )
-    storage_data.save_weights(final_weights)
-    storage_data.set_saved_loo_mae(best_loo_mae)
+    save_result = model.save_weights_after_explicit_loo_training(
+        new_weights=final_weights,
+        new_loo_mae=best_loo_mae,
+        source_name="LOO обучение",
+    )
 
     print("LOO обучение завершено.")
     print(f"Лучший Ridge alpha: {best_alpha}")
     print(f"Лучший LOO MAE: {best_loo_mae:.4f}")
     print("Финальная модель обучена на всём датасете.")
-    print("weights.json обновлён.")
-    print("config/model_metrics.json обновлён.")
     print("")
     saved_weights = storage_data.load_weights()
     after_metrics = collect_loo_metrics(
         data=movies,
         weights=saved_weights,
-        loo_mae=storage_data.get_saved_loo_mae(),
+        loo_mae=save_result["new_loo_mae"],
     )
     print_metrics_report(
         title="ПОСЛЕ LOO ОБУЧЕНИЯ",
         metrics=after_metrics,
         before_metrics=before_metrics,
-        decision="веса сохранены",
+        decision="веса и metrics сохранены (явное LOO обучение)",
     )
     print("")
-    print_loo_metrics_summary(before_metrics, after_metrics)
+    print_explicit_loo_training_save_report(save_result)
     print("")
     print_baseline_comparison(after_metrics)
     print("")
