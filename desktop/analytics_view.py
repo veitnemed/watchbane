@@ -8,9 +8,15 @@ import tempfile
 
 from dataset.score_analytics import (
     build_score_analytics,
+    format_imdb_delta_line,
     format_rating_gap_line,
     format_suspicious_rating_line,
+    IMDB_DELTA_LIST_PREVIEW_LIMIT,
     summarize_dataset_completeness,
+)
+from desktop.plotly_charts import (
+    CHART_BASE_HEIGHT,
+    bar_chart_height,
 )
 from desktop.theme import (
     COLOR_CARD,
@@ -73,8 +79,14 @@ ANALYTICS_ROOT_SPACING = 14
 ANALYTICS_SUMMARY_SPACING = 10
 # Зазор между KPI-карточками в одной строке.
 
-ANALYTICS_INSIGHT_LINE_SPACING = 8
+ANALYTICS_INSIGHT_LINE_SPACING = 4
 # Расстояние между строками внутри блока «Коротко».
+
+ANALYTICS_COMPLETENESS_SPACING = 4
+# Расстояние между headline и subline полноты dataset.
+
+ANALYTICS_COMPLETENESS_BOTTOM_SPACING = 8
+# Отступ между блоком полноты и insights в «Коротко».
 
 ANALYTICS_SECTION_PADDING = 16
 # Внутренний отступ серых карточек секций от рамки.
@@ -102,6 +114,12 @@ ANALYTICS_DENSE_TEXT_SPACING = 2
 
 SHOW_DENSE_SCORES_SECTION = False
 # Секция «Одинаковые оценки» скрыта: insights в «Коротко» покрывают mode.
+
+ANALYTICS_PLOTLY_BASE_HEIGHT = CHART_BASE_HEIGHT
+# Базовая высота Plotly-графиков; синхронизирована с desktop/plotly_charts.py.
+
+ANALYTICS_PLOTLY_OBJECT_NAME = "analyticsPlotlyChart"
+# objectName QWebEngineView для QSS в build_analytics_style.
 
 SUMMARY_CARD_HEIGHT = 88
 # Высота KPI-карточки.
@@ -236,12 +254,28 @@ class AnalyticsView:
         self._completeness_subline.setObjectName("completenessSubline")
         self._completeness_subline.setWordWrap(True)
 
+        completeness_layout = QVBoxLayout()
+        completeness_layout.setContentsMargins(0, 0, 0, 0)
+        completeness_layout.setSpacing(ANALYTICS_COMPLETENESS_SPACING)
+        completeness_layout.addWidget(self._completeness_headline)
+        completeness_layout.addWidget(self._completeness_subline)
+
+        insights_wrapper = QVBoxLayout()
+        insights_wrapper.setContentsMargins(0, ANALYTICS_COMPLETENESS_BOTTOM_SPACING, 0, 0)
+        insights_wrapper.setSpacing(0)
+        insights_wrapper.addLayout(self._insights_layout)
+
+        short_section_content = QVBoxLayout()
+        short_section_content.setContentsMargins(0, 0, 0, 0)
+        short_section_content.setSpacing(0)
+        short_section_content.addLayout(completeness_layout)
+        short_section_content.addLayout(insights_wrapper)
+
         root_layout.addWidget(
             self._make_section(
                 "Коротко",
-                self._insights_layout,
+                short_section_content,
                 SECTION_ICONS["Коротко"],
-                prefix_widgets=[self._completeness_headline, self._completeness_subline],
             )
         )
 
@@ -251,7 +285,6 @@ class AnalyticsView:
                 "Распределение оценок",
                 self._distribution_layout,
                 SECTION_ICONS["Распределение оценок"],
-                show_menu_stub=True,
             )
         )
 
@@ -274,6 +307,9 @@ class AnalyticsView:
         )
 
         self._imdb_delta_layout = QVBoxLayout()
+        self._imdb_delta_rows: list[dict] = []
+        self._imdb_delta_extra_count = 0
+        self._imdb_delta_expanded = False
         root_layout.addWidget(
             self._make_section(
                 "Отличие моих оценок от IMDb",
@@ -331,6 +367,7 @@ class AnalyticsView:
         self._fill_distribution(analytics["score_count_points"])
         self._fill_genre_count(analytics["genre_count_rows"])
         self._fill_year_average(analytics["year_average_points"])
+        self._imdb_delta_expanded = False
         self._fill_imdb_delta(
             analytics["imdb_delta_rows"],
             analytics["imdb_delta_extra_count"],
@@ -531,20 +568,20 @@ class AnalyticsView:
         return row
 
     def _fill_distribution(self, points: list[dict]) -> None:
-        from desktop.plotly_charts import SCORE_CHART_HEIGHT, build_score_count_html
+        from desktop.plotly_charts import build_score_count_html
 
         self._fill_plotly_chart(
             self._distribution_layout,
             points,
             build_html=build_score_count_html,
-            chart_height=SCORE_CHART_HEIGHT,
+            chart_height=ANALYTICS_PLOTLY_BASE_HEIGHT,
             fallback=self._fill_distribution_fallback,
         )
 
     def _fill_genre_count(self, rows: list[dict]) -> None:
-        from desktop.plotly_charts import GENRE_COUNT_CHART_HEIGHT, build_genre_count_html
+        from desktop.plotly_charts import build_genre_count_html
 
-        height = max(GENRE_COUNT_CHART_HEIGHT, 120 + len(rows) * 24)
+        height = bar_chart_height(len(rows))
         self._fill_plotly_chart(
             self._genre_count_layout,
             rows,
@@ -554,34 +591,73 @@ class AnalyticsView:
         )
 
     def _fill_year_average(self, points: list[dict]) -> None:
-        from desktop.plotly_charts import YEAR_AVERAGE_CHART_HEIGHT, build_year_average_html
+        from desktop.plotly_charts import build_year_average_html
 
         self._fill_plotly_chart(
             self._year_average_layout,
             points,
             build_html=build_year_average_html,
-            chart_height=YEAR_AVERAGE_CHART_HEIGHT,
+            chart_height=ANALYTICS_PLOTLY_BASE_HEIGHT,
             fallback=self._fill_year_average_fallback,
         )
 
     def _fill_imdb_delta(self, rows: list[dict], extra_count: int) -> None:
-        from desktop.plotly_charts import IMDB_DELTA_CHART_HEIGHT, build_imdb_delta_html
+        self._imdb_delta_rows = list(rows)
+        self._imdb_delta_extra_count = int(extra_count or 0)
+        self._render_imdb_delta_list()
 
+    def _expand_imdb_delta_list(self) -> None:
+        self._imdb_delta_expanded = True
+        self._render_imdb_delta_list()
+
+    def _collapse_imdb_delta_list(self) -> None:
+        self._imdb_delta_expanded = False
+        self._render_imdb_delta_list()
+
+    def _render_imdb_delta_list(self) -> None:
         _clear_layout(self._imdb_delta_layout)
+        rows = self._imdb_delta_rows
         if not rows:
             self._imdb_delta_layout.addWidget(
                 self._make_list_placeholder("Нет тайтлов с вашей оценкой и IMDb для сравнения.")
             )
             return
 
-        height = max(IMDB_DELTA_CHART_HEIGHT, 120 + len(rows) * 24)
-        self._fill_plotly_chart(
-            self._imdb_delta_layout,
-            rows,
-            build_html=build_imdb_delta_html,
-            chart_height=height,
-            fallback=lambda data, error: self._fill_imdb_delta_fallback(data, extra_count, error),
-        )
+        lines = [format_imdb_delta_line(row) for row in rows]
+        if self._imdb_delta_expanded:
+            visible_lines = lines
+        else:
+            visible_lines = lines[:IMDB_DELTA_LIST_PREVIEW_LIMIT]
+
+        for line in visible_lines:
+            self._imdb_delta_layout.addWidget(self._make_insight_line(line))
+
+        hidden_count = len(lines) - len(visible_lines)
+        if hidden_count > 0:
+            self._imdb_delta_layout.addWidget(
+                self._make_list_expand_button(
+                    f"Показать ещё {hidden_count}",
+                    self._expand_imdb_delta_list,
+                )
+            )
+        elif self._imdb_delta_expanded and len(lines) > IMDB_DELTA_LIST_PREVIEW_LIMIT:
+            self._imdb_delta_layout.addWidget(
+                self._make_list_expand_button("Свернуть", self._collapse_imdb_delta_list)
+            )
+
+        if self._imdb_delta_extra_count > 0:
+            self._imdb_delta_layout.addWidget(
+                self._make_list_extra(f"ещё {self._imdb_delta_extra_count} в базе")
+            )
+
+    def _make_list_expand_button(self, text: str, handler):
+        from PyQt6.QtWidgets import QPushButton
+
+        button = QPushButton(text)
+        button.setObjectName("analyticsListExpand")
+        button.setFlat(True)
+        button.clicked.connect(handler)
+        return button
 
     def _fill_plotly_chart(
         self,
@@ -611,9 +687,9 @@ class AnalyticsView:
             from PyQt6.QtWidgets import QSizePolicy
 
             view = QWebEngineView()
+            view.setObjectName(ANALYTICS_PLOTLY_OBJECT_NAME)
             view.setFixedHeight(chart_height)
             view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            view.setStyleSheet(f"background-color: {COLOR_CARD}; border: none;")
             html_path = self._write_plotly_html_file(html)
             view.setUrl(QUrl.fromLocalFile(html_path))
             layout.addWidget(view)
@@ -757,44 +833,6 @@ class AnalyticsView:
             self._year_average_layout.addWidget(
                 self._make_insight_line(f"{year} · средняя {average:.1f} · {count} тайтлов")
             )
-
-    def _format_imdb_delta_fallback_line(self, row: dict) -> str:
-        year = row.get("year")
-        year_text = f" ({year})" if year not in (None, "") else ""
-        delta = float(row["delta"])
-        sign = "+" if delta > 0 else ""
-        return (
-            f"{row['title']}{year_text} · моя {float(row['user_score']):.1f} · "
-            f"IMDb {float(row['imdb_score']):.1f} · {sign}{delta:.1f}"
-        )
-
-    def _fill_imdb_delta_fallback(
-        self,
-        rows: list[dict],
-        extra_count: int,
-        error: str | None = None,
-    ) -> None:
-        if error is not None:
-            self._imdb_delta_layout.addWidget(
-                self._make_fallback_message(
-                    "Интерактивный график недоступен, показаны упрощённые строки.\n"
-                    f"Python: {sys.executable}\n"
-                    f"Ошибка: {error}"
-                )
-            )
-
-        if not rows:
-            self._imdb_delta_layout.addWidget(
-                self._make_list_placeholder("Нет тайтлов с вашей оценкой и IMDb для сравнения.")
-            )
-            return
-
-        for row in rows:
-            self._imdb_delta_layout.addWidget(
-                self._make_insight_line(self._format_imdb_delta_fallback_line(row))
-            )
-        if extra_count > 0:
-            self._imdb_delta_layout.addWidget(self._make_list_extra(f"ещё {extra_count}"))
 
     def _make_fallback_message(self, text: str):
         from PyQt6.QtWidgets import QLabel

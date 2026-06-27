@@ -56,8 +56,8 @@ PyQt widget (desktop/*)
 
 - [x] **1.1** Visual QA watched card — done (чеклист в [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md); helper-тесты sparse card в `test_desktop.py`).
 - [x] **1.2** Polish левой панели списка — done (sidebar: thumbnails, collapsible filters, sort row, counter, forest-green add button).
-- [ ] **1.3** Plotly bar «Распределение оценок»: высота, отступы, стиль под `#analyticsSection`.
-- [ ] **1.4** Мелкие визуальные правки analytics (KPI, dense, «Коротко») — через именованные константы `ANALYTICS_*`.
+- [x] **1.3** Plotly charts: единая высота/отступы, `#analyticsPlotlyChart`, фон `COLOR_SURFACE` — done (`plotly_charts.py` helpers, `analytics_view.py`).
+- [x] **1.4** Analytics polish (KPI, «Коротко», spacing) — done (`ANALYTICS_*` константы, completeness block layout).
 
 ### Критерий готовности
 
@@ -99,7 +99,7 @@ Pipeline для **каждого** нового графика:
 - [x] **2.2.4** Я сильно выше IMDb — done (text list, Δ ≥ 1.5, только IMDb).
 - [x] **2.2.5** Я сильно ниже IMDb — done (text list, Δ ≤ −1.5, только IMDb).
 - [x] **2.2.6** Подозрительные оценки — done (text list + reason).
-- [x] **2.2.7** Отличие моих оценок от IMDb — done (horizontal bar, моя − IMDb, до 20 тайтлов).
+- [x] **2.2.7** Отличие моих оценок от IMDb — done (text top-10 + «Показать ещё», сортировка по |Δ|, до 20).
 
 **Analytics MVP freeze (2026-06-26):** после блока «Подозрительные оценки» **не добавлять** новые analytics-секции без отдельного решения. Исключение: **2.2.7** добавлен по запросу. Вне scope: страны, pie charts, scatter, график количества оценок по годам, экспорт, drill-down в watched.
 
@@ -225,14 +225,14 @@ TMDb build, массовые операции, сложный import.
 
 | # | Шаг | Этап | Статус |
 | --- | --- | --- | --- |
-| 1 | Visual QA watched card | 1 | done |
-| 2 | Plotly bar: высота/стиль под секцию | 1 | next |
-| 3 | Polish watched list (left panel) | 1 | done |
-| 4 | График «оценки по годам» | 2 | next |
-| 5 | GUI delete watched | 3 | done |
-| 6 | Structure-тесты на новые wiring | — | done |
-| 7 | Вкладка «Модель» read-only summary | 4 | planned |
-| 8 | Вкладка «Рекомендации» read-only top-N | 5 | planned |
+| 1 | A1 Analytics Plotly/KPI polish | 1 | done |
+| 2 | A2 Read-only poster actions в карточке | 1 | next |
+| 3 | A3 Status bar LOO MAE | 1 | planned |
+| 4 | B1 Wizard «Добавить тайтл» (search + preview) | 3 | planned |
+| 5 | B2 Wizard save через service | 3 | planned |
+| 6 | C4 Вкладка «Рекомендации» read-only | 5 | planned |
+| 7 | C1 Вкладка «Модель» read-only | 4 | planned |
+| 8 | E1 Mark watched из pool | 6 | planned |
 
 ---
 
@@ -241,7 +241,7 @@ TMDb build, массовые операции, сложный import.
 - [x] Нет прямой записи JSON из PyQt (delete → `delete_watched_record`, score → `update_dataset_record`).
 - [x] Write идёт через documented service + `source_name` (score edit).
 - [x] Layout/size policy по [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) (watched card + sidebar).
-- [ ] Spacing/fonts через именованные константы в `analytics_view.py`.
+- [x] Spacing/fonts через именованные константы в `analytics_view.py`.
 - [x] Helper-тесты edge cases watched card в `test_desktop.py`; ручной чеклист — style contract.
 - [x] `tests_pytest/test_desktop.py` (+ smoke для plotly при графиках).
 - [x] Не тронуты: training, pool build, weights без отдельного этапа.

@@ -26,13 +26,83 @@ GRID_COLOR = COLOR_BORDER
 BAR_COLOR = COLOR_ACCENT
 BAR_HOVER_COLOR = COLOR_ACCENT_PLOT_HOVER
 PLOT_FONT_FAMILY = f"{FONT_FAMILY}, {FONT_FAMILY_FALLBACK}"
-SCORE_CHART_HEIGHT = 320
-SCORE_DISTRIBUTION_CHART_HEIGHT = 280
-GENRE_COUNT_CHART_HEIGHT = 320
-YEAR_AVERAGE_CHART_HEIGHT = 320
-IMDB_DELTA_CHART_HEIGHT = 320
+
+CHART_BASE_HEIGHT = 280
+SCORE_CHART_HEIGHT = CHART_BASE_HEIGHT
+SCORE_DISTRIBUTION_CHART_HEIGHT = CHART_BASE_HEIGHT
+GENRE_COUNT_CHART_HEIGHT = CHART_BASE_HEIGHT
+YEAR_AVERAGE_CHART_HEIGHT = CHART_BASE_HEIGHT
+IMDB_DELTA_CHART_HEIGHT = CHART_BASE_HEIGHT
+
+CHART_BAR_ROW_HEIGHT = 24
+CHART_BAR_MIN_HEIGHT = 120
+CHART_MARGIN_DEFAULT = {"l": 48, "r": 12, "t": 4, "b": 48}
+CHART_MARGIN_HBAR = {"l": 132, "r": 12, "t": 4, "b": 40}
+CHART_FONT_SIZE = 12
+CHART_AXIS_TITLE_SIZE = 11
+
 IMDB_DELTA_NEGATIVE_COLOR = "#9f6b6b"
 IMDB_DELTA_CHART_TITLE_LIMIT = 28
+
+
+def bar_chart_height(row_count: int, *, base: int = CHART_BASE_HEIGHT) -> int:
+    """Compute Plotly height for horizontal bar charts from row count."""
+    if row_count <= 0:
+        return base
+    return max(base, CHART_BAR_MIN_HEIGHT + row_count * CHART_BAR_ROW_HEIGHT)
+
+
+def _hoverlabel_style() -> dict:
+    return {
+        "bgcolor": COLOR_CARD_ALT,
+        "bordercolor": GRID_COLOR,
+        "font": {"color": TEXT_COLOR, "size": CHART_FONT_SIZE},
+    }
+
+
+def _apply_chart_layout(
+    fig,
+    *,
+    height: int,
+    margin: dict | None = None,
+    bargap: float | None = None,
+) -> None:
+    fig.update_layout(
+        paper_bgcolor=CHART_BG,
+        plot_bgcolor=PLOT_BG,
+        font={"color": TEXT_COLOR, "family": PLOT_FONT_FAMILY, "size": CHART_FONT_SIZE},
+        height=height,
+        margin=margin or CHART_MARGIN_DEFAULT,
+        hoverlabel=_hoverlabel_style(),
+    )
+    if bargap is not None:
+        fig.update_layout(bargap=bargap)
+
+
+def _plotly_html_page(chart: str, height: int) -> str:
+    return f"""
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        html, body {{
+            margin: 0;
+            padding: 0;
+            background: {PLOT_BG};
+            overflow: hidden;
+            min-height: {height}px;
+        }}
+        .plotly-graph-div {{
+            width: 100% !important;
+        }}
+    </style>
+</head>
+<body>
+{chart}
+</body>
+</html>
+"""
 
 
 def _format_hover(row: dict) -> str:
@@ -75,30 +145,25 @@ def build_score_distribution_figure(rows: list[dict]):
             )
         ]
     )
-    fig.update_layout(
-        paper_bgcolor=CHART_BG,
-        plot_bgcolor=PLOT_BG,
-        font={"color": TEXT_COLOR, "family": PLOT_FONT_FAMILY, "size": 12},
+    _apply_chart_layout(
+        fig,
         height=SCORE_DISTRIBUTION_CHART_HEIGHT,
-        margin={"l": 48, "r": 12, "t": 6, "b": 48},
+        margin=CHART_MARGIN_DEFAULT,
         bargap=0.28,
-        hoverlabel={
-            "bgcolor": COLOR_CARD_ALT,
-            "bordercolor": GRID_COLOR,
-            "font": {"color": TEXT_COLOR, "size": 12},
-        },
+    )
+    fig.update_layout(
         xaxis={
-            "title": {"text": ""},
+            "title": {"text": "", "font": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE}},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": 11},
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
             "showgrid": False,
         },
         yaxis={
-            "title": {"text": "Тайтлов", "font": {"color": MUTED_TEXT, "size": 11}},
+            "title": {"text": "Тайтлов", "font": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE}},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": 11},
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
             "rangemode": "tozero",
             "dtick": 1,
         },
@@ -117,29 +182,7 @@ def build_score_distribution_html(rows: list[dict]) -> str:
         full_html=False,
         config={"displayModeBar": False, "responsive": True},
     )
-    return f"""
-<!doctype html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <style>
-        html, body {{
-            margin: 0;
-            padding: 0;
-            background: {CHART_BG};
-            overflow: hidden;
-            min-height: {SCORE_DISTRIBUTION_CHART_HEIGHT}px;
-        }}
-        .plotly-graph-div {{
-            width: 100% !important;
-        }}
-    </style>
-</head>
-<body>
-{chart}
-</body>
-</html>
-"""
+    return _plotly_html_page(chart, SCORE_DISTRIBUTION_CHART_HEIGHT)
 
 
 def _format_genre_count_hover(row: dict) -> str:
@@ -162,7 +205,7 @@ def build_genre_count_figure(rows: list[dict]):
     labels = [str(row["label"]) for row in rows]
     counts = [int(row["count"]) for row in rows]
     hover_texts = [_format_genre_count_hover(row) for row in rows]
-    height = max(GENRE_COUNT_CHART_HEIGHT, 120 + len(rows) * 24)
+    height = bar_chart_height(len(rows))
 
     fig = go.Figure(
         data=[
@@ -179,23 +222,13 @@ def build_genre_count_figure(rows: list[dict]):
             )
         ]
     )
+    _apply_chart_layout(fig, height=height, margin=CHART_MARGIN_HBAR, bargap=0.24)
     fig.update_layout(
-        paper_bgcolor=CHART_BG,
-        plot_bgcolor=PLOT_BG,
-        font={"color": TEXT_COLOR, "family": PLOT_FONT_FAMILY, "size": 12},
-        height=height,
-        margin={"l": 120, "r": 16, "t": 8, "b": 40},
-        bargap=0.24,
-        hoverlabel={
-            "bgcolor": COLOR_CARD_ALT,
-            "bordercolor": GRID_COLOR,
-            "font": {"color": TEXT_COLOR, "size": 12},
-        },
         xaxis={
-            "title": {"text": "Тайтлов", "font": {"color": MUTED_TEXT, "size": 11}},
+            "title": {"text": "Тайтлов", "font": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE}},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": 11},
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
             "rangemode": "tozero",
             "dtick": 1,
         },
@@ -203,7 +236,7 @@ def build_genre_count_figure(rows: list[dict]):
             "title": {"text": ""},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": 11},
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
             "autorange": "reversed",
             "showgrid": False,
         },
@@ -222,30 +255,7 @@ def build_genre_count_html(rows: list[dict]) -> str:
         full_html=False,
         config={"displayModeBar": False, "responsive": True},
     )
-    height = max(GENRE_COUNT_CHART_HEIGHT, 120 + len(rows) * 24)
-    return f"""
-<!doctype html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <style>
-        html, body {{
-            margin: 0;
-            padding: 0;
-            background: {CHART_BG};
-            overflow: hidden;
-            min-height: {height}px;
-        }}
-        .plotly-graph-div {{
-            width: 100% !important;
-        }}
-    </style>
-</head>
-<body>
-{chart}
-</body>
-</html>
-"""
+    return _plotly_html_page(chart, int(fig.layout.height))
 
 
 def _format_year_average_hover(point: dict) -> str:
@@ -282,29 +292,20 @@ def build_year_average_figure(points: list[dict]):
             )
         ]
     )
+    _apply_chart_layout(fig, height=YEAR_AVERAGE_CHART_HEIGHT, margin=CHART_MARGIN_DEFAULT)
     fig.update_layout(
-        paper_bgcolor=CHART_BG,
-        plot_bgcolor=PLOT_BG,
-        font={"color": TEXT_COLOR, "family": PLOT_FONT_FAMILY, "size": 12},
-        height=YEAR_AVERAGE_CHART_HEIGHT,
-        margin={"l": 52, "r": 16, "t": 8, "b": 52},
-        hoverlabel={
-            "bgcolor": COLOR_CARD_ALT,
-            "bordercolor": GRID_COLOR,
-            "font": {"color": TEXT_COLOR, "size": 12},
-        },
         xaxis={
-            "title": {"text": "Год выхода", "font": {"color": MUTED_TEXT, "size": 11}},
+            "title": {"text": "Год выхода", "font": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE}},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": 11},
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
             "showgrid": False,
         },
         yaxis={
-            "title": {"text": "Средняя оценка", "font": {"color": MUTED_TEXT, "size": 11}},
+            "title": {"text": "Средняя оценка", "font": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE}},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": 11},
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
             "range": _year_average_axis_range(averages),
             "dtick": 0.5,
         },
@@ -334,29 +335,7 @@ def build_year_average_html(points: list[dict]) -> str:
         full_html=False,
         config={"displayModeBar": False, "responsive": True},
     )
-    return f"""
-<!doctype html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <style>
-        html, body {{
-            margin: 0;
-            padding: 0;
-            background: {CHART_BG};
-            overflow: hidden;
-            min-height: {YEAR_AVERAGE_CHART_HEIGHT}px;
-        }}
-        .plotly-graph-div {{
-            width: 100% !important;
-        }}
-    </style>
-</head>
-<body>
-{chart}
-</body>
-</html>
-"""
+    return _plotly_html_page(chart, YEAR_AVERAGE_CHART_HEIGHT)
 
 
 def _chart_title_label(title: str, limit: int = IMDB_DELTA_CHART_TITLE_LIMIT) -> str:
@@ -390,7 +369,7 @@ def build_imdb_delta_figure(rows: list[dict]):
     deltas = [float(row["delta"]) for row in rows]
     hover_texts = [_format_imdb_delta_hover(row) for row in rows]
     colors = [BAR_COLOR if delta >= 0 else IMDB_DELTA_NEGATIVE_COLOR for delta in deltas]
-    height = max(IMDB_DELTA_CHART_HEIGHT, 120 + len(rows) * 24)
+    height = bar_chart_height(len(rows))
 
     fig = go.Figure(
         data=[
@@ -408,23 +387,13 @@ def build_imdb_delta_figure(rows: list[dict]):
         ]
     )
     fig.add_vline(x=0, line_color=GRID_COLOR, line_width=1)
+    _apply_chart_layout(fig, height=height, margin=CHART_MARGIN_HBAR, bargap=0.24)
     fig.update_layout(
-        paper_bgcolor=CHART_BG,
-        plot_bgcolor=PLOT_BG,
-        font={"color": TEXT_COLOR, "family": PLOT_FONT_FAMILY, "size": 12},
-        height=height,
-        margin={"l": 140, "r": 16, "t": 8, "b": 40},
-        bargap=0.24,
-        hoverlabel={
-            "bgcolor": COLOR_CARD_ALT,
-            "bordercolor": GRID_COLOR,
-            "font": {"color": TEXT_COLOR, "size": 12},
-        },
         xaxis={
-            "title": {"text": "Отличие (моя − IMDb)", "font": {"color": MUTED_TEXT, "size": 11}},
+            "title": {"text": "Отличие (моя − IMDb)", "font": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE}},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": 11},
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
             "zeroline": False,
             "dtick": 0.5,
         },
@@ -432,7 +401,7 @@ def build_imdb_delta_figure(rows: list[dict]):
             "title": {"text": ""},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": 11},
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
             "autorange": "reversed",
             "showgrid": False,
         },
@@ -451,30 +420,7 @@ def build_imdb_delta_html(rows: list[dict]) -> str:
         full_html=False,
         config={"displayModeBar": False, "responsive": True},
     )
-    height = max(IMDB_DELTA_CHART_HEIGHT, 120 + len(rows) * 24)
-    return f"""
-<!doctype html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <style>
-        html, body {{
-            margin: 0;
-            padding: 0;
-            background: {CHART_BG};
-            overflow: hidden;
-            min-height: {height}px;
-        }}
-        .plotly-graph-div {{
-            width: 100% !important;
-        }}
-    </style>
-</head>
-<body>
-{chart}
-</body>
-</html>
-"""
+    return _plotly_html_page(chart, int(fig.layout.height))
 
 
 def _format_score_count_hover(point: dict) -> str:
@@ -523,31 +469,22 @@ def build_score_count_figure(points: list[dict]):
             )
         ]
     )
+    _apply_chart_layout(fig, height=SCORE_CHART_HEIGHT, margin=CHART_MARGIN_DEFAULT)
     fig.update_layout(
-        paper_bgcolor=CHART_BG,
-        plot_bgcolor=PLOT_BG,
-        font={"color": TEXT_COLOR, "family": PLOT_FONT_FAMILY, "size": 12},
-        height=SCORE_CHART_HEIGHT,
-        margin={"l": 52, "r": 16, "t": 8, "b": 52},
-        hoverlabel={
-            "bgcolor": COLOR_CARD_ALT,
-            "bordercolor": GRID_COLOR,
-            "font": {"color": TEXT_COLOR, "size": 12},
-        },
         xaxis={
-            "title": {"text": "Моя оценка", "font": {"color": MUTED_TEXT, "size": 11}},
+            "title": {"text": "Моя оценка", "font": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE}},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": 11},
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
             "range": _score_axis_range(scores),
             "dtick": 0.5,
             "showgrid": False,
         },
         yaxis={
-            "title": {"text": "Тайтлов", "font": {"color": MUTED_TEXT, "size": 11}},
+            "title": {"text": "Тайтлов", "font": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE}},
             "gridcolor": GRID_COLOR,
             "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": 11},
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
             "rangemode": "tozero",
             "dtick": 1,
         },
@@ -577,26 +514,4 @@ def build_score_count_html(points: list[dict]) -> str:
         full_html=False,
         config={"displayModeBar": False, "responsive": True},
     )
-    return f"""
-<!doctype html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <style>
-        html, body {{
-            margin: 0;
-            padding: 0;
-            background: {CHART_BG};
-            overflow: hidden;
-            min-height: {SCORE_CHART_HEIGHT}px;
-        }}
-        .plotly-graph-div {{
-            width: 100% !important;
-        }}
-    </style>
-</head>
-<body>
-{chart}
-</body>
-</html>
-"""
+    return _plotly_html_page(chart, SCORE_CHART_HEIGHT)

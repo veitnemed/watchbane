@@ -247,7 +247,9 @@ DATASET_COMPLETENESS_WORST_LIMIT = 4
 
 RATING_STRONG_GAP = 1.5
 GENRE_COUNT_CHART_LIMIT = 15
-IMDB_DELTA_CHART_LIMIT = 20
+IMDB_DELTA_LIST_PREVIEW_LIMIT = 10
+IMDB_DELTA_LIST_LIMIT = 20
+IMDB_DELTA_CHART_LIMIT = IMDB_DELTA_LIST_LIMIT
 ANALYTICS_LIST_LIMIT = 12
 GENRE_COUNT_TITLE_LIMIT = 3
 
@@ -673,9 +675,9 @@ def build_rating_gap_lists(
 def build_imdb_delta_chart_rows(
     entries: list[tuple[str, dict, dict]],
     *,
-    limit: int = IMDB_DELTA_CHART_LIMIT,
+    limit: int = IMDB_DELTA_LIST_LIMIT,
 ) -> dict:
-    """Build chart rows for user_score minus IMDb per watched title."""
+    """Build ranked rows for user_score minus IMDb per watched title."""
     rows: list[dict] = []
     for item in collect_analytics_entry_items(entries):
         user_score = item.get("user_score")
@@ -693,11 +695,29 @@ def build_imdb_delta_chart_rows(
             }
         )
 
-    rows.sort(key=lambda row: (-float(row["delta"]), str(row["title"]).casefold()))
+    rows.sort(
+        key=lambda row: (
+            -abs(float(row["delta"])),
+            -float(row["delta"]),
+            str(row["title"]).casefold(),
+        )
+    )
     return {
         "rows": rows[:limit],
         "extra_count": max(0, len(rows) - limit),
     }
+
+
+def format_imdb_delta_line(row: dict) -> str:
+    """Format one IMDb delta row for analytics text lists."""
+    year = row.get("year")
+    year_text = f" ({year})" if year not in (None, "") else ""
+    delta = float(row["delta"])
+    sign = "+" if delta > 0 else ""
+    return (
+        f"{row['title']}{year_text} · моя {float(row['user_score']):.1f} · "
+        f"IMDb {float(row['imdb_score']):.1f} · {sign}{delta:.1f}"
+    )
 
 
 def format_suspicious_rating_line(row: dict) -> str:

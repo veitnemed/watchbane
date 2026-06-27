@@ -761,4 +761,21 @@ QLabel#analyticsFallback {{
     font-size: {font_fallback}px;
     padding: 8px 2px;
 }}
+QWebEngineView#analyticsPlotlyChart {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BAR}px;
+}}
+QPushButton#analyticsListExpand {{
+    background: transparent;
+    border: none;
+    color: {COLOR_ACCENT_PLOT_HOVER};
+    font-size: {font_summary_label}px;
+    font-weight: 600;
+    padding: 2px 0;
+    text-align: left;
+}}
+QPushButton#analyticsListExpand:hover {{
+    color: {COLOR_ACCENT_HOVER};
+}}
 """

@@ -173,7 +173,7 @@ Layout-правила обязательны при GUI-polish. Точечные
 2. `QScrollArea` с `widgetResizable=True`: контент analytics **не** растягивается на всю высоту viewport.
 3. Read-only текстовые блоки (insights, overview-подобные секции, fallback): vertical size policy **`Minimum`**.
 4. Один `addStretch(1)` в **конце** root-layout analytics — пустота **под** контентом, не внутри серых карточек.
-5. Секции (`Коротко`, `Распределение`, …) — в `#analyticsSection`; padding/spacing менять **шкалой** (root → section → row), не точечно в одном месте.
+5. Секции (`Коротко`, `Распределение`, …) — в `#analyticsSection`; Plotly — `#analyticsPlotlyChart` внутри секции; padding/spacing менять **шкалой** (root → section → row), не точечно в одном месте.
 
 Порядок секций (Analytics MVP freeze):
 
@@ -202,7 +202,7 @@ Layout-правила обязательны при GUI-polish. Точечные
 
 Правила:
 
-1. Фиксированный размер карточки (сейчас `124×80`).
+1. Фиксированный размер карточки (сейчас `88px` высота, expanding width).
 2. Подпись и значение **по центру** карточки (`AlignCenter`).
 3. **Нет** `addStretch()` между label и value (ни «прижать value вниз», ни «раздуть» карточку).
 4. Значение крупнее подписи (сейчас `26px` vs `13px`).

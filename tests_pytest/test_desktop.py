@@ -835,18 +835,29 @@ def test_build_year_average_html_smoke() -> None:
     assert "2020" in html
 
 
-def test_build_imdb_delta_html_smoke() -> None:
-    from desktop.plotly_charts import build_imdb_delta_html
+def test_analytics_imdb_delta_uses_collapsible_text_list() -> None:
+    import inspect
 
-    html = build_imdb_delta_html(
-        [
-            {"title": "Alpha", "year": 2020, "user_score": 9.0, "imdb_score": 6.0, "delta": 3.0},
-            {"title": "Bravo", "year": 2021, "user_score": 4.0, "imdb_score": 8.0, "delta": -4.0},
-        ]
-    )
+    import desktop.analytics_view as analytics_view_module
 
-    assert "plotly" in html.lower()
-    assert "bar" in html.lower()
+    fill_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_imdb_delta)
+    assert "_render_imdb_delta_list" in fill_source
+    assert "build_imdb_delta_html" not in fill_source
+
+    render_source = inspect.getsource(analytics_view_module.AnalyticsView._render_imdb_delta_list)
+    assert "format_imdb_delta_line" in render_source
+    assert "IMDB_DELTA_LIST_PREVIEW_LIMIT" in render_source
+    assert "_make_list_expand_button" in render_source
+
+    button_source = inspect.getsource(analytics_view_module.AnalyticsView._make_list_expand_button)
+    assert "analyticsListExpand" in button_source
+
+
+def test_analytics_style_includes_list_expand_button() -> None:
+    from desktop.theme import build_analytics_style
+
+    style = build_analytics_style()
+    assert "QPushButton#analyticsListExpand" in style
 
 
 def test_analytics_distribution_uses_score_count_points() -> None:
@@ -910,11 +921,37 @@ def test_analytics_renders_dataset_completeness_block() -> None:
 
 
 def test_score_count_chart_height_matches_plotly_constant() -> None:
-    from desktop.plotly_charts import SCORE_CHART_HEIGHT, build_score_count_figure
+    from desktop.plotly_charts import CHART_BASE_HEIGHT, SCORE_CHART_HEIGHT, build_score_count_figure
 
     figure = build_score_count_figure([{"score": 8.5, "count": 2, "example_titles": ["A"], "extra_count": 0}])
-    assert figure.layout.height == SCORE_CHART_HEIGHT
+    assert SCORE_CHART_HEIGHT == CHART_BASE_HEIGHT
+    assert figure.layout.height == CHART_BASE_HEIGHT
     assert figure.data[0].fill == "tozeroy"
+
+
+def test_bar_chart_height_scales_with_rows() -> None:
+    from desktop.plotly_charts import CHART_BASE_HEIGHT, bar_chart_height
+
+    assert bar_chart_height(0) == CHART_BASE_HEIGHT
+    assert bar_chart_height(3) == CHART_BASE_HEIGHT
+    assert bar_chart_height(20) > CHART_BASE_HEIGHT
+
+
+def test_analytics_plotly_view_uses_chart_object_name() -> None:
+    import inspect
+
+    import desktop.analytics_view as analytics_view_module
+
+    source = inspect.getsource(analytics_view_module.AnalyticsView._fill_plotly_chart)
+    assert "ANALYTICS_PLOTLY_OBJECT_NAME" in source
+    assert analytics_view_module.ANALYTICS_PLOTLY_OBJECT_NAME == "analyticsPlotlyChart"
+
+
+def test_analytics_style_includes_plotly_chart_selector() -> None:
+    from desktop.theme import build_analytics_style
+
+    style = build_analytics_style()
+    assert "QWebEngineView#analyticsPlotlyChart" in style
 
 
 def test_analytics_summary_cards_use_icon_badges() -> None:

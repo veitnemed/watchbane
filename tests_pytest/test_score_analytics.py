@@ -14,6 +14,7 @@ from dataset.score_analytics import (
     build_suspicious_ratings,
     build_year_average_points,
     collect_user_scores,
+    format_imdb_delta_line,
     format_rating_gap_line,
     format_suspicious_rating_line,
     summarize_dataset_completeness,
@@ -260,10 +261,17 @@ def test_build_imdb_delta_chart_rows() -> None:
     result = build_imdb_delta_chart_rows(entries, limit=10)
 
     assert [(row["title"], row["delta"]) for row in result["rows"]] == [
-        ("Higher", 3.0),
         ("Lower", -4.0),
+        ("Higher", 3.0),
     ]
     assert result["extra_count"] == 0
+
+
+def test_format_imdb_delta_line() -> None:
+    line = format_imdb_delta_line(
+        {"title": "Alpha", "year": 2020, "user_score": 9.0, "imdb_score": 6.0, "delta": 3.0}
+    )
+    assert line == "Alpha (2020) · моя 9.0 · IMDb 6.0 · +3.0"
 
 
 def test_build_genre_count_rows() -> None:
