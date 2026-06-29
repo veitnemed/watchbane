@@ -1,4 +1,4 @@
-# Карта проекта
+﻿# Карта проекта
 
 `Terminal Movies Learn` - консольная система для ведения личного dataset оценок и обучения простой рекомендательной модели.
 
@@ -106,7 +106,7 @@ Poster-cache и локальные изображения для watched.
 
 **Через `candidates/service.py` (console):** pool read/stats, top prediction read/filter/defaults, contributions readiness split, mark watched write, retry KP, manual TMDb import, TMDb build/save/auto-import, delete criteria, suspicious duplicates view.
 
-**Намеренно вне service:** model scoring/ranking (`rank_candidates_by_predict`, contribution reports), legacy `collect_candidates` (KP API), `candidate_pool_ui.py` (criteria input), TMDb genre diagnostics, standalone CLI (`build_candidate_pool.py`).
+**Намеренно вне service:** model scoring/ranking (`rank_candidates_by_predict`, contribution reports), legacy `collect_candidates` (KP API), `candidate_pool_ui.py` (criteria input), TMDb genre diagnostics, standalone CLI (`scripts/build_candidate_pool.py`).
 
 **Инварианты pool:**
 
@@ -123,14 +123,9 @@ Poster-cache и локальные изображения для watched.
 - [apis/tmdb_api.py](../apis/tmdb_api.py) - TMDb Discover, Details и нормализация ответов.
 - [apis/imdb_sql.py](../apis/imdb_sql.py) - поиск в локальной IMDb SQLite базе.
 
-### `model/`
+### Legacy `model/`
 
-Модель и обучение. Не импортирует `ui`.
-
-- [model/model.py](../model/model.py) - предикт, MAE, feature logic, `reset_weights()`, save-if-improved.
-- [model/linear_regression_train.py](../model/linear_regression_train.py) - линейное обучение, LOO, метрики, отчёты.
-- [model/train_report.py](../model/train_report.py) - отчёт по модели.
-- [model/noise_experiment.py](../model/noise_experiment.py) - шумовая устойчивость (чистая логика).
+������ ML-������ ���������� � [archive/legacy/model](../archive/legacy/model). �������� runtime `series-list` �� ����������� `model/`.
 
 ### `ui/`
 
@@ -163,11 +158,11 @@ PyQt desktop GUI для watched-базы, read-only аналитики и явн
 - [desktop/plotly_charts.py](../desktop/plotly_charts.py) - helpers для Plotly-графика, если доступен WebEngine.
 - [desktop/theme.py](../desktop/theme.py) - code-level style tokens и QSS builders для PyQt desktop GUI.
 
-Style contract desktop GUI: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). Этапы миграции и приоритеты: [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md). Desktop GUI не пишет dataset JSON напрямую; LOO-обучение и save weights — только через `model/` service (`execute_explicit_loo_training`), не из PyQt в обход service.
+Style contract desktop GUI: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). Этапы миграции и приоритеты: [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md). Desktop GUI не пишет dataset JSON напрямую. ������ LOO/model flows ��������� � `archive/legacy/model/`.
 
 ### `tests/`
 
-Тесты проекта. Точка входа - [tests/test.py](../tests/test.py).
+Тесты проекта. Точка входа - `py -m pytest`.
 
 ## Текущее меню
 
@@ -329,7 +324,7 @@ UI печатает финальное сообщение сам. Service воз
 - TMDb import merge: `candidates/import_tmdb.py`
 - TMDb build pipeline: `apis/tmdb_api.py`, `candidates/tmdb_candidate_pool.py`
 - SQL-поиск: `apis/imdb_sql.py`
-- обучение и предикт: `model/model.py`, `model/linear_regression_train.py`
+- legacy �������� � �������: `archive/legacy/model/` (�� �������� ���� ��� ����� runtime-������)
 - низкоуровневое сохранение: `storage/data.py`, `storage/files.py`
 
 ## Данные и артефакты
@@ -350,8 +345,8 @@ UI печатает финальное сообщение сам. Service воз
 ## Проверки
 
 ```powershell
-py -m compileall common config storage dataset candidates model apis ui tests
-py tests\test.py
+py -m compileall app apis candidates common config dataset desktop posters scripts storage ui web tests
+py -m pytest
 py main.py
 ```
 
@@ -360,3 +355,4 @@ py main.py
 Для меню `candidate_pool` полезно отдельно проверять: возврат по `0` из подменю, TMDb flow, import TMDb result, top prediction с runtime-фильтрами, retry KP с preview, перенос кандидата в dataset через форму.
 
 Для rating-flow полезно проверять: `Уточнить порядок оценок`, создание draft из `Показать мои оценки`, отмену применения draft, stale-draft защиту и то, что draft не меняет `weights` / `model_metrics`.
+

@@ -1,63 +1,63 @@
-# Правила добавления и изменения записей dataset
+﻿# ������� ���������� � ��������� ������� dataset
 
-Этот файл фиксирует текущий контракт добавления и изменения записей. Он должен отражать реальное поведение кода, а не желаемую архитектуру "на будущее".
+���� ���� ��������� ������� �������� ���������� � ��������� �������. �� ������ �������� �������� ��������� ����, � �� �������� ����������� "�� �������".
 
-## Главный принцип
+## ������� �������
 
-Новые записи должны сохраняться через существующий безопасный путь:
+����� ������ ������ ����������� ����� ������������ ���������� ����:
 
 ```python
 storage_movie.add_movie(...)
     -> add_dataset_record(...)
 ```
 
-Нельзя сохранять dataset напрямую из UI-сценариев.
+������ ��������� dataset �������� �� UI-���������.
 
-## Слои ответственности
+## ���� ���������������
 
-### UI-слой
+### UI-����
 
-Файлы:
+�����:
 
 - [ui/console/interface_funcs.py](../ui/console/interface_funcs.py)
 - [ui/console/request.py](../ui/console/request.py)
 - [desktop/app.py](../desktop/app.py)
 - [desktop/watched_view.py](../desktop/watched_view.py)
 
-Отвечает за:
+�������� ��:
 
-- выбор сценария;
-- показ карточек и предупреждений;
-- сбор defaults;
-- открытие формы подтверждения;
-- ручной ввод `user_score`, `raw_scores`, `tags_vibe`, `genre`;
-- печать финального сообщения пользователю.
+- ����� ��������;
+- ����� �������� � ��������������;
+- ���� defaults;
+- �������� ����� �������������;
+- ������ ���� `user_score`, `raw_scores`, `tags_vibe`, `genre`;
+- ������ ���������� ��������� ������������.
 
-UI не должен молча добавлять запись в dataset.
+UI �� ������ ����� ��������� ������ � dataset.
 
-Desktop GUI использует тот же принцип: изменение `user_score` идёт через `dataset.dataset_records.update_dataset_record()` и helper `save_watched_user_score()`, а не через прямую запись JSON из PyQt.
+Desktop GUI ���������� ��� �� �������: ��������� `user_score` ��� ����� `dataset.dataset_records.update_dataset_record()` � helper `save_watched_user_score()`, � �� ����� ������ ������ JSON �� PyQt.
 
-### Storage / service-слой
+### Storage / service-����
 
-Файлы:
+�����:
 
 - [dataset/storage_movie.py](../dataset/storage_movie.py)
 - [dataset/dataset_records.py](../dataset/dataset_records.py)
 
-Отвечает за:
+�������� ��:
 
-- валидацию payload;
-- проверку дублей;
-- нормализацию полей;
-- создание/обновление meta;
-- пересчёт `computed_scores`;
-- сохранение dataset;
-- очистку candidate pool после успешного добавления;
-- возврат структурированного результата.
+- ��������� payload;
+- �������� ������;
+- ������������ �����;
+- ��������/���������� meta;
+- �������� `computed_scores`;
+- ���������� dataset;
+- ������� candidate pool ����� ��������� ����������;
+- ������� ������������������ ����������.
 
-Storage возвращает `AddRecordResult`, а не управляет UX целиком.
+Storage ���������� `AddRecordResult`, � �� ��������� UX �������.
 
-## Текущий контракт `add_movie()`
+## ������� �������� `add_movie()`
 
 ```python
 add_movie(
@@ -69,20 +69,20 @@ add_movie(
 )
 ```
 
-### Что делает `add_movie()`
+### ��� ������ `add_movie()`
 
-- вызывает `add_dataset_record(...)`;
-- прокидывает `meta_payload`;
-- прокидывает `pool_candidate`;
-- по умолчанию может напечатать `result.message`;
-- возвращает `AddRecordResult`.
+- �������� `add_dataset_record(...)`;
+- ����������� `meta_payload`;
+- ����������� `pool_candidate`;
+- �� ��������� ����� ���������� `result.message`;
+- ���������� `AddRecordResult`.
 
-### Что важно сейчас
+### ��� ����� ������
 
-- для UI-сценариев, где сообщение уже печатается вручную, нужно вызывать `print_message=False`;
-- это убирает двойной вывод `Новая запись добавлена!`.
+- ��� UI-���������, ��� ��������� ��� ���������� �������, ����� �������� `print_message=False`;
+- ��� ������� ������� ����� `����� ������ ���������!`.
 
-## Текущий контракт `add_dataset_record()`
+## ������� �������� `add_dataset_record()`
 
 ```python
 add_dataset_record(
@@ -93,7 +93,7 @@ add_dataset_record(
 ) -> AddRecordResult
 ```
 
-### Обязательные данные `record_payload`
+### ������������ ������ `record_payload`
 
 - `main_info.title`
 - `main_info.user_score`
@@ -102,36 +102,36 @@ add_dataset_record(
 - `tags_vibe`
 - `genre`
 
-### Что проверяет service
+### ��� ��������� service
 
-- валидность `title`;
-- дубль по title без учёта регистра;
-- валидность `user_score`;
-- валидность `year`;
-- валидность `raw_scores`;
-- валидность `tags_vibe`;
-- валидность `genre`;
-- полноту итогового набора признаков.
+- ���������� `title`;
+- ����� �� title ��� ����� ��������;
+- ���������� `user_score`;
+- ���������� `year`;
+- ���������� `raw_scores`;
+- ���������� `tags_vibe`;
+- ���������� `genre`;
+- ������� ��������� ������ ���������.
 
-### Что делает при успехе
+### ��� ������ ��� ������
 
-1. нормализует `main_info`, `raw_scores`, `tags_vibe`, `genre`;
-2. собирает `computed_scores`;
-3. сохраняет запись в dataset;
-4. при необходимости синхронизирует/создаёт meta;
-5. очищает candidate pool:
-   - если передан `pool_candidate`, удаляет именно его;
-   - иначе делает best-effort cleanup просмотренных кандидатов;
-6. синхронизирует poster-cache (`sync_poster_cache_from_meta_and_sources`) и **скачивает локальный файл постера** (`download_poster_for_title`) — best-effort, ошибки не откатывают сохранение записи;
-7. возвращает `AddRecordResult(ok=True, ..., reason="saved")`.
+1. ����������� `main_info`, `raw_scores`, `tags_vibe`, `genre`;
+2. �������� `computed_scores`;
+3. ��������� ������ � dataset;
+4. ��� ������������� ��������������/������ meta;
+5. ������� candidate pool:
+   - ���� ������� `pool_candidate`, ������� ������ ���;
+   - ����� ������ best-effort cleanup ������������� ����������;
+6. �������������� poster-cache (`sync_poster_cache_from_meta_and_sources`) � **��������� ��������� ���� �������** (`download_poster_for_title`) � best-effort, ������ �� ���������� ���������� ������;
+7. ���������� `AddRecordResult(ok=True, ..., reason="saved")`.
 
-Скачивание постера идёт в service-слое, не из UI. Batch «скачать недостающие постеры» в консоли (`Extra` → `download_poster_images_local`) остаётся для backfill старых записей.
+���������� ������� ��� � service-����, �� �� UI. Batch �������� ����������� �������� � ������� (`Extra` > `download_poster_images_local`) ������� ��� backfill ������ �������.
 
-## Источники добавления новой записи
+## ��������� ���������� ����� ������
 
-### 1. Ручное добавление
+### 1. ������ ����������
 
-Путь:
+����:
 
 ```text
 interface_funcs.request_object()
@@ -140,15 +140,15 @@ interface_funcs.request_object()
 -> storage_movie.add_movie(movie_request, print_message=False)
 ```
 
-Особенности:
+�����������:
 
-- defaults собираются через SQL/API flow;
-- перед сохранением всегда открывается форма;
-- итоговое сообщение печатает UI.
+- defaults ���������� ����� SQL/API flow;
+- ����� ����������� ������ ����������� �����;
+- �������� ��������� �������� UI.
 
-### 2. Перенос кандидата из пула
+### 2. ������� ��������� �� ����
 
-Путь:
+����:
 
 ```text
 interface_funcs.mark_candidate_as_watched()
@@ -162,25 +162,25 @@ interface_funcs.mark_candidate_as_watched()
    )
 ```
 
-Особенности:
+�����������:
 
-- запись не добавляется автоматически без формы;
-- перед формой UI печатает read-only preview жанров (`build_candidate_genre_transfer_preview`);
-- после успеха кандидат удаляется из общего пула;
-- для incomplete-кандидата UI показывает предупреждение, но не блокирует перенос.
+- ������ �� ����������� ������������� ��� �����;
+- ����� ������ UI �������� read-only preview ������ (`build_candidate_genre_transfer_preview`);
+- ����� ������ �������� ��������� �� ������ ����;
+- ��� incomplete-��������� UI ���������� ��������������, �� �� ��������� �������.
 
-## Как TMDb-кандидат превращается в defaults
+## ��� TMDb-�������� ������������ � defaults
 
-Логика живёт в:
+������ ���� �:
 
 - [dataset/title_resolve.py](../dataset/title_resolve.py)
 
-`build_candidate_transfer_payload(candidate)` готовит:
+`build_candidate_transfer_payload(candidate)` �������:
 
-- `defaults` для формы;
-- `meta_payload` для сохранения meta.
+- `defaults` ��� �����;
+- `meta_payload` ��� ���������� meta.
 
-### Для TMDb-кандидата используются common-поля
+### ��� TMDb-��������� ������������ common-����
 
 - `title`
 - `year`
@@ -195,53 +195,53 @@ interface_funcs.mark_candidate_as_watched()
 - `kp_id`
 - `source`
 
-### Заполнение `raw_scores`
+### ���������� `raw_scores`
 
-В форму должны попадать:
+� ����� ������ ��������:
 
 - `kp_score <- candidate["kp_score"]`
 - `kp_votes <- candidate["kp_votes"]`
 - `imdb_score <- candidate["imdb_score"]`
 - `imdb_votes <- candidate["imdb_votes"]`
 
-Если поля нет, оно должно остаться пустым/`None`, а не превращаться в `0`.
+���� ���� ���, ��� ������ �������� ������/`None`, � �� ������������ � `0`.
 
-## Жанры
+## �����
 
-Жанровая разметка в dataset — это фиксированный набор бинарных `has_*` из [config/genre_tags.json](../config/genre_tags.json). Новые `has_*` без переобучения модели не добавляются.
+�������� �������� � dataset � ��� ������������� ����� �������� `has_*` �� [config/genre_tags.json](../config/genre_tags.json). ����� `has_*` ��� ������������ ������ �� �����������.
 
-Общий mapper живёт в [candidates/to_dataset.py](../candidates/to_dataset.py):
+����� mapper ���� � [candidates/to_dataset.py](../candidates/to_dataset.py):
 
-- `candidate_genre_keys_to_dataset_genres(genre_keys)` — canonical pool keys → `has_*`;
-- `raw_genres_to_dataset_genres(raw_genres)` — EN/RU raw labels → pool keys → `has_*`.
+- `candidate_genre_keys_to_dataset_genres(genre_keys)` � canonical pool keys > `has_*`;
+- `raw_genres_to_dataset_genres(raw_genres)` � EN/RU raw labels > pool keys > `has_*`.
 
-Важное правило: pool key `mystery` и raw labels `Mystery` / `детектив` → `has_detective`, а не `has_mystery`.
+������ �������: pool key `mystery` � raw labels `Mystery` / `��������` > `has_detective`, � �� `has_mystery`.
 
-### Ручное добавление
+### ������ ����������
 
-`build_genre_defaults()` в [dataset/title_resolve.py](../dataset/title_resolve.py) использует `raw_genres_to_dataset_genres()`.
+`build_genre_defaults()` � [dataset/title_resolve.py](../dataset/title_resolve.py) ���������� `raw_genres_to_dataset_genres()`.
 
-`split_known_genres()` для confirm UI в [ui/console/request.py](../ui/console/request.py) использует тот же mapper: в known попадают только raw-жанры, которые реально маппятся в текущие `has_*`.
+`split_known_genres()` ��� confirm UI � [ui/console/request.py](../ui/console/request.py) ���������� ��� �� mapper: � known �������� ������ raw-�����, ������� ������� �������� � ������� `has_*`.
 
-### Перенос candidate → dataset
+### ������� candidate > dataset
 
-`build_candidate_transfer_genre_defaults()` выбирает источник так:
+`build_candidate_transfer_genre_defaults()` �������� �������� ���:
 
-1. если есть непустой `candidate["genre_keys"]` и mapper status не `missing` → `candidate_genre_keys_to_dataset_genres()`;
-2. иначе fallback через `extract_candidate_fallback_genres()` (`imdb_genres`, `genres_tmdb`, `genres`) и `build_genre_defaults()`.
+1. ���� ���� �������� `candidate["genre_keys"]` � mapper status �� `missing` > `candidate_genre_keys_to_dataset_genres()`;
+2. ����� fallback ����� `extract_candidate_fallback_genres()` (`imdb_genres`, `genres_tmdb`, `genres`) � `build_genre_defaults()`.
 
-Перед формой `mark_candidate_as_watched()` печатает read-only preview:
+����� ������ `mark_candidate_as_watched()` �������� read-only preview:
 
-- pool `genre_keys` → активные `has_*`;
-- fallback / partial / empty warning — без блокировки переноса.
+- pool `genre_keys` > �������� `has_*`;
+- fallback / partial / empty warning � ��� ���������� ��������.
 
-Пользователь всё равно подтверждает или правит жанры в форме `request_all_scores()`.
+������������ �� ����� ������������ ��� ������ ����� � ����� `request_all_scores()`.
 
-## Meta при добавлении
+## Meta ��� ����������
 
-`meta_payload` может содержать дополнительные поля поверх `main_info` / `raw_scores`.
+`meta_payload` ����� ��������� �������������� ���� ������ `main_info` / `raw_scores`.
 
-Сейчас в meta для TMDb-переноса по возможности передаются:
+������ � meta ��� TMDb-�������� �� ����������� ����������:
 
 - `tmdb_id`
 - `imdb_id`
@@ -249,33 +249,33 @@ interface_funcs.mark_candidate_as_watched()
 - `description`
 - `source`
 
-`add_dataset_record()` сохраняет эти дополнительные поля как extra meta.
+`add_dataset_record()` ��������� ��� �������������� ���� ��� extra meta.
 
 ## Duplicate policy
 
-Новая запись отклоняется, если в dataset уже есть title с тем же текстом без учёта регистра.
+����� ������ �����������, ���� � dataset ��� ���� title � ��� �� ������� ��� ����� ��������.
 
-Результат при дубле:
+��������� ��� �����:
 
 ```python
 AddRecordResult(
     ok=False,
-    message="Ошибка добавления! Такой объект уже добавлен",
+    message="������ ����������! ����� ������ ��� ��������",
     reason="duplicate_title",
 )
 ```
 
-Это важно для callers и тестов: current contract возвращает объект результата, а не `False`.
+��� ����� ��� callers � ������: current contract ���������� ������ ����������, � �� `False`.
 
-## Обновление существующей записи
+## ���������� ������������ ������
 
-Для patch существующей записи используется:
+��� patch ������������ ������ ������������:
 
 ```python
 update_dataset_record(title, patch_payload, source_name="") -> UpdateRecordResult
 ```
 
-### Разрешено менять
+### ��������� ������
 
 - `main_info.user_score`
 - `main_info.year`
@@ -283,25 +283,25 @@ update_dataset_record(title, patch_payload, source_name="") -> UpdateRecordResul
 - `tags_vibe`
 - `genre`
 
-### Запрещено менять через update
+### ��������� ������ ����� update
 
-- key записи;
-- `main_info.title` как способ переименования.
+- key ������;
+- `main_info.title` ��� ������ ��������������.
 
-Переименование должно идти отдельным путём через `rename_movie_title()`.
+�������������� ������ ���� ��������� ���� ����� `rename_movie_title()`.
 
-## Обновление оценок и порядка
+## ���������� ������ � �������
 
-`user_score` можно менять несколькими UI-сценариями, но все они должны идти через общий update-service:
+`user_score` ����� ������ ����������� UI-����������, �� ��� ��� ������ ���� ����� ����� update-service:
 
-- ручное изменение одной оценки из `Показать мои оценки`;
-- изменение оценки в desktop GUI через ПКМ -> dialog;
-- попарное уточнение порядка оценок (`rating_comparison`);
-- применение draft линейного распределения оценок.
+- ������ ��������� ����� ������ �� `�������� ��� ������`;
+- ��������� ������ � desktop GUI ����� ��� -> dialog;
+- �������� ��������� ������� ������ (`rating_comparison`);
+- ���������� draft ��������� ������������� ������.
 
 ### Rating comparison
 
-Путь:
+����:
 
 ```text
 global_menu.open_data_menu()
@@ -310,17 +310,17 @@ global_menu.open_data_menu()
 -> update_dataset_record(title, {"main_info": {"user_score": new_score}}, source_name="rating_comparison")
 ```
 
-Перед применением сохраняется preview snapshot:
+����� ����������� ����������� preview snapshot:
 
 ```text
 config/rating_comparison_last_snapshot.json
 ```
 
-Если пользователь отменяет применение, snapshot остаётся как preview, а dataset не меняется.
+���� ������������ �������� ����������, snapshot ������� ��� preview, � dataset �� ��������.
 
-### Draft линейного распределения
+### Draft ��������� �������������
 
-Создание draft:
+�������� draft:
 
 ```text
 interface_funcs.show_all_movies()
@@ -328,15 +328,15 @@ interface_funcs.show_all_movies()
 -> interface_funcs.create_linear_distribution_draft(rows)
 ```
 
-Draft сохраняется в:
+Draft ����������� �:
 
 ```text
 data/rating_order_drafts/rating_order_draft_YYYY-MM-DD_HH-MM-SS.json
 ```
 
-Создание draft не меняет dataset.
+�������� draft �� ������ dataset.
 
-Применение draft:
+���������� draft:
 
 ```text
 interface_funcs.apply_rating_order_draft_flow()
@@ -346,60 +346,60 @@ interface_funcs.apply_rating_order_draft_flow()
 -> update_dataset_record(title, {"main_info": {"user_score": proposed_score}}, source_name="rating_order_draft")
 ```
 
-Валидация draft должна остановить применение, если:
+��������� draft ������ ���������� ����������, ����:
 
-- `method` не равен `linear_distribution`;
-- отсутствуют `items`;
-- запись из draft отсутствует в текущем dataset;
-- текущий `user_score` отличается от `old_score` в draft;
-- `proposed_score` не проходит `valid.is_correct_score`.
+- `method` �� ����� `linear_distribution`;
+- ����������� `items`;
+- ������ �� draft ����������� � ������� dataset;
+- ������� `user_score` ���������� �� `old_score` � draft;
+- `proposed_score` �� �������� `valid.is_correct_score`.
 
-LOO-preview для draft считает `current_loo_mae` и `draft_loo_mae` на копии dataset. Этот preview не должен сохранять веса и не должен менять `config/model_metrics.json`.
+LOO-preview ��� draft ������� `current_loo_mae` � `draft_loo_mae` �� ����� dataset. ���� preview �� ������ ��������� ���� � �� ������ ������ `config/model_metrics.json`.
 
-После применения draft пользователь запускает LOO обучение отдельно, если хочет обновить веса и сохранённый `LOO MAE`.
+����� ���������� draft ������������ ��������� LOO �������� ��������, ���� ����� �������� ���� � ���������� `LOO MAE`.
 
-## Excel-правила
+## Excel-�������
 
-Excel-поток сейчас служит для patch существующих записей, а не для создания новых.
+Excel-����� ������ ������ ��� patch ������������ �������, � �� ��� �������� �����.
 
-Это значит:
+��� ������:
 
-- Excel не должен создавать новые записи;
-- Excel не должен удалять записи;
-- Excel не должен переименовывать записи;
-- если набор title не совпадает с dataset, импорт должен останавливаться;
-- `raw_scores` patch должен синхронизироваться в meta через update-service.
+- Excel �� ������ ��������� ����� ������;
+- Excel �� ������ ������� ������;
+- Excel �� ������ ��������������� ������;
+- ���� ����� title �� ��������� � dataset, ������ ������ ���������������;
+- `raw_scores` patch ������ ������������������ � meta ����� update-service.
 
 ## Candidate pool cleanup
 
-Текущее правило:
+������� �������:
 
-- успешное добавление через перенос кандидата должно удалить кандидата из общего пула;
-- для этого caller передаёт `pool_candidate` в `storage_movie.add_movie()`;
-- cleanup выполняется в `add_dataset_record()`, а не вручную отдельным UI-шагом после сохранения.
+- �������� ���������� ����� ������� ��������� ������ ������� ��������� �� ������ ����;
+- ��� ����� caller ������� `pool_candidate` � `storage_movie.add_movie()`;
+- cleanup ����������� � `add_dataset_record()`, � �� ������� ��������� UI-����� ����� ����������.
 
-## Удаление watched
+## �������� watched
 
-Путь:
+����:
 
 ```text
 delete_watched_record(dataset_key)
 ```
 
-Файл: [dataset/delete_record.py](../dataset/delete_record.py).
+����: [dataset/delete_record.py](../dataset/delete_record.py).
 
-Service удаляет запись из dataset, meta и poster-cache **после backup**. Перед очисткой cache вызывается `remove_local_poster_file()` — локальный JPG в `data/cache/posters/images/` удаляется, если был.
+Service ������� ������ �� dataset, meta � poster-cache **����� backup**. ����� �������� cache ���������� `remove_local_poster_file()` � ��������� JPG � `data/cache/posters/images/` ���������, ���� ���.
 
-Результат содержит счётчики `deleted_dataset`, `deleted_meta`, `deleted_poster_cache`, `deleted_poster_file`. Ошибка удаления файла постера **блокирует** удаление записи (dataset/meta не меняются).
+��������� �������� �������� `deleted_dataset`, `deleted_meta`, `deleted_poster_cache`, `deleted_poster_file`. ������ �������� ����� ������� **���������** �������� ������ (dataset/meta �� ��������).
 
-Console и desktop GUI вызывают один и тот же service; UI не удаляет JSON напрямую.
+Console � desktop GUI �������� ���� � ��� �� service; UI �� ������� JSON ��������.
 
-## Печать сообщений
+## ������ ���������
 
-Текущее разделение ответственности:
+������� ���������� ���������������:
 
-- service возвращает `AddRecordResult` / `UpdateRecordResult`;
-- UI решает, что печатать пользователю;
-- для сценариев с ручной печатью нужно использовать `print_message=False`.
+- service ���������� `AddRecordResult` / `UpdateRecordResult`;
+- UI ������, ��� �������� ������������;
+- ��� ��������� � ������ ������� ����� ������������ `print_message=False`.
 
-Это сохраняет бизнес-логику без изменения, но убирает двойной success-output.
+��� ��������� ������-������ ��� ���������, �� ������� ������� success-output.

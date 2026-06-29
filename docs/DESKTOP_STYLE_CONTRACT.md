@@ -1,275 +1,275 @@
-# Контракт стиля desktop GUI
+﻿# �������� ����� desktop GUI
 
-Этот документ фиксирует текущий визуальный и layout-контракт PyQt desktop GUI. Он описывает внешний вид, правила компоновки и границы изменений, а не бизнес-логику приложения. Поэтапный план переноса функционала — в [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md).
+���� �������� ��������� ������� ���������� � layout-�������� PyQt desktop GUI. �� ��������� ������� ���, ������� ���������� � ������� ���������, � �� ������-������ ����������. ��������� ���� �������� ����������� � � [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md).
 
-## Цель
+## ����
 
-Desktop GUI должен выглядеть спокойно, минималистично и цельно: тёмный графитовый фон, мягкие карточки, приглушённые рамки, читаемая типографика и умеренный зелёно-бирюзовый акцент.
+Desktop GUI ������ ��������� ��������, �������������� � ������: ����� ���������� ���, ������ ��������, ������������ �����, �������� ����������� � ��������� �����-��������� ������.
 
 ## Code-level contract
 
-Источник базовых style values в коде — `desktop/theme.py`.
+�������� ������� style values � ���� � `desktop/theme.py`.
 
-В `theme.py` живут общие design tokens:
+� `theme.py` ����� ����� design tokens:
 
-- цвета фона, карточек, вложенных блоков, рамок, текста и акцента;
-- спокойные акценты IMDb/КП;
-- базовые размеры шрифтов;
-- радиусы карточек, чипов, input/button и fallback-bars;
-- общие spacing/padding tokens;
-- builder-функции QSS для main app, score dialog, watched detail card и analytics.
+- ����� ����, ��������, ��������� ������, �����, ������ � �������;
+- ��������� ������� IMDb/��;
+- ������� ������� �������;
+- ������� ��������, �����, input/button � fallback-bars;
+- ����� spacing/padding tokens;
+- builder-������� QSS ��� main app, score dialog, watched detail card � analytics.
 
-Правила:
+�������:
 
-- новые hardcoded цвета, `font-size`, `border-radius` и повторяющиеся spacing values в GUI-коде не добавлять без причины;
-- если значение относится к общей палитре/типографике/радиусу — сначала добавить или переиспользовать token из `desktop/theme.py`;
-- layout-правки не смешивать с theme-refactor: `addStretch`, `QSizePolicy`, `setFixedSize`, poster sync и resize logic менять отдельной задачей;
-- feature-задачи не должны трогать QSS/layout, кроме минимального wiring нового виджета;
-- локальные geometry-константы конкретного виджета могут оставаться рядом с виджетом, если это не общий visual token.
+- ����� hardcoded �����, `font-size`, `border-radius` � ������������� spacing values � GUI-���� �� ��������� ��� �������;
+- ���� �������� ��������� � ����� �������/�����������/������� � ������� �������� ��� ���������������� token �� `desktop/theme.py`;
+- layout-������ �� ��������� � theme-refactor: `addStretch`, `QSizePolicy`, `setFixedSize`, poster sync � resize logic ������ ��������� �������;
+- feature-������ �� ������ ������� QSS/layout, ����� ������������ wiring ������ �������;
+- ��������� geometry-��������� ����������� ������� ����� ���������� ����� � ��������, ���� ��� �� ����� visual token.
 
-## Палитра
+## �������
 
-| Назначение | Цвет |
+| ���������� | ���� |
 | --- | --- |
-| Фон приложения | `#0f0f10` / `#111113` |
-| Карточки | `#171719` |
-| Вложенные блоки | `#1c1c1f` |
-| Рамки | `#2a2a2e` |
-| Основной текст | `#f4f4f5` |
-| Вторичный текст | `#a1a1aa` |
-| Приглушённый текст | `#71717a` |
-| Основной акцент | `#10a37f` |
+| ��� ���������� | `#0f0f10` / `#111113` |
+| �������� | `#171719` |
+| ��������� ����� | `#1c1c1f` |
+| ����� | `#2a2a2e` |
+| �������� ����� | `#f4f4f5` |
+| ��������� ����� | `#a1a1aa` |
+| ������������ ����� | `#71717a` |
+| �������� ������ | `#10a37f` |
 
-Жёлтые и оранжевые цвета для IMDb/КП не используются как яркие акценты. Внешние рейтинги должны быть спокойнее личной оценки.
+Ƹ���� � ��������� ����� ��� IMDb/�� �� ������������ ��� ����� �������. ������� �������� ������ ���� ��������� ������ ������.
 
-## Типографика
+## �����������
 
-- основной шрифт: `Segoe UI`;
+- �������� �����: `Segoe UI`;
 - fallback: `Arial`, `sans-serif`;
-- заголовок выбранного тайтла: 22-26 px, полужирный;
-- описание: 14-16 px, светло-серый текст;
-- служебные подписи и чипы: компактные, без декоративной пестроты.
+- ��������� ���������� ������: 22-26 px, ����������;
+- ��������: 14-16 px, ������-����� �����;
+- ��������� ������� � ����: ����������, ��� ������������ ��������.
 
-## Карточка выбранного тайтла
+## �������� ���������� ������
 
-Карточка должна быть единым блоком:
+�������� ������ ���� ������ ������:
 
-1. Верхняя строка:
-   - слева фиксированный постер;
-   - справа название, метаданные и рейтинги.
-2. Ниже верхней строки:
-   - отдельная мягкая карточка описания на всю ширину.
+1. ������� ������:
+   - ����� ������������� ������;
+   - ������ ��������, ���������� � ��������.
+2. ���� ������� ������:
+   - ��������� ������ �������� �������� �� ��� ������.
 
-Название является главным текстовым элементом карточки. Длинные названия должны переноситься или ограничиваться без поломки layout.
+�������� �������� ������� ��������� ��������� ��������. ������� �������� ������ ������������ ��� �������������� ��� ������� layout.
 
-## Метаданные
+## ����������
 
-Год, жанры и страна показываются текстовыми чипами:
+���, ����� � ������ ������������ ���������� ������:
 
-- без эмодзи;
-- без иконок;
-- без логотипов;
-- без rich HTML-разметки;
-- с компактными отступами и тонкой рамкой.
+- ��� ������;
+- ��� ������;
+- ��� ���������;
+- ��� rich HTML-��������;
+- � ����������� ��������� � ������ ������.
 
-Если данных нет, показываются только доступные значения. Layout не должен ломаться из-за отсутствия года, жанров, страны, IMDb или КП.
+���� ������ ���, ������������ ������ ��������� ��������. Layout �� ������ �������� ��-�� ���������� ����, ������, ������, IMDb ��� ��.
 
-## Рейтинги
+## ��������
 
-Рейтинги показываются read-only круговыми индикаторами:
+�������� ������������ read-only ��������� ������������:
 
-- `моя` — основной акцент `#10a37f`;
-- `IMDb` и `КП` — приглушённые акценты;
-- внутри круга: число и подпись;
-- внешнее кольцо показывает прогресс от 0 до 10;
-- виджет не интерактивный и ничего не сохраняет.
+- `���` � �������� ������ `#10a37f`;
+- `IMDb` � `��` � ������������ �������;
+- ������ �����: ����� � �������;
+- ������� ������ ���������� �������� �� 0 �� 10;
+- ������ �� ������������� � ������ �� ���������.
 
-Запрещено использовать логотипы IMDb/КП в карточке. Если в проекте есть файлы логотипов, они не являются частью текущего style contract.
+��������� ������������ �������� IMDb/�� � ��������. ���� � ������� ���� ����� ���������, ��� �� �������� ������ �������� style contract.
 
-## Описание
+## ��������
 
-Описание — **плоская секция** внутри `#detailCard`, не вложенная серая карточка:
+�������� � **������� ������** ������ `#detailCard`, �� ��������� ����� ��������:
 
-- заголовок `Описание` — **20px**, bold;
-- ниже тонкий divider `#overviewDivider` (1px, `COLOR_BORDER`);
-- текст overview — **16px**, `COLOR_TEXT_SECONDARY`, `line-height: 155%`;
-- отступ сверху от верхней строки — `OVERVIEW_SECTION_TOP_SPACING` (36px);
-- без иконки документа.
+- ��������� `��������` � **20px**, bold;
+- ���� ������ divider `#overviewDivider` (1px, `COLOR_BORDER`);
+- ����� overview � **16px**, `COLOR_TEXT_SECONDARY`, `line-height: 155%`;
+- ������ ������ �� ������� ������ � `OVERVIEW_SECTION_TOP_SPACING` (36px);
+- ��� ������ ���������.
 
-Если текста overview нет, блок описания **скрывается** (`_overview_frame.setVisible(False)`), placeholder не показывается.
+���� ������ overview ���, ���� �������� **����������** (`_overview_frame.setVisible(False)`), placeholder �� ������������.
 
-### Visual QA watched card (ручной чеклист)
+### Visual QA watched card (������ �������)
 
-Перед merge GUI-polish проверить вручную:
+����� merge GUI-polish ��������� �������:
 
-| Кейс | Ожидание |
+| ���� | �������� |
 | --- | --- |
-| короткий title + короткое описание | overview сразу под info, без лишней пустоты между title и описанием |
-| длинный title (2–3 строки) | `wordWrap`, постер подстраивается по высоте info |
-| без IMDb/КП | круговые индикаторы IMDb/КП скрыты, layout не ломается |
-| без постера | placeholder «Нет постера», info-колонка читаема |
-| без overview | блок «Описание» скрыт полностью |
+| �������� title + �������� �������� | overview ����� ��� info, ��� ������ ������� ����� title � ��������� |
+| ������� title (2�3 ������) | `wordWrap`, ������ �������������� �� ������ info |
+| ��� IMDb/�� | �������� ���������� IMDb/�� ������, layout �� �������� |
+| ��� ������� | placeholder ���� �������, info-������� ������� |
+| ��� overview | ���� ��������� ����� ��������� |
 
-## Layout-контракт
+## Layout-��������
 
-Layout-правила обязательны при GUI-polish. Точечные правки одного label без соблюдения этих правил часто ломают соседние блоки из-за поведения `QScrollArea`, `sizeHint()` и `QSizePolicy`.
+Layout-������� ����������� ��� GUI-polish. �������� ������ ������ label ��� ���������� ���� ������ ����� ������ �������� ����� ��-�� ��������� `QScrollArea`, `sizeHint()` � `QSizePolicy`.
 
-### Watched: карточка выбранного тайтла
+### Watched: �������� ���������� ������
 
-Реализация: `desktop/watched_view.py` (`WatchedDetailCard`).
+����������: `desktop/watched_view.py` (`WatchedDetailCard`).
 
-Верхний блок:
-
-```
-[ poster (слева) ] [ title → chips → ratings (справа) ]
-[ =========== overview на всю ширину =========== ]
-```
-
-Правила:
-
-1. Верхняя строка: постер слева, info-колонка справа (`title`, текстовые chips, read-only рейтинги).
-2. Описание — секция **ниже** верхней строки, на **всю ширину** карточки (заголовок + divider + текст).
-3. В info-колонке **нет** `addStretch()` — контент не «разъезжается» по вертикали.
-4. Постер: ширина до `275px` (1.25× базовых `220px`), высота до `412px` (1.25× `330px`); **не** сжимать под info-колонку — масштаб только вниз, без upscale blur.
-5. Блок описания и info-колонка: vertical size policy **`Minimum`** — не поглощают лишнюю высоту viewport.
-6. Лишняя высота scroll-области уходит **вниз** карточки: один `addStretch(1)` в **конце** root-layout карточки, не между info и overview.
-7. Длинные названия: `wordWrap`, без жёсткого `maximumHeight`, обрезающего текст.
-
-Запрещено:
-
-- `addStretch()` между рейтингами и низом info-колонки;
-- растягивание `_overview_frame` на высоту viewport;
-- привязка описания к низу постера фиксированного max-height, когда info-колонка ниже.
-
-### Watched: sidebar (список и фильтры)
-
-Реализация: `desktop/app.py` (`_build_left_panel`).
+������� ����:
 
 ```
-[ + Добавить тайтл ]
-[ Поиск ]
-[ Сортировка | combo ]
-[ ▸ Фильтры / ▸ Фильтры активны ]
+[ poster (�����) ] [ title > chips > ratings (������) ]
+[ =========== overview �� ��� ������ =========== ]
+```
+
+�������:
+
+1. ������� ������: ������ �����, info-������� ������ (`title`, ��������� chips, read-only ��������).
+2. �������� � ������ **����** ������� ������, �� **��� ������** �������� (��������� + divider + �����).
+3. � info-������� **���** `addStretch()` � ������� �� �������������� �� ���������.
+4. ������: ������ �� `275px` (1.25? ������� `220px`), ������ �� `412px` (1.25? `330px`); **��** ������� ��� info-������� � ������� ������ ����, ��� upscale blur.
+5. ���� �������� � info-�������: vertical size policy **`Minimum`** � �� ��������� ������ ������ viewport.
+6. ������ ������ scroll-������� ������ **����** ��������: ���� `addStretch(1)` � **�����** root-layout ��������, �� ����� info � overview.
+7. ������� ��������: `wordWrap`, ��� ������� `maximumHeight`, ����������� �����.
+
+���������:
+
+- `addStretch()` ����� ���������� � ����� info-�������;
+- ������������ `_overview_frame` �� ������ viewport;
+- �������� �������� � ���� ������� �������������� max-height, ����� info-������� ����.
+
+### Watched: sidebar (������ � �������)
+
+����������: `desktop/app.py` (`_build_left_panel`).
+
+```
+[ + �������� ����� ]
+[ ����� ]
+[ ���������� | combo ]
+[ ? ������� / ? ������� ������� ]
 [ collapsible filters panel ]
-[ N из M ]
+[ N �� M ]
 [ list with thumbnails ]
 ```
 
-Правила:
+�������:
 
-1. Левая колонка `#watchedSidebar`: min ~300px, max ~400px; splitter старт ~340px.
-2. Фильтры свёрнуты по умолчанию; активное состояние — текст «Фильтры активны», не `(N)`.
-3. «Сбросить фильтры» сбрасывает score/year/genre; поиск и сортировку не трогает.
-4. Список — `WatchedListItemDelegate`: миниатюра + title/year/score; selected — зелёная рамка.
-5. ПКМ: «Изменить оценку», «Удалить запись».
+1. ����� ������� `#watchedSidebar`: min ~300px, max ~400px; splitter ����� ~340px.
+2. ������� ������� �� ���������; �������� ��������� � ����� �������� ��������, �� `(N)`.
+3. ��������� �������� ���������� score/year/genre; ����� � ���������� �� �������.
+4. ������ � `WatchedListItemDelegate`: ��������� + title/year/score; selected � ������ �����.
+5. ���: ��������� ������, �������� �������.
 
 ### Watched: poster actions (read-only)
 
-Реализация: `WatchedDetailCard` + `resolve_local_poster_path`, `open_path_in_shell`.
+����������: `WatchedDetailCard` + `resolve_local_poster_path`, `open_path_in_shell`.
 
-1. **ПКМ по постеру** → «Открыть постер» (если есть локальный файл), «Папка poster-cache».
-2. Полный путь к файлу — tooltip на постере при наведении.
-3. Без сети и без write; открытие через `storage.files.open_file`.
+1. **��� �� �������** > �������� ������ (���� ���� ��������� ����), ������ poster-cache�.
+2. ������ ���� � ����� � tooltip �� ������� ��� ���������.
+3. ��� ���� � ��� write; �������� ����� `storage.files.open_file`.
 
-### Analytics: scroll и секции
+### Analytics: scroll � ������
 
-Реализация: `desktop/analytics_view.py` (`AnalyticsView`).
+����������: `desktop/analytics_view.py` (`AnalyticsView`).
 
-Правила:
+�������:
 
-1. Вкладка read-only; расчёты в `dataset/score_analytics.py`, PyQt только рендерит.
-2. `QScrollArea` с `widgetResizable=True`: контент analytics **не** растягивается на всю высоту viewport.
-3. Read-only текстовые блоки (insights, overview-подобные секции, fallback): vertical size policy **`Minimum`**.
-4. Один `addStretch(1)` в **конце** root-layout analytics — пустота **под** контентом, не внутри серых карточек.
-5. Секции (`Коротко`, `Распределение`, …) — в `#analyticsSection`; Plotly — `#analyticsPlotlyChart` внутри секции; padding/spacing менять **шкалой** (root → section → row), не точечно в одном месте.
+1. ������� read-only; ������� � `dataset/score_analytics.py`, PyQt ������ ��������.
+2. `QScrollArea` � `widgetResizable=True`: ������� analytics **��** ������������� �� ��� ������ viewport.
+3. Read-only ��������� ����� (insights, overview-�������� ������, fallback): vertical size policy **`Minimum`**.
+4. ���� `addStretch(1)` � **�����** root-layout analytics � ������� **���** ���������, �� ������ ����� ��������.
+5. ������ (`�������`, `�������������`, �) � � `#analyticsSection`; Plotly � `#analyticsPlotlyChart` ������ ������; padding/spacing ������ **������** (root > section > row), �� ������� � ����� �����.
 
-Порядок секций (Analytics MVP freeze):
+������� ������ (Analytics MVP freeze):
 
-1. KPI-карточки
-2. «Коротко» (+ полнота dataset, insights)
-3. «Распределение оценок»
-4. «Количество тайтлов по жанрам»
-5. «Средняя моя оценка по годам»
-6. «Отличие моих оценок от IMDb»
-7. «Я сильно выше IMDb»
-8. «Я сильно ниже IMDb»
-9. «Подозрительные оценки»
+1. KPI-��������
+2. �������� (+ ������� dataset, insights)
+3. �������������� ������
+4. ����������� ������� �� ������
+5. �������� ��� ������ �� �����
+6. �������� ���� ������ �� IMDb�
+7. �� ������ ���� IMDb�
+8. �� ������ ���� IMDb�
+9. ��������������� ������
 
-После п.8 новые секции — только по отдельному решению (см. `DESKTOP_GUI_ROADMAP.md`, Analytics MVP freeze).
+����� �.8 ����� ������ � ������ �� ���������� ������� (��. `DESKTOP_GUI_ROADMAP.md`, Analytics MVP freeze).
 
-### Model: read-only summary (этап 1)
+### Model: read-only summary (���� 1)
 
-Реализация: `desktop/model_view.py` (`ModelView`) + `desktop/model_summary.py`.
+����������: `desktop/model_view.py` (`ModelView`) + `desktop/model_summary.py`.
 
-1. Вкладка **read-only**; данные из `storage/data.get_model_metrics_status()` и лёгкие baseline MAE через `model/`.
-2. KPI-карточки: LOO MAE, IMDb baseline, КП baseline, dataset size, статус fresh/stale.
-3. **Красный banner + карточка статуса**, если metrics stale — нужно повторное LOO обучение.
-4. Секция **«Обучение»**: кнопка «Запустить LOO обучение», progress bar, статус; расчёт в `QThread` через `execute_explicit_loo_training()`. Кнопка **«Подробнее»** — collapsible панель весов (`#modelWeightsPanel`).
-5. Без read-only «Посчитать отчёт» (этапы 2+).
-6. Стили — `#summaryCard`, `#summaryCardStale`, `#modelStaleBanner`, `#modelTrainButton`, `#modelDetailsButton`, `#modelTrainingProgress`, `#modelWeightsPanel`; QSS в `build_analytics_style()`.
+1. ������� **read-only**; legacy model flows ���������� � `archive/legacy/model/`.
+2. KPI-��������: LOO MAE, IMDb baseline, �� baseline, dataset size, ������ fresh/stale.
+3. **������� banner + �������� �������**, ���� metrics stale � ����� ��������� LOO ��������.
+4. ������ **���������**: ������ ���������� LOO ��������, progress bar, ������; ������ � `QThread` ����� `execute_explicit_loo_training()`. ������ **����������** � collapsible ������ ����� (`#modelWeightsPanel`).
+5. ��� read-only ���������� ����� (����� 2+).
+6. ����� � `#summaryCard`, `#summaryCardStale`, `#modelStaleBanner`, `#modelTrainButton`, `#modelDetailsButton`, `#modelTrainingProgress`, `#modelWeightsPanel`; QSS � `build_analytics_style()`.
 
-### Analytics: «Полнота dataset»
+### Analytics: �������� dataset�
 
-Реализация: `dataset/score_analytics.py` (`build_dataset_completeness*`, `summarize_dataset_completeness`) + `AnalyticsView._fill_completeness`.
+����������: `dataset/score_analytics.py` (`build_dataset_completeness*`, `summarize_dataset_completeness`) + `AnalyticsView._fill_completeness`.
 
-1. Две строки внутри секции «Коротко»: `#completenessHeadline`, `#completenessSubline`.
-2. Формат: `Полнота dataset: 86%` + `Нужно заполнить: КП 43/51 · ...` (до 4 худших полей).
-3. Если всё заполнено: `База почти полная.` без детализации всех пунктов.
-4. Read-only; без Plotly; без write в JSON.
+1. ��� ������ ������ ������ ��������: `#completenessHeadline`, `#completenessSubline`.
+2. ������: `������� dataset: 86%` + `����� ���������: �� 43/51 � ...` (�� 4 ������ �����).
+3. ���� �� ���������: `���� ����� ������.` ��� ����������� ���� �������.
+4. Read-only; ��� Plotly; ��� write � JSON.
 
-### Analytics: KPI-карточки (Всего / Средняя / …)
+### Analytics: KPI-�������� (����� / ������� / �)
 
-Правила:
+�������:
 
-1. Фиксированный размер карточки (сейчас `88px` высота, expanding width).
-2. Подпись и значение **по центру** карточки (`AlignCenter`).
-3. **Нет** `addStretch()` между label и value (ни «прижать value вниз», ни «раздуть» карточку).
-4. Значение крупнее подписи (сейчас `26px` vs `13px`).
+1. ������������� ������ �������� (������ `88px` ������, expanding width).
+2. ������� � �������� **�� ������** �������� (`AlignCenter`).
+3. **���** `addStretch()` ����� label � value (�� �������� value ����, �� ��������� ��������).
+4. �������� ������� ������� (������ `26px` vs `13px`).
 
-### Analytics: «Одинаковые оценки»
+### Analytics: ����������� ������
 
-Правила:
+�������:
 
-1. Оценка — в badge `#denseScoreBadge`, фиксированный размер **56×56**, фон `#1c1c1f`, скругление.
-2. Число внутри badge: **по центру** (`AlignCenter`), крупный шрифт (сейчас `22px`), акцент `#10a37f`.
-3. Badge в строке: **`AlignVCenter`** относительно правой колонки.
-4. Справа: сверху `N тайтлов` (`#denseCount`), ниже список названий (`#sameScoreTitles`, wrap).
-5. **Не** использовать голый `QLabel` на всю высоту строки вместо badge — это даёт «кривое» вертикальное выравнивание.
+1. ������ � � badge `#denseScoreBadge`, ������������� ������ **56?56**, ��� `#1c1c1f`, ����������.
+2. ����� ������ badge: **�� ������** (`AlignCenter`), ������� ����� (������ `22px`), ������ `#10a37f`.
+3. Badge � ������: **`AlignVCenter`** ������������ ������ �������.
+4. ������: ������ `N �������` (`#denseCount`), ���� ������ �������� (`#sameScoreTitles`, wrap).
+5. **��** ������������ ����� `QLabel` �� ��� ������ ������ ������ badge � ��� ��� ������� ������������ ������������.
 
-### Analytics: «Коротко» (insights)
+### Analytics: �������� (insights)
 
-1. Текст insights (`#insightText`) — **14px**, цвет светлее подписей KPI (`#d4d4d8`).
-2. Между строками insights — компактный spacing (сейчас `4px` в `_insights_layout`).
-3. Заголовок секции `#sectionTitle` — **16px**, отступ заголовок → контент меньше outer padding секции.
+1. ����� insights (`#insightText`) � **14px**, ���� ������� �������� KPI (`#d4d4d8`).
+2. ����� �������� insights � ���������� spacing (������ `4px` � `_insights_layout`).
+3. ��������� ������ `#sectionTitle` � **16px**, ������ ��������� > ������� ������ outer padding ������.
 
-## Запреты
+## �������
 
-При GUI-polish нельзя менять:
+��� GUI-polish ������ ������:
 
-- dataset и формат JSON;
+- dataset � ������ JSON;
 - meta;
 - model/training;
 - weights/model_metrics;
 - candidate_pool/top prediction;
-- poster cache и TMDb/KP pipeline;
+- poster cache � TMDb/KP pipeline;
 - web GUI;
 - console UI;
-- поиск и сортировку;
-- источники постеров и описаний.
+- ����� � ����������;
+- ��������� �������� � ��������.
 
-## Где менять
+## ��� ������
 
-- watched-карточка и layout выбранного тайтла: `desktop/watched_view.py`;
+- watched-�������� � layout ���������� ������: `desktop/watched_view.py`;
 - watched sidebar, context menu, delete flow: `desktop/app.py`, `desktop/watched_delete.py`, `desktop/delete_dialog.py`;
-- analytics layout и типографика вкладки: `desktop/analytics_view.py`;
-- Plotly-график (только HTML/CSS графика): `desktop/plotly_charts.py`.
+- analytics layout � ����������� �������: `desktop/analytics_view.py`;
+- Plotly-������ (������ HTML/CSS �������): `desktop/plotly_charts.py`.
 
-Лёгкие helper-тесты для desktop GUI находятся в `tests_pytest/test_desktop.py`. Тяжёлые GUI-тесты для визуальных правок не добавляются.
+˸���� helper-����� ��� desktop GUI ��������� � `tests/test_desktop.py`. ������ GUI-����� ��� ���������� ������ �� �����������.
 
-Перед merge GUI-polish проверить вручную три крайних кейса:
+����� merge GUI-polish ��������� ������� ��� ������� �����:
 
 | Watched | Analytics |
 | --- | --- |
-| короткий title + короткое описание | KPI: целое и дробное значение |
-| длинный title (2–3 строки) | dense row с длинным списком тайтлов |
-| без IMDb/КП / без постера | fallback без Plotly/WebEngine |
+| �������� title + �������� �������� | KPI: ����� � ������� �������� |
+| ������� title (2�3 ������) | dense row � ������� ������� ������� |
+| ��� IMDb/�� / ��� ������� | fallback ��� Plotly/WebEngine |

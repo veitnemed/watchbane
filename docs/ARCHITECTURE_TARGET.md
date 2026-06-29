@@ -1,4 +1,4 @@
-# ARCHITECTURE_TARGET — целевая структура проекта
+﻿# ARCHITECTURE_TARGET — целевая структура проекта
 
 Документ фиксирует **целевую** структуру папок Terminal Movies Learn и правила
 зависимостей между слоями.
@@ -303,7 +303,7 @@ timeout, raw external data.
 ### 2.9 `tests/`
 
 **Отвечает за:** тесты проекта, regression checks, тесты архитектурных правил
-(если будут добавлены). Точка входа — `tests/test.py`.
+(если будут добавлены). Точка входа — `py -m pytest`.
 
 ### 2.10 `docs/`
 
@@ -422,8 +422,8 @@ Desktop GUI относится к UI-слою. Его visual-polish должен
    обновляются сразу и полностью, а старая папка удаляется тем же шагом.
 4. Прогон проверок:
    ```powershell
-   py -m compileall common config data_work interface model_work tests
-   py tests\test.py
+   py -m compileall app apis candidates common config dataset desktop posters scripts storage ui web tests
+   py -m pytest
    ```
 
 Дальнейшие шаги (ориентир, не часть первого шага): `integrations/ → apis/`,
@@ -443,3 +443,4 @@ Desktop GUI относится к UI-слою. Его visual-polish должен
   и не сохраняет данные напрямую, `candidates` не использует `print()/input()`.
 
 Актуальная раскладка файлов — в [PROJECT_MAP.md](PROJECT_MAP.md).
+

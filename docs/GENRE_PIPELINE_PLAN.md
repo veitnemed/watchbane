@@ -1,4 +1,4 @@
-# План: жанры и перенос кандидата в dataset
+﻿# План: жанры и перенос кандидата в dataset
 
 Дата: 2026-06-23  
 Статус: черновик плана  
@@ -76,7 +76,7 @@
   - `map_genre_names_to_features(genres: list[str]) -> dict[str, int]` — полный вектор `has_*`;
   - `split_mapped_genres(genres) -> (mapped, unknown)` — для UI-предупреждений.
 - [ ] **1.5** Подключить в `build_genre_defaults()` и `split_known_genres()` (`dataset/title_resolve.py`).
-- [ ] **1.6** Тесты в `tests/test.py`:
+- [ ] **1.6** Тесты в `tests/`:
   - `Mystery` → `has_detective=1`;
   - merged IMDb+TMDb списки;
   - unknown жанр попадает в `unknown`, не в silent drop.
@@ -161,8 +161,8 @@ Transfer не зависит от того, в какое поле попали 
 - [ ] **5.3** Добавить в `candidates/AGENTS.md` ссылку на маппер и запрет смешивать три слоя жанров.
 - [ ] **5.4** Прогон:
   ```powershell
-  python.exe -m compileall main.py common config storage dataset candidates model apis ui scripts tests
-  python.exe tests\test.py
+  python.exe -m compileall app apis candidates common config dataset desktop posters scripts storage ui web tests
+  python.exe -m pytest
   ```
 
 ### Критерий готовности
@@ -178,7 +178,7 @@ Transfer не зависит от того, в какое поле попали 
 ### Задачи
 
 - [ ] **6.1** Регулярный отчёт: `scripts/build_tmdb_dataset_genre_report.py` — coverage pool vs dataset.
-- [ ] **6.2** Согласовать `evaluate_candidate_pool.py::SERIOUS_GENRES` с pool keys и `has_*`.
+- [ ] **6.2** Согласовать `scripts/evaluate_candidate_pool.py::SERIOUS_GENRES` с pool keys и `has_*`.
 - [ ] **6.3** Отдельная задача: ретро-разметка существующих записей dataset (только с бэкапом).
 
 ---
@@ -227,5 +227,6 @@ Transfer не зависит от того, в какое поле попали 
 - [ ] Единый маппер покрыт тестами и используется в `build_genre_defaults()`.
 - [ ] Pool transfer показывает preview жанров и unknown.
 - [ ] `Mystery` / `детектив` / pool key `mystery` → `has_detective`.
-- [ ] Документация актуальна; `tests/test.py` проходит.
+- [ ] Документация актуальна; `py -m pytest` проходит.
 - [ ] Нет silent drop жанров без trace (unknown список или warning).
+

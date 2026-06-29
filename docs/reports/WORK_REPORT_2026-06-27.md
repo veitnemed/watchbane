@@ -1,104 +1,104 @@
-# Отчёт о проделанной работе на 2026-06-27
+﻿# ����� � ����������� ������ �� 2026-06-27
 
-Основано на незакоммиченных изменениях после `2c3eabe` (poster auto-download, Model tab LOO training).
+�������� �� ��������������� ���������� ����� `2c3eabe` (poster auto-download, Model tab LOO training).
 
-## Коротко
+## �������
 
-Два направления: **консольное меню жанров модели** и **desktop wizard «Добавить тайтл»** с двухэкранным UX (поиск → подтверждение на карточке). Save идёт через существующий service path (`add_movie` / `add_dataset_record`), без прямой записи JSON из PyQt.
+��� �����������: **���������� ���� ������ ������** � **desktop wizard ��������� �����** � ������������ UX (����� > ������������� �� ��������). Save ��� ����� ������������ service path (`add_movie` / `add_dataset_record`), ��� ������ ������ JSON �� PyQt.
 
 ---
 
-## 1. Консоль: раздел «Жанры»
+## 1. �������: ������ �������
 
-### Главное меню
+### ������� ����
 
-Нумерация сдвинута:
+��������� ��������:
 
-| # | Пункт |
+| # | ����� |
 |---|--------|
-| 4 | **Жанры** (новый) |
-| 5 | Дополнительно |
-| 6 | Пулл кандидатов |
-| 7 | Выгрузить отчёт |
+| 4 | **�����** (�����) |
+| 5 | ������������� |
+| 6 | ���� ���������� |
+| 7 | ��������� ����� |
 
-### Подменю «Жанры»
+### ������� �������
 
-- **1 >> Показать все жанры** — каталог `has_*` из `config/genre_tags.json` с русскими подписями (`label`).
+- **1 >> �������� ��� �����** � ������� `has_*` �� `config/genre_tags.json` � �������� ��������� (`label`).
 
-### Файлы
+### �����
 
-| Файл | Изменение |
+| ���� | ��������� |
 |------|-----------|
-| `ui/console/ui.py` | `show_genres_menu()`, обновлён `show_global_menu` |
+| `ui/console/ui.py` | `show_genres_menu()`, ������� `show_global_menu` |
 | `ui/console/global_menu.py` | `open_genres_menu()` |
-| `ui/console/console_app.py` | маршрутизация пункта 4 |
-| `ui/console/genre_menu.py` | **новый** — вызов `genre_stats.show_model_genres()` |
+| `ui/console/console_app.py` | ������������� ������ 4 |
+| `ui/console/genre_menu.py` | **�����** � ����� `genre_stats.show_model_genres()` |
 | `dataset/genre_stats.py` | `build_model_genre_catalog()`, `show_model_genres()` |
-| `config/genre_tags.json` | `has_romance` → label «Романтика» |
-| `docs/README.md`, `docs/PROJECT_MAP.md` | структура меню |
+| `config/genre_tags.json` | `has_romance` > label ���������� |
+| `docs/README.md`, `docs/PROJECT_MAP.md` | ��������� ���� |
 
-### Тесты
+### �����
 
 - `tests_pytest/test_genre_stats.py`
 
 ---
 
-## 2. Desktop: wizard «Добавить тайтл»
+## 2. Desktop: wizard ��������� �����
 
-Заменена заглушка `QMessageBox` на полноценный сценарий добавления watched-тайтла.
+�������� �������� `QMessageBox` �� ����������� �������� ���������� watched-������.
 
-### UX (два экрана, `QStackedWidget`)
+### UX (��� ������, `QStackedWidget`)
 
-**Экран A — поиск**
+**����� A � �����**
 
-- Название, страна (по умолчанию **«Не важно»**), «Найти»
-- Progress bar на 7 шагов resolve (IMDb SQL → KP → TMDb → сборка)
-- Заголовок окна: «Добавить тайтл — поиск»
+- ��������, ������ (�� ��������� **��� �����**), ������
+- Progress bar �� 7 ����� resolve (IMDb SQL > KP > TMDb > ������)
+- ��������� ����: ��������� ����� � �����
 
-**Экран B — подтверждение**
+**����� B � �������������**
 
-- После успешного resolve экран поиска **скрыт**
-- Шапка с title/year, статус источников
-- Компактная `WatchedDetailCard` (постер ×0.5, меньшие круги IMDb/КП, без «моя оценка» на карточке)
-- Scroll только для карточки; год, оценка и кнопки **вне scroll**
-- «Искать другой» → возврат на экран A
-- «Добавить тайтл» → `save_add_title_record()` → refresh списка watched
+- ����� ��������� resolve ����� ������ **�����**
+- ����� � title/year, ������ ����������
+- ���������� `WatchedDetailCard` (������ ?0.5, ������� ����� IMDb/��, ��� ���� ������ �� ��������)
+- Scroll ������ ��� ��������; ���, ������ � ������ **��� scroll**
+- ������� ������ > ������� �� ����� A
+- ��������� ����� > `save_add_title_record()` > refresh ������ watched
 
-### Service-слой
+### Service-����
 
-| Файл | Роль |
+| ���� | ���� |
 |------|------|
 | `dataset/add_title_service.py` | resolve bundle, preview card, `save_add_title_record()` |
-| `dataset/title_resolve.py` | `on_progress` callback для GUI |
-| `desktop/add_title_worker.py` | `QThread` → resolve |
+| `dataset/title_resolve.py` | `on_progress` callback ��� GUI |
+| `desktop/add_title_worker.py` | `QThread` > resolve |
 | `desktop/add_title_dialog.py` | wizard UI |
 | `desktop/app.py` | `_open_add_title_dialog()` |
-| `candidates/tmdb_country_options.py` | «Не важно» + `add_title_country_combo_options()` |
+| `candidates/tmdb_country_options.py` | ��� ����� + `add_title_country_combo_options()` |
 
-### Карточка preview
+### �������� preview
 
 - `DetailCardLayoutProfile` + `ADD_TITLE_PREVIEW_CARD_PROFILE`
-- `include_bottom_stretch=False` для preview (меньше лишней высоты scroll)
-- QSS: `#addTitlePreviewCard QLabel#detailTitle` → 18px
+- `include_bottom_stretch=False` ��� preview (������ ������ ������ scroll)
+- QSS: `#addTitlePreviewCard QLabel#detailTitle` > 18px
 
-### Тесты
+### �����
 
 - `tests_pytest/test_add_title_service.py`
-- `tests_pytest/test_desktop.py` — wizard wiring, `QStackedWidget`
+- `tests_pytest/test_desktop.py` � wizard wiring, `QStackedWidget`
 
 ### Roadmap
 
-- `docs/DESKTOP_GUI_ROADMAP.md`: B1/B2 wizard — **done**
+- `docs/DESKTOP_GUI_ROADMAP.md`: B1/B2 wizard � **done**
 
 ---
 
-## 3. Что не входит / не коммитится
+## 3. ��� �� ������ / �� ����������
 
-- `config/model_metrics.json` — локальный артефакт после LOO, не включается в коммит.
+- `config/model_metrics.json` � ��������� �������� ����� LOO, �� ���������� � ������.
 
 ---
 
-## 4. Проверки
+## 4. ��������
 
 ```powershell
 python -m pytest tests_pytest/test_genre_stats.py tests_pytest/test_add_title_service.py tests_pytest/test_desktop.py::test_add_title_button_opens_wizard_dialog -q
@@ -106,8 +106,8 @@ python -m pytest tests_pytest/test_genre_stats.py tests_pytest/test_add_title_se
 
 ---
 
-## 5. Следующие шаги (опционально)
+## 5. ��������� ���� (�����������)
 
-- Редактирование vibe-тегов и жанров на экране preview
-- Загрузка постера в preview по URL до save
-- LLM-разметка vibe-тегов (см. обсуждение плана)
+- �������������� vibe-����� � ������ �� ������ preview
+- �������� ������� � preview �� URL �� save
+- LLM-�������� vibe-����� (��. ���������� �����)

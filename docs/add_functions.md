@@ -1,4 +1,4 @@
-# Правила добавления и изменения функционала
+﻿# Правила добавления и изменения функционала
 
 Документ описывает, **куда класть новый код** и **каких зависимостей нельзя нарушать**
 при добавлении или изменении функциональности в Terminal Movies Learn.
@@ -13,33 +13,31 @@
 ## 1. Слои и направление зависимостей
 
 ```
-common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <-  ui
+common  <-  config  <-  storage  <-  dataset / apis  <-  candidates  <-  ui
 ```
 
 Импортировать можно только «вниз» по этой схеме. Разрешённые направления:
 
 | Слой | Может импортировать | Нельзя импортировать |
 | --- | --- | --- |
-| `ui` | dataset, candidates, model, apis, storage, config, common | — |
-| `candidates` | dataset, model, apis, storage, config, common | ui |
-| `dataset` | storage, apis, config, common | ui, candidates, model |
-| `model` | storage, config, common | ui, dataset, candidates, apis |
-| `apis` | config, common | ui, dataset, candidates, model, storage |
-| `storage` | config, common | ui, dataset, candidates, model, apis |
-| `config` | common, stdlib | dataset, candidates, model, apis, ui, storage |
-| `common` | stdlib (+ config) | dataset, storage, candidates, model, apis, ui |
+| `ui` | dataset, candidates, apis, storage, config, common | — |
+| `candidates` | dataset, apis, storage, config, common | ui |
+| `dataset` | storage, apis, config, common | ui, candidates |
+| `apis` | config, common | ui, dataset, candidates, storage |
+| `storage` | config, common | ui, dataset, candidates, apis |
+| `config` | common, stdlib | dataset, candidates, apis, ui, storage |
+| `common` | stdlib (+ config) | dataset, storage, candidates, apis, ui |
 
 ## 2. Жёсткие запреты
 
-1. `ui` не сохраняет dataset/candidate_pool/weights/tags напрямую — только через сервисы.
+1. `ui` не сохраняет dataset/candidate_pool/tags напрямую — только через сервисы.
 2. `ui` не вызывает внешние API напрямую — только через сервисы `dataset` / `candidates`.
 3. `apis` не пишет в dataset/candidate_pool и не принимает пользовательских решений.
-4. `model` не импортирует `ui`.
-5. `dataset` не импортирует `ui`.
-6. `candidates` не вызывает `input()` и `print()` — прогресс отдаётся наверх через reporter.
-7. `storage` не содержит пользовательских сценариев (не знает «зачем» сохраняет).
-8. `config` и `common` не зависят от верхних слоёв.
-9. Никаких compatibility-wrapper при переносах: импорты обновляются сразу и полностью.
+4. `dataset` не импортирует `ui`.
+5. `candidates` не вызывает `input()` и `print()` — прогресс отдаётся наверх через reporter.
+6. `storage` не содержит пользовательских сценариев (не знает «зачем» сохраняет).
+7. `config` и `common` не зависят от верхних слоёв.
+8. Никаких compatibility-wrapper при переносах: импорты обновляются сразу и полностью.
 
 ## 3. Куда класть новый код
 
@@ -47,7 +45,6 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 - Новый desktop PyQt экран / карточка / dialog → `desktop/`; visual-polish сверять с [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md).
 - Новый сценарий над пользовательским dataset (add/update/stats/excel/tags/genre) → `dataset/`.
 - Новая логика пулов кандидатов (сбор, фильтры, dedupe, ranking, retry) → `candidates/`.
-- Новый расчёт/метрика/режим обучения (без ввода-вывода) → `model/`.
 - Новый внешний источник или эндпоинт (KP/TMDb/IMDb SQL) → `apis/`.
 - Новое низкоуровневое чтение/запись файла, backup, init → `storage/`.
 - Новая чистая утилита (валидация, формат, нормализация текста) → `common/`.
@@ -71,9 +68,8 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates / model  <- 
 и `dataset.dataset_records.update_dataset_record()`. Подробный контракт — в
 [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md). UI не пишет в dataset напрямую.
 
-### Сохранить веса / теги / pool
+### Сохранить теги / pool
 
-- веса: сервис в `model` (например `model.reset_weights()`), не `storage.data.save_weights` из UI;
 - теги: `dataset.tags_work.add_tag()/delete_tag()/delete_all_tags()`, не `save_tags` из UI;
 - candidate pool: функции `candidates.candidate_pool` / `candidates.tmdb_candidate_pool`.
 
@@ -91,10 +87,10 @@ UI/CLI регистрируют печать через `candidates.tmdb_candida
 
 ## 5. Чего не делать без отдельного подтверждения
 
-- Менять JSON-форматы `dataset.json`, `meta_data.json`, `weights.json`, `candidate_pool.json`, `config/tags.json`.
+- Менять JSON-форматы `dataset.json`, `meta_data.json`, `candidate_pool.json`, `config/tags.json`.
 - Менять структуру меню и тексты пунктов.
-- Менять бизнес-логику добавления записей, обучения, сбора пула.
-- Делать GUI-polish, который меняет dataset/model/pool или источники данных.
+- Менять бизнес-логику добавления записей или сбора пула.
+- Делать GUI-polish, который меняет dataset/pool или источники данных.
 - Удалять старые функции.
 - Делать массовые переименования/рефакторинги.
 - Трогать или коммитить секреты (`.env.local`, `tmdb.env`, `api_token.py`).
@@ -104,17 +100,17 @@ UI/CLI регистрируют печать через `candidates.tmdb_candida
 ## 6. Обязательные проверки перед коммитом
 
 ```powershell
-py -m compileall common config storage dataset candidates model apis ui tests
-py tests\test.py
+py -m compileall app apis candidates common config dataset desktop posters scripts storage ui web tests
+py -m pytest
 py main.py   # если затронут UI: убедиться, что меню открывается
 ```
 
-Все блоки `tests\test.py` должны заканчиваться `ВСЕ ПРОВЕРКИ ПРОЙДЕНЫ: True`.
+Активный test suite запускается через `py -m pytest`.
 
 Быстрая проверка слоёв (должно быть пусто):
 
 ```powershell
-git grep -nE "from ui|import ui" -- "model/*.py" "dataset/*.py" "apis/*.py" "storage/*.py"
+git grep -nE "from ui|import ui" -- "dataset/*.py" "apis/*.py" "storage/*.py"
 git grep -nE "\b(print|input)\(" -- "candidates/*.py"
 ```
 
@@ -125,3 +121,4 @@ git grep -nE "\b(print|input)\(" -- "candidates/*.py"
 3. Внести минимальную правку в правильном слое.
 4. Прогнать проверки из раздела 6.
 5. Коммитить отдельным маленьким коммитом.
+

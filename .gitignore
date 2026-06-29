@@ -30,6 +30,7 @@ datasets/
 
 data/candidate_pool/
 data/diagnostics/
+config/model_metrics.json
 /web/data/*.json
 /reports/
 _safety_audit/

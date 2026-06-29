@@ -1,261 +1,261 @@
-# План: перенос функционала в PyQt desktop GUI
+﻿# ����: ������� ����������� � PyQt desktop GUI
 
-Дата: 2026-06-25  
-Статус: активный план  
-Связанные документы: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md), [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md), [PROJECT_MAP.md](PROJECT_MAP.md), [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md), [add_functions.md](add_functions.md)
+����: 2026-06-25  
+������: �������� ����  
+��������� ���������: [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md), [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md), [PROJECT_MAP.md](PROJECT_MAP.md), [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md), [add_functions.md](add_functions.md)
 
-Отчёты по polish: [DESKTOP_GUI_REPORT_2026-06-25.md](reports/DESKTOP_GUI_REPORT_2026-06-25.md), [DESKTOP_GUI_REPORT_2026-06-25_layout-polish.md](reports/DESKTOP_GUI_REPORT_2026-06-25_layout-polish.md)
+������ �� polish: [DESKTOP_GUI_REPORT_2026-06-25.md](reports/DESKTOP_GUI_REPORT_2026-06-25.md), [DESKTOP_GUI_REPORT_2026-06-25_layout-polish.md](reports/DESKTOP_GUI_REPORT_2026-06-25_layout-polish.md)
 
-Примечание: визуальный и layout-контракт desktop GUI описан в [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). Этот документ фиксирует **что и в каком порядке** переносить в GUI, не дублируя правила компоновки.
+����������: ���������� � layout-�������� desktop GUI ������ � [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md). ���� �������� ��������� **��� � � ����� �������** ���������� � GUI, �� �������� ������� ����������.
 
-## Цель
+## ����
 
-PyQt desktop — **основная оболочка** для повседневной работы с watched-базой, аналитикой и (позже) рекомендациями.
+PyQt desktop � **�������� ��������** ��� ������������ ������ � watched-�����, ���������� � (�����) ��������������.
 
-Консоль — **админка и fallback**: сложные импорты, обучение, pool build, массовые операции, отладка.
+������� � **������� � fallback**: ������� �������, ��������, pool build, �������� ��������, �������.
 
-## Архитектурный каркас
+## ������������� ������
 
 ```
 PyQt widget (desktop/*)
-  → desktop helper / dialog
-    → dataset/* | candidates/service | model reports
-      → storage / JSON / cache
+  > desktop helper / dialog
+    > dataset/* | candidates/service | model reports
+      > storage / JSON / cache
 ```
 
-Жёсткое правило: GUI **не пишет JSON напрямую**. Write только через documented services:
+Ƹ����� �������: GUI **�� ����� JSON ��������**. Write ������ ����� documented services:
 
-- `dataset/dataset_records.py` — add/update записи;
-- `dataset/delete_record.py` — удаление watched;
-- `candidates/service.py` — candidate pool и top prediction.
+- `dataset/dataset_records.py` � add/update ������;
+- `dataset/delete_record.py` � �������� watched;
+- `candidates/service.py` � candidate pool � top prediction.
 
-Подробнее: [add_functions.md](add_functions.md), [PROJECT_MAP.md](PROJECT_MAP.md).
+���������: [add_functions.md](add_functions.md), [PROJECT_MAP.md](PROJECT_MAP.md).
 
-## Текущее состояние
+## ������� ���������
 
-| Область | Файлы | Статус |
+| ������� | ����� | ������ |
 | --- | --- | --- |
-| Watched list + карточка | [desktop/watched_view.py](../desktop/watched_view.py), [desktop/app.py](../desktop/app.py) | done |
-| Watched sidebar (фильтры, thumbnails, delete) | `app.py`, `watched_delete.py`, `delete_dialog.py` | done |
-| Редактирование `user_score` | `app.py` → `update_dataset_record` | done |
-| Удаление watched | `app.py` → `delete_record.delete_watched_record` | done |
+| Watched list + �������� | [desktop/watched_view.py](../desktop/watched_view.py), [desktop/app.py](../desktop/app.py) | done |
+| Watched sidebar (�������, thumbnails, delete) | `app.py`, `watched_delete.py`, `delete_dialog.py` | done |
+| �������������� `user_score` | `app.py` > `update_dataset_record` | done |
+| �������� watched | `app.py` > `delete_record.delete_watched_record` | done |
 | Analytics KPI / dense / insights | [desktop/analytics_view.py](../desktop/analytics_view.py) | done |
-| Analytics «Полнота dataset» | `score_analytics.py` + `analytics_view.py` | done |
-| Analytics MVP (жанры, годы, gaps, suspicious) | `score_analytics.py` + `plotly_charts.py` + `analytics_view.py` | done |
-| Bar «Распределение оценок» | `analytics_view.py` + [desktop/plotly_charts.py](../desktop/plotly_charts.py) + [dataset/score_analytics.py](../dataset/score_analytics.py) (`chart_distribution`) | done |
-| Layout-контракт | [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) | done |
+| Analytics �������� dataset� | `score_analytics.py` + `analytics_view.py` | done |
+| Analytics MVP (�����, ����, gaps, suspicious) | `score_analytics.py` + `plotly_charts.py` + `analytics_view.py` | done |
+| Bar �������������� ������ | `analytics_view.py` + [desktop/plotly_charts.py](../desktop/plotly_charts.py) + [dataset/score_analytics.py](../dataset/score_analytics.py) (`chart_distribution`) | done |
+| Layout-�������� | [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) | done |
 
 ---
 
-## Этап 1. Polish базового GUI
+## ���� 1. Polish �������� GUI
 
-**Цель:** стабильный внешний вид, без новой бизнес-логики.  
-**Файлы:** `desktop/watched_view.py`, `desktop/analytics_view.py`, `desktop/plotly_charts.py`, `desktop/app.py`
+**����:** ���������� ������� ���, ��� ����� ������-������.  
+**�����:** `desktop/watched_view.py`, `desktop/analytics_view.py`, `desktop/plotly_charts.py`, `desktop/app.py`
 
-### Задачи
+### ������
 
-- [x] **1.1** Visual QA watched card — done (чеклист в [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md); helper-тесты sparse card в `test_desktop.py`).
-- [x] **1.2** Polish левой панели списка — done (sidebar: thumbnails, collapsible filters, sort row, counter, forest-green add button).
-- [x] **1.3** Plotly charts: единая высота/отступы, `#analyticsPlotlyChart`, фон `COLOR_SURFACE` — done (`plotly_charts.py` helpers, `analytics_view.py`).
-- [x] **1.4** Analytics polish (KPI, «Коротко», spacing) — done (`ANALYTICS_*` константы, completeness block layout).
+- [x] **1.1** Visual QA watched card � done (������� � [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md); helper-����� sparse card � `test_desktop.py`).
+- [x] **1.2** Polish ����� ������ ������ � done (sidebar: thumbnails, collapsible filters, sort row, counter, forest-green add button).
+- [x] **1.3** Plotly charts: ������ ������/�������, `#analyticsPlotlyChart`, ��� `COLOR_SURFACE` � done (`plotly_charts.py` helpers, `analytics_view.py`).
+- [x] **1.4** Analytics polish (KPI, ��������, spacing) � done (`ANALYTICS_*` ���������, completeness block layout).
 
-### Критерий готовности
+### �������� ����������
 
-Три крайних кейса из [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) проходят вручную; layout не ломается при resize.
+��� ������� ����� �� [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) �������� �������; layout �� �������� ��� resize.
 
-### Не делать на этом этапе
+### �� ������ �� ���� �����
 
-Новые write, новые вкладки, pool, training.
-
----
-
-## Этап 2. Read-only расширения
-
-### 2.1 Watched (только отображение)
-
-- [x] **2.1.1** Фильтр по диапазону `user_score` — done (`desktop.watched_view.filter_entries_by_user_score`, UI min/max в watched left panel).
-- [x] **2.1.2** Фильтр по году — done (`desktop.watched_view.filter_entries_by_year`, UI `year_from/year_to` в watched left panel).
-- [x] **2.1.3** Фильтр по жанру — done (`desktop.watched_view.get_available_genres`, `filter_entries_by_genre`, UI genre combo в watched left panel).
-- [x] **2.1.4** Счётчик «найдено N» — done (`format_watched_list_counter` над списком + status bar).
-- [x] **2.1.5** Быстрый сброс фильтров — done (`Сбросить фильтры`, score/year/genre → defaults; поиск не сбрасывается).
-
-Данные: `load_watched_entries()` + filter/sort, без записи.
-
-### 2.2 Analytics (графики по одному)
-
-Pipeline для **каждого** нового графика:
-
-1. расчёт в [dataset/score_analytics.py](../dataset/score_analytics.py);
-2. HTML в [desktop/plotly_charts.py](../desktop/plotly_charts.py);
-3. секция в [desktop/analytics_view.py](../desktop/analytics_view.py) + Qt-fallback;
-4. smoke в [tests_pytest/test_desktop.py](../tests_pytest/test_desktop.py).
-
-Порядок добавления:
-
-- [x] **2.2.0** Read-only «Полнота dataset» — done (`build_dataset_completeness*`, две строки в «Коротко»).
-- [x] **2.2.1** Распределение по корзинам — done (`score_count_points` + Plotly).
-- [x] **2.2.2** Количество тайтлов по жанрам — done (`genre_count_rows`, horizontal bar).
-- [x] **2.2.3** Средняя моя оценка по годам — done (`year_average_points`, line chart; **без** count-by-year).
-- [x] **2.2.4** Я сильно выше IMDb — done (text list, Δ ≥ 1.5, только IMDb).
-- [x] **2.2.5** Я сильно ниже IMDb — done (text list, Δ ≤ −1.5, только IMDb).
-- [x] **2.2.6** Подозрительные оценки — done (text list + reason).
-- [x] **2.2.7** Отличие моих оценок от IMDb — done (text top-10 + «Показать ещё», сортировка по |Δ|, до 20).
-
-**Analytics MVP freeze (2026-06-26):** после блока «Подозрительные оценки» **не добавлять** новые analytics-секции без отдельного решения. Исключение: **2.2.7** добавлен по запросу. Вне scope: страны, pie charts, scatter, график количества оценок по годам, экспорт, drill-down в watched.
-
-Отменено / перенесено из старого плана:
-
-- ~~2.2.x «Мои оценки по годам (count)»~~ — не входит в MVP;
-- ~~scatter/bar «моя vs IMDb/КП»~~ — заменено text lists 2.2.4–2.2.5.
-
-### Критерий готовности
-
-Каждый график работает с Plotly/WebEngine и с Qt-fallback; analytics read-only — не трогает weights, `model_metrics`, pool, dataset (кроме чтения).
+����� write, ����� �������, pool, training.
 
 ---
 
-## Этап 3. Безопасные write в watched
+## ���� 2. Read-only ����������
 
-### Задачи
+### 2.1 Watched (������ �����������)
 
-- [x] **3.0** UI-stub будущего добавления watched-тайтла — done (`+ Добавить тайтл` → wizard: search, progress, card confirm, save через service).
-- [x] **3.1** Удаление записи — done (ПКМ → «Удалить запись», preview dialog, подтверждение `DELETE`, `delete_watched_record()` через `desktop/watched_delete.py`).
-- [x] **3.2** Read-only сервисные пункты (опционально): «Открыть локальный постер», «Показать путь poster-cache» — done (`WatchedDetailCard`, `open_path_in_shell`).
+- [x] **2.1.1** ������ �� ��������� `user_score` � done (`desktop.watched_view.filter_entries_by_user_score`, UI min/max � watched left panel).
+- [x] **2.1.2** ������ �� ���� � done (`desktop.watched_view.filter_entries_by_year`, UI `year_from/year_to` � watched left panel).
+- [x] **2.1.3** ������ �� ����� � done (`desktop.watched_view.get_available_genres`, `filter_entries_by_genre`, UI genre combo � watched left panel).
+- [x] **2.1.4** ������� �������� N� � done (`format_watched_list_counter` ��� ������� + status bar).
+- [x] **2.1.5** ������� ����� �������� � done (`�������� �������`, score/year/genre > defaults; ����� �� ������������).
 
-### Тесты
+������: `load_watched_entries()` + filter/sort, ��� ������.
 
-[tests_pytest/test_delete_watched_record.py](../tests_pytest/test_delete_watched_record.py) — service layer; wiring GUI — `tests_pytest/test_desktop.py` (`test_watched_delete_*`, context menu).
+### 2.2 Analytics (������� �� ������)
 
-### Не делать на этом этапе
+Pipeline ��� **�������** ������ �������:
 
-Полный редактор записи (title, genres, raw_scores).
+1. ������ � [dataset/score_analytics.py](../dataset/score_analytics.py);
+2. HTML � [desktop/plotly_charts.py](../desktop/plotly_charts.py);
+3. ������ � [desktop/analytics_view.py](../desktop/analytics_view.py) + Qt-fallback;
+4. smoke � [tests/test_desktop.py](../tests/test_desktop.py).
 
-### Критерий готовности
+������� ����������:
 
-Delete проходит тот же service path, что и консоль; cancel не трогает данные.
+- [x] **2.2.0** Read-only �������� dataset� � done (`build_dataset_completeness*`, ��� ������ � ��������).
+- [x] **2.2.1** ������������� �� �������� � done (`score_count_points` + Plotly).
+- [x] **2.2.2** ���������� ������� �� ������ � done (`genre_count_rows`, horizontal bar).
+- [x] **2.2.3** ������� ��� ������ �� ����� � done (`year_average_points`, line chart; **���** count-by-year).
+- [x] **2.2.4** � ������ ���� IMDb � done (text list, ? ? 1.5, ������ IMDb).
+- [x] **2.2.5** � ������ ���� IMDb � done (text list, ? ? ?1.5, ������ IMDb).
+- [x] **2.2.6** �������������� ������ � done (text list + reason).
+- [x] **2.2.7** ������� ���� ������ �� IMDb � done (text top-10 + ��������� ����, ���������� �� |?|, �� 20).
+
+**Analytics MVP freeze (2026-06-26):** ����� ����� ��������������� ������ **�� ���������** ����� analytics-������ ��� ���������� �������. ����������: **2.2.7** �������� �� �������. ��� scope: ������, pie charts, scatter, ������ ���������� ������ �� �����, �������, drill-down � watched.
+
+�������� / ���������� �� ������� �����:
+
+- ~~2.2.x ���� ������ �� ����� (count)�~~ � �� ������ � MVP;
+- ~~scatter/bar ���� vs IMDb/�ϻ~~ � �������� text lists 2.2.4�2.2.5.
+
+### �������� ����������
+
+������ ������ �������� � Plotly/WebEngine � � Qt-fallback; analytics read-only � �� ������� weights, `model_metrics`, pool, dataset (����� ������).
 
 ---
 
-## Этап 4. Вкладка «Модель»
+## ���� 3. ���������� write � watched
 
-**Read-only KPI + явное LOO-обучение** через service; без линейного обучения из GUI.
+### ������
 
-| Блок | Источник |
+- [x] **3.0** UI-stub �������� ���������� watched-������ � done (`+ �������� �����` > wizard: search, progress, card confirm, save ����� service).
+- [x] **3.1** �������� ������ � done (��� > �������� �������, preview dialog, ������������� `DELETE`, `delete_watched_record()` ����� `desktop/watched_delete.py`).
+- [x] **3.2** Read-only ��������� ������ (�����������): �������� ��������� ������, ��������� ���� poster-cache� � done (`WatchedDetailCard`, `open_path_in_shell`).
+
+### �����
+
+[tests/test_delete_watched_record.py](../tests/test_delete_watched_record.py) � service layer; wiring GUI � `tests/test_desktop.py` (`test_watched_delete_*`, context menu).
+
+### �� ������ �� ���� �����
+
+������ �������� ������ (title, genres, raw_scores).
+
+### �������� ����������
+
+Delete �������� ��� �� service path, ��� � �������; cancel �� ������� ������.
+
+---
+
+## ���� 4. ������� ��������
+
+**Read-only KPI + ����� LOO-��������** ����� service; ��� ��������� �������� �� GUI.
+
+| ���� | �������� |
 | --- | --- |
 | LOO MAE summary | `config/model_metrics.json`, train reports |
-| IMDb / KP baseline | report helpers из `model/` |
+| IMDb / KP baseline | report helpers �� `model/` |
 | Feature ablation | [ui/console/train_menu.py](../ui/console/train_menu.py) / model diagnostics |
 | Top errors | read-only report |
 
-### Задачи
+### ������
 
-- [x] **4.1** Вкладка «Модель» с read-only summary из `model_metrics` — done (`ModelView`, KPI: LOO MAE, IMDb/КП baseline, dataset size, fresh/stale).
-- [x] **4.2** LOO-обучение: кнопка, progress bar, `QThread` → `execute_explicit_loo_training()` — done (`model_loo_worker.py`); stale-banner + «Подробнее» (веса).
-- [ ] **4.3** Read-only «Посчитать отчёт» / ablation / top errors (без save).
+- [x] **4.1** ������� �������� � read-only summary �� `model_metrics` � done (`ModelView`, KPI: LOO MAE, IMDb/�� baseline, dataset size, fresh/stale).
+- [x] **4.2** LOO-��������: ������, progress bar, `QThread` > `execute_explicit_loo_training()` � done (`model_loo_worker.py`); stale-banner + ���������� (����).
+- [ ] **4.3** Read-only ���������� ����� / ablation / top errors (��� save).
 
-### Не делать
+### �� ������
 
-Линейное обучение из GUI, auto-update metrics без явного LOO.
-
----
-
-## Этап 5. «Рекомендации» (read-only top prediction)
-
-- [ ] **5.1** Вкладка → выбор `criteria_name`.
-- [ ] **5.2** [candidates/service.py](../candidates/service.py) `get_global_top_prediction_view()` — единственный источник ranking (как в console ~1638 `interface_funcs.py`).
-- [ ] **5.3** Фильтры (runtime, ready/incomplete) через service.
-- [ ] **5.4** Карточки кандидатов read-only.
-
-### Не делать
-
-Пересбор pool, import TMDb, retry KP, правка `candidate_criteria.json`. Ranking не дублировать в `desktop/`.
+�������� �������� �� GUI, auto-update metrics ��� ������ LOO.
 
 ---
 
-## Этап 6. Candidate pool в GUI
+## ���� 5. ������������� (read-only top prediction)
 
-### Read-only (сначала)
+- [ ] **5.1** ������� > ����� `criteria_name`.
+- [ ] **5.2** [candidates/service.py](../candidates/service.py) `get_global_top_prediction_view()` � ������������ �������� ranking (��� � console ~1638 `interface_funcs.py`).
+- [ ] **5.3** ������� (runtime, ready/incomplete) ����� service.
+- [ ] **5.4** �������� ���������� read-only.
 
-- [ ] **6.1** Список criteria.
+### �� ������
+
+�������� pool, import TMDb, retry KP, ������ `candidate_criteria.json`. Ranking �� ����������� � `desktop/`.
+
+---
+
+## ���� 6. Candidate pool � GUI
+
+### Read-only (�������)
+
+- [ ] **6.1** ������ criteria.
 - [ ] **6.2** Stats (raw/watched/active/ready/incomplete).
-- [ ] **6.3** Просмотр кандидатов, фильтр incomplete.
+- [ ] **6.3** �������� ����������, ������ incomplete.
 
-### Write (позже, с confirmation dialogs)
+### Write (�����, � confirmation dialogs)
 
 - mark watched;
 - retry KP;
 - delete criteria;
 - import saved TMDb result.
 
-### Оставить в консоли
+### �������� � �������
 
-TMDb build, массовые операции, сложный import.
+TMDb build, �������� ��������, ������� import.
 
 ---
 
-## Этап 7. Постеры и metadata
+## ���� 7. ������� � metadata
 
 ### Backend (done)
 
-- [x] **7.0** При добавлении записи — sync poster-cache + `download_poster_for_title()`; при удалении — `remove_local_poster_file()` (`add_dataset_record`, `delete_watched_record`).
+- [x] **7.0** ��� ���������� ������ � sync poster-cache + `download_poster_for_title()`; ��� �������� � `remove_local_poster_file()` (`add_dataset_record`, `delete_watched_record`).
 
-### Read-only (сначала)
+### Read-only (�������)
 
-- [ ] **7.1** Диагностика: сколько постеров local / missing / без description.
+- [ ] **7.1** �����������: ������� �������� local / missing / ��� description.
 
-### Позже
+### �����
 
 - update metadata;
-- batch download missing posters (консоль Extra уже есть для backfill).
+- batch download missing posters (������� Extra ��� ���� ��� backfill).
 
-Отдельный риск-этап: сеть, TMDb, SSL.
+��������� ����-����: ����, TMDb, SSL.
 
 ---
 
-## Этап 8. Роль консоли
+## ���� 8. ���� �������
 
-Консоль **не удалять**. Навсегда остаётся для:
+������� **�� �������**. �������� ������� ���:
 
 - Excel import/export;
 - LOO training / weights;
 - rating comparison / drafts;
 - TMDb pool build;
 - backup/restore;
-- отладки.
+- �������.
 
 ---
 
-## Ближайшие 8 шагов
+## ��������� 8 �����
 
-| # | Шаг | Этап | Статус |
+| # | ��� | ���� | ������ |
 | --- | --- | --- | --- |
 | 1 | A1 Analytics Plotly/KPI polish | 1 | done |
-| 2 | A2 Read-only poster actions в карточке | 1 | done |
+| 2 | A2 Read-only poster actions � �������� | 1 | done |
 | 3 | A3 Status bar LOO MAE | 1 | next |
-| 4 | B1 Wizard «Добавить тайтл» (search + preview) | 3 | done |
-| 5 | B2 Wizard save через service | 3 | done |
-| 6 | C4 Вкладка «Рекомендации» read-only | 5 | planned |
-| 7 | C1 Вкладка «Модель» KPI + LOO обучение | 4 | done |
-| 8 | C1.2 Baseline comparison + «Коротко» | 4 | next |
-| 9 | E1 Mark watched из pool | 6 | planned |
+| 4 | B1 Wizard ��������� ����� (search + preview) | 3 | done |
+| 5 | B2 Wizard save ����� service | 3 | done |
+| 6 | C4 ������� ������������� read-only | 5 | planned |
+| 7 | C1 ������� �������� KPI + LOO �������� | 4 | done |
+| 8 | C1.2 Baseline comparison + �������� | 4 | next |
+| 9 | E1 Mark watched �� pool | 6 | planned |
 
 ---
 
-## Чеклист перед GUI-PR
+## ������� ����� GUI-PR
 
-- [x] Нет прямой записи JSON из PyQt (delete → `delete_watched_record`, score → `update_dataset_record`).
-- [x] Write идёт через documented service + `source_name` (score edit).
-- [x] Layout/size policy по [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) (watched card + sidebar).
-- [x] Spacing/fonts через именованные константы в `analytics_view.py`.
-- [x] Helper-тесты edge cases watched card в `test_desktop.py`; ручной чеклист — style contract.
-- [x] `tests_pytest/test_desktop.py` (+ smoke для plotly при графиках).
-- [x] Не тронуты: training, pool build, weights без отдельного этапа.
+- [x] ��� ������ ������ JSON �� PyQt (delete > `delete_watched_record`, score > `update_dataset_record`).
+- [x] Write ��� ����� documented service + `source_name` (score edit).
+- [x] Layout/size policy �� [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) (watched card + sidebar).
+- [x] Spacing/fonts ����� ����������� ��������� � `analytics_view.py`.
+- [x] Helper-����� edge cases watched card � `test_desktop.py`; ������ ������� � style contract.
+- [x] `tests/test_desktop.py` (+ smoke ��� plotly ��� ��������).
+- [x] �� �������: training, pool build, weights ��� ���������� �����.
 
-## Что не трогать без отдельного решения
+## ��� �� ������� ��� ���������� �������
 
-- формат dataset / meta;
-- автообучение после правки оценки;
+- ������ dataset / meta;
+- ������������ ����� ������ ������;
 - TMDb/KP pipeline, poster cache logic;
-- `candidate_pool` write из GUI на ранних этапах;
+- `candidate_pool` write �� GUI �� ������ ������;
 - web GUI;
-- console flows (кроме reuse helpers).
+- console flows (����� reuse helpers).
