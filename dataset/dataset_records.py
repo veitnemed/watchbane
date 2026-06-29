@@ -310,7 +310,18 @@ def add_dataset_record(
     try:
         from posters.download_images import download_poster_for_title
 
-        download_poster_for_title(title, year)
+        poster_download = download_poster_for_title(title, year)
+        if (
+            poster_download.get("ok") is False
+            and poster_download.get("reason") == "missing_cache"
+            and isinstance(poster_hints, dict)
+            and poster_hints.get("status") == "found"
+            and poster_hints.get("poster_url") not in (None, "")
+        ):
+            from posters.cache import upsert_poster_cache_entry
+
+            upsert_poster_cache_entry(title, year, poster_hints)
+            download_poster_for_title(title, year)
     except Exception as error:
         print(f"Предупреждение: не удалось скачать постер: {error}")
 

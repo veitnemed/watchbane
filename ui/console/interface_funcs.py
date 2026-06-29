@@ -3,6 +3,7 @@
 import json
 import os
 import copy
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -789,6 +790,39 @@ def show_api_features():
     print('\nСериал найден в списке API.\n')
     for line in title_resolve.format_series_lines(result["data"]):
         print(line)
+
+
+def _print_api_ping_result(name: str, host: str, result: dict, elapsed_ms: float | None = None) -> None:
+    print(f"{name} ({host})")
+    if result.get("ok") is True:
+        ms = elapsed_ms if elapsed_ms is not None else result.get("elapsed_ms")
+        status_line = "  Статус: OK"
+        if ms is not None:
+            status_line += f" ({ms} мс)"
+        print(status_line)
+    else:
+        print("  Статус: Ошибка")
+        details = result.get("details") or result.get("error") or "unknown_error"
+        print(f"  Причина: {details}")
+    print()
+
+
+def ping_external_apis() -> None:
+    """Проверяет доступность Kinopoisk и TMDb API короткими запросами."""
+    from apis import kp_api
+    from apis import tmdb_api
+
+    print("Пинг внешних API...\n")
+
+    started = time.monotonic()
+    kp_result = kp_api.check_api_available()
+    kp_ms = round((time.monotonic() - started) * 1000, 1)
+    _print_api_ping_result("Kinopoisk API", "api.kinopoisk.dev", kp_result, kp_ms)
+
+    started = time.monotonic()
+    tmdb_result = tmdb_api.check_api_available()
+    tmdb_ms = round((time.monotonic() - started) * 1000, 1)
+    _print_api_ping_result("TMDb API", "api.themoviedb.org", tmdb_result, tmdb_ms)
 
 
 def print_sql_title_result(data: dict) -> None:

@@ -37,15 +37,22 @@ _poster_cache = None
 _lookup_cache = None
 
 
+def reload_poster_cache() -> dict:
+    """Reload poster cache from disk (after add/delete or poster download)."""
+    global _poster_cache
+    try:
+        from posters.cache import load_poster_cache
+
+        _poster_cache = load_poster_cache()
+    except Exception:
+        _poster_cache = {}
+    return _poster_cache
+
+
 def _get_poster_cache() -> dict:
     global _poster_cache
     if _poster_cache is None:
-        try:
-            from posters.cache import load_poster_cache
-
-            _poster_cache = load_poster_cache()
-        except Exception:
-            _poster_cache = {}
+        return reload_poster_cache()
     return _poster_cache
 
 
@@ -69,7 +76,7 @@ SORT_OPTIONS: tuple[tuple[str, str], ...] = (
 def load_watched_entries() -> list[WatchedEntry]:
     """Load dataset and return (dataset_key, movie, card) tuples."""
     data = storage_data.load_dataset()
-    poster_cache = _get_poster_cache()
+    poster_cache = reload_poster_cache()
     lookup_cache = _get_lookup_cache()
     return [
         (key, movie, build_watched_movie_card(movie, poster_cache=poster_cache, lookup_cache=lookup_cache))

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -503,6 +504,33 @@ def print_search_options(results: list[dict[str, Any]], selected_id: int) -> Non
         countries = ", ".join(item.get("origin_country") or []) or "-"
         rating = item.get("vote_average") or "-"
         print(f"{marker} {index}. {item.get('name') or '-'} ({year}), {countries}, rating={rating}, id={item.get('id')}")
+
+
+def check_api_available(token: str | None = None) -> dict[str, Any]:
+    """Проверяет базовую доступность TMDb API коротким запросом."""
+    try:
+        resolved_token = token or load_tmdb_token()
+    except RuntimeError as error:
+        return {
+            "ok": False,
+            "error": "missing_token",
+            "details": str(error),
+        }
+
+    started = time.monotonic()
+    try:
+        tmdb_get("/configuration", token=resolved_token)
+    except RuntimeError as error:
+        elapsed_ms = round((time.monotonic() - started) * 1000, 1)
+        return {
+            "ok": False,
+            "error": "request_failed",
+            "details": str(error),
+            "elapsed_ms": elapsed_ms,
+        }
+
+    elapsed_ms = round((time.monotonic() - started) * 1000, 1)
+    return {"ok": True, "data": True, "elapsed_ms": elapsed_ms}
 
 
 def main() -> None:

@@ -593,13 +593,9 @@ class WatchedMoviesWindow(QMainWindow):
         return frame
 
     def _open_add_title_dialog(self) -> None:
-        from desktop.add_title_dialog import AddTitleDialog
+        from desktop.add_title_dialog import run_add_title_flow
 
-        dialog = AddTitleDialog(self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-
-        result = dialog.save_result
+        result = run_add_title_flow(self)
         if result is None or result.ok is False:
             return
 

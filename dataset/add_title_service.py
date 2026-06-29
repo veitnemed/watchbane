@@ -110,13 +110,34 @@ def build_preview_card_from_defaults(
     if description not in (None, "") and str(description).strip():
         card["overview"] = str(description).strip()
 
+    poster_url = _poster_url_from_hints(poster_hints)
+    if poster_url not in (None, ""):
+        card["poster_url"] = poster_url
+        from posters.download_images import download_poster_url_for_preview
+
+        local_path = download_poster_url_for_preview(poster_url)
+        if local_path not in (None, ""):
+            card["poster_src"] = local_path
+            card["poster_path"] = local_path
+        else:
+            card["poster_src"] = poster_url
+
+    return card
+
+
+def _poster_url_from_hints(poster_hints: dict | None) -> str | None:
     hints = poster_hints if isinstance(poster_hints, dict) else {}
     poster_url = hints.get("poster_url") or hints.get("poster_src")
     if poster_url not in (None, ""):
-        card["poster_url"] = poster_url
-        card["poster_src"] = poster_url
+        return str(poster_url).strip()
 
-    return card
+    poster_path = hints.get("poster_path")
+    if poster_path in (None, ""):
+        return None
+
+    from posters.cache import build_tmdb_poster_url
+
+    return build_tmdb_poster_url(str(poster_path).strip())
 
 
 def build_movie_record_from_defaults(defaults: dict, user_score: float, *, year: int | None = None) -> dict:

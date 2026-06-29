@@ -85,17 +85,16 @@ def test_add_title_button_opens_wizard_dialog() -> None:
 
     source = inspect.getsource(app_module.WatchedMoviesWindow)
     handler_source = inspect.getsource(app_module.WatchedMoviesWindow._open_add_title_dialog)
-    dialog_source = inspect.getsource(dialog_module.AddTitleDialog)
+    dialog_source = inspect.getsource(dialog_module)
 
     assert "watchedAddTitle" in source
     assert "+ Добавить тайтл" in source
-    assert "AddTitleDialog" in handler_source
-    assert "save_result" in handler_source
+    assert "run_add_title_flow" in handler_source
     assert "load_watched_entries" in handler_source
     assert "_show_add_title_stub" not in source
-    assert "QStackedWidget" in dialog_source
-    assert "_show_search_page" in dialog_source
-    assert "_show_preview_page" in dialog_source
+    assert "class AddTitleSearchDialog" in dialog_source
+    assert "class AddTitlePreviewDialog" in dialog_source
+    assert "run_add_title_flow" in dialog_source
     assert "Искать другой" in dialog_source
 
 

@@ -48,6 +48,40 @@ def test_build_preview_card_uses_genre_labels_ru() -> None:
     assert card.get("overview") == "Test overview"
 
 
+def test_build_preview_card_downloads_poster_for_preview(monkeypatch) -> None:
+    import tempfile
+    from pathlib import Path
+
+    defaults = {
+        scheme.MAIN_INFO: {"title": "Poster Show", "year": 2020, "user_score": None},
+        scheme.RAW_SCORES: {},
+        scheme.GENRE: {},
+        scheme.TAGS_VIBE: {},
+    }
+    poster_hints = {
+        "status": "found",
+        "poster_url": "https://example.com/preview.jpg",
+    }
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        image_path = Path(temp_root) / "preview.jpg"
+
+        def fake_download(url: str) -> str:
+            image_path.write_bytes(b"poster")
+            return str(image_path)
+
+        monkeypatch.setattr(
+            "posters.download_images.download_poster_url_for_preview",
+            fake_download,
+        )
+
+        card = build_preview_card_from_defaults(defaults, poster_hints=poster_hints)
+
+    assert card["poster_url"] == "https://example.com/preview.jpg"
+    assert card["poster_src"] == str(image_path)
+    assert card["poster_path"] == str(image_path)
+
+
 def test_add_title_preview_card_profile_is_compact() -> None:
     from desktop.watched_view import (
         ADD_TITLE_PREVIEW_CARD_PROFILE,

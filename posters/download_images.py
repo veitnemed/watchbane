@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -15,6 +16,7 @@ from posters.cache import (
 from storage import data as storage_data
 
 MAX_POSTER_BYTES = 5 * 1024 * 1024
+PREVIEW_POSTER_DIR = DEFAULT_POSTER_IMAGES_DIR / "preview"
 
 
 def _safe_image_filename(identity: str) -> str:
@@ -41,6 +43,25 @@ def _download_poster(url: str, destination: Path) -> bool:
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_bytes(content)
     return destination.is_file()
+
+
+def _preview_poster_path(poster_url: str) -> Path:
+    digest = hashlib.sha256(poster_url.encode("utf-8")).hexdigest()[:24]
+    return PREVIEW_POSTER_DIR / f"{digest}.jpg"
+
+
+def download_poster_url_for_preview(poster_url: str) -> str | None:
+    """Download one poster URL into preview cache for GUI add-title preview."""
+    url = str(poster_url or "").strip()
+    if url == "" or url.startswith(("http://", "https://")) is False:
+        return None
+
+    destination = _preview_poster_path(url)
+    if destination.is_file():
+        return str(destination)
+    if _download_poster(url, destination) is False:
+        return None
+    return str(destination)
 
 
 def _ensure_poster_image_downloaded(identity: str, entry: dict) -> str:

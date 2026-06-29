@@ -174,6 +174,7 @@ def show_extra_menu(movies_counter: int, error: int):
     print(' 6 >> Скачать poster images локально')
     print(' 7 >> Загрузить TMDb metadata для просмотренных')
     print(' 8 >> Диагностика unresolved TMDb metadata')
+    print(' 9 >> Пинг API')
     print(' 0 >> Главное меню\n')
 
 

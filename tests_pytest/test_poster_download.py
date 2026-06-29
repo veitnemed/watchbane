@@ -151,6 +151,48 @@ def test_add_dataset_record_downloads_poster_after_cache_sync(monkeypatch) -> No
     assert download_calls == [("New Show", 2021)]
 
 
+def test_add_dataset_record_downloads_poster_from_hints_when_cache_missing(monkeypatch) -> None:
+    from dataset import dataset_records
+
+    movie = _make_movie("Hint Show", 8.0, 2022)
+    poster_hints = {
+        "status": "found",
+        "poster_url": "https://example.com/hint.jpg",
+        "source": "tmdb_data.poster_path",
+    }
+    upsert_calls: list[tuple] = []
+    download_calls: list[tuple] = []
+
+    def fake_sync(title, year, meta_obj=None, movie=None, extra_sources=None, cache=None, persist=True):
+        return {"status": "missing", "poster_url": None}
+
+    def fake_upsert(title, year, poster_info, cache=None, persist=True):
+        upsert_calls.append((title, year, poster_info))
+        return {"status": "found", "poster_url": poster_info.get("poster_url")}
+
+    def fake_download(title, year, *, cache=None):
+        download_calls.append((title, year))
+        if len(download_calls) == 1:
+            return {"ok": False, "reason": "missing_cache", "local_path": None}
+        return {"ok": True, "reason": "downloaded", "local_path": "C:/cache/hint.jpg"}
+
+    with patch.object(dataset_records, "load_dataset", return_value={}):
+        with patch.object(dataset_records, "save_dataset"):
+            with patch.object(dataset_records, "add_movies_to_meta", return_value=True):
+                with patch.object(dataset_records, "get_meta_obj", return_value=None):
+                    with patch("posters.cache.sync_poster_cache_from_meta_and_sources", side_effect=fake_sync):
+                        with patch("posters.cache.upsert_poster_cache_entry", side_effect=fake_upsert):
+                            with patch("posters.download_images.download_poster_for_title", side_effect=fake_download):
+                                result = dataset_records.add_dataset_record(
+                                    movie,
+                                    poster_hints=poster_hints,
+                                )
+
+    assert result.ok is True
+    assert len(download_calls) == 2
+    assert upsert_calls == [("Hint Show", 2022, poster_hints)]
+
+
 def test_delete_watched_record_removes_local_poster_file(monkeypatch) -> None:
     import tempfile
 

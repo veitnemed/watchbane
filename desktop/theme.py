@@ -550,7 +550,7 @@ QPushButton#deleteRecordConfirmButton:disabled {{
 def build_add_title_dialog_style() -> str:
     """Return the add-title wizard dialog stylesheet."""
     return f"""
-QDialog#addTitleDialog {{
+QDialog#addTitleDialog, QDialog#addTitleSearchDialog, QDialog#addTitlePreviewDialog {{
     background-color: {COLOR_BG};
     font-family: {FONT_FAMILY_QSS};
 }}
