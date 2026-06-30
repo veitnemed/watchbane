@@ -128,7 +128,7 @@ def open_candidate_pool_management_menu():
         ui.clean_terminal()
         ui.show_candidate_pool_management_menu()
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 5)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
         if command == "0":
             return
         if command == "1":
@@ -141,6 +141,8 @@ def open_candidate_pool_management_menu():
             interface_funcs.collect_candidate_pool()
         elif command == "5":
             interface_funcs.clean_common_pool_duplicates()
+        elif command == "6":
+            interface_funcs.purge_pool_dataset_title_matches()
 
         ui.press_enter()
 
@@ -151,7 +153,7 @@ def open_candidate_pool_diagnostics_menu():
         ui.clean_terminal()
         ui.show_candidate_pool_diagnostics_menu()
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 8)])
         if command == "0":
             return
         if command == "1":
@@ -164,6 +166,10 @@ def open_candidate_pool_diagnostics_menu():
             interface_funcs.show_candidate_poster_diagnostics()
         elif command == "5":
             interface_funcs.download_candidate_pool_preview_posters()
+        elif command == "6":
+            interface_funcs.show_cross_year_candidate_duplicates()
+        elif command == "7":
+            interface_funcs.show_title_candidate_duplicates()
 
         ui.press_enter()
 

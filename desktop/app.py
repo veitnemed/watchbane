@@ -30,10 +30,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from desktop.analytics_view import AnalyticsView
 from desktop.candidate_filters_view import CandidateFiltersView
 from desktop.candidate_list_view import CandidateListView
-from desktop.candidate_search_session import CandidateSearchSession
+from desktop.candidate_search_session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 from desktop.delete_dialog import WatchedDeleteDialog
 from desktop.range_slider import RangeSlider
 from desktop.theme import (
@@ -206,16 +205,20 @@ class WatchedMoviesWindow(QMainWindow):
             self._candidate_session,
             on_applied=self._focus_candidates_tab,
         )
-        self._candidate_list_view = CandidateListView(self._candidate_session)
+        self._candidate_list_view = CandidateListView(
+            self._candidate_session,
+            on_watched_added=self._on_candidate_moved_to_watched,
+        )
         tabs.addTab(self._candidate_filters_view.widget, "Фильтры")
         tabs.addTab(self._candidate_list_view.widget, "Кандидаты")
         self._candidates_tab_index = tabs.indexOf(self._candidate_list_view.widget)
-        self._analytics_view = AnalyticsView(self._entries)
-        tabs.addTab(self._analytics_view.widget, "Аналитика")
+        tabs.currentChanged.connect(self._on_main_tab_changed)
 
         self._refresh_list()
         if self._list_widget.count() > 0:
             self._list_widget.setCurrentRow(0)
+
+        self._apply_candidate_browse_filters_if_needed()
 
     def _build_left_panel(self) -> QWidget:
         panel = QWidget()
@@ -487,7 +490,6 @@ class WatchedMoviesWindow(QMainWindow):
 
         added_key = result.title
         self._entries = load_watched_entries()
-        self._analytics_view.update_entries(self._entries)
         self._refresh_list()
 
         for index, (key, _, _) in enumerate(self._visible_entries):
@@ -501,14 +503,13 @@ class WatchedMoviesWindow(QMainWindow):
         self.statusBar().showMessage(result.message or "Новая запись добавлена!", 5000)
 
     def _reload_watched_entries(self, added_key: str | None = None) -> None:
-        """Refresh watched list and analytics after an external add (e.g. candidate transfer)."""
+        """Refresh watched list after an external add (e.g. candidate transfer)."""
         previous_key = None
         current_row = self._list_widget.currentRow()
         if 0 <= current_row < len(self._visible_entries):
             previous_key = self._visible_entries[current_row][0]
 
         self._entries = load_watched_entries()
-        self._analytics_view.update_entries(self._entries)
         self._reload_genre_filter_options()
         self._refresh_list()
 
@@ -529,9 +530,24 @@ class WatchedMoviesWindow(QMainWindow):
         self._list_widget.blockSignals(False)
         self._detail_card.show_entry(self._visible_entries[row_to_select])
 
+    def _on_candidate_moved_to_watched(self, result) -> None:
+        added_key = getattr(result, "title", None)
+        self._reload_watched_entries(added_key=added_key)
+        message = getattr(result, "message", None) or "Кандидат перенесён в просмотренные."
+        self.statusBar().showMessage(message, 5000)
+
     def _focus_candidates_tab(self) -> None:
         if hasattr(self, "_main_tabs") and hasattr(self, "_candidates_tab_index"):
             self._main_tabs.setCurrentIndex(self._candidates_tab_index)
+
+    def _on_main_tab_changed(self, index: int) -> None:
+        if index == self._candidates_tab_index:
+            self._apply_candidate_browse_filters_if_needed()
+
+    def _apply_candidate_browse_filters_if_needed(self) -> None:
+        if self._candidate_session.has_results:
+            return
+        self._candidate_session.apply_filters(dict(DEFAULT_BROWSE_FILTERS))
 
     def _selected_genre_filter(self) -> str | None:
         genre = self._genre_combo.currentData()
@@ -557,7 +573,6 @@ class WatchedMoviesWindow(QMainWindow):
 
     def _refresh_after_user_score_save(self, current_key: str, result) -> None:
         self._entries = load_watched_entries()
-        self._analytics_view.update_entries(self._entries)
         self._refresh_list()
 
         for index, (key, _, _) in enumerate(self._visible_entries):
@@ -635,7 +650,6 @@ class WatchedMoviesWindow(QMainWindow):
     def _refresh_after_delete(self, result: dict) -> None:
         previous_row = self._list_widget.currentRow()
         self._entries = load_watched_entries()
-        self._analytics_view.update_entries(self._entries)
         self._reload_genre_filter_options()
         self._refresh_list()
 

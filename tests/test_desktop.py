@@ -1478,7 +1478,7 @@ def test_build_candidate_readonly_detail_entry_does_not_download_poster(monkeypa
     assert "poster_path" not in card
 
 
-def test_candidate_search_session_sorts_once_and_slices_top_n(monkeypatch) -> None:
+def test_candidate_search_session_sorts_once_and_returns_all(monkeypatch) -> None:
     from desktop.candidate_search_session import CandidateSearchSession
 
     calls = {"count": 0}
@@ -1515,15 +1515,21 @@ def test_candidate_search_session_sorts_once_and_slices_top_n(monkeypatch) -> No
     assert calls["count"] == 1
     assert [item["title"] for item in session.sorted_candidates()] == ["A", "B", "C"]
     assert session.sorted_total_count() == 3
-    assert calls["count"] == 1
-
-    session.set_top_n(2)
-    assert [item["title"] for item in session.sorted_candidates()] == ["A", "B"]
-    assert session.sorted_total_count() == 3
-    assert calls["count"] == 1
 
     session.set_sort_mode("imdb_score")
     assert calls["count"] == 2
+    assert len(session.sorted_candidates()) == 3
+
+
+def test_filter_candidates_by_title_matches_alternative_title() -> None:
+    from desktop.candidate_search_view import filter_candidates_by_title
+
+    candidates = [
+        {"title": "Alpha", "year": 2020},
+        {"title": "Beta", "alternative_title": "Gamma", "year": 2021},
+    ]
+    assert len(filter_candidates_by_title(candidates, "gamma")) == 1
+    assert filter_candidates_by_title(candidates, "gamma")[0]["title"] == "Beta"
 
 
 def test_candidate_list_view_uses_readonly_detail_builder() -> None:
@@ -1534,11 +1540,25 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
 
     source = inspect.getsource(module.CandidateListView)
     assert "build_candidate_readonly_detail_entry" in source
+    assert "candidateListSearch" in source
+    assert "filter_candidates_by_title" in source
     assert "build_candidate_detail_entry" not in source
     assert "CANDIDATE_DETAIL_CARD_PROFILE" in source
     assert CANDIDATE_DETAIL_CARD_PROFILE.poster_width == DETAIL_CARD_LAYOUT_PROFILE.poster_width
     assert CANDIDATE_DETAIL_CARD_PROFILE.poster_height == DETAIL_CARD_LAYOUT_PROFILE.poster_height
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_user_score is False
+    assert CANDIDATE_DETAIL_CARD_PROFILE.show_mark_watched_button is True
+
+
+def test_candidate_list_view_wires_mark_watched_transfer() -> None:
+    import inspect
+
+    from desktop import candidate_list_view as module
+
+    source = inspect.getsource(module.CandidateListView)
+    assert "run_candidate_transfer_flow" in source
+    assert "set_mark_watched_handler" in source
+    assert "on_watched_added" in source
 
 
 def test_candidate_list_view_starts_async_poster_download() -> None:

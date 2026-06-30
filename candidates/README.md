@@ -198,14 +198,20 @@ Write-path функции могут сохранять:
 
 - лишние ключи (старый формат `criteria|title|year`);
 - exact-дубли одного `title|year`;
-- похожие названия одного года.
+- похожие названия одного года;
+- cross-year дубли: одно normalized title, год ±1 (с guard по `imdb_id`/`tmdb_id`).
+
+При записи в pool write-path выставляет **канонический год**: `imdb_start_year` > `year` > `kp_year` (`normalize_candidate_for_storage`).
 
 Read-path stats (`get_pool_stats`) показывают:
 
 - `unique_total` — число уникальных кандидатов после нормализации;
 - `raw_total` — число записей в JSON;
 - `duplicate_entries` — лишние exact-дубли;
-- `similar_duplicate_total` — сколько можно слить по похожим названиям.
+- `similar_duplicate_total` — сколько можно слить по похожим названиям;
+- `cross_year_duplicate_total` — сколько можно слить по cross-year (±1 год).
+
+Диагностика cross-year (read-only): `find_cross_year_title_groups()` / Console → Диагностика → п.6.
 
 Write-path очистка:
 

@@ -669,6 +669,7 @@ class DetailCardLayoutProfile:
     rating_value_font_point: int
     rating_label_font_point: int
     show_user_score: bool = True
+    show_mark_watched_button: bool = False
     include_bottom_stretch: bool = True
 
 
@@ -697,7 +698,11 @@ ADD_TITLE_PREVIEW_CARD_PROFILE = DetailCardLayoutProfile(
     include_bottom_stretch=False,
 )
 
-CANDIDATE_DETAIL_CARD_PROFILE = replace(DETAIL_CARD_LAYOUT_PROFILE, show_user_score=False)
+CANDIDATE_DETAIL_CARD_PROFILE = replace(
+    DETAIL_CARD_LAYOUT_PROFILE,
+    show_user_score=False,
+    show_mark_watched_button=True,
+)
 
 _thumb_pixmap_cache: dict[str, object] = {}
 _detail_poster_source_cache: dict[str, object] = {}
@@ -1053,6 +1058,7 @@ class WatchedDetailCard:
             QFrame,
             QHBoxLayout,
             QLabel,
+            QPushButton,
             QSizePolicy,
             QVBoxLayout,
             QWidget,
@@ -1061,6 +1067,8 @@ class WatchedDetailCard:
         self._profile = profile or DETAIL_CARD_LAYOUT_PROFILE
         self._poster_source_pixmap = None
         self._local_poster_path: str | None = None
+        self._mark_watched_handler = None
+        self._mark_watched_button = None
         card = self
 
         class DetailCardFrame(QFrame):
@@ -1141,6 +1149,14 @@ class WatchedDetailCard:
         if self._score_indicator is not None:
             self._metrics_row.addWidget(self._score_indicator, alignment=Qt.AlignmentFlag.AlignLeft)
         self._metrics_row.addWidget(self._meta_pills_widget, alignment=Qt.AlignmentFlag.AlignVCenter)
+        if self._profile.show_mark_watched_button:
+            self._mark_watched_button = QPushButton("👁")
+            self._mark_watched_button.setObjectName("candidateMarkWatchedButton")
+            self._mark_watched_button.setToolTip("Перенести в просмотренные")
+            self._mark_watched_button.setFixedSize(36, 36)
+            self._mark_watched_button.setEnabled(False)
+            self._mark_watched_button.clicked.connect(self._on_mark_watched_clicked)
+            self._metrics_row.addWidget(self._mark_watched_button, alignment=Qt.AlignmentFlag.AlignVCenter)
         self._metrics_row.addStretch()
 
         self._genre_section = QWidget()
@@ -1194,6 +1210,23 @@ class WatchedDetailCard:
     @property
     def widget(self):
         return self._frame
+
+    def set_mark_watched_handler(self, handler) -> None:
+        """Optional callback for candidate transfer to watched dataset."""
+        self._mark_watched_handler = handler
+        if self._mark_watched_button is not None:
+            self._mark_watched_button.setEnabled(handler is not None)
+
+    def _on_mark_watched_clicked(self) -> None:
+        if self._mark_watched_handler is not None:
+            self._mark_watched_handler()
+
+    def _metrics_row_should_show(self, meta_pill_count: int) -> bool:
+        if self._profile.show_user_score:
+            return True
+        if meta_pill_count > 0:
+            return True
+        return self._profile.show_mark_watched_button
 
     def _info_column_content_width(self) -> int:
         width = self._info_column_widget.width()
@@ -1309,7 +1342,9 @@ class WatchedDetailCard:
         self._genre_section.setVisible(False)
         self._overview_label.setText("")
         self._overview_frame.setVisible(False)
-        self._metrics_row_widget.setVisible(self._profile.show_user_score)
+        if self._mark_watched_button is not None:
+            self._mark_watched_button.setEnabled(self._mark_watched_handler is not None)
+        self._metrics_row_widget.setVisible(self._metrics_row_should_show(0))
         self._schedule_poster_height_sync()
 
     def show_entry(self, entry: WatchedEntry) -> None:
@@ -1321,7 +1356,9 @@ class WatchedDetailCard:
         meta_pills = build_meta_pill_items(card)
         _fill_meta_pill_row(self._meta_pills_layout, meta_pills, self._profile)
         self._meta_pills_widget.setVisible(len(meta_pills) > 0)
-        self._metrics_row_widget.setVisible(self._profile.show_user_score or len(meta_pills) > 0)
+        if self._mark_watched_button is not None:
+            self._mark_watched_button.setEnabled(self._mark_watched_handler is not None)
+        self._metrics_row_widget.setVisible(self._metrics_row_should_show(len(meta_pills)))
 
         detail_pills = build_detail_info_pill_labels(card)
         _fill_pill_rows(self._genre_pills_layout, detail_pills, "genrePill")

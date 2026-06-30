@@ -456,3 +456,174 @@ def test_clean_common_pool_duplicates_writes_normalized_pool(monkeypatch) -> Non
     assert result["unique_total"] == 1
     assert len(saved["pool"]) == 1
     assert list(saved["pool"].values())[0]["kp_score"] == 8.5
+
+
+def test_resolve_canonical_year_prefers_imdb_start_year() -> None:
+    from candidates.schema import resolve_canonical_year
+
+    candidate = {"imdb_start_year": 2016, "year": 2015}
+    assert resolve_canonical_year(candidate) == 2016
+
+
+def test_find_cross_year_title_groups_groups_different_years() -> None:
+    from candidates import candidate_pool
+
+    candidates = [
+        {"title": "Show Name", "year": 2015},
+        {"title": "Show Name", "year": 2016},
+    ]
+    groups = candidate_pool.find_cross_year_title_groups(candidates)
+    assert len(groups) == 1
+    assert groups[0]["years"] == [2015, 2016]
+
+
+def test_find_title_duplicate_groups_counts_extra_entries() -> None:
+    from candidates import candidate_pool
+
+    candidates = [
+        {"title": "Show Name", "year": 2015},
+        {"title": "Show Name", "year": 2016},
+        {"title": "Show Name", "year": 2016, "kp_score": 8.0},
+        {"title": "Other", "year": 2020},
+    ]
+    groups = candidate_pool.find_title_duplicate_groups(candidates, include_dataset=False)
+    summary = candidate_pool.build_title_duplicate_summary(groups)
+    assert len(groups) == 1
+    assert groups[0]["entry_count"] == 3
+    assert summary["group_count"] == 1
+    assert summary["extra_entries"] == 2
+
+
+def test_find_title_duplicate_groups_includes_dataset_matches() -> None:
+    from candidates import candidate_pool
+
+    candidates = [{"title": "Show Name", "year": 2015}]
+    dataset_index = {
+        "show name": [
+            {"dataset_key": "Show Name", "title": "Show Name", "year": 2015},
+        ],
+    }
+    groups = candidate_pool.find_title_duplicate_groups(
+        candidates,
+        include_dataset=True,
+        dataset_by_title_key=dataset_index,
+    )
+    summary = candidate_pool.build_title_duplicate_summary(groups)
+    assert len(groups) == 1
+    assert groups[0]["entry_count"] == 1
+    assert groups[0]["dataset_count"] == 1
+    assert summary["dataset_overlap_count"] == 1
+    assert summary["group_count"] == 0
+
+
+def test_get_title_duplicates_view_uses_service_facade(monkeypatch) -> None:
+    from candidates import candidate_pool, service
+
+    groups = [{
+        "title": "Show",
+        "entry_count": 2,
+        "extra_entries": 1,
+        "dataset_count": 1,
+        "in_dataset": True,
+        "years": [2015, 2016],
+        "entries": [],
+        "dataset_entries": [{"dataset_key": "Show", "title": "Show", "year": 2015}],
+    }]
+    monkeypatch.setattr(candidate_pool, "find_title_duplicate_groups", lambda: groups)
+    monkeypatch.setattr(
+        candidate_pool,
+        "build_title_duplicate_summary",
+        lambda _groups: {
+            "group_count": 1,
+            "extra_entries": 1,
+            "reported_groups": 1,
+            "dataset_overlap_count": 1,
+        },
+    )
+
+    view = service.get_title_duplicates_view()
+    assert view["group_count"] == 1
+    assert view["extra_entries"] == 1
+    assert view["dataset_overlap_count"] == 1
+    assert view["is_empty"] is False
+
+
+def test_dedupe_pool_cross_year_titles_merges_within_one_year() -> None:
+    from candidates import candidate_pool
+
+    pool = {
+        "show|2015": {"title": "Show", "year": 2015, "kp_score": 7.0},
+        "show|2016": {"title": "Show", "year": 2016, "imdb_start_year": 2015, "kp_score": 8.0},
+    }
+    deduped, removed = candidate_pool.dedupe_pool_cross_year_titles(pool)
+    assert removed == 1
+    assert len(deduped) == 1
+    entry = list(deduped.values())[0]
+    assert entry["year"] == 2015
+    assert entry["kp_score"] == 8.0
+
+
+def test_dedupe_pool_cross_year_titles_skips_conflicting_imdb_ids() -> None:
+    from candidates import candidate_pool
+
+    pool = {
+        "show|2015": {"title": "Show", "year": 2015, "imdb_id": "tt111"},
+        "show|2016": {"title": "Show", "year": 2016, "imdb_id": "tt222"},
+    }
+    deduped, removed = candidate_pool.dedupe_pool_cross_year_titles(pool)
+    assert removed == 0
+    assert len(deduped) == 2
+
+
+def test_clean_common_pool_duplicates_merges_cross_year(monkeypatch) -> None:
+    from candidates import candidate_pool
+
+    raw_pool = {
+        "show|2015": {"title": "Show", "year": 2015, "kp_score": 7.0, "tmdb_id": "1"},
+        "show|2016": {"title": "Show", "year": 2016, "kp_score": 8.0, "imdb_id": "tt999"},
+    }
+    saved = {}
+
+    monkeypatch.setattr(candidate_pool, "load_candidate_pool", lambda: dict(raw_pool))
+    monkeypatch.setattr(candidate_pool, "save_candidate_pool", lambda pool: saved.update({"pool": pool}))
+
+    result = candidate_pool.clean_common_pool_duplicates()
+    assert result["removed_cross_year"] == 1
+    assert result["unique_total"] == 1
+    assert len(saved["pool"]) == 1
+    merged = list(saved["pool"].values())[0]
+    assert merged["kp_score"] == 8.0
+    assert merged["tmdb_id"] == "1"
+    assert merged["imdb_id"] == "tt999"
+
+
+def test_is_dataset_title_match_ignores_year() -> None:
+    from candidates import candidate_pool
+
+    dataset_keys = {"бывшие"}
+    candidate = {"title": "Бывшие", "year": 2018}
+    assert candidate_pool.is_dataset_title_match(candidate, dataset_keys) is True
+
+
+def test_purge_dataset_title_matches_from_pool(monkeypatch) -> None:
+    from candidates import candidate_pool
+
+    raw_pool = {
+        "byvshie|2018": {"title": "Бывшие", "year": 2018},
+        "other|2020": {"title": "Other", "year": 2020},
+    }
+    saved = {}
+
+    monkeypatch.setattr(candidate_pool, "load_candidate_pool", lambda: dict(raw_pool))
+    monkeypatch.setattr(
+        candidate_pool,
+        "build_dataset_title_keys",
+        lambda: {"бывшие"},
+    )
+    monkeypatch.setattr(candidate_pool, "save_candidate_pool", lambda pool: saved.update({"pool": pool}))
+
+    result = candidate_pool.purge_dataset_title_matches_from_pool()
+    assert result["removed_dataset_title_matches"] == 1
+    assert result["unique_total"] == 1
+    assert len(saved["pool"]) == 1
+    assert list(saved["pool"].values())[0]["title"] == "Other"

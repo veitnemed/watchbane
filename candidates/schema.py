@@ -142,3 +142,23 @@ def is_candidate_complete(candidate: dict) -> bool:
 def normalize_candidate_record(candidate: dict) -> dict:
     """Returns a normalized candidate record without dropping unknown fields."""
     return ensure_candidate_defaults(candidate)
+
+
+def resolve_canonical_year(candidate: dict) -> int | None:
+    """Returns the canonical pool year: imdb_start_year > year > kp_year."""
+    for field_name in ("imdb_start_year", "year", "kp_year"):
+        value = coerce_candidate_number(candidate.get(field_name))
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+    return None
+
+
+def normalize_candidate_for_storage(candidate: dict) -> dict:
+    """Applies canonical year and schema defaults before pool write-path."""
+    updated = _copy_candidate(candidate)
+    canonical_year = resolve_canonical_year(updated)
+    if canonical_year is not None:
+        updated["year"] = canonical_year
+    return normalize_candidate_record(updated)

@@ -177,6 +177,9 @@ QWidget#watchedSidebar {{
 QLineEdit#watchedSearch {{
     font-size: {FONT_BASE}px;
 }}
+QLineEdit#candidateListSearch {{
+    font-size: {FONT_BASE}px;
+}}
 QPushButton#watchedAddTitle {{
     background-color: {COLOR_ADD_BUTTON};
     border: 1px solid {COLOR_ADD_BUTTON_BORDER};
@@ -443,14 +446,55 @@ QLabel#candidateListCounter {{
     font-weight: 600;
     padding: 0 4px;
 }}
+QWidget#candidateSortRow {{
+    background: transparent;
+}}
+QLabel#candidateSortLabel {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    font-weight: 600;
+}}
 QComboBox#candidateListSort {{
-    background-color: {COLOR_SURFACE};
+    background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
     border-radius: {RADIUS_INPUT}px;
     color: {COLOR_TEXT};
-    font-size: {FONT_SMALL}px;
-    padding: 4px 8px;
-    min-width: 120px;
+    font-size: {FONT_BASE}px;
+    padding: {INPUT_PADDING_Y}px {INPUT_PADDING_X}px;
+    min-height: 20px;
+    max-width: 160px;
+}}
+QComboBox#candidateListSort:focus {{
+    border: 1px solid {COLOR_ACCENT};
+}}
+QComboBox#candidateListSort::drop-down {{
+    border: none;
+    width: 28px;
+}}
+QComboBox#candidateListSort::down-arrow {{
+    width: 10px;
+    height: 10px;
+}}
+QPushButton#candidateMarkWatchedButton {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 18px;
+    color: {COLOR_TEXT};
+    font-size: 16px;
+    padding: 0;
+    min-width: 36px;
+    max-width: 36px;
+    min-height: 36px;
+    max-height: 36px;
+}}
+QPushButton#candidateMarkWatchedButton:hover {{
+    border-color: {COLOR_ACCENT};
+    background-color: {COLOR_CARD_ALT};
+}}
+QPushButton#candidateMarkWatchedButton:disabled {{
+    color: {COLOR_TEXT_SECONDARY};
+    border-color: {COLOR_BORDER};
 }}
 QPushButton#genreFilterChip {{
     background-color: {COLOR_CARD_ALT};

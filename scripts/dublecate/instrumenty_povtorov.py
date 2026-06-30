@@ -85,6 +85,24 @@ def find_exact_duplicate_groups(entries: list[PoolEntry] | None = None) -> list[
     return groups
 
 
+def find_cross_year_title_groups(entries: list[PoolEntry] | None = None) -> list[dict]:
+    """Ищет группы с одним normalized title, но разными canonical year."""
+    if entries is None:
+        return candidate_pool.find_cross_year_title_groups()
+
+    candidates = [entry.candidate for entry in entries]
+    return candidate_pool.find_cross_year_title_groups(candidates)
+
+
+def find_title_duplicate_groups(entries: list[PoolEntry] | None = None) -> list[dict]:
+    """Ищет группы с одним normalized title (2+ записей)."""
+    if entries is None:
+        return candidate_pool.find_title_duplicate_groups()
+
+    candidates = [entry.candidate for entry in entries]
+    return candidate_pool.find_title_duplicate_groups(candidates)
+
+
 def find_similar_title_pairs(
     entries: list[PoolEntry] | None = None,
     *,

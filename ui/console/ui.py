@@ -78,6 +78,7 @@ def show_candidate_pool_management_menu():
     print(' 3 >> Импортировать TMDb result в общий pool')
     print(' 4 >> Собрать pool через KP API (legacy)')
     print(' 5 >> Очистить дубли в pool')
+    print(' 6 >> Удалить из pool тайтлы из датасета')
     print(' 0 >> Назад\n')
 
 
@@ -89,6 +90,8 @@ def show_candidate_pool_diagnostics_menu():
     print(' 3 >> Показать TMDb жанры по dataset')
     print(' 4 >> Диагностика постеров в общем пуле')
     print(' 5 >> Скачать постеры candidate pool в preview-cache')
+    print(' 6 >> Cross-year: одно название, разный год')
+    print(' 7 >> Дубли по названию')
     print(' 0 >> Назад\n')
 
 

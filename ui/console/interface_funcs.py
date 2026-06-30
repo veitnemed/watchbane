@@ -1233,6 +1233,7 @@ def clean_common_pool_duplicates() -> None:
     unique_total = stats.get("unique_total", stats.get("storage_total", 0))
     duplicate_entries = int(stats.get("duplicate_entries") or 0)
     similar_duplicate_total = int(stats.get("similar_duplicate_total") or 0)
+    cross_year_duplicate_total = int(stats.get("cross_year_duplicate_total") or 0)
 
     if unique_total == 0:
         print("Общий pool пуст.")
@@ -1242,8 +1243,8 @@ def clean_common_pool_duplicates() -> None:
     for line in pool_stats_view["lines"]:
         print(line)
     print("")
-    if duplicate_entries == 0 and similar_duplicate_total == 0:
-        print("Exact- и похожие дубли не найдены. JSON уже соответствует уникальным кандидатам.")
+    if duplicate_entries == 0 and similar_duplicate_total == 0 and cross_year_duplicate_total == 0:
+        print("Exact-, похожие и cross-year дубли не найдены. JSON уже соответствует уникальным кандидатам.")
         return
 
     print("Будет выполнено:")
@@ -1251,6 +1252,8 @@ def clean_common_pool_duplicates() -> None:
         print(f"- exact-дубли и legacy-ключи: до {duplicate_entries}")
     if similar_duplicate_total > 0:
         print(f"- похожие названия одного года: до {similar_duplicate_total}")
+    if cross_year_duplicate_total > 0:
+        print(f"- cross-year (±1 год, одно название): до {cross_year_duplicate_total}")
     print("Останется лучшая запись по рейтингу и полноте данных.")
 
     answer = input("\nОчистить дубли? [y/N] >> ").strip().casefold()
@@ -1264,7 +1267,35 @@ def clean_common_pool_duplicates() -> None:
     print(f"Стало уникальных: {result['unique_total']}")
     print(f"Удалено exact-дублей: {result['removed_exact']}")
     print(f"Слито похожих: {result['removed_similar']}")
+    print(f"Слито cross-year: {result.get('removed_cross_year', 0)}")
     print(f"Всего убрано: {result['removed_total']}")
+    if result["changed"] is False:
+        print("JSON не изменился.")
+
+
+def purge_pool_dataset_title_matches() -> None:
+    """Удаляет из pool записи, чьё normalized title уже есть в датасете."""
+    ui.clean_terminal()
+    preview = candidate_service.get_pool_dataset_title_matches_view()
+    if preview["is_empty"]:
+        print("В pool нет записей с названиями из датасета.")
+        return
+
+    print("Удаление из pool тайтлов, уже есть в датасете\n")
+    print(f"Будет удалено записей: {preview['match_count']}\n")
+    for idx, match in enumerate(preview["matches"], start=1):
+        print(f"{idx}) {match.get('title')} ({match.get('year') or '?'})")
+
+    answer = input("\nУдалить эти записи из pool? [y/N] >> ").strip().casefold()
+    if answer not in {"y", "yes", "д", "да"}:
+        print("Удаление отменено.")
+        return
+
+    result = candidate_service.purge_pool_dataset_title_matches()
+    print("\nГотово.")
+    print(f"Было записей: {result['raw_total']}")
+    print(f"Стало: {result['unique_total']}")
+    print(f"Удалено: {result['removed_dataset_title_matches']}")
     if result["changed"] is False:
         print("JSON не изменился.")
 
@@ -1290,6 +1321,78 @@ def show_suspicious_candidate_duplicates() -> None:
             f"   B: {right.get('title')} ({right.get('year')}) "
             f"| критерий: {right.get('criteria_name')}"
         )
+        print("")
+
+
+def show_cross_year_candidate_duplicates() -> None:
+    """Показывает группы cross-year дублей в общем пуле."""
+    ui.clean_terminal()
+    duplicates_view = candidate_service.get_cross_year_duplicates_view()
+    if duplicates_view["is_empty"]:
+        print("Cross-year дублей в общем пуле не найдено.")
+        return
+
+    print("Cross-year дубли (одно название, разный год):\n")
+    for idx, group in enumerate(duplicates_view["groups"], start=1):
+        years = group.get("years") or []
+        years_text = ", ".join(str(year) for year in years) if years else "?"
+        print(f"{idx}) {group.get('title')} | годы: {years_text}")
+        for entry in group.get("entries") or []:
+            year = entry.get("year") or "?"
+            source = entry.get("source") or entry.get("criteria_name") or "?"
+            kp_id = entry.get("kp_id") or entry.get("id") or "-"
+            imdb_id = entry.get("imdb_id") or "-"
+            tmdb_id = entry.get("tmdb_id") or "-"
+            print(
+                f"   - ({year}) source={source} | KP={kp_id} | IMDb={imdb_id} | TMDb={tmdb_id}"
+            )
+        print("")
+
+
+def show_title_candidate_duplicates() -> None:
+    """Показывает сводку и группы дублей с одним normalized title."""
+    ui.clean_terminal()
+    duplicates_view = candidate_service.get_title_duplicates_view()
+    if duplicates_view["is_empty"]:
+        print("Дублей по названию и совпадений с датасетом не найдено.")
+        return
+
+    group_count = int(duplicates_view.get("group_count") or 0)
+    extra_entries = int(duplicates_view.get("extra_entries") or 0)
+    reported_groups = int(duplicates_view.get("reported_groups") or duplicates_view.get("count") or 0)
+    dataset_overlap_count = int(duplicates_view.get("dataset_overlap_count") or 0)
+    print("Дубли по названию (pool + совпадения с датасетом):\n")
+    print(f"Названий с повторами в pool: {group_count}")
+    print(f"Лишних записей в pool: {extra_entries}")
+    print(f"Совпадает с датасетом: {dataset_overlap_count}")
+    print(f"Показано групп: {reported_groups}\n")
+
+    for idx, group in enumerate(duplicates_view["groups"], start=1):
+        entry_count = int(group.get("entry_count") or 0)
+        dataset_count = int(group.get("dataset_count") or 0)
+        years = group.get("years") or []
+        years_text = ", ".join(str(year) for year in years) if years else "?"
+        markers = []
+        if entry_count >= 2:
+            markers.append(f"pool x{entry_count}")
+        if dataset_count > 0:
+            markers.append(f"dataset x{dataset_count}")
+        marker_text = " | ".join(markers) if markers else "?"
+        print(f"{idx}) {group.get('title')} | {marker_text} | годы: {years_text}")
+        for entry in group.get("entries") or []:
+            year = entry.get("year") or "?"
+            source = entry.get("source") or entry.get("criteria_name") or "?"
+            kp_id = entry.get("kp_id") or entry.get("id") or "-"
+            imdb_id = entry.get("imdb_id") or "-"
+            tmdb_id = entry.get("tmdb_id") or "-"
+            print(
+                f"   [pool] ({year}) source={source} | KP={kp_id} | IMDb={imdb_id} | TMDb={tmdb_id}"
+            )
+        for dataset_entry in group.get("dataset_entries") or []:
+            year = dataset_entry.get("year") or "?"
+            dataset_key = dataset_entry.get("dataset_key") or "?"
+            title = dataset_entry.get("title") or dataset_key
+            print(f"   [dataset] {title} ({year}) | key={dataset_key}")
         print("")
 
 

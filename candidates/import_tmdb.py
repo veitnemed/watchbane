@@ -9,7 +9,7 @@ from typing import Any
 
 from candidates import candidate_pool as legacy_candidate_pool
 from candidates.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key
-from candidates.schema import normalize_candidate_record
+from candidates.schema import normalize_candidate_for_storage
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -53,7 +53,7 @@ def normalize_tmdb_candidate_for_common_import(candidate: dict[str, Any], criter
         "signals": candidate.get("signals") or [],
         "saved_at": datetime.now().isoformat(timespec="seconds"),
     })
-    return normalize_candidate_record(normalized)
+    return normalize_candidate_for_storage(normalized)
 
 
 def tmdb_import_default_criteria_name(result: dict[str, Any]) -> str | None:
@@ -164,6 +164,7 @@ def import_tmdb_candidates_to_common_pool(
     resolved_criteria_name = resolve_tmdb_import_criteria_name(result_metadata, criteria_name)
     pool = legacy_candidate_pool.normalize_storage_pool(legacy_candidate_pool.load_candidate_pool())
     watched_signatures = legacy_candidate_pool.build_watched_signatures()
+    dataset_title_keys = legacy_candidate_pool.build_dataset_title_keys()
     stats = _base_import_stats(len(candidates), resolved_criteria_name, len(pool))
 
     for raw_candidate in candidates:
@@ -176,7 +177,11 @@ def import_tmdb_candidates_to_common_pool(
             stats["errors"] += 1
             continue
 
-        if legacy_candidate_pool.is_watched_candidate(candidate, watched_signatures):
+        if legacy_candidate_pool.is_watched_candidate(
+            candidate,
+            watched_signatures,
+            dataset_title_keys,
+        ):
             stats["watched_skipped"] += 1
             stats["skipped_watched"] += 1
             continue

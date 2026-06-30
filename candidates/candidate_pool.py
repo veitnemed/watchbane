@@ -17,7 +17,9 @@ from candidates.schema import (
     coerce_candidate_number,
     compute_completeness as schema_compute_completeness,
     is_candidate_complete as schema_is_candidate_complete,
+    normalize_candidate_for_storage,
     normalize_candidate_record,
+    resolve_canonical_year,
 )
 
 DISCOVER_PAGE_LIMIT = 30
@@ -265,7 +267,7 @@ def deduplicate_pool(pool: dict) -> dict:
     for candidate in pool.values():
         if isinstance(candidate, dict) is False:
             continue
-        candidate = normalize_candidate_record(candidate)
+        candidate = normalize_candidate_for_storage(candidate)
         key = pool_entry_key(candidate)
         current_best = deduplicated.get(key)
         if current_best is None or candidate_sort_score(candidate) > candidate_sort_score(current_best):
@@ -276,7 +278,7 @@ def deduplicate_pool(pool: dict) -> dict:
 def dedupe_pool_by_similar_titles(pool: dict) -> tuple[dict, int]:
     """Сливает кандидатов одного года с похожими названиями, оставляя лучшую запись."""
     candidates = [
-        normalize_candidate_record(candidate)
+        normalize_candidate_for_storage(candidate)
         for candidate in pool.values()
         if isinstance(candidate, dict)
     ]
@@ -308,8 +310,324 @@ def dedupe_pool_by_similar_titles(pool: dict) -> tuple[dict, int]:
     return deduplicated, removed
 
 
-def clean_common_pool_duplicates(*, merge_similar: bool = True) -> dict:
-    """Явно чистит общий pool от exact- и fuzzy-дублей (write-path)."""
+def _storage_id_value(candidate: dict, field_name: str) -> str | None:
+    value = candidate.get(field_name)
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _cross_year_ids_conflict(left: dict, right: dict) -> bool:
+    for field_name in ("imdb_id", "tmdb_id"):
+        left_id = _storage_id_value(left, field_name)
+        right_id = _storage_id_value(right, field_name)
+        if left_id and right_id and left_id != right_id:
+            return True
+    return False
+
+
+def _canonical_years_within_delta(left: dict, right: dict, *, max_year_delta: int = 1) -> bool:
+    left_year = resolve_canonical_year(left)
+    right_year = resolve_canonical_year(right)
+    if left_year is None or right_year is None:
+        return False
+    return abs(left_year - right_year) <= max_year_delta
+
+
+def _same_normalized_storage_title(left: dict, right: dict) -> bool:
+    return normalize_key_part(candidate_title(left)) == normalize_key_part(candidate_title(right))
+
+
+def can_merge_cross_year_candidates(left: dict, right: dict, *, max_year_delta: int = 1) -> bool:
+    """True when same normalized title, years within delta, and ids do not conflict."""
+    if not _same_normalized_storage_title(left, right):
+        return False
+    if not _canonical_years_within_delta(left, right, max_year_delta=max_year_delta):
+        return False
+    if _cross_year_ids_conflict(left, right):
+        return False
+    return True
+
+
+def _candidate_field_has_value(value) -> bool:
+    return value is not None and str(value).strip() != ""
+
+
+def merge_pool_candidate_records(winner: dict, loser: dict) -> dict:
+    """Merges two pool records, preferring winner fields and filling gaps from loser."""
+    merged = dict(winner)
+    for field_name, value in loser.items():
+        if _candidate_field_has_value(merged.get(field_name)):
+            continue
+        if _candidate_field_has_value(value) is False:
+            continue
+        merged[field_name] = value
+    return normalize_candidate_for_storage(merged)
+
+
+def dedupe_pool_cross_year_titles(pool: dict, *, max_year_delta: int = 1) -> tuple[dict, int]:
+    """Сливает кандидатов с одним названием и годами в пределах ±max_year_delta."""
+    candidates = [
+        normalize_candidate_for_storage(candidate)
+        for candidate in pool.values()
+        if isinstance(candidate, dict)
+    ]
+    if len(candidates) <= 1:
+        return dict(pool), 0
+
+    kept: list[dict] = []
+    removed = 0
+    for candidate in candidates:
+        match_index = None
+        for index, existing in enumerate(kept):
+            if can_merge_cross_year_candidates(candidate, existing, max_year_delta=max_year_delta):
+                match_index = index
+                break
+        if match_index is None:
+            kept.append(candidate)
+            continue
+
+        removed += 1
+        existing = kept[match_index]
+        if candidate_sort_score(candidate) > candidate_sort_score(existing):
+            kept[match_index] = merge_pool_candidate_records(candidate, existing)
+        else:
+            kept[match_index] = merge_pool_candidate_records(existing, candidate)
+
+    deduplicated: dict = {}
+    for candidate in kept:
+        key = pool_entry_key(candidate)
+        current_best = deduplicated.get(key)
+        if current_best is None or candidate_sort_score(candidate) > candidate_sort_score(current_best):
+            deduplicated[key] = candidate
+    return deduplicated, removed
+
+
+def find_cross_year_title_groups(candidates: list | None = None) -> list[dict]:
+    """Группирует кандидатов с одним normalized title, но разными canonical year."""
+    if candidates is None:
+        source_candidates = get_all_candidates()
+    else:
+        source_candidates = [
+            normalize_candidate_record(candidate)
+            for candidate in candidates
+            if isinstance(candidate, dict)
+        ]
+
+    groups_by_title: dict[str, list[dict]] = {}
+    for candidate in source_candidates:
+        title_key = normalize_key_part(candidate_title(candidate))
+        if title_key == "":
+            continue
+        groups_by_title.setdefault(title_key, []).append(candidate)
+
+    groups: list[dict] = []
+    for title_key, entries in groups_by_title.items():
+        if len(entries) < 2:
+            continue
+        years = [resolve_canonical_year(entry) for entry in entries]
+        if len(set(years)) <= 1:
+            continue
+        best_entry = max(entries, key=candidate_sort_score)
+        display_title = candidate_title(best_entry) or title_key
+        groups.append({
+            "title": display_title,
+            "title_key": title_key,
+            "years": sorted({year for year in years if year is not None}),
+            "entries": entries,
+            "best_entry": best_entry,
+        })
+
+    groups.sort(key=lambda item: (item["title"].casefold(), item["years"]))
+    return groups
+
+
+def build_dataset_entries_by_title_key() -> dict[str, list[dict]]:
+    """Read-only index of watched dataset records grouped by normalized title."""
+    from storage import data as storage_data
+
+    dataset = storage_data.load_dataset()
+    groups: dict[str, list[dict]] = {}
+    for dataset_key, movie in dataset.items():
+        if isinstance(movie, dict) is False:
+            continue
+        main_info = movie.get("main_info") or {}
+        title = main_info.get("title") or dataset_key
+        title_key = normalize_key_part(title)
+        if title_key == "":
+            continue
+        groups.setdefault(title_key, []).append({
+            "dataset_key": dataset_key,
+            "title": title,
+            "year": main_info.get("year"),
+        })
+    return groups
+
+
+def build_dataset_title_keys() -> set[str]:
+    """Read-only set of normalized dataset titles for strict pool gate."""
+    return set(build_dataset_entries_by_title_key().keys())
+
+
+def is_dataset_title_match(candidate: dict, dataset_title_keys: set[str] | None = None) -> bool:
+    """True when candidate normalized title already exists in watched dataset."""
+    if dataset_title_keys is None:
+        dataset_title_keys = build_dataset_title_keys()
+    title_key = normalize_key_part(candidate_title(candidate))
+    return title_key != "" and title_key in dataset_title_keys
+
+
+def count_pool_dataset_title_matches(pool: dict | None = None) -> dict:
+    """Read-only count of pool entries whose title already exists in dataset."""
+    if pool is None:
+        pool = normalize_storage_pool(load_candidate_pool())
+    dataset_title_keys = build_dataset_title_keys()
+    matches = []
+    for key, candidate in pool.items():
+        if isinstance(candidate, dict) is False:
+            continue
+        if is_dataset_title_match(candidate, dataset_title_keys):
+            matches.append({
+                "pool_key": key,
+                "title": candidate_title(candidate),
+                "year": candidate.get("year"),
+            })
+    return {
+        "match_count": len(matches),
+        "matches": matches,
+        "is_empty": len(matches) == 0,
+    }
+
+
+def purge_dataset_title_matches_from_pool() -> dict:
+    """Removes pool entries whose normalized title exists in watched dataset."""
+    raw_pool = load_candidate_pool()
+    raw_total = len(raw_pool) if isinstance(raw_pool, dict) else 0
+    storage_pool = normalize_storage_pool(raw_pool)
+    dataset_title_keys = build_dataset_title_keys()
+
+    filtered = {}
+    removed = 0
+    for key, candidate in storage_pool.items():
+        if isinstance(candidate, dict) is False:
+            continue
+        if is_dataset_title_match(candidate, dataset_title_keys):
+            removed += 1
+            continue
+        filtered[key] = candidate
+
+    changed = removed > 0 or set(raw_pool.keys()) != set(filtered.keys())
+    if changed:
+        save_candidate_pool(filtered)
+
+    return {
+        "ok": True,
+        "changed": changed,
+        "raw_total": raw_total,
+        "unique_total": len(filtered),
+        "removed_dataset_title_matches": removed,
+    }
+
+
+def find_title_duplicate_groups(
+    candidates: list | None = None,
+    *,
+    include_dataset: bool = True,
+    dataset_by_title_key: dict[str, list[dict]] | None = None,
+) -> list[dict]:
+    """Группирует pool-кандидатов и совпадения из датасета по normalized title."""
+    if candidates is None:
+        source_candidates = get_all_candidates()
+    else:
+        source_candidates = [
+            normalize_candidate_record(candidate)
+            for candidate in candidates
+            if isinstance(candidate, dict)
+        ]
+
+    pool_by_title: dict[str, list[dict]] = {}
+    for candidate in source_candidates:
+        title_key = normalize_key_part(candidate_title(candidate))
+        if title_key == "":
+            continue
+        pool_by_title.setdefault(title_key, []).append(candidate)
+
+    dataset_index = dataset_by_title_key
+    if include_dataset and dataset_index is None:
+        dataset_index = build_dataset_entries_by_title_key()
+    if dataset_index is None:
+        dataset_index = {}
+
+    title_keys: set[str] = set()
+    for title_key, entries in pool_by_title.items():
+        if len(entries) >= 2:
+            title_keys.add(title_key)
+    if include_dataset:
+        for title_key in pool_by_title:
+            if pool_by_title[title_key] and dataset_index.get(title_key):
+                title_keys.add(title_key)
+
+    groups: list[dict] = []
+    for title_key in title_keys:
+        entries = pool_by_title.get(title_key) or []
+        dataset_entries = list(dataset_index.get(title_key) or [])
+        years = [resolve_canonical_year(entry) for entry in entries]
+        for dataset_entry in dataset_entries:
+            year = dataset_entry.get("year")
+            coerced_year = coerce_candidate_number(year)
+            if isinstance(coerced_year, int):
+                years.append(coerced_year)
+        best_entry = max(entries, key=candidate_sort_score) if entries else None
+        display_title = (
+            candidate_title(best_entry)
+            if best_entry is not None
+            else (dataset_entries[0].get("title") if dataset_entries else title_key)
+        )
+        entry_count = len(entries)
+        groups.append({
+            "title": display_title or title_key,
+            "title_key": title_key,
+            "entry_count": entry_count,
+            "extra_entries": max(0, entry_count - 1),
+            "dataset_count": len(dataset_entries),
+            "in_dataset": len(dataset_entries) > 0,
+            "years": sorted({year for year in years if isinstance(year, int)}),
+            "entries": entries,
+            "dataset_entries": dataset_entries,
+            "best_entry": best_entry,
+        })
+
+    groups.sort(
+        key=lambda item: (
+            0 if item["entry_count"] >= 2 else 1,
+            -item["entry_count"],
+            -item["dataset_count"],
+            item["title"].casefold(),
+        )
+    )
+    return groups
+
+
+def build_title_duplicate_summary(groups: list[dict]) -> dict:
+    """Сводка по группам дублей с одним normalized title."""
+    pool_duplicate_groups = [group for group in groups if int(group.get("entry_count") or 0) >= 2]
+    extra_entries = sum(int(group.get("extra_entries") or 0) for group in pool_duplicate_groups)
+    dataset_overlap_count = sum(1 for group in groups if group.get("in_dataset"))
+    return {
+        "group_count": len(pool_duplicate_groups),
+        "extra_entries": extra_entries,
+        "reported_groups": len(groups),
+        "dataset_overlap_count": dataset_overlap_count,
+    }
+
+
+def clean_common_pool_duplicates(
+    *,
+    merge_similar: bool = True,
+    merge_cross_year: bool = True,
+) -> dict:
+    """Явно чистит общий pool от exact-, fuzzy- и cross-year-дублей (write-path)."""
     raw_pool = load_candidate_pool()
     raw_total = len(raw_pool) if isinstance(raw_pool, dict) else 0
 
@@ -322,10 +640,15 @@ def clean_common_pool_duplicates(*, merge_similar: bool = True) -> dict:
     if merge_similar and exact_unique > 1:
         final_pool, similar_removed = dedupe_pool_by_similar_titles(exact_pool)
 
+    cross_year_removed = 0
+    if merge_cross_year and len(final_pool) > 1:
+        final_pool, cross_year_removed = dedupe_pool_cross_year_titles(final_pool)
+
     final_unique = len(final_pool)
     changed = (
         raw_total != final_unique
         or similar_removed > 0
+        or cross_year_removed > 0
         or set(raw_pool.keys()) != set(final_pool.keys())
     )
     if changed:
@@ -339,6 +662,7 @@ def clean_common_pool_duplicates(*, merge_similar: bool = True) -> dict:
         "unique_total": final_unique,
         "removed_exact": exact_removed,
         "removed_similar": similar_removed,
+        "removed_cross_year": cross_year_removed,
         "removed_total": max(0, raw_total - final_unique),
     }
 
@@ -349,7 +673,7 @@ def migrate_pool_keys(pool: dict) -> dict:
     for candidate in pool.values():
         if isinstance(candidate, dict) is False:
             continue
-        candidate = normalize_candidate_record(candidate)
+        candidate = normalize_candidate_for_storage(candidate)
         key = pool_entry_key(candidate)
         current_best = migrated.get(key)
         if current_best is None or candidate_sort_score(candidate) > candidate_sort_score(current_best):
@@ -405,8 +729,15 @@ def build_watched_signatures() -> set:
     return signatures
 
 
-def is_watched_candidate(candidate: dict, watched_signatures: set | None = None) -> bool:
+def is_watched_candidate(
+    candidate: dict,
+    watched_signatures: set | None = None,
+    dataset_title_keys: set[str] | None = None,
+) -> bool:
     """Проверяет, есть ли кандидат уже в основном датасете."""
+    if is_dataset_title_match(candidate, dataset_title_keys):
+        return True
+
     if watched_signatures is None:
         watched_signatures = build_watched_signatures()
 
@@ -429,9 +760,14 @@ def is_watched_candidate(candidate: dict, watched_signatures: set | None = None)
 def remove_watched_candidates(pool: dict) -> dict:
     """Удаляет из пула кандидатов уже просмотренные объекты."""
     watched_signatures = build_watched_signatures()
+    dataset_title_keys = build_dataset_title_keys()
     filtered = {}
     for key, candidate in pool.items():
-        if is_watched_candidate(candidate, watched_signatures):
+        if is_watched_candidate(
+            candidate,
+            watched_signatures,
+            dataset_title_keys=dataset_title_keys,
+        ):
             continue
         filtered[key] = candidate
     return filtered
@@ -457,7 +793,7 @@ def movie_matches_genres(movie: dict, expected_genres: list, excluded_genres: li
 
 def normalize_candidate(movie: dict, criteria_name: str) -> dict:
     """Оставляет в пуле кандидатов полезные поля."""
-    return normalize_candidate_record({
+    return normalize_candidate_for_storage({
         "id": movie.get("id"),
         "title": movie.get("name") or movie.get("alternativeName") or movie.get("enName"),
         "alternative_title": movie.get("alternativeName") or movie.get("enName"),
@@ -480,6 +816,7 @@ def collect_candidates(criteria_name: str, criteria: dict) -> dict:
     criteria_name = COMMON_POOL_CRITERIA_NAME
     pool = normalize_storage_pool(load_candidate_pool())
     watched_signatures = build_watched_signatures()
+    dataset_title_keys = build_dataset_title_keys()
     target_count = int(criteria.get("count") or 20)
     availability = api.check_api_available()
     if availability["ok"] is False:
@@ -527,7 +864,7 @@ def collect_candidates(criteria_name: str, criteria: dict) -> dict:
                 continue
 
             candidate = normalize_candidate(movie, criteria_name)
-            if is_watched_candidate(candidate, watched_signatures):
+            if is_watched_candidate(candidate, watched_signatures, dataset_title_keys):
                 watched_skipped += 1
                 continue
 
@@ -611,6 +948,7 @@ def get_pool_stats(criteria_name: str | None = None) -> dict:
     raw_pool = load_candidate_pool()
     storage_pool = normalize_storage_pool(raw_pool)
     watched_signatures = build_watched_signatures()
+    dataset_title_keys = build_dataset_title_keys()
 
     candidates = [
         candidate
@@ -623,12 +961,14 @@ def get_pool_stats(criteria_name: str | None = None) -> dict:
     raw_total = _count_raw_pool_entries(raw_pool, criteria_name=criteria_name)
     duplicate_entries = max(0, raw_total - unique_total)
     similar_duplicate_total = 0
+    cross_year_duplicate_total = 0
     if criteria_name is None and unique_total > 1:
         _, similar_duplicate_total = dedupe_pool_by_similar_titles(storage_pool)
+        _, cross_year_duplicate_total = dedupe_pool_cross_year_titles(storage_pool)
 
     watched_total = sum(
         1 for candidate in candidates
-        if is_watched_candidate(candidate, watched_signatures)
+        if is_watched_candidate(candidate, watched_signatures, dataset_title_keys)
     )
     ready_total = sum(
         1 for candidate in candidates
@@ -643,6 +983,7 @@ def get_pool_stats(criteria_name: str | None = None) -> dict:
         "storage_total": unique_total,
         "duplicate_entries": duplicate_entries,
         "similar_duplicate_total": similar_duplicate_total,
+        "cross_year_duplicate_total": cross_year_duplicate_total,
         "watched_total": watched_total,
         "active_total": unique_total - watched_total,
         "ready_total": ready_total,
@@ -666,6 +1007,9 @@ def format_pool_stats_summary(stats: dict) -> str:
     similar_duplicate_total = int(stats.get("similar_duplicate_total") or 0)
     if similar_duplicate_total > 0:
         parts.append(f"похожих: {similar_duplicate_total}")
+    cross_year_duplicate_total = int(stats.get("cross_year_duplicate_total") or 0)
+    if cross_year_duplicate_total > 0:
+        parts.append(f"cross-year: {cross_year_duplicate_total}")
     return " | ".join(parts)
 
 
@@ -690,6 +1034,9 @@ def format_pool_stats_lines(stats: dict) -> list[str]:
     similar_duplicate_total = int(stats.get("similar_duplicate_total") or 0)
     if stats.get("criteria_name") is None and similar_duplicate_total > 0:
         lines.append(f"Похожих дублей можно слить: {similar_duplicate_total}")
+    cross_year_duplicate_total = int(stats.get("cross_year_duplicate_total") or 0)
+    if stats.get("criteria_name") is None and cross_year_duplicate_total > 0:
+        lines.append(f"Cross-year дублей можно слить: {cross_year_duplicate_total}")
     return lines
 
 

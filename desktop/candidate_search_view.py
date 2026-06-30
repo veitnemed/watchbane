@@ -47,6 +47,31 @@ def format_candidate_list_label(candidate: dict, sort_mode: str = "kp_score") ->
     return f"{format_candidate_title_line(candidate)}  {format_candidate_metric_value(candidate, sort_mode)}"
 
 
+def candidate_search_text(candidate: dict) -> str:
+    """Lowercase haystack for local title search in the Candidates tab."""
+    parts = [
+        candidate.get("title"),
+        candidate.get("name"),
+        candidate.get("alternative_title"),
+        candidate.get("alternativeName"),
+        candidate.get("enName"),
+        candidate.get("original_title"),
+    ]
+    return " ".join(str(part).strip() for part in parts if part not in (None, "")).casefold()
+
+
+def filter_candidates_by_title(candidates: list[dict], query: str) -> list[dict]:
+    """Return candidates whose title fields contain the query (case-insensitive)."""
+    normalized = str(query or "").strip().casefold()
+    if normalized == "":
+        return list(candidates)
+    return [
+        candidate
+        for candidate in candidates
+        if normalized in candidate_search_text(candidate)
+    ]
+
+
 def candidate_detail_identity(candidate: dict) -> str:
     """Stable key for caching detail entries in the Candidates tab."""
     return str(candidate.get("pool_entry_key") or candidate.get("title") or "candidate")

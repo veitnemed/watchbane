@@ -323,9 +323,26 @@ def clear_common_candidate_pool() -> dict:
     }
 
 
-def clean_common_pool_duplicates(*, merge_similar: bool = True) -> dict:
-    """Removes exact and similar duplicates from shared pool via write-path."""
-    return candidate_pool.clean_common_pool_duplicates(merge_similar=merge_similar)
+def clean_common_pool_duplicates(
+    *,
+    merge_similar: bool = True,
+    merge_cross_year: bool = True,
+) -> dict:
+    """Removes exact, similar, and cross-year duplicates from shared pool via write-path."""
+    return candidate_pool.clean_common_pool_duplicates(
+        merge_similar=merge_similar,
+        merge_cross_year=merge_cross_year,
+    )
+
+
+def get_pool_dataset_title_matches_view() -> dict:
+    """Read-only preview of pool entries whose title exists in watched dataset."""
+    return candidate_pool.count_pool_dataset_title_matches()
+
+
+def purge_pool_dataset_title_matches() -> dict:
+    """Removes pool entries whose normalized title exists in watched dataset."""
+    return candidate_pool.purge_dataset_title_matches_from_pool()
 
 
 def delete_candidate_pool_criteria(criteria_name: str) -> dict:
@@ -347,6 +364,32 @@ def get_suspicious_duplicates_view() -> dict:
         "pairs": pairs,
         "count": len(pairs),
         "is_empty": len(pairs) == 0,
+    }
+
+
+def get_cross_year_duplicates_view() -> dict:
+    """Prepares cross-year duplicate groups for diagnostics UI without writing JSON."""
+    groups = candidate_pool.find_cross_year_title_groups()
+    return {
+        "groups": groups,
+        "count": len(groups),
+        "is_empty": len(groups) == 0,
+    }
+
+
+def get_title_duplicates_view() -> dict:
+    """Prepares title duplicate groups and summary for diagnostics UI without writing JSON."""
+    groups = candidate_pool.find_title_duplicate_groups()
+    summary = candidate_pool.build_title_duplicate_summary(groups)
+    return {
+        "groups": groups,
+        "summary": summary,
+        "group_count": summary["group_count"],
+        "extra_entries": summary["extra_entries"],
+        "reported_groups": summary["reported_groups"],
+        "dataset_overlap_count": summary["dataset_overlap_count"],
+        "count": summary["reported_groups"],
+        "is_empty": len(groups) == 0,
     }
 
 
