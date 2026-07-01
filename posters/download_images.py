@@ -389,6 +389,7 @@ def download_preview_posters_for_urls(
     *,
     progress_callback=None,
     error_callback=None,
+    should_stop_callback=None,
 ) -> dict:
     """Download unique poster URLs into preview cache for candidate pool GUI."""
     stats = {
@@ -398,12 +399,17 @@ def download_preview_posters_for_urls(
         "failed": 0,
         "skipped_invalid": 0,
         "failures": [],
+        "stopped": False,
     }
 
     attempted_downloads = 0
     consecutive_failures = 0
 
     for index, raw_url in enumerate(urls, start=1):
+        if should_stop_callback is not None and should_stop_callback() and index > 1:
+            stats["stopped"] = True
+            break
+
         url = str(raw_url or "").strip()
         if progress_callback is not None:
             progress_callback(index, len(urls), url)

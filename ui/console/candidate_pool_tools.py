@@ -435,6 +435,7 @@ def download_candidate_pool_preview_posters() -> None:
     """Download unique candidate pool poster URLs into preview cache for desktop GUI."""
     ui.clean_terminal()
     print("Скачивание постеров candidate pool в preview-cache...")
+    print("Tip: python scripts/poster_download_job.py start candidates")
     print(
         f"(TMDb URL -> {PREVIEW_DOWNLOAD_SIZE}, пауза {PREVIEW_BULK_DELAY_SECONDS:g}s, "
         f"batch {PREVIEW_BATCH_SIZE}, retry на 403/SSL)\n"
