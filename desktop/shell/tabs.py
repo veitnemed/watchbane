@@ -11,7 +11,6 @@ from desktop.analytics.view import AnalyticsView
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.list_view import CandidateListView
 from desktop.candidates.session import CandidateSearchSession
-from desktop.settings.view import SettingsToolsView
 from desktop.watched.model import WatchedEntry
 from desktop.watched.tab import WatchedTabView
 
@@ -32,7 +31,6 @@ class AppTabsContext:
     watched_tab_view: WatchedTabView
     analytics_view: AnalyticsView
     candidate_session: CandidateSearchSession
-    settings_view: SettingsToolsView
 
 
 class MainTabRegistry:
@@ -111,21 +109,11 @@ def build_main_tabs(
     registry.register(ShellTabSpec("candidates", "Кандидаты", candidate_list_view))
     registry.register(ShellTabSpec("analytics", "Analytics", analytics_view))
 
-    def on_pool_changed() -> None:
-        candidate_session.reload_from_pool()
-
-    settings_view = SettingsToolsView(
-        on_status_message=on_status_message,
-        on_pool_changed=on_pool_changed,
-    )
-    registry.register(ShellTabSpec("settings", "Сервис", settings_view))
-
     tabs.currentChanged.connect(registry.on_current_changed)
 
     context = AppTabsContext(
         watched_tab_view=watched_tab_view,
         analytics_view=analytics_view,
         candidate_session=candidate_session,
-        settings_view=settings_view,
     )
     return registry, context

@@ -64,7 +64,7 @@ desktop/
       lists.py                   # IMDb delta, gaps, dense scores
     charts.py                    # Plotly HTML builders
   settings/
-    view.py                      # SettingsToolsView (pool maintenance)
+    view.py                      # optional: pool maintenance UI (not registered in shell)
     presenters.py                # stats/dedupe status formatters
   shared/
     detail/
@@ -116,7 +116,7 @@ desktop/
 | `analytics/view.py` | read-only вкладка Analytics (orchestrator) | feature view |
 | `analytics/sections/*` | KPI, charts, lists section mixins | feature view |
 | `analytics/charts.py` | Plotly chart builders | charts |
-| `settings/view.py` | вкладка Сервис: pool stats, dedupe, retry KP | feature view |
+| `settings/view.py` | pool maintenance UI (не в tab bar; console) | optional / unused in shell |
 | `shared/widgets/` | range_slider, list_search, chip selectors | shared |
 | `theme/tokens.py` | colors, fonts, spacing | theme |
 | `theme/styles/*` | QSS builders per screen | theme |

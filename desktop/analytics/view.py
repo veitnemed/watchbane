@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from candidates.service import get_pool_genre_count_rows
 from dataset.score_analytics import build_score_analytics
 
 from desktop.analytics.constants import (
@@ -131,6 +132,15 @@ class AnalyticsView(
             )
         )
 
+        self._pool_genre_count_layout = QVBoxLayout()
+        root_layout.addWidget(
+            self._make_section(
+                "Количество тайтлов по жанрам (pool)",
+                self._pool_genre_count_layout,
+                SECTION_ICONS["Количество тайтлов по жанрам (pool)"],
+            )
+        )
+
         self._year_average_layout = QVBoxLayout()
         root_layout.addWidget(
             self._make_section(
@@ -204,6 +214,7 @@ class AnalyticsView(
         self._fill_insights(analytics["insights"])
         self._fill_distribution(analytics["score_count_points"])
         self._fill_genre_count(analytics["genre_count_rows"])
+        self._fill_pool_genre_count(get_pool_genre_count_rows())
         self._fill_year_average(analytics["year_average_points"])
         self._imdb_delta_expanded = False
         self._fill_imdb_delta(

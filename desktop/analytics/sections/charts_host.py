@@ -91,6 +91,18 @@ class AnalyticsChartsMixin:
             fallback=self._fill_genre_count_fallback,
         )
 
+    def _fill_pool_genre_count(self, rows: list[dict]) -> None:
+        from desktop.analytics.charts import bar_chart_height, build_genre_count_html
+
+        height = bar_chart_height(len(rows))
+        self._fill_plotly_chart(
+            self._pool_genre_count_layout,
+            rows,
+            build_html=build_genre_count_html,
+            chart_height=height,
+            fallback=self._fill_pool_genre_count_fallback,
+        )
+
     def _fill_year_average(self, points: list[dict]) -> None:
         from desktop.analytics.charts import build_year_average_html
 

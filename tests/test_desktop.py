@@ -886,6 +886,7 @@ def test_analytics_distribution_uses_score_count_points() -> None:
     assert 'analytics["score_count_points"]' in source
     assert 'analytics["dataset_completeness"]' in source
     assert 'analytics["genre_count_rows"]' in source
+    assert "get_pool_genre_count_rows" in source
     assert 'analytics["year_average_points"]' in source
     assert 'analytics["imdb_delta_rows"]' in source
     assert 'analytics["rating_higher_than_public"]' in source
@@ -903,6 +904,7 @@ def test_analytics_mvp_sections_wired() -> None:
 
     init_source = inspect.getsource(analytics_view_module.AnalyticsView.__init__)
     assert "Количество тайтлов по жанрам" in init_source
+    assert "Количество тайтлов по жанрам (pool)" in init_source
     assert "Средняя моя оценка по годам" in init_source
     assert "Отличие моих оценок от IMDb" in init_source
     assert "Я сильно выше IMDb" in init_source
@@ -911,6 +913,7 @@ def test_analytics_mvp_sections_wired() -> None:
 
     update_source = inspect.getsource(analytics_view_module.AnalyticsView.update_entries)
     assert "_fill_genre_count" in update_source
+    assert "_fill_pool_genre_count" in update_source
     assert "_fill_year_average" in update_source
     assert "_fill_imdb_delta" in update_source
     assert "_fill_rating_higher" in update_source
@@ -1570,9 +1573,6 @@ def test_watched_window_includes_candidate_tabs() -> None:
     assert "registry.register" in factory_source
     assert "registry.focus" in factory_source
     assert "on_watched_entries_changed" in factory_source
-    assert "SettingsToolsView" in factory_source
-    assert '"Сервис"' in factory_source
-    assert "on_pool_changed" in factory_source
 
 
 def test_genre_chip_selector_tracks_selection(qapp) -> None:

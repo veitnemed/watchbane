@@ -67,6 +67,35 @@ class AnalyticsFallbackMixin:
         for row in fallback_rows:
             self._genre_count_layout.addWidget(self._make_bar_row(row, max_count))
 
+    def _fill_pool_genre_count_fallback(self, rows: list[dict], error: str | None = None) -> None:
+        if error is not None:
+            self._pool_genre_count_layout.addWidget(
+                self._make_fallback_message(
+                    "Интерактивный график недоступен, показаны упрощённые полосы.\n"
+                    f"Python: {sys.executable}\n"
+                    f"Ошибка: {error}"
+                )
+            )
+
+        if not rows:
+            self._pool_genre_count_layout.addWidget(
+                self._make_list_placeholder("Нет жанров в candidate pool.")
+            )
+            return
+
+        total = sum(int(row.get("count") or 0) for row in rows)
+        fallback_rows = [
+            {
+                "label": str(row["label"]),
+                "count": int(row["count"]),
+                "percent": 0.0 if total == 0 else round(int(row["count"]) * 100 / total, 1),
+            }
+            for row in rows
+        ]
+        max_count = max((row["count"] for row in fallback_rows), default=0)
+        for row in fallback_rows:
+            self._pool_genre_count_layout.addWidget(self._make_bar_row(row, max_count))
+
     def _fill_year_average_fallback(self, points: list[dict], error: str | None = None) -> None:
         if error is not None:
             self._year_average_layout.addWidget(
