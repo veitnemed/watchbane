@@ -125,16 +125,26 @@ def build_candidate_readonly_card(candidate: dict) -> dict:
     title = candidate.get("title") or candidate.get("name") or "Без названия"
     overview = candidate.get("overview") or candidate.get("description")
     overview_text = str(overview).strip() if overview not in (None, "") else ""
+    country = candidate.get("country_display") or candidate.get("country")
+    object_type = candidate.get("media_type") or candidate.get("object_type")
+    if object_type in (None, "") and (
+        candidate.get("number_of_seasons") not in (None, "", 0, "0")
+        or candidate.get("number_of_episodes") not in (None, "", 0, "0")
+    ):
+        object_type = "series"
 
     card: dict = {
         "title": title,
         "year": candidate.get("year"),
-        "country": candidate.get("country"),
+        "country": country,
+        "object_type": object_type or "unknown",
+        "number_of_seasons": candidate.get("number_of_seasons"),
+        "number_of_episodes": candidate.get("number_of_episodes"),
     }
     if overview_text:
         card["overview"] = overview_text
 
-    for field in ("kp_score", "imdb_score"):
+    for field in ("kp_score", "imdb_score", "kp_votes", "imdb_votes"):
         value = coerce_candidate_number(candidate.get(field))
         if value is not None:
             card[field] = value

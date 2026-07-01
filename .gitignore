@@ -35,6 +35,7 @@ datasets/
 *.db
 
 data/diagnostics/
+logs/
 config/model_metrics.json
 config/rating_comparison_last_snapshot.json
 data/rating_order_drafts/*.json

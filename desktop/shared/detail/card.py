@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from desktop.shared.detail.card_pills import fill_meta_pill_row, fill_pill_rows
+from desktop.shared.detail.card_pills import clear_layout, fill_meta_pill_row, fill_pill_rows
 from desktop.shared.detail.card_poster import DetailCardPosterMixin
+from desktop.shared.detail.main_info import build_main_info_items
 from desktop.shared.detail.posters import resolve_local_poster_path
 from desktop.shared.detail.presenters import (
     build_detail_info_pill_labels,
@@ -33,6 +34,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
         from PyQt6.QtCore import Qt
         from PyQt6.QtWidgets import (
             QFrame,
+            QGridLayout,
             QHBoxLayout,
             QLabel,
             QPushButton,
@@ -153,6 +155,35 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._genre_pills_layout.setContentsMargins(0, 0, 0, 0)
         self._genre_pills_layout.setSpacing(8)
 
+        self._main_info_section = QWidget()
+        self._main_info_section.setObjectName("mainInfoSection")
+        self._main_info_section.setStyleSheet(TRANSPARENT_STYLE)
+        main_info_layout = QVBoxLayout(self._main_info_section)
+        main_info_layout.setContentsMargins(0, 0, 0, 0)
+        main_info_layout.setSpacing(10)
+
+        self._main_info_divider = QFrame()
+        self._main_info_divider.setObjectName("mainInfoDivider")
+        self._main_info_divider.setFrameShape(QFrame.Shape.HLine)
+        self._main_info_divider.setFixedHeight(1)
+
+        self._main_info_title_label = QLabel("Основная информация")
+        self._main_info_title_label.setObjectName("mainInfoTitle")
+        self._main_info_title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+
+        self._main_info_grid_widget = QWidget()
+        self._main_info_grid_widget.setStyleSheet(TRANSPARENT_STYLE)
+        self._main_info_grid = QGridLayout(self._main_info_grid_widget)
+        self._main_info_grid.setContentsMargins(0, 0, 0, 0)
+        self._main_info_grid.setHorizontalSpacing(14)
+        self._main_info_grid.setVerticalSpacing(6)
+        self._main_info_grid.setColumnStretch(0, 0)
+        self._main_info_grid.setColumnStretch(1, 1)
+
+        main_info_layout.addWidget(self._main_info_divider)
+        main_info_layout.addWidget(self._main_info_title_label)
+        main_info_layout.addWidget(self._main_info_grid_widget)
+
         self._overview_frame = QFrame()
         self._overview_frame.setObjectName("overviewBlock")
         self._overview_frame.setFrameShape(QFrame.Shape.NoFrame)
@@ -187,6 +218,8 @@ class WatchedDetailCard(DetailCardPosterMixin):
         info_column.addWidget(self._genre_section)
         info_column.addSpacing(2)
         info_column.addWidget(metrics_row_widget)
+        info_column.addSpacing(6)
+        info_column.addWidget(self._main_info_section)
 
         top_row.addWidget(self._poster_label, alignment=Qt.AlignmentFlag.AlignTop)
         top_row.addWidget(self._info_column_widget, stretch=1, alignment=Qt.AlignmentFlag.AlignTop)
@@ -253,6 +286,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._genre_section.setVisible(False)
         self._overview_label.setText("")
         self._overview_frame.setVisible(False)
+        self._set_main_info_items([])
         if self._mark_watched_button is not None:
             self._mark_watched_button.setEnabled(self._mark_watched_handler is not None)
         if self._hide_button is not None:
@@ -281,6 +315,8 @@ class WatchedDetailCard(DetailCardPosterMixin):
         fill_pill_rows(self._genre_pills_layout, detail_pills, "genrePill")
         self._genre_section.setVisible(len(detail_pills) > 0)
 
+        self._set_main_info_items(build_main_info_items(card))
+
         if has_overview_text(card):
             self._overview_label.setText(get_overview_display(card))
             self._overview_frame.setVisible(True)
@@ -293,3 +329,23 @@ class WatchedDetailCard(DetailCardPosterMixin):
             self._set_poster_placeholder()
         self._set_local_poster_path(poster_path)
         self._schedule_poster_height_sync()
+
+    def _set_main_info_items(self, items: list[dict[str, str]]) -> None:
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QLabel
+
+        clear_layout(self._main_info_grid)
+        for row, item in enumerate(items):
+            label = QLabel(str(item.get("label", "")))
+            label.setObjectName("mainInfoLabel")
+            label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+
+            value = QLabel(str(item.get("value", "")))
+            value.setObjectName("mainInfoValue")
+            value.setWordWrap(True)
+            value.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+
+            self._main_info_grid.addWidget(label, row, 0)
+            self._main_info_grid.addWidget(value, row, 1)
+
+        self._main_info_section.setVisible(len(items) > 0)

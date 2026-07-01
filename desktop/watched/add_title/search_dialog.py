@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -19,6 +21,7 @@ from PyQt6.QtWidgets import (
 from candidates.sources.tmdb.country_options import add_title_country_combo_options
 from common import valid
 from dataset import service
+from diagnostics.gui_event_log import log_event
 from desktop.watched.add_title.constants import (
     ADD_TITLE_DIALOG_STYLE,
     SEARCH_DIALOG_HEIGHT,
@@ -37,10 +40,15 @@ class AddTitleSearchDialog(QDialog):
         *,
         initial_title: str = "",
         initial_country: str = "",
+        worker_factory: Callable | None = None,
     ) -> None:
         super().__init__(parent)
         self._bundle: service.AddTitleResolveBundle | None = None
         self._worker: AddTitleResolveWorker | None = None
+        self._worker_factory = worker_factory or AddTitleResolveWorker
+        self._request_seq = 0
+        self._active_request_id = 0
+        self._cancel_after_worker = False
         self.last_title = initial_title.strip()
         self.last_country = initial_country
 
@@ -73,7 +81,7 @@ class AddTitleSearchDialog(QDialog):
         self._title_input.setObjectName("addTitleSearchInput")
         self._title_input.setPlaceholderText("Название сериала")
         self._title_input.setText(self.last_title)
-        self._title_input.returnPressed.connect(self._start_search)
+        self._title_input.returnPressed.connect(lambda: self._start_search(trigger="enter"))
 
         self._country_combo = QComboBox()
         self._country_combo.setObjectName("addTitleCountryCombo")
@@ -83,7 +91,9 @@ class AddTitleSearchDialog(QDialog):
 
         self._search_button = QPushButton("Найти")
         self._search_button.setObjectName("addTitleSearchButton")
-        self._search_button.clicked.connect(self._start_search)
+        self._search_button.setAutoDefault(False)
+        self._search_button.setDefault(False)
+        self._search_button.clicked.connect(lambda: self._start_search(trigger="button"))
 
         search_layout.addWidget(self._title_input, stretch=3)
         search_layout.addWidget(self._country_combo, stretch=1)
@@ -105,10 +115,12 @@ class AddTitleSearchDialog(QDialog):
         footer = QHBoxLayout()
         footer.setContentsMargins(0, 4, 0, 0)
         footer.addStretch()
-        cancel_button = QPushButton("Отмена")
-        cancel_button.setObjectName("addTitleSecondaryButton")
-        cancel_button.clicked.connect(self.reject)
-        footer.addWidget(cancel_button)
+        self._cancel_button = QPushButton("Отмена")
+        self._cancel_button.setObjectName("addTitleSecondaryButton")
+        self._cancel_button.setAutoDefault(False)
+        self._cancel_button.setDefault(False)
+        self._cancel_button.clicked.connect(self._cancel_search_dialog)
+        footer.addWidget(self._cancel_button)
         root_layout.addLayout(footer)
 
         self._title_input.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -139,56 +151,141 @@ class AddTitleSearchDialog(QDialog):
         self._title_input.setEnabled(not active)
         self._country_combo.setEnabled(not active)
         self._search_button.setEnabled(not active)
+        self._cancel_button.setEnabled(True)
         self._progress.setVisible(active)
         self._status_label.setVisible(active)
         self.setFixedHeight(SEARCH_DIALOG_HEIGHT_ACTIVE if active else SEARCH_DIALOG_HEIGHT)
         if active is False:
             self._progress.reset()
 
-    def _start_search(self) -> None:
+    def _cancel_search_dialog(self) -> None:
+        worker_running = self._worker is not None and self._worker.isRunning()
+        log_event(
+            "add_title.search.cancel_clicked",
+            request_id=self._active_request_id,
+            title=self._title_input.text().strip(),
+            worker_running=worker_running,
+        )
+        if worker_running:
+            self._cancel_after_worker = True
+            self._cancel_button.setEnabled(False)
+            self._status_label.setVisible(True)
+            self._status_label.setText("Отмена после текущего шага…")
+            self._worker.requestInterruption()
+            log_event("add_title.search.cancel_requested", request_id=self._active_request_id)
+            return
+        self.reject()
+
+    def _start_search(self, *, trigger: str = "unknown") -> None:
         if self._worker is not None and self._worker.isRunning():
+            log_event(
+                "add_title.search.ignored_already_running",
+                trigger=trigger,
+                request_id=self._active_request_id,
+            )
             return
 
         title = self._title_input.text().strip()
         if valid.is_correct_title(title) is False:
+            log_event("add_title.search.invalid_title", trigger=trigger, request_id=0, title=title)
             QMessageBox.warning(self, "Добавить тайтл", "Введите корректное название.")
             return
 
         self.last_title = title
         self.last_country = self._selected_country()
         self._bundle = None
+        self._request_seq += 1
+        self._active_request_id = self._request_seq
+        self._cancel_after_worker = False
+        request_id = self._active_request_id
+        log_event(
+            "add_title.search.start",
+            trigger=trigger,
+            request_id=request_id,
+            title=title,
+            country=self.last_country,
+        )
         self._set_search_active(True)
         self._status_label.setText("Поиск…")
         self._progress.setValue(0)
         self._progress.setMaximum(7)
 
-        worker = AddTitleResolveWorker(title, self.last_country, self)
-        worker.progress.connect(self._on_progress)
-        worker.finished_with_result.connect(self._on_resolve_finished)
-        worker.failed.connect(self._on_resolve_failed)
+        worker = self._worker_factory(title, self.last_country, self)
+        worker.progress.connect(
+            lambda current, total, message, rid=request_id: self._on_progress(rid, current, total, message)
+        )
+        worker.finished_with_result.connect(
+            lambda bundle, rid=request_id: self._on_resolve_finished(rid, bundle)
+        )
+        worker.failed.connect(lambda message, rid=request_id: self._on_resolve_failed(rid, message))
         worker.finished.connect(worker.deleteLater)
         self._worker = worker
         worker.start()
+        log_event("add_title.worker.started", request_id=request_id, title=title, country=self.last_country)
 
-    def _on_progress(self, current: int, total: int, message: str) -> None:
+    def _is_current_request(self, request_id: int) -> bool:
+        return request_id == self._active_request_id
+
+    def _on_progress(self, request_id: int, current: int, total: int, message: str) -> None:
+        if self._is_current_request(request_id) is False:
+            log_event("add_title.worker.progress_ignored_stale", request_id=request_id, message=message)
+            return
+        log_event("add_title.worker.progress", request_id=request_id, current=current, total=total, message=message)
         self._progress.setMaximum(max(total, 1))
         self._progress.setValue(min(current, total))
         percent = int(round(100 * current / max(total, 1)))
         self._progress.setFormat(f"{percent}%")
-        self._status_label.setText(message)
+        if self._cancel_after_worker:
+            self._status_label.setText("Отмена после текущего шага…")
+        else:
+            self._status_label.setText(message)
 
-    def _on_resolve_failed(self, message: str) -> None:
+    def _on_resolve_failed(self, request_id: int, message: str) -> None:
+        if self._is_current_request(request_id) is False:
+            log_event("add_title.worker.failed_ignored_stale", request_id=request_id, message=message)
+            return
+        log_event("add_title.worker.failed", request_id=request_id, message=message)
         self._worker = None
         self._set_search_active(False)
+        if self._cancel_after_worker:
+            log_event("add_title.search.cancel_completed", request_id=request_id)
+            self.reject()
+            return
         QMessageBox.critical(self, "Добавить тайтл", f"Ошибка поиска:\n{message}")
 
-    def _on_resolve_finished(self, bundle: service.AddTitleResolveBundle) -> None:
+    def _on_resolve_finished(self, request_id: int, bundle: service.AddTitleResolveBundle) -> None:
+        if self._is_current_request(request_id) is False:
+            log_event("add_title.worker.finished_ignored_stale", request_id=request_id)
+            return
+        log_event(
+            "add_title.worker.finished",
+            request_id=request_id,
+            found=bundle.found,
+            statuses=bundle.statuses,
+            preview_title=bundle.preview_card.get("title"),
+            preview_year=bundle.preview_card.get("year"),
+        )
         self._worker = None
         self._set_search_active(False)
+        if self._cancel_after_worker:
+            log_event("add_title.search.cancel_completed", request_id=request_id)
+            self.reject()
+            return
         self._bundle = bundle
         self.accept()
 
+    def reject(self) -> None:
+        if self._worker is not None and self._worker.isRunning():
+            log_event("add_title.search.reject_deferred", request_id=self._active_request_id)
+            self._cancel_search_dialog()
+            return
+        super().reject()
+
     def closeEvent(self, event) -> None:
         if self._worker is not None and self._worker.isRunning():
-            self._worker.requestInterruption()
+            log_event("add_title.search.close_with_running_worker", request_id=self._active_request_id)
+            self._cancel_search_dialog()
+            event.ignore()
+            return
+        log_event("add_title.search.close", request_id=self._active_request_id)
         super().closeEvent(event)

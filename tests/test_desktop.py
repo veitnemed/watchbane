@@ -114,6 +114,49 @@ def test_add_title_preview_dialog_uses_readonly_year_and_score_only_save() -> No
     assert "save_add_title_record" in source
 
 
+def test_add_title_search_dialog_enter_starts_search_without_default_cancel(qapp) -> None:
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtTest import QTest
+
+    from desktop.watched.add_title.search_dialog import AddTitleSearchDialog
+
+    dialog = AddTitleSearchDialog(initial_title="Триггер")
+    calls = []
+    dialog._start_search = lambda *, trigger="unknown": calls.append(trigger)
+
+    assert dialog._cancel_button.autoDefault() is False
+    assert dialog._cancel_button.isDefault() is False
+
+    QTest.keyClick(dialog._title_input, Qt.Key.Key_Return)
+
+    assert calls == ["enter"]
+
+
+def test_add_title_search_dialog_reject_defers_while_worker_running(qapp) -> None:
+    from desktop.watched.add_title.search_dialog import AddTitleSearchDialog
+
+    class FakeWorker:
+        def __init__(self) -> None:
+            self.interrupted = False
+
+        def isRunning(self) -> bool:
+            return True
+
+        def requestInterruption(self) -> None:
+            self.interrupted = True
+
+    dialog = AddTitleSearchDialog(initial_title="Триггер")
+    worker = FakeWorker()
+    dialog._worker = worker
+    dialog._active_request_id = 7
+
+    dialog.reject()
+
+    assert worker.interrupted is True
+    assert dialog.result() == 0
+    assert dialog._cancel_after_worker is True
+
+
 def test_prepare_card_for_display_does_not_mutate_movie() -> None:
     from desktop.watched import prepare_card_for_display
 
@@ -437,8 +480,71 @@ def test_build_detail_info_pill_labels_moves_year_to_genres() -> None:
     assert build_detail_info_pill_labels({"year": 2025, "genres": ["Драма"], "country": "Россия"}) == [
         "2025",
         "Драма",
-        "Россия",
     ]
+
+
+def test_build_main_info_items_formats_country_type_and_votes() -> None:
+    from desktop.watched import build_main_info_items
+
+    assert build_main_info_items(
+        {
+            "country": "Россия",
+            "object_type": "series",
+            "imdb_votes": 1200,
+            "kp_votes": 128536,
+        }
+    ) == [
+        {"label": "Страна", "value": "Россия"},
+        {"label": "Тип", "value": "Сериал"},
+        {"label": "Голоса IMDb", "value": "1 200"},
+        {"label": "Голоса КП", "value": "128 536"},
+    ]
+
+
+def test_build_main_info_items_hides_empty_votes_and_defaults_type() -> None:
+    from desktop.watched import build_main_info_items
+
+    assert build_main_info_items({"imdb_votes": None, "kp_votes": 0}) == [
+        {"label": "Тип", "value": "Неизвестно"},
+    ]
+
+
+def test_normalize_object_type_detects_tmdb_tv_shape() -> None:
+    from desktop.watched import normalize_object_type
+
+    assert normalize_object_type(None, {"number_of_seasons": 2}) == "Сериал"
+    assert normalize_object_type("movie") == "Фильм"
+    assert normalize_object_type("unknown") == "Неизвестно"
+
+
+def test_build_watched_movie_card_includes_main_info_type() -> None:
+    from web.export import build_watched_movie_card
+
+    card = build_watched_movie_card(
+        {
+            "main_info": {"title": "Alpha", "year": 2024, "user_score": 8.0},
+            "raw_scores": {"kp_score": 7.5, "kp_votes": 1200, "imdb_score": 7.1, "imdb_votes": 900},
+        },
+        poster_cache={},
+    )
+
+    assert card["object_type"] == "series"
+    assert card["kp_votes"] == 1200
+    assert card["imdb_votes"] == 900
+
+
+def test_build_watched_movie_card_uses_meta_country_fallback() -> None:
+    from web.export import build_export_lookup_cache, build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Alpha", "year": 2024, "user_score": 8.0},
+        "raw_scores": {"kp_score": 7.5, "kp_votes": 1200, "imdb_score": 7.1, "imdb_votes": 900},
+    }
+    lookup_cache = build_export_lookup_cache(meta={"Alpha": {"main_info": {"country": "США"}}}, pool_by_identity={})
+
+    card = build_watched_movie_card(movie, poster_cache={}, lookup_cache=lookup_cache)
+
+    assert card["country"] == "США"
 
 
 def test_format_genre_pill_label_unknown_genre() -> None:
@@ -794,6 +900,20 @@ def test_watched_detail_card_hides_overview_without_text() -> None:
     assert "_overview_frame.setVisible(False)" in source
     assert "overviewDivider" in init_source
     assert "OVERVIEW_SECTION_TOP_SPACING" in init_source
+
+
+def test_watched_detail_card_renders_main_info_block() -> None:
+    import inspect
+
+    import desktop.shared.detail.card as watched_view_module
+
+    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
+    show_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
+    empty_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_empty)
+
+    assert "Основная информация" in init_source
+    assert "build_main_info_items(card)" in show_source
+    assert "_set_main_info_items([])" in empty_source
 
 
 def test_build_score_count_html_smoke() -> None:
@@ -1384,6 +1504,48 @@ def test_format_candidate_list_label_shows_sort_metric() -> None:
     assert "KP 8.1" in label
     assert "incomplete" not in label
     assert "Q " not in label
+
+
+def test_build_candidate_readonly_card_passes_main_info_fields(monkeypatch) -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_card
+
+    monkeypatch.setattr(
+        "desktop.candidates.presenters.resolve_local_poster_path_for_candidate",
+        lambda candidate: None,
+    )
+    card = build_candidate_readonly_card(
+        {
+            "title": "Test Show",
+            "year": 2020,
+            "country_display": "Россия",
+            "number_of_seasons": 2,
+            "kp_votes": 12000,
+            "imdb_votes": 900,
+        }
+    )
+
+    assert card["country"] == "Россия"
+    assert card["object_type"] == "series"
+    assert card["kp_votes"] == 12000
+    assert card["imdb_votes"] == 900
+
+
+def test_build_candidate_readonly_card_ignores_tmdb_scripted_type(monkeypatch) -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_card
+
+    monkeypatch.setattr(
+        "desktop.candidates.presenters.resolve_local_poster_path_for_candidate",
+        lambda candidate: None,
+    )
+    card = build_candidate_readonly_card(
+        {
+            "title": "Test Show",
+            "year": 2020,
+            "type": "Scripted",
+        }
+    )
+
+    assert card["object_type"] == "unknown"
 
 
 def test_candidate_filters_view_empty_pool_summary(monkeypatch, qapp) -> None:

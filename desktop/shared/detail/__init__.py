@@ -7,6 +7,11 @@ from desktop.shared.detail.list_delegate import (
     _load_list_thumb_pixmap,
     fit_poster_pixmap_for_display,
 )
+from desktop.shared.detail.main_info import (
+    build_main_info_items,
+    format_votes_display,
+    normalize_object_type,
+)
 from desktop.shared.detail.presenters import (
     build_detail_info_pill_labels,
     build_genre_pill_labels,
@@ -69,6 +74,7 @@ __all__ = [
     "_load_list_thumb_pixmap",
     "build_detail_info_pill_labels",
     "build_genre_pill_labels",
+    "build_main_info_items",
     "build_meta_pill_items",
     "build_meta_pill_labels",
     "fit_poster_pixmap_for_display",
@@ -76,10 +82,12 @@ __all__ = [
     "format_poster_path_display",
     "format_rating_score_display",
     "format_user_score_display",
+    "format_votes_display",
     "get_country_display",
     "get_overview_display",
     "get_poster_cache_directory",
     "has_overview_text",
+    "normalize_object_type",
     "open_path_in_shell",
     "resolve_local_poster_path",
 ]

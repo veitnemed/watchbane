@@ -154,6 +154,41 @@ def _country(movie: dict) -> str | None:
     return _first_text(movie, "country")
 
 
+def _object_type(movie: dict, default: str = "unknown") -> str:
+    text = _first_text(movie, "object_type", "media_type", "title_type")
+    if text is not None:
+        return text
+    return default
+
+
+def _pool_candidate_for_title(title: str, year, lookup_cache: dict | None) -> dict | None:
+    if lookup_cache is None:
+        return None
+    pool_by_identity = lookup_cache.get("pool_by_identity") or {}
+    candidate = pool_by_identity.get(title_identity_key({"title": title, "year": year}))
+    return candidate if isinstance(candidate, dict) else None
+
+
+def _resolve_country(movie: dict, title: str, year, lookup_cache: dict | None = None, meta_obj=None) -> str | None:
+    country = _country(movie)
+    if country is not None:
+        return country
+
+    resolved_meta = _meta_obj_for_title(title, lookup_cache, meta_obj=meta_obj)
+    if isinstance(resolved_meta, dict):
+        country = _country(resolved_meta)
+        if country is not None:
+            return country
+
+    pool_candidate = _pool_candidate_for_title(title, year, lookup_cache)
+    if isinstance(pool_candidate, dict):
+        country = _country(pool_candidate)
+        if country is not None:
+            return country
+
+    return None
+
+
 def _genres_from_flags(movie: dict) -> list[str]:
     genre_section = _as_dict(movie.get(constant.GENRE_SECTION))
     result = []
@@ -257,7 +292,8 @@ def build_watched_movie_card(
         "kp_votes": _to_int(raw_scores.get("kp_votes", movie.get("kp_votes"))),
         "imdb_votes": _to_int(raw_scores.get("imdb_votes", movie.get("imdb_votes"))),
         "genres": _genres(movie),
-        "country": _country(movie),
+        "country": _resolve_country(movie, title, year, lookup_cache=lookup_cache, meta_obj=meta_obj),
+        "object_type": _object_type(movie, default="series"),
         "overview": _resolve_overview(movie, title, year, lookup_cache=lookup_cache, meta_obj=meta_obj),
         "poster_url": poster_fields["poster_url"],
         "poster_path": poster_fields["poster_path"],

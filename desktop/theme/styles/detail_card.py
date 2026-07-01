@@ -27,6 +27,35 @@ QLabel#genrePill {{
     color: {COLOR_TEXT_CHIP};
     font-size: {FONT_BASE}px;
 }}
+QWidget#mainInfoSection {{
+    background: transparent;
+}}
+QFrame#mainInfoDivider {{
+    background-color: {COLOR_BORDER};
+    min-height: 1px;
+    max-height: 1px;
+    border: none;
+}}
+QLabel#mainInfoTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_SECTION}px;
+    font-weight: 700;
+    padding: {SPACING_SMALL}px 0 2px 0;
+}}
+QLabel#mainInfoLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {FONT_SMALL}px;
+    padding: 1px 0;
+}}
+QLabel#mainInfoValue {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {FONT_BASE}px;
+    font-weight: 600;
+    padding: 1px 0;
+}}
 QFrame#overviewBlock {{
     background: transparent;
     border: none;

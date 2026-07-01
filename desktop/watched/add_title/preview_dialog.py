@@ -20,6 +20,7 @@ from common import valid
 from config import constant
 from config import scheme
 from dataset import service
+from diagnostics.gui_event_log import log_event
 from desktop.shared.detail import ADD_TITLE_PREVIEW_CARD_PROFILE, WatchedDetailCard
 from desktop.watched.add_title.constants import (
     ADD_TITLE_DIALOG_STYLE,
@@ -206,16 +207,28 @@ class AddTitlePreviewDialog(QDialog):
         self._confirm_button.setEnabled(score_ok and year_ok)
 
     def _go_search_again(self) -> None:
+        log_event("add_title.preview.search_again")
         self.search_again = True
         self.reject()
 
     def _confirm_add(self) -> None:
         user_score = normalize_user_score_value(self._score_input.value())
         year = self._resolved_year(self._bundle)
+        log_event(
+            "add_title.preview.confirm_clicked",
+            **{
+                "title": self._bundle.preview_card.get("title"),
+                "resolved_year": year,
+                "score": user_score,
+                "transfer_mode": self._transfer_mode,
+            },
+        )
         if valid.is_correct_score(str(user_score)) is False:
+            log_event("add_title.preview.invalid_score", score=user_score)
             QMessageBox.warning(self, "Добавить тайтл", "Укажите корректную оценку (0–10).")
             return
         if year is None or valid.is_correct_year(str(year)) is False:
+            log_event("add_title.preview.invalid_year", **{"resolved_year": year})
             QMessageBox.warning(
                 self,
                 "Добавить тайтл",
@@ -235,8 +248,10 @@ class AddTitlePreviewDialog(QDialog):
         dialog_title = "Перенос из pool" if self._transfer_mode else "Добавить тайтл"
         if result.ok is False:
             self._confirm_button.setEnabled(True)
+            log_event("add_title.preview.save_failed", message=result.message)
             QMessageBox.warning(self, dialog_title, result.message)
             return
 
         self._save_result = result
+        log_event("add_title.preview.save_ok", message=result.message)
         self.accept()

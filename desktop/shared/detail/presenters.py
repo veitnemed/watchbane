@@ -113,9 +113,6 @@ def build_detail_info_pill_labels(card: dict) -> list[str]:
     if year not in (None, ""):
         labels.append(format_year_pill(year))
     labels.extend(build_genre_pill_labels(card))
-    country = get_country_display(card)
-    if country is not None:
-        labels.append(country)
     return labels
 
 
