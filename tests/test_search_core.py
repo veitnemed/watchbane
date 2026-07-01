@@ -400,6 +400,10 @@ def test_download_candidate_pool_preview_posters_service(monkeypatch) -> None:
             "failures": [],
         },
     )
+    monkeypatch.setattr(
+        "posters.download_images.local_preview_poster_path_if_cached",
+        lambda _url: None,
+    )
 
     result = service.download_candidate_pool_preview_posters()
     assert result["ok"] is True

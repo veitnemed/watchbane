@@ -36,9 +36,11 @@ class CandidateFiltersView:
         self,
         session: CandidateSearchSession,
         *,
+        service=None,
         on_applied: Callable[[], None] | None = None,
     ) -> None:
         self._session = session
+        self._service = service or session.service
         self._on_applied = on_applied
         self._genre_options: list[str] = []
         self._year_max = constant.NOW_YEAR
@@ -181,7 +183,7 @@ class CandidateFiltersView:
         return self._form.hide_hidden_check
 
     def _update_intro(self, *, result_count: int | None = None, result_ok: bool | None = None) -> None:
-        overview = candidate_service.get_search_overview_view()
+        overview = self._service.get_search_overview_view()
         lead, stats, apply_enabled = build_intro_copy(
             self._session,
             overview,
@@ -244,9 +246,9 @@ class CandidateFiltersView:
         return year_min, year_max
 
     def _apply_filter_defaults(self) -> None:
-        defaults_view = candidate_service.get_search_filter_defaults_view()
+        defaults_view = self._service.get_search_filter_defaults_view()
         defaults = defaults_view.get("defaults") or {}
-        chip_view = candidate_service.get_search_filter_chip_options_view()
+        chip_view = self._service.get_search_filter_chip_options_view()
         genre_labels = [
             str(item.get("label") or "").strip()
             for item in chip_view.get("genres") or []

@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+.pytest-tmp/
 
 # Editors and operating systems
 .idea/

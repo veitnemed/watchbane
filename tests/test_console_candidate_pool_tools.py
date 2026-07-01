@@ -7,6 +7,20 @@ from ui.console import tmdb_pool_tools
 from ui.console import ui
 
 
+def test_global_menu_prints_candidate_summary(capsys) -> None:
+    ui.show_global_menu(
+        7,
+        candidate_summary={
+            "line": "Candidate pool: 3 | complete: 2 | posters: 1 | need posters: 1",
+        },
+    )
+
+    output = capsys.readouterr().out
+
+    assert "Candidate pool: 3 | complete: 2 | posters: 1 | need posters: 1" in output
+    assert "3 >> Candidate pool" in output
+
+
 def test_candidate_pool_tools_keep_interface_compatibility() -> None:
     assert interface_funcs.collect_candidate_pool is candidate_pool_tools.collect_candidate_pool
     assert interface_funcs.show_candidate_pool is candidate_pool_tools.show_candidate_pool

@@ -32,9 +32,15 @@ def show_header(movies_counter: int, error: int):
         print(" " * 4, f"Просмотрено записей: {movies_counter}\n")
 
 
-def show_global_menu(movies_counter: int, error: int = 0):
+def show_global_menu(movies_counter: int, error: int = 0, candidate_summary=None):
     """Print main menu with maintenance as the primary path."""
     show_header(movies_counter, error)
+    if isinstance(candidate_summary, dict):
+        line = candidate_summary.get("line")
+    else:
+        line = candidate_summary
+    if line not in (None, ""):
+        print(f"{line}\n")
     print(" 1 >> Обслуживание")
     print(" 2 >> Просмотренное")
     print(" 3 >> Candidate pool")
@@ -48,7 +54,7 @@ def show_maintenance_menu(movies_counter: int, pool_stats_line: str, error: int 
     show_header(movies_counter, error)
     show_menu_title("ОБСЛУЖИВАНИЕ")
     print(f"{pool_stats_line}\n")
-    print(" 1 >> Состояние проекта")
+    print(" 1 >> Информациях о данных")
     print(" 2 >> Backup / restore")
     print(" 3 >> Metadata и poster-cache")
     print(" 4 >> Candidate pool cleanup")

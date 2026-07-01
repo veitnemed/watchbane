@@ -29,7 +29,8 @@ DEFAULT_BROWSE_FILTERS = {
 class CandidateSearchSession:
     """Runtime candidate search state shared across desktop tabs."""
 
-    def __init__(self) -> None:
+    def __init__(self, service=None) -> None:
+        self.service = service or candidate_service
         self.filters: dict | None = None
         self.filtered_candidates: list[dict] = []
         self.filtered_count: int = 0
@@ -54,7 +55,7 @@ class CandidateSearchSession:
         if not self.filtered_candidates:
             self._clear_sorted_cache()
             return
-        sort_view = candidate_service.sort_search_candidates(
+        sort_view = self.service.sort_search_candidates(
             self.filtered_candidates,
             self.sort_mode,
         )
@@ -67,7 +68,7 @@ class CandidateSearchSession:
 
     def apply_filters(self, filters: dict) -> dict:
         """Filter saved pool candidates without sorting."""
-        overview = candidate_service.get_search_overview_view()
+        overview = self.service.get_search_overview_view()
         if overview.get("is_empty"):
             self.filters = None
             self.filtered_candidates = []
@@ -82,7 +83,7 @@ class CandidateSearchSession:
             self._notify_listeners()
             return result
 
-        search_view = candidate_service.search_candidate_pool(overview["candidates"], filters)
+        search_view = self.service.search_candidate_pool(overview["candidates"], filters)
         self.filters = dict(filters)
         self.filtered_candidates = list(search_view.get("candidates") or [])
         self.filtered_count = int(search_view.get("filtered_count") or 0)
@@ -97,7 +98,7 @@ class CandidateSearchSession:
         return result
 
     def set_sort_mode(self, sort_mode: str) -> None:
-        if sort_mode in candidate_service.SEARCH_SORT_MODES:
+        if sort_mode in self.service.SEARCH_SORT_MODES:
             self.sort_mode = sort_mode
             self._rebuild_sorted_cache()
             self._notify_listeners()
@@ -115,3 +116,17 @@ class CandidateSearchSession:
             self.apply_filters(self.filters)
         else:
             self._notify_listeners()
+
+    def remove_candidate(self, candidate: dict) -> None:
+        """Remove one candidate from current in-memory search results and notify views."""
+        from desktop.candidates.presenters import candidate_detail_identity
+
+        target_identity = candidate_detail_identity(candidate)
+        self.filtered_candidates = [
+            item
+            for item in self.filtered_candidates
+            if candidate_detail_identity(item) != target_identity
+        ]
+        self.filtered_count = len(self.filtered_candidates)
+        self._rebuild_sorted_cache()
+        self._notify_listeners()

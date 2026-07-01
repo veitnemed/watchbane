@@ -17,6 +17,7 @@ from candidates.pool.dedupe import clean_common_pool_duplicates as _clean_common
 from candidates.pool.diagnostics import (
     build_candidate_poster_diagnostics,
     build_title_duplicate_summary,
+    collect_candidate_poster_download_urls,
     collect_unique_pool_poster_urls,
     find_cross_year_title_groups,
     find_suspicious_duplicates,
@@ -496,8 +497,37 @@ def get_candidate_poster_diagnostics_view() -> dict:
     }
 
 
+def get_console_candidate_summary_view() -> dict:
+    """Returns compact candidate-pool counters for the main console menu."""
+    stats_view = get_pool_stats_view()
+    poster_view = get_candidate_poster_diagnostics_view()
+    stats = stats_view.get("stats") or {}
+    counts = poster_view.get("counts") or {}
+
+    total = int(stats.get("unique_total") or stats.get("storage_total") or 0)
+    complete = int(stats.get("ready_total") or 0)
+    incomplete = int(stats.get("incomplete_total") or max(0, total - complete))
+    posters_displayable = int(counts.get("displayable") or 0)
+    posters_to_download = int(counts.get("metadata_only") or 0)
+    posters_missing_metadata = int(counts.get("missing") or 0)
+    line = (
+        f"Candidate pool: {total} | complete: {complete} | "
+        f"posters: {posters_displayable} | need posters: {posters_to_download}"
+    )
+
+    return {
+        "total": total,
+        "complete": complete,
+        "incomplete": incomplete,
+        "posters_displayable": posters_displayable,
+        "posters_to_download": posters_to_download,
+        "posters_missing_metadata": posters_missing_metadata,
+        "line": line,
+    }
+
+
 def download_candidate_pool_preview_posters(*, progress_callback=None, error_callback=None) -> dict:
-    """Download unique candidate pool poster URLs into preview cache."""
+    """Download candidate pool poster URLs that do not have a local preview yet."""
     from posters.download_images import download_preview_posters_for_urls
 
     overview = get_search_overview_view()
@@ -507,6 +537,11 @@ def download_candidate_pool_preview_posters(*, progress_callback=None, error_cal
             "is_empty_pool": True,
             "pool_total": 0,
             "unique_urls": 0,
+            "poster_displayable": 0,
+            "poster_metadata_only": 0,
+            "poster_missing": 0,
+            "download_queue_total": 0,
+            "already_displayable": 0,
             "downloaded": 0,
             "skipped_existing": 0,
             "failed": 0,
@@ -515,17 +550,34 @@ def download_candidate_pool_preview_posters(*, progress_callback=None, error_cal
         }
 
     candidates = overview["candidates"]
-    urls = collect_unique_pool_poster_urls(candidates)
-    stats = download_preview_posters_for_urls(
-        urls,
-        progress_callback=progress_callback,
-        error_callback=error_callback,
-    )
+    diagnostics = build_candidate_poster_diagnostics(candidates)
+    counts = diagnostics.get("counts") or {}
+    urls = collect_candidate_poster_download_urls(candidates)
+    if len(urls) == 0:
+        stats = {
+            "total_urls": 0,
+            "downloaded": 0,
+            "skipped_existing": 0,
+            "failed": 0,
+            "skipped_invalid": 0,
+            "failures": [],
+        }
+    else:
+        stats = download_preview_posters_for_urls(
+            urls,
+            progress_callback=progress_callback,
+            error_callback=error_callback,
+        )
     return {
         "ok": True,
         "is_empty_pool": False,
         "pool_total": len(candidates),
         "unique_urls": len(urls),
+        "poster_displayable": int(counts.get("displayable") or 0),
+        "poster_metadata_only": int(counts.get("metadata_only") or 0),
+        "poster_missing": int(counts.get("missing") or 0),
+        "download_queue_total": len(urls),
+        "already_displayable": int(counts.get("displayable") or 0),
         **stats,
     }
 

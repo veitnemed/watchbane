@@ -20,7 +20,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from candidates import service as candidate_service
 from desktop.candidates.list_delegate import build_candidate_list_item_delegate
 from desktop.candidates.presenters import (
     build_candidate_readonly_detail_entry,
@@ -51,9 +50,11 @@ class CandidateListView:
         self,
         session: CandidateSearchSession,
         *,
+        service=None,
         on_watched_added: Callable[[object], None] | None = None,
     ) -> None:
         self._session = session
+        self._service = service or session.service
         self._on_watched_added = on_watched_added
         self._all_candidates: list[dict] = []
         self._candidates: list[dict] = []
@@ -76,9 +77,9 @@ class CandidateListView:
         sort_label.setObjectName("candidateSortLabel")
         self._sort_combo = QComboBox()
         self._sort_combo.setObjectName("candidateListSort")
-        for mode in candidate_service.SEARCH_SORT_MODES:
+        for mode in self._service.SEARCH_SORT_MODES:
             self._sort_combo.addItem(
-                candidate_service.SEARCH_SORT_MODE_LABELS[mode],
+                self._service.SEARCH_SORT_MODE_LABELS[mode],
                 mode,
             )
         self._sort_combo.setCurrentIndex(0)
@@ -151,6 +152,7 @@ class CandidateListView:
 
         self._detail_card = WatchedDetailCard(profile=CANDIDATE_DETAIL_CARD_PROFILE)
         self._detail_card.set_mark_watched_handler(self._transfer_selected_to_watched)
+        self._detail_card.set_hide_handler(self._hide_selected_candidate)
         scroll.setWidget(self._detail_card.widget)
         scroll.hide()
         self._detail_scroll = scroll
@@ -187,13 +189,28 @@ class CandidateListView:
         if self._on_watched_added is not None:
             self._on_watched_added(result)
 
+    def _hide_selected_candidate(self) -> None:
+        candidate = self._selected_candidate
+        if not isinstance(candidate, dict):
+            return
+
+        result = self._service.hide_candidate(candidate)
+        if isinstance(result, dict) and result.get("ok") is False:
+            return
+
+        identity = candidate_detail_identity(candidate)
+        self._detail_entries.pop(identity, None)
+        self._selected_candidate = None
+        self._selected_identity = None
+        self._session.remove_candidate(candidate)
+
     @property
     def widget(self) -> QWidget:
         return self._widget
 
     def _on_sort_changed(self, _index: int) -> None:
         mode = self._sort_combo.currentData()
-        if mode in candidate_service.SEARCH_SORT_MODES:
+        if mode in self._service.SEARCH_SORT_MODES:
             self._session.set_sort_mode(str(mode))
             self._delegate = build_candidate_list_item_delegate(self._results_list, self._session.sort_mode)
             self._results_list.setItemDelegate(self._delegate)
@@ -272,7 +289,7 @@ class CandidateListView:
 
         self._all_candidates = self._session.sorted_candidates()
         self._search_index = build_candidate_search_index(self._all_candidates)
-        pool_stats = candidate_service.get_pool_stats_view()["stats"]
+        pool_stats = self._service.get_pool_stats_view()["stats"]
         self._pool_unique_total = int(
             pool_stats.get("unique_total", pool_stats.get("storage_total", 0)) or 0
         )

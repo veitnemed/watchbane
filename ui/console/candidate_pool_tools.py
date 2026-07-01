@@ -440,6 +440,26 @@ def download_candidate_pool_preview_posters() -> None:
         f"batch {PREVIEW_BATCH_SIZE}, retry на 403/SSL)\n"
     )
 
+    diagnostics = candidate_service.get_candidate_poster_diagnostics_view()
+    if diagnostics.get("is_empty_pool"):
+        print("\nРћР±С‰РёР№ candidate pool РїСѓСЃС‚.")
+        return
+
+    counts = diagnostics.get("counts") or {}
+    total = int(diagnostics.get("total") or 0)
+    displayable = int(counts.get("displayable") or 0)
+    metadata_only = int(counts.get("metadata_only") or 0)
+    missing = int(counts.get("missing") or 0)
+
+    print(f"  Pool records: {total}")
+    print(f"  Local preview posters: {displayable}")
+    print(f"  Need download: {metadata_only}")
+    print(f"  Without poster metadata: {missing}\n")
+
+    if metadata_only == 0:
+        print("Nothing to download: all available poster URLs already have local previews.")
+        return
+
     def progress(current: int, total: int, url: str) -> None:
         label = request.short_text(url, 70) if url else "—"
         print(f"  [{current}/{total}] {label}")
@@ -458,7 +478,9 @@ def download_candidate_pool_preview_posters() -> None:
 
     print("")
     print(f"  Записей в pool: {result.get('pool_total', 0)}")
-    print(f"  Уникальных poster URL: {result.get('unique_urls', 0)}")
+    print(f"  Already displayable: {result.get('already_displayable', 0)}")
+    print(f"  Download queue: {result.get('download_queue_total', result.get('unique_urls', 0))}")
+    print(f"  Without poster metadata: {result.get('poster_missing', 0)}")
     print(f"  Скачано: {result.get('downloaded', 0)}")
     print(f"  Уже были в cache: {result.get('skipped_existing', 0)}")
     print(f"  Ошибок: {result.get('failed', 0)}")

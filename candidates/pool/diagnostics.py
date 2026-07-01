@@ -293,3 +293,26 @@ def collect_unique_pool_poster_urls(candidates: list) -> list[str]:
         seen.add(text)
         urls.append(text)
     return urls
+
+
+def collect_candidate_poster_download_urls(candidates: list) -> list[str]:
+    """Collect unique HTTP poster URLs that still need a local preview file."""
+    urls: list[str] = []
+    seen: set[str] = set()
+
+    diagnostics = build_candidate_poster_diagnostics(candidates)
+    for row in diagnostics.get("rows") or []:
+        if row.get("display_state") != "metadata_only":
+            continue
+        poster_url = row.get("poster_url")
+        if poster_url in (None, ""):
+            continue
+        text = str(poster_url).strip()
+        if text.startswith(("http://", "https://")) is False:
+            continue
+        if text in seen:
+            continue
+        seen.add(text)
+        urls.append(text)
+
+    return urls
