@@ -23,6 +23,29 @@ def test_start_candidates_job_refuses_second_start_when_lock_is_active(monkeypat
     assert result["already_running"] is True
 
 
+def test_start_candidates_job_refuses_second_start_when_status_pid_is_active(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(download_job, "DEFAULT_JOBS_DIR", tmp_path / "jobs")
+    paths = download_job.get_job_paths("candidates")
+    paths.base_dir.mkdir(parents=True, exist_ok=True)
+    paths.status_path.write_text(
+        json.dumps({"pid": 888, "job_name": "candidates", "status": "running"}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(download_job, "_is_pid_alive", lambda pid: int(pid) == 888)
+
+    def fail_start(*_args, **_kwargs):
+        raise AssertionError("subprocess should not be started when status pid is active")
+
+    monkeypatch.setattr(download_job.subprocess, "Popen", fail_start)
+
+    result = download_job.start_job("candidates")
+
+    assert result["ok"] is False
+    assert result["already_running"] is True
+    assert result["pid"] == 888
+
+
 def test_status_reads_json_file(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(download_job, "DEFAULT_JOBS_DIR", tmp_path / "jobs")
     paths = download_job.get_job_paths("candidates")
@@ -49,6 +72,19 @@ def test_status_reads_json_file(monkeypatch, tmp_path) -> None:
     assert status["status"] == "finished"
     assert status["processed_urls"] == 2
     assert status["total_urls"] == 5
+
+
+def test_background_process_is_detached_from_console(tmp_path) -> None:
+    log_path = tmp_path / "worker.log"
+    with open(log_path, "w", encoding="utf-8") as log_file:
+        kwargs = download_job._background_process_kwargs(log_file)
+
+    assert kwargs["stdin"] is download_job.subprocess.DEVNULL
+    assert kwargs["stderr"] is download_job.subprocess.STDOUT
+    assert kwargs["close_fds"] is True
+    if download_job.os.name == "nt":
+        assert kwargs["creationflags"] & download_job.subprocess.CREATE_NEW_PROCESS_GROUP
+        assert kwargs["creationflags"] & download_job.subprocess.CREATE_NO_WINDOW
 
 
 def test_download_preview_posters_stops_between_urls(monkeypatch, tmp_path) -> None:

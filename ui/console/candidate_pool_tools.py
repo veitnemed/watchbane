@@ -435,7 +435,6 @@ def download_candidate_pool_preview_posters() -> None:
     """Download unique candidate pool poster URLs into preview cache for desktop GUI."""
     ui.clean_terminal()
     print("Скачивание постеров candidate pool в preview-cache...")
-    print("Tip: python scripts/poster_download_job.py start candidates")
     print(
         f"(TMDb URL -> {PREVIEW_DOWNLOAD_SIZE}, пауза {PREVIEW_BULK_DELAY_SECONDS:g}s, "
         f"batch {PREVIEW_BATCH_SIZE}, retry на 403/SSL)\n"
@@ -492,3 +491,93 @@ def download_candidate_pool_preview_posters() -> None:
     failures = list(result.get("failures") or [])
     if len(failures) > 0 and int(result.get("failed") or 0) > len(failures):
         print("  (часть ошибок уже показана выше построчно)")
+
+
+def _print_candidate_poster_job_status(status: dict) -> None:
+    status_labels = {
+        "idle": "не запускалась",
+        "starting": "запускается",
+        "running": "идёт загрузка",
+        "stopping": "останавливается",
+        "stopped": "остановлена",
+        "finished": "завершена",
+        "failed": "ошибка",
+        "stale_lock": "зависший lock",
+    }
+    raw_status = status.get("status") or "idle"
+    print(f"Задача: {status.get('job_name') or 'candidates'}")
+    print(f"Статус: {status_labels.get(raw_status, raw_status)}")
+    print(f"Запущена: {'да' if status.get('is_running') else 'нет'}")
+    print(f"Прогресс: {status.get('processed_urls', 0)}/{status.get('total_urls', 0)}")
+    print(
+        f"Скачано: {status.get('downloaded', 0)} | "
+        f"уже было в cache: {status.get('skipped_existing', 0)} | "
+        f"ошибок: {status.get('failed', 0)} | "
+        f"невалидных URL: {status.get('skipped_invalid', 0)}"
+    )
+    queue_total = status.get("download_queue_total")
+    if queue_total is not None:
+        print(f"Очередь скачивания: {queue_total}")
+    if status.get("stop_requested"):
+        print("Остановка запрошена: да")
+    if status.get("last_url"):
+        print(f"Последний URL: {request.short_text(status.get('last_url'), 90)}")
+    if status.get("is_empty_pool") is True:
+        print("Candidate pool пуст или нет URL для скачивания.")
+    if status.get("error"):
+        print(f"Ошибка: {status.get('error')}")
+
+
+def start_candidate_pool_preview_poster_job() -> None:
+    """Start background preview-poster download for candidate pool."""
+    from posters import download_job
+
+    ui.clean_terminal()
+    print("Фоновая загрузка preview-постеров candidate pool\n")
+    result = download_job.start_job("candidates")
+    if result.get("ok"):
+        print("Загрузка запущена в фоне.")
+        print(f"PID: {result.get('pid')}")
+        print("Статус можно смотреть в этом же меню.")
+        return
+
+    if result.get("already_running"):
+        print("Фоновая загрузка уже запущена.")
+    else:
+        print(f"Не удалось запустить загрузку: {result.get('message') or result.get('error')}")
+
+    _print_candidate_poster_job_status(download_job.get_status("candidates"))
+
+
+def show_candidate_pool_preview_poster_job_status() -> None:
+    """Show background candidate preview-poster download status."""
+    from posters import download_job
+
+    ui.clean_terminal()
+    print("Статус фоновой загрузки preview-постеров\n")
+    _print_candidate_poster_job_status(download_job.get_status("candidates"))
+
+
+def show_candidate_pool_preview_poster_job_log(lines: int = 40) -> None:
+    """Show recent background candidate preview-poster download log lines."""
+    from posters import download_job
+
+    ui.clean_terminal()
+    print(f"Лог фоновой загрузки preview-постеров, последние {lines} строк\n")
+    log_tail = download_job.get_log_tail("candidates", lines=lines)
+    if log_tail.strip() == "":
+        print("Лог пока пуст.")
+        return
+    print(log_tail)
+
+
+def stop_candidate_pool_preview_poster_job() -> None:
+    """Request graceful stop for background candidate preview-poster download."""
+    from posters import download_job
+
+    ui.clean_terminal()
+    print("Остановка фоновой загрузки preview-постеров\n")
+    result = download_job.stop_job("candidates")
+    print(result.get("message") or "Запрос на остановку записан.")
+    print("")
+    _print_candidate_poster_job_status(download_job.get_status("candidates"))

@@ -73,6 +73,14 @@ def _read_lock_payload(lock_path: Path) -> dict | None:
     return _safe_json_load(lock_path) or None
 
 
+def _parse_pid(value) -> int | None:
+    try:
+        pid = int(value)
+    except (TypeError, ValueError):
+        return None
+    return pid if pid > 0 else None
+
+
 def _is_pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -90,10 +98,15 @@ def _running_lock_payload(lock_path: Path) -> tuple[bool, int | None]:
     payload = _read_lock_payload(lock_path)
     if not payload:
         return False, None
-    raw_pid = payload.get("pid")
-    try:
-        pid = int(raw_pid)
-    except (TypeError, ValueError):
+    pid = _parse_pid(payload.get("pid"))
+    if pid is None:
+        return False, None
+    return _is_pid_alive(pid), pid
+
+
+def _running_status_pid(status: dict) -> tuple[bool, int | None]:
+    pid = _parse_pid(status.get("pid"))
+    if pid is None:
         return False, None
     return _is_pid_alive(pid), pid
 
@@ -183,6 +196,11 @@ def _write_status(paths: JobPaths, status: dict) -> None:
 def _resolve_state(paths: JobPaths) -> dict:
     status = _read_existing_status(paths)
     running, running_pid = _running_lock_payload(paths.lock_path)
+    if running is False:
+        status_running, status_pid = _running_status_pid(status)
+        if status_running and status.get("status") in {"starting", "running", "stopping"}:
+            running = True
+            running_pid = status_pid
     status["is_running"] = running
     status["lock_pid"] = running_pid
     if running:
@@ -196,6 +214,11 @@ def _resolve_state(paths: JobPaths) -> dict:
 def get_status(job_name: str = DEFAULT_JOB_NAME) -> dict:
     paths = _build_job_paths(job_name)
     return _resolve_state(paths)
+
+
+def get_log_tail(job_name: str = DEFAULT_JOB_NAME, *, lines: int = DEFAULT_LINE_COUNT) -> str:
+    paths = _build_job_paths(job_name)
+    return _format_tail_lines(paths.log_path, lines=lines)
 
 
 def get_job_paths(job_name: str = DEFAULT_JOB_NAME, *, jobs_root: Path | None = None) -> JobPaths:
@@ -212,6 +235,21 @@ def _format_tail_lines(path: Path, lines: int) -> str:
     return "\n".join(all_lines[-lines:])
 
 
+def _background_process_kwargs(log_file) -> dict:
+    kwargs = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": log_file,
+        "stderr": subprocess.STDOUT,
+        "cwd": str(ROOT_DIR),
+        "text": True,
+        "env": {**os.environ, "PYTHONUNBUFFERED": "1"},
+        "close_fds": True,
+    }
+    if os.name == "nt":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
+    return kwargs
+
+
 def start_job(job_name: str = DEFAULT_JOB_NAME) -> dict:
     """Start a candidate poster job in a background process."""
     paths = _build_job_paths(job_name)
@@ -224,7 +262,13 @@ def start_job(job_name: str = DEFAULT_JOB_NAME) -> dict:
             "status": "unsupported",
         }
 
+    current_status = _read_existing_status(paths)
     running, running_pid = _running_lock_payload(paths.lock_path)
+    if running is False:
+        status_running, status_pid = _running_status_pid(current_status)
+        if status_running and current_status.get("status") in {"starting", "running", "stopping"}:
+            running = True
+            running_pid = status_pid
     if running:
         return {
             "ok": False,
@@ -261,14 +305,7 @@ def start_job(job_name: str = DEFAULT_JOB_NAME) -> dict:
     command = [sys.executable, "-u", str(script_path), "_run", normalized]
     try:
         with open(paths.log_path, "a", encoding="utf-8") as log_file:
-            process = subprocess.Popen(
-                command,
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                cwd=str(ROOT_DIR),
-                text=True,
-                env={**os.environ, "PYTHONUNBUFFERED": "1"},
-            )
+            process = subprocess.Popen(command, **_background_process_kwargs(log_file))
         _write_lock(paths, pid=process.pid, started_at=status.get("started_at"))
         status = _resolve_state(paths)
         status["status"] = "running"
@@ -477,8 +514,7 @@ def run_cli(args: list[str] | None = None) -> int:
         return 0
 
     if args.command == "tail":
-        paths = _build_job_paths(args.job)
-        print(_format_tail_lines(paths.log_path, lines=args.lines))
+        print(get_log_tail(args.job, lines=args.lines))
         return 0
 
     if args.command == "stop":

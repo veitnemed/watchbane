@@ -35,7 +35,10 @@ def open_candidate_pool_menu() -> None:
         elif command == "5":
             open_candidate_pool_import_menu()
 
-        ui.press_enter()
+        try:
+            ui.press_enter()
+        except KeyboardInterrupt:
+            print("\nВозвращаюсь в меню.")
 
 
 def open_candidate_pool_cleanup_menu() -> None:
@@ -44,29 +47,44 @@ def open_candidate_pool_cleanup_menu() -> None:
         ui.clean_terminal()
         ui.show_candidate_pool_cleanup_menu()
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 9)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 13)])
         if command == "0":
             return
-        if command == "1":
-            candidate_pool_tools.show_candidate_pool()
-        elif command == "2":
-            candidate_pool_tools.clean_common_pool_duplicates()
-        elif command == "3":
-            candidate_pool_tools.purge_pool_dataset_title_matches()
-        elif command == "4":
-            candidate_pool_tools.show_suspicious_candidate_duplicates()
-        elif command == "5":
-            candidate_pool_tools.show_cross_year_candidate_duplicates()
-        elif command == "6":
-            candidate_pool_tools.show_title_candidate_duplicates()
-        elif command == "7":
-            candidate_pool_tools.show_candidate_poster_diagnostics()
-        elif command == "8":
-            candidate_pool_tools.download_candidate_pool_preview_posters()
-        elif command == "9":
-            candidate_pool_tools.retry_kp_for_incomplete_candidates()
 
-        ui.press_enter()
+        try:
+            if command == "1":
+                candidate_pool_tools.show_candidate_pool()
+            elif command == "2":
+                candidate_pool_tools.clean_common_pool_duplicates()
+            elif command == "3":
+                candidate_pool_tools.purge_pool_dataset_title_matches()
+            elif command == "4":
+                candidate_pool_tools.show_suspicious_candidate_duplicates()
+            elif command == "5":
+                candidate_pool_tools.show_cross_year_candidate_duplicates()
+            elif command == "6":
+                candidate_pool_tools.show_title_candidate_duplicates()
+            elif command == "7":
+                candidate_pool_tools.show_candidate_poster_diagnostics()
+            elif command == "8":
+                candidate_pool_tools.start_candidate_pool_preview_poster_job()
+            elif command == "9":
+                candidate_pool_tools.show_candidate_pool_preview_poster_job_status()
+            elif command == "10":
+                candidate_pool_tools.show_candidate_pool_preview_poster_job_log()
+            elif command == "11":
+                candidate_pool_tools.stop_candidate_pool_preview_poster_job()
+            elif command == "12":
+                candidate_pool_tools.download_candidate_pool_preview_posters()
+            elif command == "13":
+                candidate_pool_tools.retry_kp_for_incomplete_candidates()
+        except KeyboardInterrupt:
+            print("\nДействие прервано. Возвращаюсь в меню.")
+
+        try:
+            ui.press_enter()
+        except KeyboardInterrupt:
+            print("\nВозвращаюсь в меню.")
 
 
 def open_candidate_pool_import_menu() -> None:
