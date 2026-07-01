@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -25,6 +27,9 @@ from desktop.settings.presenters import (
     format_pool_stats_block,
     format_retry_kp_preview_line,
     format_retry_kp_status,
+    format_tmdb_files_empty_hint,
+    format_tmdb_import_preview,
+    format_tmdb_import_status,
 )
 
 StatusCallback = Callable[[str, int], None]
@@ -42,6 +47,7 @@ class SettingsToolsView:
     ) -> None:
         self._on_status_message = on_status_message
         self._on_pool_changed = on_pool_changed
+        self._tmdb_files: list[Path] = []
 
         self._widget = QWidget()
         self._widget.setObjectName("settingsToolsRoot")
@@ -98,6 +104,34 @@ class SettingsToolsView:
         self._dedupe_layout.addWidget(self._retry_preview)
         content_layout.addWidget(self._dedupe_card)
 
+        self._tmdb_card = self._make_card()
+        tmdb_layout = QVBoxLayout(self._tmdb_card)
+        tmdb_layout.setContentsMargins(14, 12, 14, 12)
+        tmdb_layout.setSpacing(8)
+        tmdb_title = QLabel("Импорт TMDb result")
+        tmdb_title.setObjectName("candidateSearchFieldLabel")
+        tmdb_layout.addWidget(tmdb_title)
+
+        self._tmdb_file_combo = QComboBox()
+        self._tmdb_file_combo.setObjectName("settingsTmdbImportFile")
+        self._tmdb_file_combo.currentIndexChanged.connect(self._on_tmdb_file_changed)
+        tmdb_layout.addWidget(self._tmdb_file_combo)
+
+        self._tmdb_preview = QLabel("")
+        self._tmdb_preview.setObjectName("candidateFiltersIntroLead")
+        self._tmdb_preview.setWordWrap(True)
+        tmdb_layout.addWidget(self._tmdb_preview)
+
+        tmdb_actions = QHBoxLayout()
+        tmdb_actions.setContentsMargins(0, 0, 0, 0)
+        self._tmdb_import_button = QPushButton("Импортировать в pool")
+        self._tmdb_import_button.setObjectName("candidateSearchApplyTopButton")
+        self._tmdb_import_button.clicked.connect(self._run_tmdb_import)
+        tmdb_actions.addWidget(self._tmdb_import_button)
+        tmdb_actions.addStretch(1)
+        tmdb_layout.addLayout(tmdb_actions)
+        content_layout.addWidget(self._tmdb_card)
+
         actions_row = QHBoxLayout()
         actions_row.setContentsMargins(0, 0, 0, 0)
         actions_row.setSpacing(10)
@@ -136,31 +170,69 @@ class SettingsToolsView:
         overview = candidate_service.get_search_overview_view()
         stats_view = candidate_service.get_pool_stats_view()
         stats_lines = format_pool_stats_block(stats_view)
-        if overview.get("is_empty"):
+        pool_empty = overview.get("is_empty")
+
+        if pool_empty:
             self._stats_body.setText("Candidate pool пуст.")
             self._dedupe_body.setText("Нет данных для предпросмотра дублей.")
             self._retry_preview.setText(format_retry_kp_preview_line({"incomplete_count": 0}))
-            self._set_actions_enabled(False)
-            return
+            self._dedupe_button.setEnabled(False)
+            self._retry_kp_button.setEnabled(False)
+            self._clear_pool_button.setEnabled(False)
+        else:
+            self._stats_body.setText("\n".join(stats_lines))
+            title_view = candidate_service.get_title_duplicates_view()
+            suspicious_view = candidate_service.get_suspicious_duplicates_view()
+            self._dedupe_body.setText("\n".join(format_dedupe_preview_lines(title_view, suspicious_view)))
+            retry_view = candidate_service.get_retry_kp_view()
+            self._retry_preview.setText(format_retry_kp_preview_line(retry_view))
+            self._dedupe_button.setEnabled(True)
+            self._retry_kp_button.setEnabled(True)
+            self._clear_pool_button.setEnabled(True)
 
-        self._set_actions_enabled(True)
-        self._stats_body.setText("\n".join(stats_lines))
-        title_view = candidate_service.get_title_duplicates_view()
-        suspicious_view = candidate_service.get_suspicious_duplicates_view()
-        self._dedupe_body.setText("\n".join(format_dedupe_preview_lines(title_view, suspicious_view)))
-        retry_view = candidate_service.get_retry_kp_view()
-        self._retry_preview.setText(format_retry_kp_preview_line(retry_view))
+        self._refresh_tmdb_import_section()
+
+    def _refresh_tmdb_import_section(self) -> None:
+        files_view = candidate_service.get_tmdb_import_files_view()
+        self._tmdb_files = list(files_view.get("files") or [])
+
+        self._tmdb_file_combo.blockSignals(True)
+        self._tmdb_file_combo.clear()
+        if files_view.get("is_empty"):
+            self._tmdb_file_combo.addItem("— файлов нет —")
+            self._tmdb_preview.setText(format_tmdb_files_empty_hint())
+            self._tmdb_import_button.setEnabled(False)
+        else:
+            for path in self._tmdb_files:
+                self._tmdb_file_combo.addItem(path.name, path)
+            self._tmdb_import_button.setEnabled(True)
+            self._update_tmdb_preview()
+        self._tmdb_file_combo.blockSignals(False)
+
+    def _on_tmdb_file_changed(self, _index: int) -> None:
+        self._update_tmdb_preview()
+
+    def _selected_tmdb_file(self) -> Path | None:
+        if not self._tmdb_files:
+            return None
+        index = self._tmdb_file_combo.currentIndex()
+        if index < 0 or index >= len(self._tmdb_files):
+            return None
+        return self._tmdb_files[index]
+
+    def _update_tmdb_preview(self) -> None:
+        result_path = self._selected_tmdb_file()
+        if result_path is None:
+            self._tmdb_preview.setText(format_tmdb_files_empty_hint())
+            return
+        preview = candidate_service.load_tmdb_result_import_preview(result_path)
+        self._tmdb_preview.setText(format_tmdb_import_preview(preview))
 
     @staticmethod
     def _make_card() -> QFrame:
         frame = QFrame()
         frame.setObjectName("candidateFiltersIntro")
         return frame
-
-    def _set_actions_enabled(self, enabled: bool) -> None:
-        self._dedupe_button.setEnabled(enabled)
-        self._retry_kp_button.setEnabled(enabled)
-        self._clear_pool_button.setEnabled(enabled)
 
     def _show_status(self, message: str, timeout_ms: int = 8000) -> None:
         if self._on_status_message is not None:
@@ -169,6 +241,35 @@ class SettingsToolsView:
     def _notify_pool_changed(self) -> None:
         if self._on_pool_changed is not None:
             self._on_pool_changed()
+
+    def _run_tmdb_import(self) -> None:
+        result_path = self._selected_tmdb_file()
+        if result_path is None:
+            self._show_status(format_tmdb_files_empty_hint(), 5000)
+            return
+
+        preview = candidate_service.load_tmdb_result_import_preview(result_path)
+        if preview.get("ok") is False:
+            self._show_status(format_tmdb_import_preview(preview), 8000)
+            self._update_tmdb_preview()
+            return
+
+        answer = QMessageBox.question(
+            self._widget,
+            "Импорт TMDb result",
+            f"{format_tmdb_import_preview(preview)}\n\nИмпортировать в общий candidate pool?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        import_result = candidate_service.import_tmdb_result_to_pool(result_path)
+        message = format_tmdb_import_status(import_result)
+        self._show_status(message, 12000)
+        self.refresh()
+        if import_result.get("ok"):
+            self._notify_pool_changed()
 
     def _run_clean_duplicates(self) -> None:
         answer = QMessageBox.question(

@@ -1805,6 +1805,22 @@ def test_settings_tools_view_wires_pool_maintenance_actions() -> None:
     assert "get_title_duplicates_view" in inspect.getsource(settings_module.SettingsToolsView.refresh)
 
 
+def test_settings_tools_view_wires_tmdb_import() -> None:
+    import inspect
+
+    import desktop.settings.view as settings_module
+
+    init_source = inspect.getsource(settings_module.SettingsToolsView.__init__)
+    import_source = inspect.getsource(settings_module.SettingsToolsView._run_tmdb_import)
+    refresh_source = inspect.getsource(settings_module.SettingsToolsView._refresh_tmdb_import_section)
+
+    assert "get_tmdb_import_files_view" in refresh_source
+    assert "load_tmdb_result_import_preview" in import_source
+    assert "import_tmdb_result_to_pool" in import_source
+    assert "settingsTmdbImportFile" in init_source
+    assert "_notify_pool_changed" in import_source
+
+
 def test_candidate_session_reload_from_pool_reapplies_filters() -> None:
     import inspect
 

@@ -113,7 +113,8 @@ Desktop planned (write только с confirmation dialogs):
 
 - mark watched — done (transfer из вкладки Кандидаты);
 - retry KP, dedupe preview/clean — вкладка **Сервис**;
-- TMDb build/import без дублирования console-логики — planned.
+- TMDb result import — вкладка **Сервис** (файлы из `data/exports/candidate_pool`);
+- TMDb build без дублирования console-логики — planned.
 
 ## Этап 6. Metadata и posters
 

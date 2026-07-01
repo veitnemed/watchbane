@@ -69,3 +69,40 @@ def format_clear_pool_status(result: dict) -> str:
     if cleared <= 0:
         return "Pool уже был пуст."
     return f"Pool очищен: удалено {cleared} записей."
+
+
+def format_tmdb_files_empty_hint() -> str:
+    return "TMDb result JSON в data/exports/candidate_pool не найдены."
+
+
+def format_tmdb_import_preview(preview: dict) -> str:
+    if preview.get("ok") is False:
+        error = preview.get("error") or "неизвестная ошибка"
+        return f"Не удалось прочитать файл: {error}"
+
+    path = preview.get("result_path")
+    file_name = path.name if hasattr(path, "name") else str(path)
+    count = int(preview.get("candidate_count") or 0)
+    criteria = str(preview.get("default_criteria_name") or "—")
+    return (
+        f"Файл: {file_name}\n"
+        f"Кандидатов в файле: {count}\n"
+        f"criteria_name: {criteria}\n"
+        "Будет добавлено/обновлено в общий pool после дедупликации."
+    )
+
+
+def format_tmdb_import_status(import_result: dict) -> str:
+    if import_result.get("ok") is False:
+        return f"Импорт не выполнен: {import_result.get('error') or 'неизвестная ошибка'}"
+
+    stats = import_result.get("stats") or {}
+    skipped_watched = stats.get("skipped_watched", stats.get("watched_skipped", 0))
+    skipped_duplicates = stats.get("skipped_duplicates", stats.get("duplicates", 0))
+    pool_after = stats.get("pool_size_after", stats.get("pool_size", 0))
+    return (
+        f"Импорт завершён: прочитано {stats.get('read', 0)}, "
+        f"добавлено {stats.get('added', 0)}, обновлено {stats.get('updated', 0)}, "
+        f"пропущено watched {skipped_watched}, дублей {skipped_duplicates}, "
+        f"ошибок {stats.get('errors', 0)}. Pool: {pool_after}."
+    )
