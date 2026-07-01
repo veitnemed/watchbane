@@ -4,7 +4,8 @@ from config import constant
 from config import scheme
 from common import format_score as format
 from common import valid
-from dataset.dataset_records import add_dataset_record
+from dataset.records.add import add_dataset_record
+from dataset.records.side_effects import apply_add_record_side_effects
 from storage.data import load_dataset, save_dataset
 from storage.normalize import (
     normalize_csv_row,
@@ -67,6 +68,8 @@ def add_movie(
         pool_candidate=pool_candidate,
         poster_hints=poster_hints,
     )
+    if result.ok:
+        apply_add_record_side_effects(result.side_effects, print_warnings=print_message)
     if print_message:
         print(result.message)
     return result

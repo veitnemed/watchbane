@@ -363,6 +363,7 @@ def test_build_add_meta_payload_includes_poster_fields() -> None:
 
 def test_add_dataset_record_syncs_poster_cache_from_meta_payload(monkeypatch) -> None:
     from dataset import dataset_records
+    from dataset.records import add as add_module
 
     movie = _make_movie("New Show", 8.5, 2021)
     meta_payload = {
@@ -379,10 +380,10 @@ def test_add_dataset_record_syncs_poster_cache_from_meta_payload(monkeypatch) ->
         synced["meta_obj"] = meta_obj
         return {"status": "found", "poster_url": "https://image.tmdb.org/t/p/w342/new.jpg"}
 
-    with patch.object(dataset_records, "load_dataset", return_value={}):
-        with patch.object(dataset_records, "save_dataset"):
-            with patch.object(dataset_records, "add_movies_to_meta", return_value=True):
-                with patch.object(dataset_records, "get_meta_obj", return_value=None):
+    with patch.object(add_module, "load_dataset", return_value={}):
+        with patch.object(add_module, "save_dataset"):
+            with patch.object(add_module, "add_movies_to_meta", return_value=True):
+                with patch.object(add_module, "get_meta_obj", return_value=None):
                     with patch("posters.cache.sync_poster_cache_from_meta_and_sources", side_effect=fake_sync):
                         result = dataset_records.add_dataset_record(
                             movie,

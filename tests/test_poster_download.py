@@ -186,6 +186,7 @@ def test_remove_local_poster_file_deletes_local_path() -> None:
 
 def test_add_dataset_record_downloads_poster_after_cache_sync(monkeypatch) -> None:
     from dataset import dataset_records
+    from dataset.records import add as add_module
 
     movie = _make_movie("New Show", 8.5, 2021, poster_url="https://example.com/new.jpg")
     download_calls: list[tuple[str, object]] = []
@@ -197,10 +198,10 @@ def test_add_dataset_record_downloads_poster_after_cache_sync(monkeypatch) -> No
         download_calls.append((title, year))
         return {"ok": True, "reason": "downloaded", "local_path": "C:/cache/new.jpg"}
 
-    with patch.object(dataset_records, "load_dataset", return_value={}):
-        with patch.object(dataset_records, "save_dataset"):
-            with patch.object(dataset_records, "add_movies_to_meta", return_value=True):
-                with patch.object(dataset_records, "get_meta_obj", return_value=None):
+    with patch.object(add_module, "load_dataset", return_value={}):
+        with patch.object(add_module, "save_dataset"):
+            with patch.object(add_module, "add_movies_to_meta", return_value=True):
+                with patch.object(add_module, "get_meta_obj", return_value=None):
                     with patch("posters.cache.sync_poster_cache_from_meta_and_sources", side_effect=fake_sync):
                         with patch("posters.download_images.download_poster_for_title", side_effect=fake_download):
                             result = dataset_records.add_dataset_record(movie)
@@ -211,6 +212,7 @@ def test_add_dataset_record_downloads_poster_after_cache_sync(monkeypatch) -> No
 
 def test_add_dataset_record_downloads_poster_from_hints_when_cache_missing(monkeypatch) -> None:
     from dataset import dataset_records
+    from dataset.records import add as add_module
 
     movie = _make_movie("Hint Show", 8.0, 2022)
     poster_hints = {
@@ -234,10 +236,10 @@ def test_add_dataset_record_downloads_poster_from_hints_when_cache_missing(monke
             return {"ok": False, "reason": "missing_cache", "local_path": None}
         return {"ok": True, "reason": "downloaded", "local_path": "C:/cache/hint.jpg"}
 
-    with patch.object(dataset_records, "load_dataset", return_value={}):
-        with patch.object(dataset_records, "save_dataset"):
-            with patch.object(dataset_records, "add_movies_to_meta", return_value=True):
-                with patch.object(dataset_records, "get_meta_obj", return_value=None):
+    with patch.object(add_module, "load_dataset", return_value={}):
+        with patch.object(add_module, "save_dataset"):
+            with patch.object(add_module, "add_movies_to_meta", return_value=True):
+                with patch.object(add_module, "get_meta_obj", return_value=None):
                     with patch("posters.cache.sync_poster_cache_from_meta_and_sources", side_effect=fake_sync):
                         with patch("posters.cache.upsert_poster_cache_entry", side_effect=fake_upsert):
                             with patch("posters.download_images.download_poster_for_title", side_effect=fake_download):
@@ -255,6 +257,7 @@ def test_delete_watched_record_removes_local_poster_file(monkeypatch) -> None:
     import tempfile
 
     from dataset import delete_record as module
+    from dataset.records import delete as records_delete
     from posters.cache import poster_identity_key
 
     with tempfile.TemporaryDirectory() as temp_root:
@@ -274,13 +277,13 @@ def test_delete_watched_record_removes_local_poster_file(monkeypatch) -> None:
         dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
         saved_cache: dict = {}
 
-        monkeypatch.setattr(module.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
-        monkeypatch.setattr(module.storage_data, "load_meta", lambda: {})
-        monkeypatch.setattr(module.storage_data, "save_dataset", lambda payload: None)
-        monkeypatch.setattr(module.storage_data, "save_meta", lambda payload: None)
-        monkeypatch.setattr(module, "load_poster_cache", lambda: copy.deepcopy(poster_cache))
-        monkeypatch.setattr(module, "save_poster_cache", lambda payload: saved_cache.update(payload))
-        monkeypatch.setattr(module, "backup_before_watched_delete", lambda timestamp=None: [])
+        monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
+        monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: {})
+        monkeypatch.setattr(records_delete.storage_data, "save_dataset", lambda payload: None)
+        monkeypatch.setattr(records_delete.storage_data, "save_meta", lambda payload: None)
+        monkeypatch.setattr(records_delete, "load_poster_cache", lambda: copy.deepcopy(poster_cache))
+        monkeypatch.setattr(records_delete, "save_poster_cache", lambda payload: saved_cache.update(payload))
+        monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: [])
 
         result = module.delete_watched_record("Alpha", timestamp="test")
 

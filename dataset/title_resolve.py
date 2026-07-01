@@ -10,6 +10,7 @@ from dataset.genres.mapping import (
     normalize_genre_label_to_key,
     raw_genres_to_dataset_genres,
 )
+from dataset.resolve.countries import extract_country_value
 from apis import imdb_sql as sql_search
 from apis import kp_api as api
 
@@ -393,38 +394,6 @@ def extract_api_description(series: dict) -> str:
 def build_genre_defaults(genres: list) -> dict:
     """Собирает значения genre по списку жанров."""
     return dict(raw_genres_to_dataset_genres(genres)["dataset_genre"])
-
-
-def extract_country_value(source: dict | None) -> str:
-    """Returns a display country string from API/SQL/candidate data."""
-    if not isinstance(source, dict):
-        return ""
-    for field_name in (
-        "country_display",
-        "country",
-        "countries",
-        "title_region_countries",
-        "tmdb_production_countries",
-        "tmdb_origin_countries",
-        "origin_country",
-    ):
-        value = source.get(field_name)
-        if isinstance(value, list):
-            parts = []
-            for item in value:
-                if isinstance(item, dict):
-                    text = str(item.get("name") or item.get("iso_3166_1") or "").strip()
-                else:
-                    text = str(item or "").strip()
-                if text and text not in parts:
-                    parts.append(text)
-            if parts:
-                return ", ".join(parts)
-            continue
-        text = str(value or "").strip()
-        if text:
-            return text
-    return ""
 
 
 def build_empty_add_defaults(input_title: str) -> dict:

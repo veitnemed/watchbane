@@ -58,6 +58,7 @@ def test_search_watched_records_requires_multiple_choice_for_similar_titles() ->
 
 def test_delete_watched_record_removes_dataset_meta_and_poster_cache(monkeypatch) -> None:
     from dataset import delete_record as module
+    from dataset.records import delete as records_delete
     from posters.cache import poster_identity_key
 
     dataset = {
@@ -86,13 +87,13 @@ def test_delete_watched_record_removes_dataset_meta_and_poster_cache(monkeypatch
     saved_meta = {}
     saved_cache = {}
 
-    monkeypatch.setattr(module.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
-    monkeypatch.setattr(module.storage_data, "load_meta", lambda: copy.deepcopy(meta))
-    monkeypatch.setattr(module, "load_poster_cache", lambda: copy.deepcopy(poster_cache))
-    monkeypatch.setattr(module.storage_data, "save_dataset", lambda payload: saved_dataset.update(payload))
-    monkeypatch.setattr(module.storage_data, "save_meta", lambda payload: saved_meta.update(payload))
-    monkeypatch.setattr(module, "save_poster_cache", lambda payload: saved_cache.update(payload))
-    monkeypatch.setattr(module, "backup_before_watched_delete", lambda timestamp=None: ["backup-dataset"])
+    monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
+    monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: copy.deepcopy(meta))
+    monkeypatch.setattr(records_delete, "load_poster_cache", lambda: copy.deepcopy(poster_cache))
+    monkeypatch.setattr(records_delete.storage_data, "save_dataset", lambda payload: saved_dataset.update(payload))
+    monkeypatch.setattr(records_delete.storage_data, "save_meta", lambda payload: saved_meta.update(payload))
+    monkeypatch.setattr(records_delete, "save_poster_cache", lambda payload: saved_cache.update(payload))
+    monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: ["backup-dataset"])
 
     result = module.delete_watched_record("Alpha", timestamp="test")
 
@@ -111,17 +112,18 @@ def test_delete_watched_record_removes_dataset_meta_and_poster_cache(monkeypatch
 
 def test_delete_watched_record_without_meta_or_cache(monkeypatch) -> None:
     from dataset import delete_record as module
+    from dataset.records import delete as records_delete
 
     dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
     saved_dataset = {}
 
-    monkeypatch.setattr(module.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
-    monkeypatch.setattr(module.storage_data, "load_meta", lambda: {})
-    monkeypatch.setattr(module, "load_poster_cache", lambda: {})
-    monkeypatch.setattr(module.storage_data, "save_dataset", lambda payload: saved_dataset.update(payload))
-    monkeypatch.setattr(module.storage_data, "save_meta", lambda _payload: None)
-    monkeypatch.setattr(module, "save_poster_cache", lambda _payload: None)
-    monkeypatch.setattr(module, "backup_before_watched_delete", lambda timestamp=None: [])
+    monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
+    monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: {})
+    monkeypatch.setattr(records_delete, "load_poster_cache", lambda: {})
+    monkeypatch.setattr(records_delete.storage_data, "save_dataset", lambda payload: saved_dataset.update(payload))
+    monkeypatch.setattr(records_delete.storage_data, "save_meta", lambda _payload: None)
+    monkeypatch.setattr(records_delete, "save_poster_cache", lambda _payload: None)
+    monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: [])
 
     result = module.delete_watched_record("Alpha", timestamp="test")
 
@@ -134,16 +136,17 @@ def test_delete_watched_record_without_meta_or_cache(monkeypatch) -> None:
 
 def test_delete_watched_record_missing_entry_does_not_save(monkeypatch) -> None:
     from dataset import delete_record as module
+    from dataset.records import delete as records_delete
 
-    monkeypatch.setattr(module.storage_data, "load_dataset", lambda: {})
-    monkeypatch.setattr(module, "backup_before_watched_delete", lambda timestamp=None: [])
+    monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: {})
+    monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: [])
 
     save_called = {"dataset": False}
 
     def fake_save_dataset(_payload):
         save_called["dataset"] = True
 
-    monkeypatch.setattr(module.storage_data, "save_dataset", fake_save_dataset)
+    monkeypatch.setattr(records_delete.storage_data, "save_dataset", fake_save_dataset)
 
     result = module.delete_watched_record("Missing", timestamp="test")
 
@@ -152,7 +155,7 @@ def test_delete_watched_record_missing_entry_does_not_save(monkeypatch) -> None:
 
 
 def test_backup_before_watched_delete_creates_files(monkeypatch) -> None:
-    from dataset import delete_record as module
+    from dataset.records import delete as records_delete
 
     with tempfile.TemporaryDirectory() as temp_root:
         root = Path(temp_root)
@@ -163,11 +166,11 @@ def test_backup_before_watched_delete_creates_files(monkeypatch) -> None:
         meta_path.write_text("{}", encoding="utf-8")
         cache_path.write_text("{}", encoding="utf-8")
 
-        monkeypatch.setattr(module.constant, "FILE_NAME", str(dataset_path))
-        monkeypatch.setattr(module.constant, "META_JSON", str(meta_path))
-        monkeypatch.setattr(module, "DEFAULT_POSTER_CACHE_JSON", cache_path)
+        monkeypatch.setattr(records_delete.constant, "FILE_NAME", str(dataset_path))
+        monkeypatch.setattr(records_delete.constant, "META_JSON", str(meta_path))
+        monkeypatch.setattr(records_delete, "DEFAULT_POSTER_CACHE_JSON", cache_path)
 
-        backups = module.backup_before_watched_delete(timestamp="123")
+        backups = records_delete.backup_before_watched_delete(timestamp="123")
 
         assert len(backups) == 3
         assert Path(backups[0]).name == "dataset.json.backup_before_delete_123"
@@ -176,7 +179,8 @@ def test_backup_before_watched_delete_creates_files(monkeypatch) -> None:
 
 
 def test_build_watched_delete_preview(monkeypatch) -> None:
-    from dataset import delete_record as module
+    from dataset.delete_record import build_watched_delete_preview
+    from dataset.records import delete as records_delete
     from posters.cache import poster_identity_key
 
     dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
@@ -184,10 +188,10 @@ def test_build_watched_delete_preview(monkeypatch) -> None:
     identity = poster_identity_key("Alpha", 2020)
     poster_cache = {identity: {"status": "found", "local_path": "C:/images/alpha.jpg"}}
 
-    monkeypatch.setattr(module.storage_data, "load_meta", lambda: meta)
-    monkeypatch.setattr(module, "load_poster_cache", lambda: poster_cache)
+    monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: meta)
+    monkeypatch.setattr(records_delete, "load_poster_cache", lambda: poster_cache)
 
-    preview = module.build_watched_delete_preview("Alpha", data=dataset)
+    preview = build_watched_delete_preview("Alpha", data=dataset)
 
     assert preview is not None
     assert preview["title"] == "Alpha"
@@ -199,6 +203,7 @@ def test_build_watched_delete_preview(monkeypatch) -> None:
 
 def test_delete_watched_record_does_not_touch_candidate_pool(monkeypatch) -> None:
     from dataset import delete_record as module
+    from dataset.records import delete as records_delete
 
     with tempfile.TemporaryDirectory() as temp_root:
         root = Path(temp_root)
@@ -209,14 +214,14 @@ def test_delete_watched_record_does_not_touch_candidate_pool(monkeypatch) -> Non
 
         dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
 
-        monkeypatch.setattr(module.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
-        monkeypatch.setattr(module.storage_data, "load_meta", lambda: {})
-        monkeypatch.setattr(module, "load_poster_cache", lambda: {})
-        monkeypatch.setattr(module.storage_data, "save_dataset", lambda _payload: None)
-        monkeypatch.setattr(module.storage_data, "save_meta", lambda _payload: None)
-        monkeypatch.setattr(module, "save_poster_cache", lambda _payload: None)
-        monkeypatch.setattr(module, "backup_before_watched_delete", lambda timestamp=None: [])
-        monkeypatch.setattr(module.constant, "CANDIDATE_POOL_JSON", str(pool_path))
+        monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
+        monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: {})
+        monkeypatch.setattr(records_delete, "load_poster_cache", lambda: {})
+        monkeypatch.setattr(records_delete.storage_data, "save_dataset", lambda _payload: None)
+        monkeypatch.setattr(records_delete.storage_data, "save_meta", lambda _payload: None)
+        monkeypatch.setattr(records_delete, "save_poster_cache", lambda _payload: None)
+        monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: [])
+        monkeypatch.setattr(records_delete.constant, "CANDIDATE_POOL_JSON", str(pool_path))
 
         module.delete_watched_record("Alpha", timestamp="test")
 

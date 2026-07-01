@@ -54,6 +54,7 @@ from candidates.views.formatters import (
     format_search_filter_default_lines,
 )
 from dataset import filter_popularity
+from candidates.views import filter_popularity as pool_filter_popularity
 from storage import data as storage_data
 
 
@@ -148,8 +149,8 @@ def get_search_filter_chip_options_view() -> dict:
 
     genres = filter_popularity.build_dataset_genre_popularity(dataset)
     countries = filter_popularity.build_dataset_country_popularity(dataset)
-    genres = filter_popularity.merge_genre_popularity_with_pool(genres, pool_genres)
-    countries = filter_popularity.merge_country_popularity_with_pool(countries, pool_countries)
+    genres = pool_filter_popularity.merge_genre_popularity_with_pool(genres, pool_genres)
+    countries = pool_filter_popularity.merge_country_popularity_with_pool(countries, pool_countries)
 
     source = "dataset" if dataset_total > 0 else "fallback"
     if not genres:
