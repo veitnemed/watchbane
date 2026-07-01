@@ -389,6 +389,7 @@ def download_preview_posters_for_urls(
     *,
     progress_callback=None,
     error_callback=None,
+    result_callback=None,
     should_stop_callback=None,
 ) -> dict:
     """Download unique poster URLs into preview cache for candidate pool GUI."""
@@ -416,20 +417,26 @@ def download_preview_posters_for_urls(
 
         if url == "" or url.startswith(("http://", "https://")) is False:
             stats["skipped_invalid"] += 1
+            if result_callback is not None:
+                result_callback(index, len(urls), url, "skipped_invalid")
             continue
 
         destination = _preview_poster_path(url)
         if destination.is_file():
             stats["skipped_existing"] += 1
+            if result_callback is not None:
+                result_callback(index, len(urls), url, "skipped_existing")
             continue
 
         ok, reason = _download_preview_poster(url, destination)
         if ok:
             stats["downloaded"] += 1
+            result_reason = "downloaded"
             attempted_downloads += 1
             consecutive_failures = 0
         else:
             stats["failed"] += 1
+            result_reason = reason
             failure = {"url": url, "reason": reason}
             stats["failures"].append(failure)
             if error_callback is not None:
@@ -439,6 +446,9 @@ def download_preview_posters_for_urls(
             if consecutive_failures >= PREVIEW_CONSECUTIVE_FAILURE_THRESHOLD:
                 time.sleep(PREVIEW_CONSECUTIVE_FAILURE_COOLDOWN_SECONDS)
                 consecutive_failures = 0
+
+        if result_callback is not None:
+            result_callback(index, len(urls), url, result_reason)
 
         if attempted_downloads > 0 and attempted_downloads % PREVIEW_BATCH_SIZE == 0:
             time.sleep(PREVIEW_BATCH_COOLDOWN_SECONDS)

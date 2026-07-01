@@ -530,6 +530,7 @@ def download_candidate_pool_preview_posters(
     *,
     progress_callback=None,
     error_callback=None,
+    result_callback=None,
     should_stop_callback=None,
 ) -> dict:
     """Download candidate pool poster URLs that do not have a local preview yet."""
@@ -572,6 +573,8 @@ def download_candidate_pool_preview_posters(
             "progress_callback": progress_callback,
             "error_callback": error_callback,
         }
+        if result_callback is not None:
+            call_kwargs["result_callback"] = result_callback
         if should_stop_callback is not None:
             call_kwargs["should_stop_callback"] = should_stop_callback
         stats = download_preview_posters_for_urls(

@@ -376,6 +376,49 @@ def test_download_preview_posters_for_urls_reports_failures(monkeypatch) -> None
         assert errors == [("https://image.tmdb.org/t/p/original/a.jpg", "http_429")]
 
 
+def test_download_preview_posters_for_urls_reports_results(monkeypatch) -> None:
+    import tempfile
+    from pathlib import Path
+
+    from posters import download_images
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        preview_dir = Path(temp_root) / "preview"
+        monkeypatch.setattr(download_images, "PREVIEW_POSTER_DIR", preview_dir)
+        monkeypatch.setattr(download_images.time, "sleep", lambda *_args, **_kwargs: None)
+
+        def fake_preview(source_url: str, destination) -> tuple[bool, str]:
+            if source_url.endswith("/fail.jpg"):
+                return False, "network_ssl"
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(b"jpg")
+            return True, "downloaded"
+
+        monkeypatch.setattr(download_images, "_download_preview_poster", fake_preview)
+
+        results: list[tuple[int, int, str, str]] = []
+        stats = download_images.download_preview_posters_for_urls(
+            [
+                "https://example.com/ok.jpg",
+                "https://example.com/ok.jpg",
+                "",
+                "https://example.com/fail.jpg",
+            ],
+            result_callback=lambda current, total, url, reason: results.append((current, total, url, reason)),
+        )
+
+        assert stats["downloaded"] == 1
+        assert stats["skipped_existing"] == 1
+        assert stats["skipped_invalid"] == 1
+        assert stats["failed"] == 1
+        assert [item[3] for item in results] == [
+            "downloaded",
+            "skipped_existing",
+            "skipped_invalid",
+            "network_ssl",
+        ]
+
+
 def test_download_candidate_pool_preview_posters_service(monkeypatch) -> None:
     from candidates import service
 

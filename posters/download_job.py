@@ -84,6 +84,8 @@ def _parse_pid(value) -> int | None:
 def _is_pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
+    if os.name == "nt":
+        return _is_windows_pid_alive(pid)
     try:
         # On Windows and Unix this validates process existence.
         os.kill(pid, 0)
@@ -92,6 +94,37 @@ def _is_pid_alive(pid: int) -> bool:
         return True
     except OSError:
         return False
+
+
+def _is_windows_pid_alive(pid: int) -> bool:
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return False
+
+    process_query_limited_information = 0x1000
+    still_active = 259
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        return False
+
+    try:
+        exit_code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return True
+        return exit_code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def _running_lock_payload(lock_path: Path) -> tuple[bool, int | None]:
@@ -144,7 +177,12 @@ def _acquire_lock(paths: JobPaths, *, pid: int | None) -> bool:
         return False
 
 
-def _release_lock(paths: JobPaths) -> None:
+def _release_lock(paths: JobPaths, *, expected_pid: int | None = None) -> None:
+    if expected_pid is not None:
+        payload = _read_lock_payload(paths.lock_path)
+        lock_pid = _parse_pid((payload or {}).get("pid"))
+        if lock_pid != expected_pid:
+            return
     try:
         paths.lock_path.unlink()
     except OSError:
@@ -193,6 +231,33 @@ def _write_status(paths: JobPaths, status: dict) -> None:
     _safe_json_dump(paths.status_path, status)
 
 
+def _reset_run_status(status: dict, *, job_name: str, pid: int | None, started_at: str | None) -> dict:
+    status.update({
+        "job_name": job_name,
+        "status": "starting",
+        "pid": pid,
+        "started_at": started_at or _utcnow(),
+        "ended_at": None,
+        "total_urls": 0,
+        "processed_urls": 0,
+        "downloaded": 0,
+        "skipped_existing": 0,
+        "failed": 0,
+        "skipped_invalid": 0,
+        "last_url": None,
+        "failures": [],
+        "errors": [],
+        "stopped": False,
+        "stop_requested": False,
+        "is_running": True,
+        "is_empty_pool": None,
+        "pool_total": None,
+        "download_queue_total": None,
+        "lock_pid": None,
+    })
+    return status
+
+
 def _resolve_state(paths: JobPaths) -> dict:
     status = _read_existing_status(paths)
     running, running_pid = _running_lock_payload(paths.lock_path)
@@ -213,7 +278,15 @@ def _resolve_state(paths: JobPaths) -> dict:
 
 def get_status(job_name: str = DEFAULT_JOB_NAME) -> dict:
     paths = _build_job_paths(job_name)
-    return _resolve_state(paths)
+    stored_status = _safe_json_load(paths.status_path)
+    status = _resolve_state(paths)
+    if stored_status and (
+        stored_status.get("status") != status.get("status")
+        or stored_status.get("is_running") != status.get("is_running")
+        or stored_status.get("lock_pid") != status.get("lock_pid")
+    ):
+        _write_status(paths, status)
+    return status
 
 
 def get_log_tail(job_name: str = DEFAULT_JOB_NAME, *, lines: int = DEFAULT_LINE_COUNT) -> str:
@@ -290,16 +363,17 @@ def start_job(job_name: str = DEFAULT_JOB_NAME) -> dict:
     _ensure_stop_file_absent(paths)
 
     status = _read_existing_status(paths)
-    status["status"] = "starting"
-    status["pid"] = os.getpid()
-    status["started_at"] = _utcnow()
-    status["ended_at"] = None
-    status["stop_requested"] = False
+    status = _reset_run_status(
+        status,
+        job_name=paths.job_name,
+        pid=os.getpid(),
+        started_at=_utcnow(),
+    )
     _write_status(paths, status)
 
     script_path = ROOT_DIR / "scripts" / "poster_download_job.py"
     if script_path.is_file() is False:
-        _release_lock(paths)
+        _release_lock(paths, expected_pid=os.getpid())
         return {"ok": False, "error": "CLI script is missing", "status": "failed"}
 
     command = [sys.executable, "-u", str(script_path), "_run", normalized]
@@ -319,7 +393,7 @@ def start_job(job_name: str = DEFAULT_JOB_NAME) -> dict:
             "log_path": str(paths.log_path),
         }
     except OSError as error:
-        _release_lock(paths)
+        _release_lock(paths, expected_pid=os.getpid())
         status["status"] = "failed"
         status["ended_at"] = _utcnow()
         status["error"] = str(error)
@@ -331,6 +405,11 @@ def stop_job(job_name: str = DEFAULT_JOB_NAME) -> dict:
     paths = _build_job_paths(job_name)
     status = _resolve_state(paths)
     running, running_pid = _running_lock_payload(paths.lock_path)
+    if not running and status.get("is_running"):
+        status_running, status_pid = _running_status_pid(status)
+        if status_running:
+            running = True
+            running_pid = status_pid
     if not running:
         return {
             "ok": False,
@@ -363,14 +442,16 @@ def _run_candidates_job_for_output(paths: JobPaths) -> dict:
     from candidates import service as candidate_service
 
     status = _read_existing_status(paths)
-    status["status"] = status.get("status", "running") or "running"
-    status["started_at"] = status.get("started_at") or _utcnow()
-    status["ended_at"] = None
-    status["stop_requested"] = False
-    status["stopped"] = False
-    status["failures"] = []
-    status["errors"] = []
+    status = _reset_run_status(
+        status,
+        job_name=paths.job_name,
+        pid=os.getpid(),
+        started_at=status.get("started_at") or _utcnow(),
+    )
+    status["status"] = "running"
+    _write_lock(paths, pid=os.getpid(), started_at=status.get("started_at"))
     _write_status(paths, status)
+    print(f"Worker started: {paths.job_name}", flush=True)
 
     def should_stop() -> bool:
         return paths.stop_path.is_file()
@@ -381,26 +462,46 @@ def _run_candidates_job_for_output(paths: JobPaths) -> dict:
         status["processed_urls"] = current
         status["last_url"] = url
         _write_status(paths, status)
+        print(f"[{current}/{total}] {url}", flush=True)
 
     def on_error(url: str, reason: str) -> None:
-        status["failed"] = status.get("failed", 0) + 1
         failure = {"url": url, "reason": reason}
         failures = list(status.get("failures") or [])
         failures.append(failure)
         status["failures"] = failures[-50:]
+        _write_status(paths, status)
+        print(f"! {reason} | {url}", flush=True)
+
+    def on_result(current: int, total: int, url: str, reason: str) -> None:
+        status["total_urls"] = total
+        status["processed_urls"] = current
+        status["last_url"] = url
+        if reason == "downloaded":
+            status["downloaded"] = status.get("downloaded", 0) + 1
+        elif reason == "skipped_existing":
+            status["skipped_existing"] = status.get("skipped_existing", 0) + 1
+        elif reason == "skipped_invalid":
+            status["skipped_invalid"] = status.get("skipped_invalid", 0) + 1
+        else:
+            status["failed"] = status.get("failed", 0) + 1
         _write_status(paths, status)
 
     try:
         results = candidate_service.download_candidate_pool_preview_posters(
             progress_callback=on_progress,
             error_callback=on_error,
+            result_callback=on_result,
             should_stop_callback=should_stop,
         )
     except Exception as error:
         status["status"] = "failed"
         status["ended_at"] = _utcnow()
         status["error"] = str(error)
+        status["is_running"] = False
+        status["lock_pid"] = None
         _write_status(paths, status)
+        _release_lock(paths, expected_pid=os.getpid())
+        print(f"Worker failed: {error}", flush=True)
         return {"ok": False, "status": "failed", "error": str(error)}
 
     status["status"] = (
@@ -408,6 +509,8 @@ def _run_candidates_job_for_output(paths: JobPaths) -> dict:
     )
     status["ended_at"] = _utcnow()
     status["pid"] = os.getpid()
+    status["is_running"] = False
+    status["lock_pid"] = None
     status["pool_total"] = int(results.get("pool_total") or results.get("total", 0))
     status["download_queue_total"] = int(results.get("download_queue_total") or results.get("total_urls") or 0)
     status["total_urls"] = int(results.get("total_urls") or 0)
@@ -421,6 +524,15 @@ def _run_candidates_job_for_output(paths: JobPaths) -> dict:
     status["failures"] = list(results.get("failures") or status.get("failures") or [])
     status["errors"] = list(results.get("errors") or status.get("errors") or [])
     _write_status(paths, status)
+    _release_lock(paths, expected_pid=os.getpid())
+    print(
+        "Worker completed: "
+        f"status={status['status']} "
+        f"downloaded={status['downloaded']} "
+        f"skipped_existing={status['skipped_existing']} "
+        f"failed={status['failed']}",
+        flush=True,
+    )
     return {"ok": True, "status": status["status"], "state": status}
 
 
@@ -444,7 +556,7 @@ def run_job(job_name: str = DEFAULT_JOB_NAME) -> int:
             paths.stop_path.unlink()
         except OSError:
             pass
-    _release_lock(paths)
+    _release_lock(paths, expected_pid=os.getpid())
 
     final_status = get_status(normalized)
     print(f"Job finished: {final_status.get('status')}")
