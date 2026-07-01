@@ -16,9 +16,16 @@
 ## Быстрая карта
 
 - `service.py` — facade для UI.
-- `candidate_pool.py` — общий saved pool, filters, stats, diagnostics, search helpers.
-- `tmdb_candidate_pool.py` — новый TMDb build snapshot.
-- `import_tmdb.py` — импорт TMDb snapshot в общий saved pool.
+- `candidate_pool.py` — compatibility wrapper (re-export из `pool/`, `repositories/`, `views/`).
+- `models/` — schema, keys, country/genre schema.
+- `repositories/` — load/save pool и criteria JSON.
+- `pool/` — dedupe, queries, stats, diagnostics, search helpers, completeness.
+- `scoring/` — sort keys для ranking/dedupe.
+- `views/` — formatters (dict → str).
+- `sources/tmdb/` — discover_query, discover_dedupe, transformer, builder, output, importer.
+- `sources/kp/` — enrichment, retry.
+- `tmdb_candidate_pool.py` — wrapper над `sources/tmdb/builder.py`.
+- `import_tmdb.py` — wrapper над `sources/tmdb/importer.py`.
 - `schema.py` — нормализация кандидата, `kp_status`, completeness.
 - `keys.py` — identity/storage keys.
 - `genres.py` — runtime жанры saved pool.

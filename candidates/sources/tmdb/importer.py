@@ -12,7 +12,7 @@ from candidates.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key
 from candidates.schema import normalize_candidate_for_storage
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[3]
 OUTPUT_DIR = ROOT_DIR / "data" / "exports" / "candidate_pool"
 
 
