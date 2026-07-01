@@ -12,6 +12,14 @@ Recommended helps you keep your own watched base, discover new films and series,
 
 It is local-first, inspectable, and built around a persistent candidate pool instead of one-off search results.
 
+<p align="center">
+  <img src="screens/main.png" alt="Recommended desktop watched library with poster, ratings and title details" width="100%">
+</p>
+
+<p align="center">
+  <strong>Your watched library, recommendations, ratings and metadata in one local desktop workspace.</strong>
+</p>
+
 ## The Idea
 
 Streaming platforms know what they want to sell. Recommended is for what **you** want to track, compare and remember.
@@ -46,6 +54,23 @@ watched library
 - **Poster cache**: keep preview posters local and avoid waiting on CDN during normal browsing.
 - **Console tools**: maintenance, diagnostics, imports and longer-running operations stay available.
 
+## Preview
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="screens/main.png" alt="Watched library screen">
+    </td>
+    <td width="50%">
+      <img src="screens/candidates.png" alt="Candidate pool screen">
+    </td>
+  </tr>
+  <tr>
+    <td><strong>My library</strong><br>Personal ratings, public scores, posters, metadata and synopsis.</td>
+    <td><strong>Candidate pool</strong><br>Ranked recommendations with filters, hide/transfer actions and vote signals.</td>
+  </tr>
+</table>
+
 ## Built For
 
 - people who rate films and series seriously;
@@ -53,15 +78,6 @@ watched library
 - custom recommendation experiments;
 - personal media datasets;
 - Python/PyQt projects that should stay understandable while growing.
-
-## Quick Preview
-
-Screenshots are the next public-polish step. Planned preview shots:
-
-- watched library with detail card;
-- candidate filters and candidate detail;
-- information/analytics tab;
-- TMDb candidate pool flow.
 
 ## Architecture
 

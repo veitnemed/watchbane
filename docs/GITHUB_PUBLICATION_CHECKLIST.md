@@ -23,7 +23,7 @@ Things that cannot be fully configured from files in the repository.
 
 ## Visuals
 
-- Add 2-4 screenshots to `docs/screenshots/`.
+- Add 2-4 screenshots to `screens/`.
 - Use one screenshot as GitHub social preview.
 - Recommended screenshots:
   - watched list + detail card;
