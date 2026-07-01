@@ -112,6 +112,8 @@ class CandidateFiltersView:
         self._update_year_range_label()
         self._refresh_threshold_labels()
         self._apply_filter_defaults()
+        session.add_listener(self._on_session_updated)
+        session.add_loading_listener(self._on_loading_changed)
         self._update_intro()
 
     @property
@@ -183,7 +185,7 @@ class CandidateFiltersView:
         return self._form.hide_hidden_check
 
     def _update_intro(self, *, result_count: int | None = None, result_ok: bool | None = None) -> None:
-        overview = self._service.get_search_overview_view()
+        overview = self._session.overview()
         lead, stats, apply_enabled = build_intro_copy(
             self._session,
             overview,
@@ -192,7 +194,27 @@ class CandidateFiltersView:
         )
         self._intro_lead.setText(lead)
         self._intro_stats.setText(stats)
-        self._apply_button.setEnabled(apply_enabled)
+        self._apply_button.setEnabled(apply_enabled and self._session.is_loading is False)
+
+    def _on_loading_changed(self) -> None:
+        if self._session.is_loading:
+            self._apply_button.setEnabled(False)
+            self._intro_lead.setText("Применяю фильтры...")
+            self._intro_stats.setText("Окно можно не трогать, результат появится на вкладке «Кандидаты».")
+
+    def _on_session_updated(self) -> None:
+        if self._session.is_loading:
+            return
+        if self._session.last_error:
+            self._intro_lead.setText("Не удалось применить фильтры.")
+            self._intro_stats.setText(self._session.last_error)
+            self._apply_button.setEnabled(True)
+            return
+        if self._session.has_results:
+            self._update_intro(
+                result_count=self._session.filtered_count,
+                result_ok=self._session.filtered_count > 0,
+            )
 
     def _update_apply_button_width(self) -> None:
         width = self._widget.width()
@@ -297,16 +319,7 @@ class CandidateFiltersView:
         }
 
     def _apply_filters(self) -> None:
-        result = self._session.apply_filters(self._collect_filters())
-        if result.get("is_empty_pool"):
-            self._update_intro()
-            return
-
-        filtered_count = int(result.get("filtered_count", 0) or 0)
-        self._update_intro(
-            result_count=filtered_count,
-            result_ok=filtered_count > 0,
-        )
+        self._session.apply_filters_async(self._collect_filters(), parent=self._widget)
 
         if self._on_applied is not None:
             self._on_applied()

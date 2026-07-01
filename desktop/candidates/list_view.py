@@ -6,14 +6,15 @@ import logging
 from collections.abc import Callable
 from time import perf_counter
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QModelIndex, Qt
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
+    QListView,
     QScrollArea,
     QSplitter,
     QVBoxLayout,
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.candidates.list_delegate import build_candidate_list_item_delegate
+from desktop.candidates.list_model import CandidateListModel
 from desktop.candidates.presenters import (
     build_candidate_readonly_detail_entry,
     build_candidate_search_index,
@@ -65,7 +67,8 @@ class CandidateListView:
         self._detail_entries: dict[str, tuple] = {}
         self._poster_request_seq = 0
         self._poster_worker: CandidatePosterDownloadWorker | None = None
-        self._delegate = build_candidate_list_item_delegate(None, session.sort_mode)
+        self._model = CandidateListModel(parent=None)
+        self._delegate = None
 
         self._widget = QWidget()
         self._widget.setObjectName("candidateListRoot")
@@ -121,12 +124,18 @@ class CandidateListView:
         sort_row_layout.addStretch(1)
         list_layout.addWidget(sort_row)
 
-        self._results_list = QListWidget()
+        self._results_list = QListView()
         self._results_list.setObjectName("candidateListWidget")
         self._results_list.setSpacing(2)
         self._results_list.setUniformItemSizes(True)
+        self._results_list.setModel(self._model)
+        self._delegate = build_candidate_list_item_delegate(self._results_list, session.sort_mode)
         self._results_list.setItemDelegate(self._delegate)
-        self._results_list.currentRowChanged.connect(self._on_result_selected)
+        self._results_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self._results_list.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        selection_model = self._results_list.selectionModel()
+        if selection_model is not None:
+            selection_model.currentChanged.connect(self._on_result_selected)
         list_layout.addWidget(self._results_list, stretch=1)
         list_layout.addWidget(self._counter_label)
         splitter.addWidget(list_panel)
@@ -164,12 +173,14 @@ class CandidateListView:
         splitter.setSizes([CANDIDATE_LIST_MAX_WIDTH, 800])
 
         session.add_listener(self.refresh)
+        session.add_loading_listener(self._on_loading_changed)
         self.refresh()
 
     def on_tab_activated(self) -> None:
-        if self._session.has_results:
+        if self._session.has_results or self._session.is_loading:
             return
-        self._session.apply_filters(dict(DEFAULT_BROWSE_FILTERS))
+        self._clear_detail(show_filters_hint=False, loading=True)
+        self._session.apply_filters_async(dict(DEFAULT_BROWSE_FILTERS), parent=self._widget)
 
     def _transfer_selected_to_watched(self) -> None:
         candidate = self._selected_candidate
@@ -185,7 +196,7 @@ class CandidateListView:
 
         self._selected_candidate = None
         if self._session.filters is not None:
-            self._session.apply_filters(self._session.filters)
+            self._session.reload_from_pool(force=True)
         if self._on_watched_added is not None:
             self._on_watched_added(result)
 
@@ -222,20 +233,15 @@ class CandidateListView:
         self._candidates = self._search_index.filter_by_query(query)
 
         self._results_list.blockSignals(True)
-        self._results_list.clear()
         if len(self._candidates) == 0:
+            self._model.set_candidates([])
             self._selected_candidate = None
             self._selected_identity = None
             self._update_counter_label(query)
             self._clear_detail(show_filters_hint=False, search_active=bool(query.strip()))
         else:
             self._update_counter_label(query)
-            for candidate in self._candidates:
-                from PyQt6.QtWidgets import QListWidgetItem
-
-                item = QListWidgetItem()
-                item.setData(Qt.ItemDataRole.UserRole, candidate)
-                self._results_list.addItem(item)
+            self._model.set_candidates(self._candidates)
         self._results_list.blockSignals(False)
 
         if len(self._candidates) == 0:
@@ -250,11 +256,11 @@ class CandidateListView:
             return
 
         selected_identity = candidate_detail_identity(self._candidates[row])
-        current_row = self._results_list.currentRow()
+        current_row = self._results_list.currentIndex().row()
         if current_row != row:
-            self._results_list.setCurrentRow(row)
+            self._results_list.setCurrentIndex(self._model.index(row, 0))
         elif selected_identity != self._selected_identity:
-            self._on_result_selected(row)
+            self._on_result_selected(self._model.index(row, 0), QModelIndex())
 
     def _update_counter_label(self, query: str) -> None:
         dup_note = ""
@@ -282,21 +288,24 @@ class CandidateListView:
             self._search_index = build_candidate_search_index([])
             self._pool_unique_total = 0
             self._detail_entries = {}
-            self._results_list.clear()
+            self._model.set_candidates([])
             self._counter_label.setText("")
             self._clear_detail(show_filters_hint=True)
             return
 
         self._all_candidates = self._session.sorted_candidates()
         self._search_index = build_candidate_search_index(self._all_candidates)
-        pool_stats = self._service.get_pool_stats_view()["stats"]
+        pool_stats = self._session.pool_stats()
+        if not pool_stats:
+            pool_stats = self._service.get_pool_stats_view()["stats"]
         self._pool_unique_total = int(
             pool_stats.get("unique_total", pool_stats.get("storage_total", 0)) or 0
         )
         self._debounced_search.flush()
 
-    def _on_result_selected(self, row: int) -> None:
+    def _on_result_selected(self, current: QModelIndex, _previous: QModelIndex = QModelIndex()) -> None:
         started = perf_counter()
+        row = current.row() if current.isValid() else -1
         if row < 0 or row >= len(self._candidates):
             if self._session.has_results and len(self._candidates) == 0:
                 self._clear_detail(
@@ -367,12 +376,27 @@ class CandidateListView:
             self._detail_entries[identity] = (entry_key, movie, updated_card)
 
         self._detail_card.apply_local_poster_path(local_path)
+        self._model.update_poster_path(identity, local_path)
         self._results_list.viewport().update()
 
-    def _clear_detail(self, *, show_filters_hint: bool, search_active: bool = False) -> None:
+    def _on_loading_changed(self) -> None:
+        if self._session.is_loading:
+            self._counter_label.setText("Загрузка кандидатов...")
+            self._clear_detail(show_filters_hint=False, loading=True)
+
+    def _clear_detail(
+        self,
+        *,
+        show_filters_hint: bool,
+        search_active: bool = False,
+        loading: bool = False,
+    ) -> None:
         self._poster_request_seq += 1
         self._detail_scroll.hide()
-        if show_filters_hint:
+        if loading:
+            self._detail_placeholder.setText("Загрузка кандидатов...")
+            self._detail_placeholder.show()
+        elif show_filters_hint:
             self._detail_placeholder.setText("Сначала примените фильтры на вкладке «Фильтры»")
             self._detail_placeholder.show()
         elif search_active:

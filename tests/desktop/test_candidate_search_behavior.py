@@ -3,8 +3,9 @@ from __future__ import annotations
 from copy import deepcopy
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QListWidget, QPushButton, QCheckBox
+from PyQt6.QtWidgets import QLabel, QListView, QPushButton, QCheckBox
 
+from desktop.candidates.list_model import CandidateListModel, CandidateListRoles
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.list_view import CandidateListView
 from desktop.candidates.presenters import candidate_detail_identity
@@ -54,8 +55,10 @@ class FakeCandidateService:
         self.candidates = deepcopy(candidates or [_searchable_candidate(), _predict_ready_candidate()])
         self.hidden_candidates: list[dict] = []
         self.applied_filters: list[dict] = []
+        self.overview_calls = 0
 
     def get_search_overview_view(self) -> dict:
+        self.overview_calls += 1
         return {
             "is_empty": len(self.candidates) == 0,
             "summary": f"{len(self.candidates)} candidates",
@@ -120,18 +123,23 @@ def _build_views(qtbot, service: FakeCandidateService | None = None):
     return service, session, filters_view, list_view
 
 
-def _candidate_list(list_view: CandidateListView) -> QListWidget:
-    widget = list_view.widget.findChild(QListWidget, "candidateListWidget")
+def _candidate_list(list_view: CandidateListView) -> QListView:
+    widget = list_view.widget.findChild(QListView, "candidateListWidget")
     assert widget is not None
     return widget
 
 
-def _listed_titles(list_widget: QListWidget) -> list[str]:
+def _listed_titles(list_widget: QListView) -> list[str]:
     titles = []
-    for index in range(list_widget.count()):
-        candidate = list_widget.item(index).data(Qt.ItemDataRole.UserRole)
+    model = list_widget.model()
+    for row in range(model.rowCount()):
+        candidate = model.data(model.index(row, 0), CandidateListRoles.CandidateRole)
         titles.append(candidate.get("title"))
     return titles
+
+
+def _listed_count(list_widget: QListView) -> int:
+    return list_widget.model().rowCount()
 
 
 def test_searchable_candidate_without_kp_imdb_is_visible_in_searchable_mode(qtbot) -> None:
@@ -150,7 +158,7 @@ def test_searchable_candidate_without_kp_imdb_is_hidden_in_predict_ready_mode(qt
     session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": True})
 
     list_widget = _candidate_list(list_view)
-    qtbot.waitUntil(lambda: list_widget.count() == 1)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 1)
     assert _listed_titles(list_widget) == ["Predict Ready"]
 
 
@@ -158,10 +166,10 @@ def test_selecting_candidate_row_updates_detail_card_and_missing_poster_placehol
     _service, session, _filters_view, list_view = _build_views(qtbot)
     session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": False})
     list_widget = _candidate_list(list_view)
-    qtbot.waitUntil(lambda: list_widget.count() == 2)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 2)
 
     row = _listed_titles(list_widget).index("Searchable Only")
-    list_widget.setCurrentRow(row)
+    list_widget.setCurrentIndex(list_widget.model().index(row, 0))
 
     title_label = list_view.widget.findChild(QLabel, "detailTitle")
     poster_label = list_view.widget.findChild(QLabel, "detailPoster")
@@ -175,15 +183,15 @@ def test_hide_button_calls_service_and_removes_candidate_row(qtbot) -> None:
     service, session, _filters_view, list_view = _build_views(qtbot)
     session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": False})
     list_widget = _candidate_list(list_view)
-    qtbot.waitUntil(lambda: list_widget.count() == 2)
-    list_widget.setCurrentRow(_listed_titles(list_widget).index("Searchable Only"))
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 2)
+    list_widget.setCurrentIndex(list_widget.model().index(_listed_titles(list_widget).index("Searchable Only"), 0))
 
     hide_button = list_view.widget.findChild(QPushButton, "candidateHideButton")
     assert hide_button is not None
     qtbot.waitUntil(lambda: hide_button.isEnabled())
     qtbot.mouseClick(hide_button, Qt.MouseButton.LeftButton)
 
-    qtbot.waitUntil(lambda: list_widget.count() == 1)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 1)
     assert [candidate["title"] for candidate in service.hidden_candidates] == ["Searchable Only"]
     assert _listed_titles(list_widget) == ["Predict Ready"]
 
@@ -197,11 +205,71 @@ def test_filter_change_updates_candidate_list(qtbot) -> None:
     assert only_complete is not None
 
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
-    qtbot.waitUntil(lambda: list_widget.count() == 2)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 2)
     assert _listed_titles(list_widget) == ["Predict Ready", "Searchable Only"]
 
     only_complete.setChecked(True)
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
 
-    qtbot.waitUntil(lambda: list_widget.count() == 1)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 1)
     assert _listed_titles(list_widget) == ["Predict Ready"]
+
+
+def test_candidate_list_model_roles_and_poster_cache(monkeypatch, qtbot) -> None:
+    calls: list[str] = []
+
+    def fake_resolve(candidate: dict) -> str | None:
+        calls.append(candidate["title"])
+        return f"poster-{candidate['title']}.jpg"
+
+    monkeypatch.setattr("desktop.candidates.list_model.resolve_local_poster_path_for_candidate", fake_resolve)
+
+    model = CandidateListModel([_searchable_candidate()])
+    qtbot.addWidget(QListView())
+    index = model.index(0, 0)
+
+    assert model.rowCount() == 1
+    assert model.data(index, CandidateListRoles.CandidateRole)["title"] == "Searchable Only"
+    assert model.data(index, CandidateListRoles.IdentityRole) == "searchable-only|2024"
+    assert model.data(index, CandidateListRoles.PosterPathRole) == "poster-Searchable Only.jpg"
+    assert model.data(index, CandidateListRoles.PosterPathRole) == "poster-Searchable Only.jpg"
+    assert calls == ["Searchable Only"]
+
+
+def test_session_reuses_cached_overview_for_repeated_filters(qtbot) -> None:
+    service, session, _filters_view, _list_view = _build_views(qtbot)
+
+    session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": False})
+    session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": True})
+
+    assert service.overview_calls == 1
+
+
+def test_session_reload_from_pool_force_refreshes_overview(qtbot) -> None:
+    service, session, _filters_view, _list_view = _build_views(qtbot)
+
+    session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": False})
+    session.reload_from_pool(force=True)
+
+    assert service.overview_calls == 2
+
+
+def test_session_ignores_stale_async_result(qtbot) -> None:
+    _service, session, _filters_view, _list_view = _build_views(qtbot)
+    session._request_id = 2
+
+    session._on_async_result(
+        1,
+        {**DEFAULT_BROWSE_FILTERS, "only_complete": False},
+        {
+            "ok": True,
+            "is_empty_pool": False,
+            "filtered_count": 1,
+            "candidates": [_searchable_candidate()],
+            "filtered_candidates": [_searchable_candidate()],
+            "hidden_duplicates": 0,
+        },
+    )
+
+    assert session.has_results is False
+    assert session.sorted_total_count() == 0

@@ -6,10 +6,8 @@ from PyQt6.QtCore import QRect, QSize, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import QStyledItemDelegate, QStyle
 
-from desktop.candidates.presenters import (
-    format_candidate_metric_value,
-    resolve_local_poster_path_for_candidate,
-)
+from desktop.candidates.list_model import CandidateListRoles
+from desktop.candidates.presenters import format_candidate_metric_value
 from desktop.shared.detail import (
     LIST_ITEM_HEIGHT,
     LIST_ITEM_H_PADDING,
@@ -71,7 +69,7 @@ def build_candidate_list_item_delegate(parent, sort_mode: str):
             thumb_top = rect.top() + (rect.height() - LIST_THUMB_HEIGHT) // 2
             thumb_rect = QRect(thumb_left, thumb_top, LIST_THUMB_WIDTH, LIST_THUMB_HEIGHT)
 
-            poster_path = resolve_local_poster_path_for_candidate(candidate)
+            poster_path = index.data(CandidateListRoles.PosterPathRole)
             thumb = _load_list_thumb_pixmap(poster_path)
             if thumb is not None:
                 clip = thumb_rect.adjusted(1, 1, -1, -1)

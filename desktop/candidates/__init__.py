@@ -17,6 +17,7 @@ from desktop.candidates.list_view import (
     CANDIDATE_LIST_STRETCH,
     CandidateListView,
 )
+from desktop.candidates.list_model import CandidateListModel, CandidateListRoles
 from desktop.candidates.presenters import (
     SORT_MODE_METRIC_PREFIX,
     build_candidate_detail_entry,
@@ -38,6 +39,7 @@ from desktop.candidates.session import (
     CandidateSearchSession,
 )
 from desktop.candidates.workers.poster_worker import CandidatePosterDownloadWorker
+from desktop.candidates.workers.search_worker import CandidateSearchWorker
 
 __all__ = [
     "APPLY_BUTTON_HEIGHT",
@@ -48,8 +50,11 @@ __all__ = [
     "CANDIDATE_LIST_STRETCH",
     "CANDIDATE_YEAR_MIN",
     "CandidateFiltersView",
+    "CandidateListModel",
+    "CandidateListRoles",
     "CandidateListView",
     "CandidatePosterDownloadWorker",
+    "CandidateSearchWorker",
     "CandidateSearchSession",
     "DEFAULT_BROWSE_FILTERS",
     "DEFAULT_SORT_MODE",
