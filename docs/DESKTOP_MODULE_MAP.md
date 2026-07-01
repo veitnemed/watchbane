@@ -51,6 +51,7 @@ desktop/
     filters_view.py              # вкладка Фильтры
     list_view.py                 # вкладка Кандидаты
     list_delegate.py             # card-style list rows
+    filters_controls.py          # threshold slider helpers
     presenters.py                # format/map candidate records
     workers/poster_worker.py
   analytics/
@@ -66,7 +67,7 @@ desktop/
     detail/
       types.py                   # DetailEntry
       presenters.py              # card-facing formatters (no watched import)
-      posters.py                 # poster path / shell helpers
+      posters.py                 # poster path / shell helpers (shared lookup)
       profiles.py                # layout profiles and constants
       rating_indicator.py        # RatingCircleIndicator
       list_delegate.py           # WatchedListItemDelegate
