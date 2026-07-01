@@ -160,7 +160,7 @@ def test_save_add_title_record_passes_pool_candidate(monkeypatch) -> None:
 
         return Result()
 
-    monkeypatch.setattr("dataset.add_title_service.add_movie", fake_add_movie)
+    monkeypatch.setattr("dataset.add_flow.save.add_movie", fake_add_movie)
 
     defaults = {
         scheme.MAIN_INFO: {"title": "From Pool", "year": 2020, "country": ""},
