@@ -59,11 +59,11 @@ def test_get_search_filter_chip_options_view_uses_dataset_popularity(monkeypatch
     monkeypatch.setattr("candidates.service.storage_data.load_dataset", lambda: dataset)
     monkeypatch.setattr("candidates.service.get_pool_view", lambda: [])
     monkeypatch.setattr(
-        "candidates.service.candidate_pool.collect_search_genre_options",
+        "candidates.service.collect_search_genre_options",
         lambda _candidates: ["Триллер"],
     )
     monkeypatch.setattr(
-        "candidates.service.candidate_pool.collect_search_country_options",
+        "candidates.service.collect_search_country_options",
         lambda _candidates: [{"code": "GB", "label": "Великобритания"}],
     )
 
@@ -85,11 +85,11 @@ def test_get_search_filter_chip_options_view_falls_back_when_dataset_empty(monke
     monkeypatch.setattr("candidates.service.storage_data.load_dataset", lambda: {})
     monkeypatch.setattr("candidates.service.get_pool_view", lambda: [])
     monkeypatch.setattr(
-        "candidates.service.candidate_pool.collect_search_genre_options",
+        "candidates.service.collect_search_genre_options",
         lambda _candidates: ["Драма"],
     )
     monkeypatch.setattr(
-        "candidates.service.candidate_pool.collect_search_country_options",
+        "candidates.service.collect_search_country_options",
         lambda _candidates: [],
     )
 

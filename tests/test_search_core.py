@@ -106,11 +106,11 @@ def test_sort_search_candidates_puts_missing_values_last() -> None:
 def test_candidate_service_exposes_search_named_views(monkeypatch) -> None:
     from candidates import service
 
-    monkeypatch.setattr(service.candidate_pool, "get_pool_stats", lambda criteria_name=None: {"storage_total": 1})
-    monkeypatch.setattr(service.candidate_pool, "format_pool_stats_lines", lambda stats: ["В pool: 1"])
-    monkeypatch.setattr(service.candidate_pool, "format_pool_stats_summary", lambda stats: "В pool: 1")
+    monkeypatch.setattr(service, "get_pool_stats", lambda criteria_name=None: {"storage_total": 1, "ready_total": 0, "incomplete_total": 0, "watched_total": 0, "active_total": 1, "unique_total": 1, "raw_total": 1, "duplicate_entries": 0, "similar_duplicate_total": 0, "cross_year_duplicate_total": 0})
+    monkeypatch.setattr(service, "format_pool_stats_lines", lambda stats: ["В pool: 1"])
+    monkeypatch.setattr(service, "format_pool_stats_summary", lambda stats: "В pool: 1")
     monkeypatch.setattr(service, "get_pool_view", lambda criteria_name=None: [_candidate()])
-    monkeypatch.setattr(service.candidate_pool, "load_candidate_criteria", lambda: {})
+    monkeypatch.setattr(service, "load_candidate_criteria", lambda: {})
 
     overview = service.get_search_overview_view()
     assert overview["is_empty"] is False
@@ -439,6 +439,20 @@ def test_format_pool_stats_summary_shows_unique_and_duplicates() -> None:
     assert "похожих: 1" in summary
 
 
+def test_build_pool_genre_count_rows() -> None:
+    from candidates import candidate_pool
+
+    candidates = [
+        {"title": "Alpha", "genres": ["Драма", "Комедия"]},
+        {"title": "Bravo", "genres": ["Драма"]},
+    ]
+
+    rows = candidate_pool.build_pool_genre_count_rows(candidates)
+
+    assert [(row["label"], row["count"]) for row in rows] == [("Драма", 2), ("Комедия", 1)]
+    assert rows[0]["example_titles"] == ["Alpha", "Bravo"]
+
+
 def test_clean_common_pool_duplicates_writes_normalized_pool(monkeypatch) -> None:
     from candidates import candidate_pool
 
@@ -517,7 +531,7 @@ def test_find_title_duplicate_groups_includes_dataset_matches() -> None:
 
 
 def test_get_title_duplicates_view_uses_service_facade(monkeypatch) -> None:
-    from candidates import candidate_pool, service
+    from candidates import service
 
     groups = [{
         "title": "Show",
@@ -529,9 +543,9 @@ def test_get_title_duplicates_view_uses_service_facade(monkeypatch) -> None:
         "entries": [],
         "dataset_entries": [{"dataset_key": "Show", "title": "Show", "year": 2015}],
     }]
-    monkeypatch.setattr(candidate_pool, "find_title_duplicate_groups", lambda: groups)
+    monkeypatch.setattr(service, "find_title_duplicate_groups", lambda: groups)
     monkeypatch.setattr(
-        candidate_pool,
+        service,
         "build_title_duplicate_summary",
         lambda _groups: {
             "group_count": 1,

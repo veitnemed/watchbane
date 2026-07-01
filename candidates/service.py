@@ -8,11 +8,51 @@ from pathlib import Path
 from app.core import candidates as search_core
 from app.core import ranking as search_ranking
 from app.core import storage as search_storage
-from candidates import candidate_pool
-from candidates import import_tmdb as tmdb_import
-from candidates import tmdb_candidate_pool as tmdb_build
-from candidates import tmdb_country_options
-from candidates.keys import COMMON_POOL_CRITERIA_NAME
+from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
+from candidates.pool.dataset_overlap import (
+    count_pool_dataset_title_matches,
+    purge_dataset_title_matches_from_pool,
+)
+from candidates.pool.dedupe import clean_common_pool_duplicates
+from candidates.pool.diagnostics import (
+    build_candidate_poster_diagnostics,
+    build_title_duplicate_summary,
+    collect_unique_pool_poster_urls,
+    find_cross_year_title_groups,
+    find_suspicious_duplicates,
+    find_title_duplicate_groups,
+)
+from candidates.pool.legacy_collect import collect_candidates
+from candidates.pool.queries import (
+    get_all_candidates,
+    get_incomplete_candidates,
+    is_candidate_incomplete,
+)
+from candidates.pool.search_helpers import (
+    build_search_filter_defaults,
+    collect_search_country_options,
+    collect_search_genre_options,
+)
+from candidates.pool.stats import build_pool_genre_count_rows, get_pool_stats
+from candidates.pool.watched_cleanup import remove_candidate_from_pool
+from candidates.repositories.criteria_repository import (
+    build_criteria_label,
+    clear_common_pool,
+    ensure_common_pool_criteria,
+    load_candidate_criteria,
+)
+from candidates.repositories.pool_repository import load_candidate_pool
+from candidates.scoring.sort_keys import dedupe_ranked_candidates_by_title_identity
+from candidates.sources.kp.retry import retry_kp_enrichment_for_pool
+from candidates.sources.tmdb import builder as tmdb_build
+from candidates.sources.tmdb import country_options as tmdb_country_options
+from candidates.sources.tmdb import importer as tmdb_import
+from candidates.views.formatters import (
+    format_candidate_description,
+    format_pool_stats_lines,
+    format_pool_stats_summary,
+    format_search_filter_default_lines,
+)
 from dataset import filter_popularity
 from storage import data as storage_data
 
@@ -20,17 +60,22 @@ from storage import data as storage_data
 def get_pool_view(criteria_name: str | None = None) -> list:
     """Returns candidates for display without writing candidate_pool.json."""
     del criteria_name
-    return candidate_pool.get_all_candidates()
+    return get_all_candidates()
 
 
 def get_pool_stats_view(criteria_name: str | None = None) -> dict:
     """Returns pool stats and formatted lines for UI without writing JSON."""
-    stats = candidate_pool.get_pool_stats(criteria_name=criteria_name)
+    stats = get_pool_stats(criteria_name=criteria_name)
     return {
         "stats": stats,
-        "lines": candidate_pool.format_pool_stats_lines(stats),
-        "summary": candidate_pool.format_pool_stats_summary(stats),
+        "lines": format_pool_stats_lines(stats),
+        "summary": format_pool_stats_summary(stats),
     }
+
+
+def get_pool_genre_count_rows() -> list[dict]:
+    """Read-only genre distribution rows for candidate pool analytics."""
+    return build_pool_genre_count_rows(get_pool_view())
 
 
 def get_search_overview_view() -> dict:
@@ -53,7 +98,7 @@ def get_search_filter_view(candidates: list, filters: dict) -> dict:
     ready_candidates = filtered_candidates
     incomplete_candidates = [
         candidate for candidate in filtered_candidates
-        if candidate_pool.is_candidate_incomplete(candidate)
+        if is_candidate_incomplete(candidate)
     ]
 
     return {
@@ -70,9 +115,9 @@ def get_search_filter_view(candidates: list, filters: dict) -> dict:
 def get_search_filter_defaults_view(criteria_name: str | None = None) -> dict:
     """Returns saved search filter defaults for UI without writing JSON."""
     del criteria_name
-    defaults = candidate_pool.build_search_filter_defaults()
-    lines = candidate_pool.format_search_filter_default_lines(defaults)
-    common_criteria = candidate_pool.load_candidate_criteria().get(COMMON_POOL_CRITERIA_NAME)
+    defaults = build_search_filter_defaults()
+    lines = format_search_filter_default_lines(defaults)
+    common_criteria = load_candidate_criteria().get(COMMON_POOL_CRITERIA_NAME)
     return {
         "defaults": defaults,
         "lines": lines,
@@ -84,7 +129,7 @@ def get_search_genre_options_view(criteria_name: str | None = None) -> dict:
     """Returns saved-pool genres available for search filters without writing JSON."""
     del criteria_name
     candidates = get_pool_view()
-    genres = candidate_pool.collect_search_genre_options(candidates)
+    genres = collect_search_genre_options(candidates)
     return {
         "criteria_name": COMMON_POOL_CRITERIA_NAME,
         "genres": genres,
@@ -98,8 +143,8 @@ def get_search_filter_chip_options_view() -> dict:
     dataset = storage_data.load_dataset()
     dataset_total = len(dataset) if isinstance(dataset, dict) else 0
     pool_candidates = get_pool_view()
-    pool_genres = candidate_pool.collect_search_genre_options(pool_candidates)
-    pool_countries = candidate_pool.collect_search_country_options(pool_candidates)
+    pool_genres = collect_search_genre_options(pool_candidates)
+    pool_countries = collect_search_country_options(pool_candidates)
 
     genres = filter_popularity.build_dataset_genre_popularity(dataset)
     countries = filter_popularity.build_dataset_country_popularity(dataset)
@@ -129,7 +174,7 @@ def get_search_filter_chip_options_view() -> dict:
 
 def mark_candidate_watched_in_pool(candidate: dict) -> dict:
     """Removes watched candidate from pool via existing title+year write-path."""
-    removed_count = candidate_pool.remove_candidate_from_pool(candidate)
+    removed_count = remove_candidate_from_pool(candidate)
     if removed_count > 0:
         message = f"Из pool удалено записей: {removed_count}"
     else:
@@ -146,8 +191,8 @@ def mark_candidate_watched_in_pool(candidate: dict) -> dict:
 def get_retry_kp_view(criteria_name: str | None = None) -> dict:
     """Prepares incomplete-candidate data for retry KP UI without writing JSON."""
     del criteria_name
-    pool = candidate_pool.load_candidate_pool()
-    incomplete_candidates = candidate_pool.get_incomplete_candidates(pool, criteria_name=None)
+    pool = load_candidate_pool()
+    incomplete_candidates = get_incomplete_candidates(pool, criteria_name=None)
 
     return {
         "is_empty": len(pool) == 0,
@@ -158,7 +203,7 @@ def get_retry_kp_view(criteria_name: str | None = None) -> dict:
 
 def retry_kp_enrichment_in_pool(limit: int = 10, criteria_name: str | None = None) -> dict:
     """Retries KP enrichment for incomplete pool candidates via existing write-path."""
-    stats = candidate_pool.retry_kp_enrichment_for_pool(
+    stats = retry_kp_enrichment_for_pool(
         limit=limit,
         criteria_name=criteria_name,
     )
@@ -348,12 +393,12 @@ def get_mark_watched_view(criteria_name: str | None = None) -> dict:
 
 def is_pool_candidate_incomplete(candidate: dict) -> bool:
     """Returns incomplete flag for mark-watched UI without writing JSON."""
-    return candidate_pool.is_candidate_incomplete(candidate)
+    return is_candidate_incomplete(candidate)
 
 
 def clear_common_candidate_pool() -> dict:
     """Clears all candidates from the shared pool via existing write-path."""
-    result = candidate_pool.clear_common_pool()
+    result = clear_common_pool()
     return {
         "cleared": result.get("cleared", 0),
         "criteria_name": COMMON_POOL_CRITERIA_NAME,
@@ -366,7 +411,7 @@ def clean_common_pool_duplicates(
     merge_cross_year: bool = True,
 ) -> dict:
     """Removes exact, similar, and cross-year duplicates from shared pool via write-path."""
-    return candidate_pool.clean_common_pool_duplicates(
+    return clean_common_pool_duplicates(
         merge_similar=merge_similar,
         merge_cross_year=merge_cross_year,
     )
@@ -374,12 +419,12 @@ def clean_common_pool_duplicates(
 
 def get_pool_dataset_title_matches_view() -> dict:
     """Read-only preview of pool entries whose title exists in watched dataset."""
-    return candidate_pool.count_pool_dataset_title_matches()
+    return count_pool_dataset_title_matches()
 
 
 def purge_pool_dataset_title_matches() -> dict:
     """Removes pool entries whose normalized title exists in watched dataset."""
-    return candidate_pool.purge_dataset_title_matches_from_pool()
+    return purge_dataset_title_matches_from_pool()
 
 
 def delete_candidate_pool_criteria(criteria_name: str) -> dict:
@@ -396,7 +441,7 @@ def delete_candidate_pool_criteria(criteria_name: str) -> dict:
 
 def get_suspicious_duplicates_view() -> dict:
     """Prepares suspicious duplicate pairs for diagnostics UI without writing JSON."""
-    pairs = candidate_pool.find_suspicious_duplicates()
+    pairs = find_suspicious_duplicates()
     return {
         "pairs": pairs,
         "count": len(pairs),
@@ -406,7 +451,7 @@ def get_suspicious_duplicates_view() -> dict:
 
 def get_cross_year_duplicates_view() -> dict:
     """Prepares cross-year duplicate groups for diagnostics UI without writing JSON."""
-    groups = candidate_pool.find_cross_year_title_groups()
+    groups = find_cross_year_title_groups()
     return {
         "groups": groups,
         "count": len(groups),
@@ -416,8 +461,8 @@ def get_cross_year_duplicates_view() -> dict:
 
 def get_title_duplicates_view() -> dict:
     """Prepares title duplicate groups and summary for diagnostics UI without writing JSON."""
-    groups = candidate_pool.find_title_duplicate_groups()
-    summary = candidate_pool.build_title_duplicate_summary(groups)
+    groups = find_title_duplicate_groups()
+    summary = build_title_duplicate_summary(groups)
     return {
         "groups": groups,
         "summary": summary,
@@ -443,7 +488,7 @@ def get_candidate_poster_diagnostics_view() -> dict:
             "problem_rows": [],
         }
 
-    diagnostics = candidate_pool.build_candidate_poster_diagnostics(overview["candidates"])
+    diagnostics = build_candidate_poster_diagnostics(overview["candidates"])
     return {
         "is_empty_pool": False,
         **diagnostics,
@@ -469,7 +514,7 @@ def download_candidate_pool_preview_posters(*, progress_callback=None, error_cal
         }
 
     candidates = overview["candidates"]
-    urls = candidate_pool.collect_unique_pool_poster_urls(candidates)
+    urls = collect_unique_pool_poster_urls(candidates)
     stats = download_preview_posters_for_urls(
         urls,
         progress_callback=progress_callback,
@@ -486,14 +531,14 @@ def download_candidate_pool_preview_posters(*, progress_callback=None, error_cal
 
 def get_criteria_catalog_view() -> dict:
     """Returns the single shared pool criteria entry for UI pickers."""
-    all_criteria = candidate_pool.load_candidate_criteria()
+    all_criteria = load_candidate_criteria()
     criteria = all_criteria.get(COMMON_POOL_CRITERIA_NAME)
     items = []
     if isinstance(criteria, dict):
         items.append({
             "criteria_name": COMMON_POOL_CRITERIA_NAME,
             "criteria": criteria,
-            "label": candidate_pool.build_criteria_label(COMMON_POOL_CRITERIA_NAME, criteria),
+            "label": build_criteria_label(COMMON_POOL_CRITERIA_NAME, criteria),
         })
     return {
         "items": items,
@@ -504,7 +549,7 @@ def get_criteria_catalog_view() -> dict:
 
 def get_common_pool_criteria_view() -> dict:
     """Returns shared pool build/filter settings without writing JSON."""
-    criteria = candidate_pool.load_candidate_criteria().get(COMMON_POOL_CRITERIA_NAME)
+    criteria = load_candidate_criteria().get(COMMON_POOL_CRITERIA_NAME)
     return {
         "criteria_name": COMMON_POOL_CRITERIA_NAME,
         "criteria": criteria if isinstance(criteria, dict) else {},
@@ -514,19 +559,19 @@ def get_common_pool_criteria_view() -> dict:
 
 def ensure_common_pool_criteria() -> tuple[str, dict]:
     """Ensures shared pool criteria entry exists (write-path)."""
-    return candidate_pool.ensure_common_pool_criteria()
+    return ensure_common_pool_criteria()
 
 
 def collect_candidates_legacy(criteria_name: str, criteria: dict) -> dict:
     """Collects candidates via legacy KP Discover write-path."""
-    return candidate_pool.collect_candidates(criteria_name, criteria)
+    return collect_candidates(criteria_name, criteria)
 
 
 def rank_search_candidates(candidates: list) -> dict:
     """Ranks and dedupes candidates by explainable quality score."""
     scored_candidates = search_ranking.rank_candidates(candidates)
     before_dedupe_count = len(scored_candidates)
-    scored_candidates = candidate_pool.dedupe_ranked_candidates_by_title_identity(scored_candidates)
+    scored_candidates = dedupe_ranked_candidates_by_title_identity(scored_candidates)
     return {
         "candidates": scored_candidates,
         "before_dedupe_count": before_dedupe_count,
@@ -545,7 +590,7 @@ SEARCH_SORT_MODE_LABELS = {
 
 
 def _sort_field_value(candidate: dict, field_name: str) -> float | None:
-    from candidates.schema import coerce_candidate_number
+    from candidates.models.schema import coerce_candidate_number
 
     return coerce_candidate_number(candidate.get(field_name))
 
@@ -567,7 +612,7 @@ def sort_search_candidates(candidates: list, sort_mode: str) -> dict:
     """Dedupes and sorts filtered candidates by a numeric pool field."""
     normalized_mode = sort_mode if sort_mode in SEARCH_SORT_MODES else "kp_score"
     before_dedupe_count = len(candidates)
-    deduped = candidate_pool.dedupe_ranked_candidates_by_title_identity(list(candidates))
+    deduped = dedupe_ranked_candidates_by_title_identity(list(candidates))
     sorted_candidates = _sort_candidates_by_mode(deduped, normalized_mode)
     return {
         "candidates": sorted_candidates,
@@ -594,4 +639,4 @@ def hide_candidate(candidate: dict) -> dict:
 
 def format_candidate_description(candidate: dict, limit: int = 200) -> str:
     """Returns truncated candidate description for UI cards."""
-    return candidate_pool.format_candidate_description(candidate, limit=limit)
+    return format_candidate_description(candidate, limit=limit)
