@@ -34,6 +34,7 @@ Things that cannot be fully configured from files in the repository.
 ## First Public Release
 
 - Tag `v0.1.0`.
+- Use [RELEASE_TEMPLATE.md](RELEASE_TEMPLATE.md) for the release body.
 - Write release notes with:
   - what works now;
   - what is local-only;
