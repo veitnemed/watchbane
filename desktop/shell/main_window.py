@@ -15,7 +15,7 @@ class WatchedMoviesWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Terminal Movies Learn Desktop")
+        self.setWindowTitle("Watchbane")
         self.resize(1180, 720)
         self.setStyleSheet(DARK_STYLE)
         self.statusBar().showMessage("")

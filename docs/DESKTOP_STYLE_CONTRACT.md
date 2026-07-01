@@ -1,6 +1,6 @@
 ﻿# Desktop Style Contract
 
-Документ фиксирует визуальные и layout-правила PyQt desktop GUI для `Series List`. Он относится к watched/search/analytics интерфейсу и не описывает legacy-сценарии из `archive/legacy/`.
+Документ фиксирует визуальные и layout-правила PyQt desktop GUI для `Watchbane`. Он относится к watched/search/analytics интерфейсу и не описывает legacy-сценарии из `archive/legacy/`.
 
 ## Принципы
 

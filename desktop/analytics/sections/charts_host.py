@@ -23,7 +23,7 @@ class AnalyticsChartsMixin:
             "w",
             encoding="utf-8",
             suffix=".html",
-            prefix="recommended_plotly_",
+            prefix="watchbane_plotly_",
             delete=False,
         )
         with handle:

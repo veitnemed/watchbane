@@ -1,6 +1,6 @@
 # dataset
 
-Доменный слой watched-базы Series List.
+Доменный слой watched-базы Watchbane.
 
 ## Целевая структура
 

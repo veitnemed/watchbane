@@ -1,6 +1,6 @@
 ﻿# Data Storage Plan
 
-Целевая структура локальных данных `Series List`.
+Целевая структура локальных данных `Watchbane`.
 
 ```text
 data/

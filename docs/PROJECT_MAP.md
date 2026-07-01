@@ -1,6 +1,6 @@
 ﻿# Карта проекта
 
-`Series List` - локальный Python-проект для ведения watched-базы и поиска сериалов/тайтлов через candidate pool, TMDb, IMDb SQL и KP enrichment.
+`Watchbane` - локальный Python-проект для ведения watched-базы и поиска сериалов/тайтлов через candidate pool, TMDb, IMDb SQL и KP enrichment.
 
 Старая ML-модель перенесена в `archive/legacy/model/` и не является активной частью runtime.
 

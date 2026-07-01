@@ -1,19 +1,19 @@
-# Recommended
+# Watchbane
 
-[![Tests](https://github.com/veitnemed/recommended/actions/workflows/tests.yml/badge.svg)](https://github.com/veitnemed/recommended/actions/workflows/tests.yml)
+[![Tests](https://github.com/veitnemed/watchbane/actions/workflows/tests.yml/badge.svg)](https://github.com/veitnemed/watchbane/actions/workflows/tests.yml)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/desktop-PyQt6-41cd52.svg)](https://www.riverbankcomputing.com/software/pyqt/)
 [![Local first](https://img.shields.io/badge/data-local--first-111827.svg)](docs/DATA_STORAGE_PLAN.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**A private recommendation workspace for people who want more than a watchlist.**
+**The local-first app that turns your watchlist into a ranked candidate pool.**
 
-Recommended helps you keep your own watched base, discover new films and series, compare signals from TMDb / IMDb / KP, and move good candidates into your personal library without giving the whole process to a black-box service.
+Watchbane helps you keep your own watched base, discover new films and series, compare signals from TMDb / IMDb / KP, and move good candidates into your personal library without giving the whole process to a black-box service.
 
 It is local-first, inspectable, and built around a persistent candidate pool instead of one-off search results.
 
 <p align="center">
-  <img src="screens/main.png" alt="Recommended desktop watched library with poster, ratings and title details" width="100%">
+  <img src="screens/main.png" alt="Watchbane desktop watched library with poster, ratings and title details" width="100%">
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@ It is local-first, inspectable, and built around a persistent candidate pool ins
 
 ## The Idea
 
-Streaming platforms know what they want to sell. Recommended is for what **you** want to track, compare and remember.
+Streaming platforms know what they want to sell. Watchbane is for what **you** want to track, compare and remember.
 
 You keep the source of truth locally. The app enriches it with external metadata, but does not surrender your data model to any external platform.
 
@@ -37,7 +37,7 @@ watched library
 
 ## What Makes It Different
 
-| Instead of... | Recommended gives you... |
+| Instead of... | Watchbane gives you... |
 | --- | --- |
 | A throwaway search result | A persistent candidate pool you can filter, clean and revisit |
 | A locked platform watchlist | Local JSON data you can inspect and back up |
@@ -81,7 +81,7 @@ watched library
 
 ## Architecture
 
-Recommended keeps the physical folder layout simple, but treats the project as four logical zones:
+Watchbane keeps the physical folder layout simple, but treats the project as four logical zones:
 
 | Zone | Purpose |
 | --- | --- |
@@ -99,7 +99,7 @@ Start here if you want to understand the code:
 
 ## Run It
 
-Recommended is developed primarily on Windows with Python 3.13+.
+Watchbane is developed primarily on Windows with Python 3.13+.
 
 ```powershell
 py -m pip install -r requirements.txt

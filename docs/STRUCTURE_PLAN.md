@@ -2,7 +2,7 @@
 
 Goal
 
-- Make `series-list` a clean, non-legacy local series search project structure.
+- Make `watchbane` a clean, non-legacy local series search project structure.
 
 Done
 

@@ -25,7 +25,7 @@ Things that cannot be fully configured from files in the repository.
 
 - Add 2-4 screenshots to `screens/`.
 - Use one screenshot as GitHub social preview.
-- Recommended screenshots:
+- Watchbane screenshots:
   - watched list + detail card;
   - candidate filters;
   - candidate detail card;
@@ -42,6 +42,6 @@ Things that cannot be fully configured from files in the repository.
 
 ## README Cleanup Before Public Push
 
-- Confirm README badges point to `veitnemed/recommended`.
+- Confirm README badges point to `veitnemed/watchbane`.
 - Add screenshots when available.
 - Confirm the license choice is intentional.

@@ -1,6 +1,6 @@
 ﻿# Desktop GUI Roadmap
 
-Roadmap описывает актуальный PyQt desktop для `Series List`: watched-база, карточка тайтла, аналитика и поиск кандидатов. Старые desktop-сценарии из `archive/legacy/` не возвращаются в активный GUI.
+Roadmap описывает актуальный PyQt desktop для `Watchbane`: watched-база, карточка тайтла, аналитика и поиск кандидатов. Старые desktop-сценарии из `archive/legacy/` не возвращаются в активный GUI.
 
 ## Цель
 

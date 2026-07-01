@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for taking a look at Series List.
+Thanks for taking a look at Watchbane.
 
 The project is local-first and intentionally keeps UI, domain logic and storage boundaries separate.
 
