@@ -32,7 +32,7 @@ from dataset.add_title_service import (
 )
 from desktop.theme import build_add_title_dialog_style
 from desktop.watched.add_title.worker import AddTitleResolveWorker
-from desktop.shared.detail.card import (
+from desktop.shared.detail import (
     ADD_TITLE_PREVIEW_CARD_PROFILE,
     WatchedDetailCard,
 )

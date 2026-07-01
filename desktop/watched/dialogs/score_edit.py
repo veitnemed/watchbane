@@ -14,12 +14,12 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.theme import build_score_edit_dialog_style
+from desktop.shared.detail.presenters import format_user_score_display
 from desktop.watched.model import (
     USER_SCORE_MAX,
     USER_SCORE_MIN,
     USER_SCORE_STEP,
     WatchedEntry,
-    format_user_score_display,
     get_user_score_spin_value,
 )
 

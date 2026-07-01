@@ -5,25 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
-    QComboBox,
-    QDialog,
-    QFrame,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMenu,
-    QPushButton,
-    QScrollArea,
-    QSplitter,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt6.QtWidgets import QDialog, QHBoxLayout, QMenu, QScrollArea, QSplitter, QWidget
 
-from desktop.shared.widgets.list_search import DebouncedLineEditSearch, resolve_selection_row
-from desktop.shared.widgets.range_slider import RangeSlider
+from desktop.shared.detail import WatchedDetailCard
+from desktop.shared.widgets.list_search import resolve_selection_row
 from desktop.watched.delete import (
     execute_watched_delete,
     format_delete_status_message,
@@ -31,34 +16,20 @@ from desktop.watched.delete import (
 )
 from desktop.watched.dialogs.delete_dialog import WatchedDeleteDialog
 from desktop.watched.dialogs.score_edit import ScoreEditDialog
-from desktop.shared.detail.card import WatchedDetailCard, WatchedListItemDelegate
 from desktop.watched.model import (
-    GENRE_FILTER_ALL,
     SORT_OPTIONS,
-    USER_SCORE_MAX,
-    USER_SCORE_MIN,
-    USER_SCORE_STEP,
-    YEAR_FILTER_DEFAULT_FROM,
-    YEAR_FILTER_DEFAULT_TO,
-    YEAR_FILTER_MAX,
-    YEAR_FILTER_MIN,
     WatchedEntry,
     apply_view,
     build_watched_search_index,
     format_list_label,
     format_save_user_score_status,
-    format_watched_filters_label,
     format_watched_list_counter,
     format_watched_list_status,
-    genre_filter_is_active,
-    get_available_genres,
     load_watched_entries,
     save_watched_user_score,
-    score_filter_is_active,
     validate_score_edit_entry,
-    watched_filters_are_active,
-    year_filter_is_active,
 )
+from desktop.watched.sidebar import build_watched_sidebar
 
 StatusCallback = Callable[[str, int], None]
 EntriesCallback = Callable[[list[WatchedEntry]], None]
@@ -91,7 +62,20 @@ class WatchedTabView:
         splitter = QSplitter(Qt.Orientation.Horizontal)
         layout.addWidget(splitter)
 
-        left_panel = self._build_left_panel()
+        left_panel, handles = build_watched_sidebar(
+            entries=self._entries,
+            on_add_title=self._open_add_title_dialog,
+            on_filters_changed=self._on_filters_changed,
+            on_selection_changed=self._on_selection_changed,
+            on_context_menu=self._open_list_context_menu,
+        )
+        self._add_title_button = handles["add_title_button"]
+        self._search_input = handles["search_input"]
+        self._sort_combo = handles["sort_combo"]
+        self._filters = handles["filters"]
+        self._list_counter_label = handles["list_counter_label"]
+        self._list_widget = handles["list_widget"]
+
         right_panel = self._build_right_panel()
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
@@ -122,7 +106,7 @@ class WatchedTabView:
 
         self._entries = load_watched_entries()
         self._reload_watched_search_index()
-        self._reload_genre_filter_options()
+        self._filters.reload_genre_options(self._entries)
         self._refresh_list()
         self._notify_entries_changed()
 
@@ -153,253 +137,14 @@ class WatchedTabView:
         if self._on_status_message is not None:
             self._on_status_message(message, timeout_ms)
 
-    def _build_left_panel(self) -> QWidget:
-        panel = QWidget()
-        panel.setObjectName("watchedSidebar")
-        panel.setMinimumWidth(300)
-        panel.setMaximumWidth(400)
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(14)
+    def _build_right_panel(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
-        self._add_title_button = QPushButton("+ Добавить тайтл")
-        self._add_title_button.setObjectName("watchedAddTitle")
-        self._add_title_button.clicked.connect(self._open_add_title_dialog)
-        layout.addWidget(self._add_title_button)
-
-        self._search_input = QLineEdit()
-        self._search_input.setObjectName("watchedSearch")
-        self._search_input.setPlaceholderText("Поиск по названию")
-        self._search_input.setClearButtonEnabled(True)
-        self._debounced_watched_search = DebouncedLineEditSearch(
-            self._search_input,
-            self._on_filters_changed,
-            parent=panel,
-        )
-        layout.addWidget(self._search_input)
-
-        sort_row = QWidget()
-        sort_row.setObjectName("watchedSortRow")
-        sort_layout = QHBoxLayout(sort_row)
-        sort_layout.setContentsMargins(0, 0, 0, 0)
-        sort_layout.setSpacing(10)
-
-        sort_label = QLabel("Сортировка")
-        sort_label.setObjectName("watchedSortLabel")
-
-        self._sort_combo = QComboBox()
-        self._sort_combo.setObjectName("watchedSort")
-        for sort_key, label in SORT_OPTIONS:
-            self._sort_combo.addItem(label, sort_key)
-        self._sort_combo.currentIndexChanged.connect(self._on_filters_changed)
-
-        sort_layout.addWidget(sort_label)
-        sort_layout.addWidget(self._sort_combo, stretch=1)
-        layout.addWidget(sort_row)
-
-        self._filters_expanded = False
-        self._filter_toggle = QPushButton("▸ Фильтры")
-        self._filter_toggle.setObjectName("watchedFilterToggle")
-        self._filter_toggle.clicked.connect(self._toggle_filters_panel)
-        layout.addWidget(self._filter_toggle)
-
-        self._filters_panel = self._build_filters_panel()
-        self._filters_panel.setVisible(False)
-        layout.addWidget(self._filters_panel)
-
-        self._list_counter_label = QLabel("")
-        self._list_counter_label.setObjectName("watchedListCounter")
-        layout.addWidget(self._list_counter_label)
-
-        self._list_widget = QListWidget()
-        self._list_widget.setObjectName("watchedList")
-        self._list_widget.setSpacing(2)
-        self._list_widget.setUniformItemSizes(True)
-        self._list_widget.setItemDelegate(WatchedListItemDelegate(self._list_widget))
-        self._list_widget.currentRowChanged.connect(self._on_selection_changed)
-        self._list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self._list_widget.customContextMenuRequested.connect(self._open_list_context_menu)
-        layout.addWidget(self._list_widget, stretch=1)
-
-        return panel
-
-    def _build_filters_panel(self) -> QWidget:
-        frame = QFrame()
-        frame.setObjectName("watchedFiltersPanel")
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
-
-        layout.addWidget(self._build_score_filter_panel())
-        layout.addWidget(self._build_year_filter_panel())
-        layout.addWidget(self._build_genre_filter_panel())
-
-        reset_all_button = QPushButton("Сбросить фильтры")
-        reset_all_button.setObjectName("watchedFilterResetAll")
-        reset_all_button.clicked.connect(self._reset_all_filters)
-        layout.addWidget(reset_all_button)
-        return frame
-
-    def _toggle_filters_panel(self) -> None:
-        self._filters_expanded = not self._filters_expanded
-        self._filters_panel.setVisible(self._filters_expanded)
-        self._update_filter_toggle_label()
-
-    def _update_filter_toggle_label(self) -> None:
-        score_active = self._score_filter_active()
-        year_active = self._year_filter_active()
-        genre_active = self._genre_filter_active()
-        filters_active = watched_filters_are_active(score_active, year_active, genre_active)
-        self._filter_toggle.setText(
-            format_watched_filters_label(
-                score_active,
-                year_active,
-                genre_active,
-                self._filters_expanded,
-            )
-        )
-        self._filter_toggle.setProperty("watchedFiltersActive", "true" if filters_active else "false")
-        self._filter_toggle.style().unpolish(self._filter_toggle)
-        self._filter_toggle.style().polish(self._filter_toggle)
-
-    def _reset_all_filters(self) -> None:
-        self._score_slider.blockSignals(True)
-        self._score_slider.setValues(
-            self._score_to_slider_value(USER_SCORE_MIN),
-            self._score_to_slider_value(USER_SCORE_MAX),
-        )
-        self._score_slider.blockSignals(False)
-
-        self._year_slider.blockSignals(True)
-        self._year_slider.setValues(YEAR_FILTER_DEFAULT_FROM, YEAR_FILTER_DEFAULT_TO)
-        self._year_slider.blockSignals(False)
-
-        self._genre_combo.blockSignals(True)
-        self._genre_combo.setCurrentIndex(0)
-        self._genre_combo.blockSignals(False)
-
-        self._update_score_range_label()
-        self._update_year_range_label()
-        self._on_filters_changed()
-
-    def _build_score_filter_panel(self) -> QWidget:
-        frame = QFrame()
-        frame.setObjectName("watchedScoreFilter")
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 8, 10, 10)
-        layout.setSpacing(8)
-
-        header_row = QHBoxLayout()
-        header_row.setContentsMargins(0, 0, 0, 0)
-        title = QLabel("Оценка")
-        title.setObjectName("watchedScoreFilterTitle")
-        header_row.addWidget(title)
-        header_row.addStretch()
-
-        self._score_range_label = QLabel()
-        self._score_range_label.setObjectName("watchedFilterValue")
-        header_row.addWidget(self._score_range_label)
-        layout.addLayout(header_row)
-
-        self._score_slider = RangeSlider(
-            self._score_to_slider_value(USER_SCORE_MIN),
-            self._score_to_slider_value(USER_SCORE_MAX),
-            self._score_to_slider_value(USER_SCORE_MIN),
-            self._score_to_slider_value(USER_SCORE_MAX),
-        )
-        self._score_slider.setObjectName("watchedScoreRange")
-        self._score_slider.rangeChanged.connect(self._on_score_range_changed)
-        layout.addWidget(self._score_slider)
-        self._update_score_range_label()
-        return frame
-
-    def _score_to_slider_value(self, score: float) -> int:
-        return int(round(float(score) / USER_SCORE_STEP))
-
-    def _score_from_slider_value(self, value: int) -> float:
-        return round(value * USER_SCORE_STEP, 1)
-
-    def _score_filter_range(self) -> tuple[float, float]:
-        lower, upper = self._score_slider.values()
-        return (self._score_from_slider_value(lower), self._score_from_slider_value(upper))
-
-    def _score_filter_active(self) -> bool:
-        min_score, max_score = self._score_filter_range()
-        return score_filter_is_active(min_score, max_score)
-
-    def _update_score_range_label(self) -> None:
-        min_score, max_score = self._score_filter_range()
-        self._score_range_label.setText(f"{min_score:.1f}-{max_score:.1f}")
-
-    def _on_score_range_changed(self, _lower: int, _upper: int) -> None:
-        self._update_score_range_label()
-        self._on_filters_changed()
-
-    def _build_year_filter_panel(self) -> QWidget:
-        frame = QFrame()
-        frame.setObjectName("watchedYearFilter")
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 8, 10, 10)
-        layout.setSpacing(8)
-
-        header_row = QHBoxLayout()
-        header_row.setContentsMargins(0, 0, 0, 0)
-        title = QLabel("Год")
-        title.setObjectName("watchedYearFilterTitle")
-        header_row.addWidget(title)
-        header_row.addStretch()
-
-        self._year_range_label = QLabel()
-        self._year_range_label.setObjectName("watchedFilterValue")
-        header_row.addWidget(self._year_range_label)
-        layout.addLayout(header_row)
-
-        self._year_slider = RangeSlider(
-            YEAR_FILTER_MIN,
-            YEAR_FILTER_MAX,
-            YEAR_FILTER_DEFAULT_FROM,
-            YEAR_FILTER_DEFAULT_TO,
-        )
-        self._year_slider.setObjectName("watchedYearRange")
-        self._year_slider.rangeChanged.connect(self._on_year_range_changed)
-        layout.addWidget(self._year_slider)
-        self._update_year_range_label()
-        return frame
-
-    def _year_filter_range(self) -> tuple[int, int]:
-        return self._year_slider.values()
-
-    def _year_filter_active(self) -> bool:
-        year_from, year_to = self._year_filter_range()
-        return year_filter_is_active(year_from, year_to)
-
-    def _update_year_range_label(self) -> None:
-        year_from, year_to = self._year_filter_range()
-        self._year_range_label.setText(f"{year_from}-{year_to}")
-
-    def _on_year_range_changed(self, _lower: int, _upper: int) -> None:
-        self._update_year_range_label()
-        self._on_filters_changed()
-
-    def _build_genre_filter_panel(self) -> QWidget:
-        frame = QFrame()
-        frame.setObjectName("watchedGenreFilter")
-        layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 8, 10, 10)
-        layout.setSpacing(8)
-
-        title = QLabel("Жанр")
-        title.setObjectName("watchedGenreFilterTitle")
-        layout.addWidget(title)
-
-        self._genre_combo = QComboBox()
-        self._genre_combo.setObjectName("watchedGenre")
-        self._genre_combo.addItem(GENRE_FILTER_ALL, None)
-        for genre in get_available_genres(self._entries):
-            self._genre_combo.addItem(genre, genre)
-        self._genre_combo.currentIndexChanged.connect(self._on_filters_changed)
-        layout.addWidget(self._genre_combo)
-        return frame
+        self._detail_card = WatchedDetailCard()
+        scroll.setWidget(self._detail_card.widget)
+        return scroll
 
     def _open_add_title_dialog(self) -> None:
         from desktop.watched.add_title import run_add_title_flow
@@ -414,22 +159,6 @@ class WatchedTabView:
 
     def _reload_watched_search_index(self) -> None:
         self._watched_search_index = build_watched_search_index(self._entries)
-
-    def _selected_genre_filter(self) -> str | None:
-        genre = self._genre_combo.currentData()
-        return genre if isinstance(genre, str) else None
-
-    def _genre_filter_active(self) -> bool:
-        return genre_filter_is_active(self._selected_genre_filter())
-
-    def _build_right_panel(self) -> QWidget:
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-
-        self._detail_card = WatchedDetailCard()
-        scroll.setWidget(self._detail_card.widget)
-        return scroll
 
     def _current_entry_key(self) -> str | None:
         row = self._list_widget.currentRow()
@@ -504,25 +233,11 @@ class WatchedTabView:
 
         self._show_status(format_delete_status_message(result), 4000)
 
-    def _reload_genre_filter_options(self) -> None:
-        current = self._selected_genre_filter()
-        self._genre_combo.blockSignals(True)
-        self._genre_combo.clear()
-        self._genre_combo.addItem(GENRE_FILTER_ALL, None)
-        for genre in get_available_genres(self._entries):
-            self._genre_combo.addItem(genre, genre)
-        if current is not None:
-            index = self._genre_combo.findData(current)
-            self._genre_combo.setCurrentIndex(index if index >= 0 else 0)
-        else:
-            self._genre_combo.setCurrentIndex(0)
-        self._genre_combo.blockSignals(False)
-
     def _refresh_after_delete(self, result: dict) -> None:
         previous_key = self._current_entry_key()
         self._entries = load_watched_entries()
         self._reload_watched_search_index()
-        self._reload_genre_filter_options()
+        self._filters.reload_genre_options(self._entries)
         self._refresh_list()
         self._notify_entries_changed()
 
@@ -581,10 +296,12 @@ class WatchedTabView:
             self._list_widget.setCurrentRow(row_to_select)
 
     def _refresh_list(self) -> None:
+        from PyQt6.QtWidgets import QListWidgetItem
+
         query = self._search_input.text()
-        min_score, max_score = self._score_filter_range()
-        year_from, year_to = self._year_filter_range()
-        genre = self._selected_genre_filter()
+        min_score, max_score = self._filters.score_filter_range()
+        year_from, year_to = self._filters.year_filter_range()
+        genre = self._filters.selected_genre()
         self._visible_entries = apply_view(
             self._entries,
             query,
@@ -615,9 +332,9 @@ class WatchedTabView:
         visible = len(self._visible_entries)
         total = len(self._entries)
         query = self._search_input.text()
-        score_active = self._score_filter_active()
-        year_active = self._year_filter_active()
-        genre_active = self._genre_filter_active()
+        score_active = self._filters.score_filter_active()
+        year_active = self._filters.year_filter_active()
+        genre_active = self._filters.genre_filter_active()
         self._list_counter_label.setText(
             format_watched_list_counter(
                 visible,
@@ -638,7 +355,7 @@ class WatchedTabView:
                 genre_active,
             )
         )
-        self._update_filter_toggle_label()
+        self._filters.update_toggle_label()
 
     def _on_selection_changed(self, row: int) -> None:
         if row < 0 or row >= len(self._visible_entries):

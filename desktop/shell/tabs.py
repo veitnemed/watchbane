@@ -1,10 +1,18 @@
-"""Main window tab registry and activation dispatch."""
+"""Main window tab registry, factory and activation dispatch."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from PyQt6.QtWidgets import QTabWidget, QWidget
+
+from desktop.analytics.view import AnalyticsView
+from desktop.candidates.filters_view import CandidateFiltersView
+from desktop.candidates.list_view import CandidateListView
+from desktop.candidates.session import CandidateSearchSession
+from desktop.watched.model import WatchedEntry
+from desktop.watched.tab import WatchedTabView
 
 
 @dataclass(frozen=True)
@@ -14,6 +22,15 @@ class ShellTabSpec:
     tab_id: str
     label: str
     view: object
+
+
+@dataclass
+class AppTabsContext:
+    """Feature views and shared session for cross-tab callbacks."""
+
+    watched_tab_view: WatchedTabView
+    analytics_view: AnalyticsView
+    candidate_session: CandidateSearchSession
 
 
 class MainTabRegistry:
@@ -46,3 +63,57 @@ class MainTabRegistry:
         activated = getattr(view, "on_tab_activated", None)
         if callable(activated):
             activated()
+
+
+def build_main_tabs(
+    tabs: QTabWidget,
+    parent: QWidget,
+    *,
+    on_status_message: Callable[[str, int], None],
+) -> tuple[MainTabRegistry, AppTabsContext]:
+    """Create main-window tabs, register them and wire cross-tab callbacks."""
+    registry = MainTabRegistry(tabs)
+    analytics_view: AnalyticsView
+
+    def on_watched_entries_changed(entries: list[WatchedEntry]) -> None:
+        analytics_view.update_entries(entries)
+
+    watched_tab_view = WatchedTabView(
+        parent=parent,
+        on_status_message=on_status_message,
+        on_entries_changed=on_watched_entries_changed,
+    )
+    analytics_view = AnalyticsView(
+        watched_tab_view.entries,
+        entries_provider=lambda: watched_tab_view.entries,
+    )
+    registry.register(ShellTabSpec("watched", "Watched", watched_tab_view))
+
+    candidate_session = CandidateSearchSession()
+
+    def on_candidate_moved_to_watched(result) -> None:
+        added_key = getattr(result, "title", None)
+        watched_tab_view.reload_entries(added_key=added_key)
+        message = getattr(result, "message", None) or "Кандидат перенесён в просмотренные."
+        on_status_message(message, 5000)
+
+    candidate_filters_view = CandidateFiltersView(
+        candidate_session,
+        on_applied=lambda: registry.focus("candidates"),
+    )
+    candidate_list_view = CandidateListView(
+        candidate_session,
+        on_watched_added=on_candidate_moved_to_watched,
+    )
+    registry.register(ShellTabSpec("filters", "Фильтры", candidate_filters_view))
+    registry.register(ShellTabSpec("candidates", "Кандидаты", candidate_list_view))
+    registry.register(ShellTabSpec("analytics", "Analytics", analytics_view))
+
+    tabs.currentChanged.connect(registry.on_current_changed)
+
+    context = AppTabsContext(
+        watched_tab_view=watched_tab_view,
+        analytics_view=analytics_view,
+        candidate_session=candidate_session,
+    )
+    return registry, context

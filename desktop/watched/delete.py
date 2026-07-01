@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataset.delete_record import build_watched_delete_preview, delete_watched_record
-from desktop.watched.model import format_user_score_display
+from desktop.shared.detail.presenters import format_user_score_display
 
 DELETE_CONFIRMATION_TEXT = "DELETE"
 

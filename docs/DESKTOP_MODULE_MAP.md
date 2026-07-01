@@ -28,12 +28,18 @@ desktop/
 
   shell/
     bootstrap.py                 # QApplication, WebEngine prep, main()
-    main_window.py               # WatchedMoviesWindow: tabs, status bar
-    tabs.py                      # MainTabRegistry, ShellTabSpec
+    main_window.py               # WatchedMoviesWindow: chrome + status bar
+    tabs.py                      # build_main_tabs(), MainTabRegistry, AppTabsContext
   watched/
-    model.py                     # load, filter, sort, format, writes (no Qt widgets)
+    model/                       # load, filter, sort, format, writes (no Qt widgets)
+      load.py
+      filters.py
+      formatters.py
+      score_write.py
+    filters_panel.py             # WatchedFiltersPanel (collapsible score/year/genre)
+    sidebar.py                   # build_watched_sidebar()
     delete.py                    # delete preview/execute helpers
-    tab.py                       # WatchedTabView
+    tab.py                       # WatchedTabView orchestration
     dialogs/
       score_edit.py              # ScoreEditDialog
       delete_dialog.py           # WatchedDeleteDialog
@@ -44,14 +50,27 @@ desktop/
     session.py                   # shared filter/sort state
     filters_view.py              # вкладка Фильтры
     list_view.py                 # вкладка Кандидаты
+    list_delegate.py             # card-style list rows
     presenters.py                # format/map candidate records
     workers/poster_worker.py
   analytics/
-    view.py                      # AnalyticsView (read-only tab)
+    view.py                      # AnalyticsView orchestrator
+    constants.py                 # typography, spacing, icons
+    sections/
+      summary.py                 # KPI, completeness, insights
+      charts_host.py             # Plotly host
+      fallback_bars.py           # bar fallbacks
+      lists.py                   # IMDb delta, gaps, dense scores
     charts.py                    # Plotly HTML builders
   shared/
     detail/
-      card.py                    # WatchedDetailCard, delegate, layout profiles
+      types.py                   # DetailEntry
+      presenters.py              # card-facing formatters (no watched import)
+      posters.py                 # poster path / shell helpers
+      profiles.py                # layout profiles and constants
+      rating_indicator.py        # RatingCircleIndicator
+      list_delegate.py           # WatchedListItemDelegate
+      card.py                    # WatchedDetailCard only
     widgets/
       range_slider.py
       list_search.py
@@ -70,21 +89,24 @@ desktop/
 | Модуль | Роль | Слой |
 | --- | --- | --- |
 | `app.py` | thin entry, re-exports `main` | shell |
-| `shell/main_window.py` | главное окно, регистрация вкладок | shell |
-| `shell/tabs.py` | tab registry, `on_tab_activated` dispatch | shell |
-| `watched/tab.py` | вкладка Watched: sidebar, filters, list, detail, CRUD | feature view |
-| `watched/model.py` | load/filter/format, poster paths, score save | model |
-| `shared/detail/card.py` | `WatchedDetailCard`, list delegate | shared |
+| `shell/main_window.py` | главное окно, status bar | shell |
+| `shell/tabs.py` | `build_main_tabs()`, tab registry, cross-tab wiring | shell |
+| `watched/tab.py` | orchestration: detail card, dialogs, CRUD | feature view |
+| `watched/sidebar.py` | list widget, search, sort, add-title button | feature view |
+| `watched/filters_panel.py` | collapsible score/year/genre filters | feature view |
+| `watched/model/` | load/filter/format, poster paths, score save | model |
+| `shared/detail/` | card, delegate, presenters (no `watched/` import) | shared |
 | `watched/dialogs/score_edit.py` | диалог редактирования user_score | dialog |
 | `watched/add_title/` | wizard добавления / transfer из pool | dialog + worker |
 | `candidates/session.py` | shared state Фильтры ↔ Кандидаты | session |
 | `candidates/filters_view.py` | вкладка Фильтры | feature view |
 | `candidates/list_view.py` | вкладка Кандидаты | feature view |
+| `candidates/list_delegate.py` | card-style list row delegate | shared UI |
 | `candidates/presenters.py` | format/map для UI | presenter |
-| `analytics/view.py` | read-only вкладка Analytics | feature view |
+| `analytics/view.py` | read-only вкладка Analytics (orchestrator) | feature view |
+| `analytics/sections/*` | KPI, charts, lists section mixins | feature view |
 | `analytics/charts.py` | Plotly chart builders | charts |
 | `shared/widgets/` | range_slider, list_search, chip selectors | shared |
-| `shared/detail/` | detail card reused across tabs | shared |
 | `theme/tokens.py` | colors, fonts, spacing | theme |
 | `theme/styles/*` | QSS builders per screen | theme |
 
@@ -111,11 +133,14 @@ class SomeTabView:
 
 | Задача | Куда |
 | --- | --- |
-| Новая вкладка | `desktop/<feature>/` + регистрация в `shell/main_window.py` |
-| Фильтр/сортировка watched (логика) | `watched/model.py` |
-| Layout watched sidebar | `watched/tab.py` |
-| Detail card / list delegate | `shared/detail/card.py` |
+| Новая вкладка | `desktop/<feature>/` + регистрация в `shell/tabs.py` (`build_main_tabs`) |
+| Фильтр/сортировка watched (логика) | `watched/model/filters.py` |
+| Layout watched sidebar | `watched/sidebar.py` |
+| Watched filter panel UI | `watched/filters_panel.py` |
+| Detail card formatters | `shared/detail/presenters.py` |
+| Detail card / list delegate | `shared/detail/card.py`, `list_delegate.py` |
 | Форматирование candidate list | `candidates/presenters.py` |
+| Candidate list row paint | `candidates/list_delegate.py` |
 | Write-сценарий (save/delete) | `watched/delete.py` / `dataset` + dialog |
 | Переиспользуемый виджет без domain | `shared/widgets/` |
 | Новый цвет/spacing | `theme/tokens.py` |
@@ -126,9 +151,11 @@ class SomeTabView:
 ```text
 ❌ desktop → storage (напрямую save/load JSON)
 ❌ feature view → feature view (Watched → Candidate)
-❌ watched/model.py → PyQt6
+❌ shared/detail → watched/ (presenters live in shared)
+❌ watched/model/ → PyQt6
 ❌ candidates/* → watched/tab.py
 ✅ candidate views → shared/detail (card reused across watched, candidates, add-title)
+✅ watched/model → shared/detail/presenters (re-export for backward compat)
 ✅ все views → dataset / candidates.service
 ```
 
@@ -137,8 +164,8 @@ class SomeTabView:
 1. Создать view в `desktop/<feature>/` с `.widget`.
 2. Бизнес-логику — в `dataset` / `candidates` / model без Qt.
 3. QSS — через `desktop.theme` (`tokens.py` + `styles/`).
-4. Зарегистрировать в `shell/main_window.py` через `MainTabRegistry`.
-5. Callbacks в shell при cross-tab sync.
+4. Зарегистрировать в `shell/tabs.py` через `build_main_tabs()` / `MainTabRegistry`.
+5. Cross-tab callbacks — в `build_main_tabs()` (не в feature views).
 6. Тесты в `tests/test_desktop.py`.
 
 ## Порядок миграции
@@ -152,6 +179,9 @@ class SomeTabView:
 7. ~~Удалить shims~~ done
 8. ~~Перенести flat-файлы (`app.py` → `shell/`, dialogs в feature-пакеты)~~ done
 9. ~~`shell/tabs.py`, `shared/detail/`, `on_tab_activated`~~ done
+10. ~~`shared/detail/{types,presenters,posters}.py` — убрать `watched/` из card~~ done
+11. ~~Разбить монолиты: `shared/detail/*`, `watched/{sidebar,filters_panel,model/}`, `candidates/list_delegate.py`~~ done
+12. ~~`analytics/sections/*`, `build_main_tabs()` в shell, docs~~ done
 
 ## Проверки
 

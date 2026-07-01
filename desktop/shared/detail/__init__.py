@@ -1,6 +1,31 @@
-"""Shared detail card widgets."""
+"""Shared detail card widgets and presenters."""
 
-from desktop.shared.detail.card import (
+from desktop.shared.detail.card import WatchedDetailCard
+from desktop.shared.detail.list_delegate import (
+    WatchedListItemDelegate,
+    _elide_text,
+    _load_list_thumb_pixmap,
+    fit_poster_pixmap_for_display,
+)
+from desktop.shared.detail.presenters import (
+    build_detail_info_pill_labels,
+    build_genre_pill_labels,
+    build_meta_pill_items,
+    build_meta_pill_labels,
+    format_genre_pill_label,
+    format_rating_score_display,
+    format_user_score_display,
+    get_country_display,
+    get_overview_display,
+    has_overview_text,
+)
+from desktop.shared.detail.posters import (
+    format_poster_path_display,
+    get_poster_cache_directory,
+    open_path_in_shell,
+    resolve_local_poster_path,
+)
+from desktop.shared.detail.profiles import (
     ADD_TITLE_PREVIEW_CARD_PROFILE,
     CANDIDATE_DETAIL_CARD_PROFILE,
     DETAIL_CARD_LAYOUT_PROFILE,
@@ -16,19 +41,16 @@ from desktop.shared.detail.card import (
     POSTER_DISPLAY_SCALE,
     POSTER_HEIGHT,
     POSTER_WIDTH,
-    RatingCircleIndicator,
-    WatchedDetailCard,
-    WatchedListItemDelegate,
-    _elide_text,
-    _load_list_thumb_pixmap,
-    fit_poster_pixmap_for_display,
 )
+from desktop.shared.detail.rating_indicator import RatingCircleIndicator
+from desktop.shared.detail.types import DetailEntry
 
 __all__ = [
     "ADD_TITLE_PREVIEW_CARD_PROFILE",
     "CANDIDATE_DETAIL_CARD_PROFILE",
     "DETAIL_CARD_LAYOUT_PROFILE",
     "DetailCardLayoutProfile",
+    "DetailEntry",
     "LIST_ITEM_HEIGHT",
     "LIST_ITEM_H_PADDING",
     "LIST_ITEM_V_PADDING",
@@ -45,5 +67,19 @@ __all__ = [
     "WatchedListItemDelegate",
     "_elide_text",
     "_load_list_thumb_pixmap",
+    "build_detail_info_pill_labels",
+    "build_genre_pill_labels",
+    "build_meta_pill_items",
+    "build_meta_pill_labels",
     "fit_poster_pixmap_for_display",
+    "format_genre_pill_label",
+    "format_poster_path_display",
+    "format_rating_score_display",
+    "format_user_score_display",
+    "get_country_display",
+    "get_overview_display",
+    "get_poster_cache_directory",
+    "has_overview_text",
+    "open_path_in_shell",
+    "resolve_local_poster_path",
 ]

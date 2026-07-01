@@ -83,17 +83,18 @@ def test_score_edit_dialog_is_custom_dark_dialog() -> None:
 
 def test_add_title_button_opens_wizard_dialog() -> None:
     import desktop.watched.add_title.dialog as dialog_module
+    import desktop.watched.sidebar as sidebar_module
     import desktop.watched.tab as watched_tab_module
 
-    source = inspect.getsource(watched_tab_module.WatchedTabView)
+    sidebar_source = inspect.getsource(sidebar_module.build_watched_sidebar)
     handler_source = inspect.getsource(watched_tab_module.WatchedTabView._open_add_title_dialog)
     dialog_source = inspect.getsource(dialog_module)
 
-    assert "watchedAddTitle" in source
-    assert "+ Добавить тайтл" in source
+    assert "watchedAddTitle" in sidebar_source
+    assert "+ Добавить тайтл" in sidebar_source
     assert "run_add_title_flow" in handler_source
     assert "reload_entries" in handler_source
-    assert "_show_add_title_stub" not in source
+    assert "_show_add_title_stub" not in handler_source
     assert "class AddTitleSearchDialog" in dialog_source
     assert "class AddTitlePreviewDialog" in dialog_source
     assert "run_add_title_flow" in dialog_source
@@ -679,25 +680,30 @@ def test_apply_view_after_default_filter_reset_respects_search() -> None:
 def test_watched_layout_uses_collapsible_filters_and_rich_list() -> None:
     import inspect
 
+    import desktop.watched.filters_panel as filters_panel_module
+    import desktop.watched.sidebar as sidebar_module
     import desktop.watched.tab as watched_tab_module
 
-    source = inspect.getsource(watched_tab_module.WatchedTabView)
+    tab_source = inspect.getsource(watched_tab_module.WatchedTabView)
+    sidebar_source = inspect.getsource(sidebar_module.build_watched_sidebar)
+    filters_source = inspect.getsource(filters_panel_module.WatchedFiltersPanel)
 
-    assert "_build_filters_panel" in source
-    assert "watchedFiltersPanel" in source
-    assert "format_watched_filters_label" in source
-    assert "watchedFilterResetAll" in source
-    assert "WatchedListItemDelegate" in source
-    assert "watchedListCounter" in source
-    assert "watchedSortRow" in source
-    assert "watchedSortLabel" in source
-    assert "Сортировка" in source
-    assert "_reset_all_filters" in source
-    assert "watchedScoreReset" not in source
-    assert "watchedYearReset" not in source
-    assert "Удалить запись" in source
-    assert "_delete_watched_entry" in source
-    assert "execute_watched_delete" in source
+    assert "WatchedFiltersPanel" in sidebar_source
+    assert "build_watched_sidebar" in tab_source
+    assert "watchedFiltersPanel" in filters_source
+    assert "format_watched_filters_label" in filters_source
+    assert "watchedFilterResetAll" in filters_source
+    assert "WatchedListItemDelegate" in sidebar_source
+    assert "watchedListCounter" in sidebar_source
+    assert "watchedSortRow" in sidebar_source
+    assert "watchedSortLabel" in sidebar_source
+    assert "Сортировка" in sidebar_source
+    assert "reset_all" in filters_source
+    assert "watchedScoreReset" not in filters_source
+    assert "watchedYearReset" not in filters_source
+    assert "Удалить запись" in tab_source
+    assert "_delete_watched_entry" in tab_source
+    assert "execute_watched_delete" in tab_source
 
 
 def test_is_delete_confirmation_valid() -> None:
@@ -1185,7 +1191,7 @@ def test_resolve_local_poster_path_uses_preview_cache_for_poster_url() -> None:
 def test_watched_list_delegate_uses_poster_resolver() -> None:
     import inspect
 
-    import desktop.shared.detail.card as watched_view_module
+    import desktop.shared.detail.list_delegate as watched_view_module
 
     source = inspect.getsource(watched_view_module.WatchedListItemDelegate.__new__)
     assert "resolve_local_poster_path" in source
@@ -1316,7 +1322,7 @@ def test_refresh_after_delete_wiring() -> None:
 
     source = inspect.getsource(watched_tab_module.WatchedTabView._refresh_after_delete)
     assert "load_watched_entries" in source
-    assert "_reload_genre_filter_options" in source
+    assert "_filters.reload_genre_options" in source
     assert "_reload_watched_search_index" in source
     assert "resolve_selection_row" in source
     assert "_model_view.refresh" not in source
@@ -1545,21 +1551,25 @@ def test_watched_window_includes_candidate_tabs() -> None:
     import inspect
 
     import desktop.shell.main_window as app_module
+    import desktop.shell.tabs as tabs_module
 
-    source = inspect.getsource(app_module.WatchedMoviesWindow.__init__)
-    assert "WatchedTabView" in source
-    assert "CandidateFiltersView" in source
-    assert "CandidateListView" in source
-    assert "AnalyticsView" in source
-    assert '"Фильтры"' in source
-    assert '"Кандидаты"' in source
-    assert '"Analytics"' in source
-    assert '"Search"' not in source
-    assert "MainTabRegistry" in source
-    assert "ShellTabSpec" in source
-    assert "_tab_registry.register" in source
-    assert "_focus_candidates_tab" in source
-    assert "_on_watched_entries_changed" in source
+    init_source = inspect.getsource(app_module.WatchedMoviesWindow.__init__)
+    factory_source = inspect.getsource(tabs_module.build_main_tabs)
+    assert "build_main_tabs" in init_source
+    assert "WatchedTabView" in factory_source
+    assert "CandidateFiltersView" in factory_source
+    assert "CandidateListView" in factory_source
+    assert "AnalyticsView" in factory_source
+    assert '"Фильтры"' in factory_source
+    assert '"Кандидаты"' in factory_source
+    assert '"Analytics"' in factory_source
+    assert '"Search"' not in factory_source
+    assert "MainTabRegistry" in factory_source
+    assert "ShellTabSpec" in factory_source
+    assert "_tab_registry.register" not in init_source
+    assert "registry.register" in factory_source
+    assert "registry.focus" in factory_source
+    assert "on_watched_entries_changed" in factory_source
 
 
 def test_genre_chip_selector_tracks_selection(qapp) -> None:

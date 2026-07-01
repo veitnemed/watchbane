@@ -85,7 +85,7 @@ def test_build_preview_card_downloads_poster_for_preview(monkeypatch) -> None:
 
 
 def test_add_title_preview_card_profile_is_compact() -> None:
-    from desktop.shared.detail.card import (
+    from desktop.shared.detail.profiles import (
         ADD_TITLE_PREVIEW_CARD_PROFILE,
         DETAIL_CARD_LAYOUT_PROFILE,
         POSTER_HEIGHT,
