@@ -6,7 +6,7 @@ from urllib.error import HTTPError, URLError
 
 from apis import tmdb_api
 from candidates.models.keys import title_identity_key
-from dataset.title_resolve import extract_api_identity_titles, title_identity_match
+from dataset.resolve.identity import extract_api_identity_titles, title_identity_match
 from posters.cache import load_poster_cache
 from posters.fetch_watched_tmdb import (
     _fetch_override_details,

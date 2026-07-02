@@ -1,21 +1,42 @@
-"""Main add-flow resolve orchestration."""
+"""TMDb-only add-flow resolve orchestration."""
 
+from __future__ import annotations
+
+from typing import Any
+
+from apis import tmdb_api as api_tmdb
 from config import scheme
-from dataset.resolve.defaults import has_api_imdb_values
-from dataset.resolve.helpers import unique_preserve_order
-from dataset.resolve.identity import is_sql_candidate_identity_safe, resolve_sql_after_api_mismatch
-from dataset.resolve.priority import build_add_defaults_by_priority
-from dataset.resolve.sources import search_tmdb_defaults_data
-from dataset.resolve.status import get_kp_status, get_sql_status
-from apis import imdb_sql as sql_search
-from apis import kp_api as api
+from dataset.resolve.countries import extract_country_value
+from dataset.resolve.defaults import build_empty_add_defaults
+from dataset.resolve.genres import build_genre_defaults, extract_tmdb_genres
 
-ADD_TITLE_RESOLVE_PROGRESS_TOTAL = 7
+ADD_TITLE_RESOLVE_PROGRESS_TOTAL = 4
+
+_EXTERNAL_RATING_FIELDS = {
+    "kp_id",
+    "kp_score",
+    "kp_votes",
+    "kp_rating",
+    "kp_status",
+    "imdb_score",
+    "imdb_rating",
+    "imdb_votes",
+    "imdb_title_type",
+    "imdb_is_adult",
+    "imdb_start_year",
+    "imdb_end_year",
+    "imdb_runtime_minutes",
+    "imdb_genres",
+}
 
 
 def print_progress_step(source: str, status: str) -> None:
     """Compatibility no-op: callers should pass ``on_progress`` to receive progress."""
     del source, status
+
+
+def _normalize_text(value) -> str:
+    return str(value or "").strip()
 
 
 def _report_add_progress(
@@ -29,140 +50,166 @@ def _report_add_progress(
         on_progress(step, ADD_TITLE_RESOLVE_PROGRESS_TOTAL, message)
 
 
+def _tmdb_error(error: str, details: str) -> dict[str, Any]:
+    return {"ok": False, "error": error, "details": details}
+
+
+def _clean_tmdb_data(data: dict[str, Any]) -> dict[str, Any]:
+    cleaned = {
+        key: value
+        for key, value in dict(data or {}).items()
+        if key not in _EXTERNAL_RATING_FIELDS and value not in (None, "")
+    }
+    if "tmdb_score" not in cleaned and data.get("tmdb_rating") not in (None, ""):
+        cleaned["tmdb_score"] = data.get("tmdb_rating")
+    cleaned.pop("tmdb_rating", None)
+    cleaned["source"] = "tmdb_api"
+    return cleaned
+
+
+def _build_tmdb_add_defaults(input_title: str, country: str, tmdb_data: dict[str, Any]) -> dict:
+    defaults = build_empty_add_defaults(input_title)
+    genres = extract_tmdb_genres(tmdb_data)
+    defaults[scheme.MAIN_INFO]["title"] = tmdb_data.get("title") or input_title
+    defaults[scheme.MAIN_INFO]["year"] = tmdb_data.get("year")
+    defaults[scheme.MAIN_INFO]["country"] = extract_country_value(tmdb_data) or country
+    defaults[scheme.RAW_SCORES] = {
+        key: tmdb_data.get(key)
+        for key in ("tmdb_score", "tmdb_votes", "tmdb_popularity")
+        if tmdb_data.get(key) not in (None, "")
+    }
+    defaults[scheme.GENRE] = build_genre_defaults(genres)
+    return defaults
+
+
+def _build_tmdb_sources(tmdb_data: dict[str, Any]) -> dict:
+    return {
+        "title": "tmdb_api" if tmdb_data.get("title") not in (None, "") else "input",
+        "year": "tmdb_api" if tmdb_data.get("year") not in (None, "") else None,
+        "country": "tmdb_api" if extract_country_value(tmdb_data) else "input",
+        "tmdb_score": "tmdb_api" if tmdb_data.get("tmdb_score") not in (None, "") else None,
+        "tmdb_votes": "tmdb_api" if tmdb_data.get("tmdb_votes") not in (None, "") else None,
+        "tmdb_popularity": "tmdb_api" if tmdb_data.get("tmdb_popularity") not in (None, "") else None,
+        "genres": "tmdb_api" if extract_tmdb_genres(tmdb_data) else None,
+        "description": "tmdb_api" if tmdb_data.get("overview") not in (None, "") else None,
+        "imdb_id": "tmdb_api" if tmdb_data.get("imdb_id") not in (None, "") else None,
+    }
+
+
+def _build_tmdb_source_values(tmdb_data: dict[str, Any]) -> dict:
+    return {
+        "genres": extract_tmdb_genres(tmdb_data),
+        "description": tmdb_data.get("overview"),
+        "tmdb_score": tmdb_data.get("tmdb_score"),
+        "tmdb_votes": tmdb_data.get("tmdb_votes"),
+        "tmdb_popularity": tmdb_data.get("tmdb_popularity"),
+        "imdb_id": tmdb_data.get("imdb_id"),
+    }
+
+
+def search_tmdb_title_for_add(
+    title: str,
+    *,
+    search_func=None,
+    choose_func=None,
+    details_func=None,
+    normalizer=None,
+) -> dict[str, Any]:
+    """Search TMDb and return normalized add-flow data without KP/IMDb ratings."""
+    search_func = search_func or api_tmdb.search_tv_by_name
+    choose_func = choose_func or api_tmdb.choose_best_result
+    details_func = details_func or api_tmdb.get_tv_details
+    normalizer = normalizer or api_tmdb.normalize_tmdb_tv
+
+    try:
+        results = search_func(title)
+        selected = choose_func(results)
+        if selected is None:
+            return {
+                "data": None,
+                "error": _tmdb_error("not_found", f"TMDb не нашёл объект: {title}"),
+                "status": "не найдено",
+            }
+
+        details = details_func(
+            int(selected["id"]),
+            append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
+        )
+        return {
+            "data": _clean_tmdb_data(normalizer(details)),
+            "error": None,
+            "status": "найдено",
+        }
+    except Exception as error:  # noqa: BLE001 - внешний API не должен ронять ручное добавление.
+        return {
+            "data": None,
+            "error": _tmdb_error("network_error", str(error)),
+            "status": "ошибка",
+        }
+
+
 def resolve_title_data_for_add(
     title: str,
     country: str = "Россия",
     *,
     on_progress=None,
+    tmdb_search_func=None,
+    tmdb_choose_func=None,
+    tmdb_details_func=None,
+    tmdb_normalizer=None,
 ) -> dict:
-    """Собирает defaults для добавления записи по приоритетам SQL -> KP -> TMDb -> ручной ввод."""
-    title = api.normalize_text(title)
-    country = api.normalize_text(country)
+    """Resolve add-title defaults through TMDb only."""
+    title = _normalize_text(title)
+    country = _normalize_text(country)
 
-    _report_add_progress(on_progress, 1, "IMDb dataset", "Поиск")
-    sql_result = sql_search.search_title_in_sql(title, country)
-    sql_data = sql_result["data"] if sql_result["ok"] else None
-    _report_add_progress(
-        on_progress,
-        2,
-        "IMDb dataset",
-        "Успешно" if sql_data is not None else "Нет кандидатов",
-    )
-
-    api_data = None
-    last_api_error = None
-    api_queries = unique_preserve_order([
+    _report_add_progress(on_progress, 1, "TMDb Search", "Поиск")
+    tmdb_result = search_tmdb_title_for_add(
         title,
-        (sql_data or {}).get("title"),
-        (sql_data or {}).get("original_title"),
-    ])
-    _report_add_progress(on_progress, 3, "KP API", "Ожидание ответа")
-    for query in api_queries:
-        api_result = api.find_series_raw(query, country)
-        if api_result["ok"]:
-            api_data = api_result["data"]
-            break
-        last_api_error = api_result
-    kp_status = get_kp_status(api_data, last_api_error)
-    if kp_status == "найдено":
-        _report_add_progress(on_progress, 4, "KP API", "Успешно")
-    elif kp_status == "ошибка":
-        _report_add_progress(on_progress, 4, "KP API", "Ошибка сети")
-    else:
-        _report_add_progress(on_progress, 4, "KP API", "Нет кандидатов")
+        search_func=tmdb_search_func,
+        choose_func=tmdb_choose_func,
+        details_func=tmdb_details_func,
+        normalizer=tmdb_normalizer,
+    )
+    tmdb_data = tmdb_result["data"]
+    tmdb_error = tmdb_result["error"]
+    tmdb_status = tmdb_result["status"]
 
-    tmdb_data = None
-    tmdb_error = None
-    tmdb_status = "не найдено"
-    if api_data is None:
-        _report_add_progress(on_progress, 5, "TMDb API", "Ожидание ответа")
-        tmdb_result = search_tmdb_defaults_data(api_queries)
-        tmdb_data = tmdb_result["data"]
-        tmdb_error = tmdb_result["error"]
-        tmdb_status = tmdb_result["status"]
-        if tmdb_status == "найдено":
-            _report_add_progress(on_progress, 6, "TMDb API", "Успешно")
-        elif tmdb_status == "ошибка":
-            _report_add_progress(on_progress, 6, "TMDb API", "Ошибка сети")
-        else:
-            _report_add_progress(on_progress, 6, "TMDb API", "Нет кандидатов")
-    else:
-        _report_add_progress(on_progress, 5, "TMDb API", "Не требуется")
-        _report_add_progress(on_progress, 6, "TMDb API", "Не требуется")
+    if tmdb_data is None:
+        _report_add_progress(on_progress, 2, "TMDb Details", "Не требуется")
+        _report_add_progress(on_progress, 3, "Подготовка defaults", "Ручной ввод")
+        _report_add_progress(on_progress, 4, "Готово", tmdb_status)
+        return {
+            "title": title,
+            "country": country,
+            "tmdb_data": None,
+            "tmdb_error": tmdb_error,
+            "defaults": None,
+            "sources": {},
+            "source_values": {},
+            "statuses": {"tmdb_api": tmdb_status},
+            "found": False,
+        }
 
-    api_identity_candidate = api_data if api_data is not None else tmdb_data
-    sql_first_identity = None
-    sql_second_pass_result = None
-    sql_second_pass_data = None
-    sql_second_pass_identity = None
-    sql_second_pass_status = None
-    sql_merge_data = sql_data
-    sql_merge_source = "imdb_sql"
-
-    if sql_data is not None and api_identity_candidate is not None:
-        accepted, reason = is_sql_candidate_identity_safe(sql_data, api_identity_candidate, title)
-        sql_first_identity = {"accepted": accepted, "reason": reason}
-        if accepted is False:
-            if has_api_imdb_values(api_data):
-                sql_second_pass_status = "не требуется, IMDb взят из KP API"
-            else:
-                sql_second_pass_result = resolve_sql_after_api_mismatch(title, api_identity_candidate, country)
-                sql_second_pass_data = sql_second_pass_result.get("data")
-                sql_second_pass_identity = sql_second_pass_result.get("identity")
-                sql_second_pass_status = sql_second_pass_result.get("status")
-                if sql_second_pass_data is not None:
-                    sql_merge_data = sql_second_pass_data
-                    sql_merge_source = "imdb_sql_second_pass"
-
-    found = sql_data is not None or api_data is not None or tmdb_data is not None
-    defaults = None
-    sources = {}
-    source_values = {}
-    sql_identity = None
-    if found:
-        built = build_add_defaults_by_priority(title, sql_merge_data, api_data, tmdb_data, sql_merge_source)
-        defaults = built["defaults"]
-        if defaults[scheme.MAIN_INFO].get("country") in (None, ""):
-            defaults[scheme.MAIN_INFO]["country"] = country
-        sources = built["sources"]
-        if sources.get("country") is None:
-            sources["country"] = "input"
-        source_values = built["source_values"]
-        sql_identity = sql_first_identity or built["sql_identity"]
-
-    statuses = {
-        "sql": get_sql_status(sql_data, sql_identity),
-        "kp_api": get_kp_status(api_data, last_api_error),
-        "tmdb_api": tmdb_status,
-    }
-    if sql_second_pass_status is not None:
-        statuses["sql_second_pass"] = sql_second_pass_status
-
-    _report_add_progress(on_progress, 7, "Подготовка", "Готово")
+    _report_add_progress(on_progress, 2, "TMDb Details", "Успешно")
+    _report_add_progress(on_progress, 3, "Подготовка defaults", "TMDb")
+    defaults = _build_tmdb_add_defaults(title, country, tmdb_data)
+    sources = _build_tmdb_sources(tmdb_data)
+    source_values = _build_tmdb_source_values(tmdb_data)
+    _report_add_progress(on_progress, 4, "Готово", "найдено")
 
     return {
         "title": title,
         "country": country,
-        "sql_result": sql_result,
-        "sql_data": sql_data,
-        "sql_merge_data": sql_merge_data,
-        "sql_merge_source": sql_merge_source,
-        "sql_second_pass_result": sql_second_pass_result,
-        "sql_second_pass_data": sql_second_pass_data,
-        "sql_second_pass_identity": sql_second_pass_identity,
-        "api_data": api_data,
-        "api_error": last_api_error,
         "tmdb_data": tmdb_data,
-        "tmdb_error": tmdb_error,
+        "tmdb_error": None,
         "defaults": defaults,
         "sources": sources,
         "source_values": source_values,
-        "sql_identity": sql_identity,
-        "statuses": statuses,
-        "found": found,
+        "statuses": {"tmdb_api": tmdb_status},
+        "found": True,
     }
 
 
 def resolve_title_data(title: str, country: str = "Россия") -> dict:
-    """Совместимое имя: add-flow использует единые приоритеты источников."""
+    """Compatibility name for add-flow resolve."""
     return resolve_title_data_for_add(title, country)

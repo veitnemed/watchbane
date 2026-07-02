@@ -2,7 +2,6 @@
 
 from functools import partial
 
-from candidates.sources.tmdb.builder import set_progress_reporter
 from common import valid
 from storage import files as storage_files
 from ui.console import global_menu
@@ -14,7 +13,6 @@ from ui.console import ui
 def run_console_app():
     """Запускает главный цикл консольного приложения."""
     storage_files.init_all_dates()
-    set_progress_reporter(lambda source, status: print(f"{source}: {status}"))
 
     while True:
         ui.clean_terminal()

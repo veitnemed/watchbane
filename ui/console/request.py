@@ -276,30 +276,15 @@ def print_autofill_status(resolved: dict, *, manual_mode: bool) -> None:
     description = source_values.get("description")
 
     print("\nАвтозаполнение:")
-    if "sql_second_pass" in statuses:
-        print(f"SQL first pass: {statuses.get('sql', 'не найдено')}")
-        print(f"SQL second pass: {statuses.get('sql_second_pass', 'не найдено')}")
-    else:
-        print(f"SQL: {statuses.get('sql', 'не найдено')}")
-    print(f"KP API: {statuses.get('kp_api', 'не найдено')}")
     print(f"TMDb API: {statuses.get('tmdb_api', 'не найдено')}")
     print("")
     print(
-        "IMDb: "
+        "TMDb: "
         + format_score_pair(
-            raw_scores.get("imdb_score"),
-            raw_scores.get("imdb_votes"),
-            sources.get("imdb_score"),
-            sources.get("imdb_votes"),
-        )
-    )
-    print(
-        "KP: "
-        + format_score_pair(
-            raw_scores.get("kp_score"),
-            raw_scores.get("kp_votes"),
-            sources.get("kp_score"),
-            sources.get("kp_votes"),
+            raw_scores.get("tmdb_score"),
+            raw_scores.get("tmdb_votes"),
+            sources.get("tmdb_score"),
+            sources.get("tmdb_votes"),
         )
     )
     print(f"Жанры: {genres_text} ({format_source(genres_source)})" if genres else "Жанры: не заполнено")
@@ -317,35 +302,21 @@ def resolve_title_for_add(
     country: str = "Россия",
     confirm_genres: bool = False,
 ) -> tuple[dict | None, dict | None, dict | None]:
-    """Ищет объект через SQL, затем обогащает через API и собирает defaults."""
+    """Ищет объект через TMDb и собирает defaults."""
+    del confirm_genres
+
     def print_progress(_step: int, _total: int, message: str) -> None:
         print(message)
 
     resolved = service.resolve_title_data_for_add(title, country, on_progress=print_progress)
     meta_payload = service.build_add_meta_payload(resolved)
     poster_hints = service.build_poster_hints_from_resolve(resolved)
-    sql_data = resolved["sql_data"]
-    api_data = resolved["api_data"]
-
-    if sql_data is not None:
-        title_presenters.print_sql_add_preview(sql_data)
-    else:
-        print(f"\nSQL не нашёл точный базовый объект: {resolved['sql_result'].get('details')}")
-
-    api_defaults = {}
-    if api_data is not None:
-        title_presenters.print_api_add_preview(api_data)
-        api_genres = service.extract_api_genres(api_data)
-        if confirm_genres:
-            print("")
-            api_genres = confirm_or_edit_dataset_genres(api_data)
-        api_defaults = service.build_api_defaults(api_data, api_genres)
-    elif resolved["api_error"] is not None:
-        error = resolved["api_error"]
-        print(f"\nAPI не обогатил объект: {error.get('details') or error.get('error')}")
+    tmdb_data = resolved.get("tmdb_data")
 
     if resolved["found"] is False:
-        print("\nНе удалось найти объект ни в SQL, ни в API.")
+        error = resolved.get("tmdb_error") or {}
+        details = error.get("details") or error.get("error") or "нет данных"
+        print(f"\nTMDb не нашёл объект: {details}")
         if ask_manual_addition() is False:
             return None, None, None
 
@@ -355,10 +326,15 @@ def resolve_title_for_add(
         return defaults, meta_payload, poster_hints
 
     defaults = resolved["defaults"]
-    if confirm_genres and api_data is not None:
-        defaults[scheme.GENRE] = dict(api_defaults.get(scheme.GENRE, {}))
+    if isinstance(tmdb_data, dict):
+        print("\nTMDb нашёл объект:")
+        print(f"Название: {tmdb_data.get('title') or 'нет данных'}")
+        print(f"Год: {tmdb_data.get('year') or 'нет данных'}")
+        print(f"TMDb: {tmdb_data.get('tmdb_score') or '-'} / голосов {tmdb_data.get('tmdb_votes') or '-'}")
+        print(f"IMDb ID: {tmdb_data.get('imdb_id') or '-'}")
+        print(f"Описание: {short_text(tmdb_data.get('overview'), 80) or 'нет данных'}")
 
-    print_autofill_status(resolved, manual_mode=api_data is None)
+    print_autofill_status(resolved, manual_mode=False)
     title_presenters.print_final_add_preview(defaults)
     answer = input("\nЭто нужный объект? Введи yes >> ").strip().lower()
     if answer != "yes":

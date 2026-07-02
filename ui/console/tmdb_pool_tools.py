@@ -438,7 +438,7 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
 
 def show_tmdb_dataset_genre_diagnostics() -> None:
     """Показывает и сохраняет распределение TMDb TV-жанров по текущему dataset."""
-    from candidates.sources.tmdb.builder import (
+    from candidates.sources.tmdb.output import (
         build_tmdb_genre_distribution_report,
         save_tmdb_genre_distribution_report,
     )

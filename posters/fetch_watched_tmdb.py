@@ -5,7 +5,8 @@ from __future__ import annotations
 from urllib.error import HTTPError, URLError
 
 from apis import tmdb_api
-from dataset.title_resolve import extract_api_identity_titles, extract_candidate_year, title_identity_match
+from dataset.resolve.helpers import extract_candidate_year
+from dataset.resolve.identity import extract_api_identity_titles, title_identity_match
 from posters.cache import load_poster_cache, save_poster_cache, sync_poster_cache_from_meta_and_sources
 from posters.tmdb_overrides import get_watched_tmdb_override, load_watched_tmdb_overrides
 from storage import data as storage_data
