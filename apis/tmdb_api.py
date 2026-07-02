@@ -18,6 +18,21 @@ API_URL = "https://api.themoviedb.org/3"
 IMAGE_URL = "https://image.tmdb.org/t/p/original"
 DEFAULT_LANGUAGE = "ru-RU"
 DEFAULT_REGION = "RU"
+DEFAULT_TV_DETAIL_APPENDS = (
+    "external_ids",
+    "content_ratings",
+    "watch/providers",
+    "aggregate_credits",
+    "keywords",
+    "images",
+    "translations",
+)
+LEGACY_TV_DETAIL_APPENDS = (
+    "external_ids",
+    "content_ratings",
+    "watch/providers",
+    "credits",
+)
 TMDB_CACHE_DIR = ROOT_DIR / "data" / "cache" / "tmdb"
 DISCOVER_CACHE_DIR = TMDB_CACHE_DIR / "discover"
 DETAILS_CACHE_DIR = TMDB_CACHE_DIR / "details"
@@ -95,6 +110,25 @@ def cache_key(path: str, params: dict[str, Any] | None = None) -> str:
     }
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+def normalize_append_to_response(append_to_response: str | list[str] | tuple[str, ...] | None) -> str:
+    if append_to_response is None:
+        values = DEFAULT_TV_DETAIL_APPENDS
+    elif isinstance(append_to_response, str):
+        values = tuple(item.strip() for item in append_to_response.split(","))
+    else:
+        values = tuple(str(item or "").strip() for item in append_to_response)
+    return ",".join(item for item in values if item)
+
+
+def _tv_details_cache_path(tmdb_id: int, language: str, append_to_response: str) -> Path:
+    safe_language = language.replace("-", "_")
+    legacy_append = normalize_append_to_response(LEGACY_TV_DETAIL_APPENDS)
+    if append_to_response == legacy_append:
+        return DETAILS_CACHE_DIR / f"{int(tmdb_id)}_{safe_language}.json"
+    append_key = hashlib.sha256(append_to_response.encode("utf-8")).hexdigest()[:12]
+    return DETAILS_CACHE_DIR / f"{int(tmdb_id)}_{safe_language}_{append_key}.json"
 
 
 def tmdb_get(
@@ -264,15 +298,16 @@ def get_tv_details(
     tmdb_id: int,
     language: str = DEFAULT_LANGUAGE,
     *,
+    append_to_response: str | list[str] | tuple[str, ...] | None = None,
     force_refresh: bool = False,
     token: str | None = None,
 ) -> dict[str, Any]:
+    append_value = normalize_append_to_response(append_to_response)
     params = {
         "language": language,
-        "append_to_response": "external_ids,content_ratings,watch/providers,credits",
+        "append_to_response": append_value,
     }
-    safe_language = language.replace("-", "_")
-    cache_path = DETAILS_CACHE_DIR / f"{int(tmdb_id)}_{safe_language}.json"
+    cache_path = _tv_details_cache_path(int(tmdb_id), language, append_value)
     return cached_tmdb_get(
         f"/tv/{int(tmdb_id)}",
         params,
@@ -306,6 +341,164 @@ def image_link(path: str | None) -> str | None:
     if not path:
         return None
     return f"{IMAGE_URL}{path}"
+
+
+def _clean_text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _translation_language_keys(item: dict[str, Any]) -> set[str]:
+    language = str(item.get("iso_639_1") or "").strip()
+    country = str(item.get("iso_3166_1") or "").strip()
+    keys = set()
+    if language:
+        keys.add(language.casefold())
+    if language and country:
+        keys.add(f"{language}-{country}".casefold())
+    return keys
+
+
+def _translation_items(raw_details: dict[str, Any]) -> list[dict[str, Any]]:
+    translations = raw_details.get("translations") or {}
+    items = translations.get("translations") if isinstance(translations, dict) else translations
+    return [item for item in items or [] if isinstance(item, dict)]
+
+
+def extract_best_overview(
+    raw_details: dict[str, Any],
+    preferred_languages: tuple[str, ...] = ("ru-RU", "ru", "en-US", "en"),
+) -> str | None:
+    overview = _clean_text(raw_details.get("overview"))
+    if overview is not None:
+        return overview
+
+    translations = _translation_items(raw_details)
+    preferred = [str(language or "").strip().casefold() for language in preferred_languages if str(language or "").strip()]
+    for language in preferred:
+        for item in translations:
+            if language not in _translation_language_keys(item):
+                continue
+            data = item.get("data") or {}
+            overview = _clean_text(data.get("overview")) if isinstance(data, dict) else None
+            if overview is not None:
+                return overview
+    return None
+
+
+def extract_best_poster_path(raw_details: dict[str, Any]) -> str | None:
+    poster_path = _clean_text(raw_details.get("poster_path"))
+    if poster_path is not None:
+        return poster_path
+
+    posters = (raw_details.get("images") or {}).get("posters") or []
+    valid_posters = [item for item in posters if isinstance(item, dict) and _clean_text(item.get("file_path"))]
+    if not valid_posters:
+        return None
+
+    def poster_rank(item: dict[str, Any]) -> tuple:
+        language = str(item.get("iso_639_1") or "").casefold()
+        language_rank = {"ru": 3, "en": 2, "": 1, "none": 1}.get(language, 0)
+        return (
+            language_rank,
+            float(item.get("vote_average") or 0),
+            int(item.get("vote_count") or 0),
+        )
+
+    return _clean_text(max(valid_posters, key=poster_rank).get("file_path"))
+
+
+def _person_credit(item: dict[str, Any], role: str | None, episode_count: int | None) -> dict[str, Any] | None:
+    name = _clean_text(item.get("name"))
+    if name is None:
+        return None
+    credit = {"name": name}
+    if role:
+        credit["role"] = role
+    if episode_count is not None:
+        credit["episode_count"] = episode_count
+    if item.get("id") is not None:
+        credit["tmdb_person_id"] = item.get("id")
+    return credit
+
+
+def _roles_text(roles: list[dict[str, Any]], role_key: str) -> str | None:
+    names = []
+    for role in roles:
+        if isinstance(role, dict) is False:
+            continue
+        value = _clean_text(role.get(role_key))
+        if value and value not in names:
+            names.append(value)
+    return ", ".join(names) if names else None
+
+
+def _episode_count(roles: list[dict[str, Any]]) -> int | None:
+    counts = []
+    for role in roles:
+        if isinstance(role, dict) and role.get("episode_count") is not None:
+            try:
+                counts.append(int(role.get("episode_count")))
+            except (TypeError, ValueError):
+                continue
+    return sum(counts) if counts else None
+
+
+def extract_aggregate_credits_top(raw_details: dict[str, Any], limit: int = 10) -> dict[str, list[dict[str, Any]]]:
+    aggregate_credits = raw_details.get("aggregate_credits") or {}
+    result = {"actors_top": [], "crew_top": []}
+    for source_key, target_key, role_key in (
+        ("cast", "actors_top", "character"),
+        ("crew", "crew_top", "job"),
+    ):
+        people = aggregate_credits.get(source_key) or []
+        normalized_people = []
+        for item in people:
+            if isinstance(item, dict) is False:
+                continue
+            roles = item.get("roles") or item.get("jobs") or []
+            roles = roles if isinstance(roles, list) else []
+            credit = _person_credit(
+                item,
+                _roles_text(roles, role_key),
+                _episode_count(roles),
+            )
+            if credit is not None:
+                normalized_people.append(credit)
+        normalized_people.sort(
+            key=lambda value: (
+                int(value.get("episode_count") or 0),
+                str(value.get("name") or "").casefold(),
+            ),
+            reverse=True,
+        )
+        result[target_key] = normalized_people[: max(0, int(limit))]
+    return result
+
+
+def extract_keywords(raw_details: dict[str, Any]) -> list[str]:
+    keywords = raw_details.get("keywords") or {}
+    items = keywords.get("results") or keywords.get("keywords") if isinstance(keywords, dict) else keywords
+    result: list[str] = []
+    for item in items or []:
+        if isinstance(item, dict):
+            name = _clean_text(item.get("name"))
+        else:
+            name = _clean_text(item)
+        if name and name not in result:
+            result.append(name)
+    return result
+
+
+def extract_external_ids(raw_details: dict[str, Any]) -> dict[str, Any]:
+    external_ids = raw_details.get("external_ids") or {}
+    if isinstance(external_ids, dict) is False:
+        return {}
+    return {
+        key: value
+        for key, value in external_ids.items()
+        if value is not None and str(value).strip() != ""
+    }
 
 
 def get_content_rating(details: dict[str, Any], region: str = DEFAULT_REGION) -> str | None:
@@ -359,10 +552,12 @@ def normalize_people(items: list[dict[str, Any]] | None, limit: int, role_key: s
 
 
 def normalize_tmdb_tv(raw_details: dict[str, Any]) -> dict[str, Any]:
-    external_ids = raw_details.get("external_ids") or {}
+    external_ids = extract_external_ids(raw_details)
     credits = raw_details.get("credits") or {}
+    aggregate_credits = extract_aggregate_credits_top(raw_details, limit=10)
     first_air_date = raw_details.get("first_air_date")
     production_countries = raw_details.get("production_countries") or []
+    poster_path = extract_best_poster_path(raw_details)
 
     return {
         "tmdb_id": raw_details.get("id"),
@@ -389,15 +584,16 @@ def normalize_tmdb_tv(raw_details: dict[str, Any]) -> dict[str, Any]:
         "tmdb_rating": raw_details.get("vote_average"),
         "tmdb_votes": raw_details.get("vote_count"),
         "tmdb_popularity": raw_details.get("popularity"),
-        "overview": raw_details.get("overview"),
-        "poster_path": raw_details.get("poster_path"),
-        "poster_url": image_link(raw_details.get("poster_path")),
+        "overview": extract_best_overview(raw_details),
+        "poster_path": poster_path,
+        "poster_url": image_link(poster_path),
         "backdrop_path": raw_details.get("backdrop_path"),
         "backdrop_url": image_link(raw_details.get("backdrop_path")),
         "content_rating": get_content_rating(raw_details),
         "watch_providers_ru": get_watch_providers(raw_details, DEFAULT_REGION),
-        "actors_top": normalize_people(credits.get("cast"), 8, "character"),
-        "crew_top": normalize_people(credits.get("crew"), 5, "job"),
+        "actors_top": aggregate_credits["actors_top"][:8] or normalize_people(credits.get("cast"), 8, "character"),
+        "crew_top": aggregate_credits["crew_top"][:5] or normalize_people(credits.get("crew"), 5, "job"),
+        "keywords": extract_keywords(raw_details),
         "imdb_rating": None,
         "imdb_votes": None,
         "imdb_title_type": None,
