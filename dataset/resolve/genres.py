@@ -67,4 +67,8 @@ def extract_tmdb_genres(series: dict | None) -> list:
     """Достаёт список жанров из нормализованного TMDb-объекта."""
     if not isinstance(series, dict):
         return []
-    return unique_preserve_order(series.get("genres_tmdb", []) or [])
+    for field_name in ("genres_tmdb", "genres"):
+        values = series.get(field_name, []) or []
+        if values:
+            return unique_preserve_order(values)
+    return []

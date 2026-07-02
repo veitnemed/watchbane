@@ -143,7 +143,7 @@ def iter_sql_result_candidates(sql_result: dict) -> list:
 
 def resolve_sql_after_api_mismatch(query: str, api_candidate: dict, country: str = "Россия", sql_search_func=None) -> dict:
     """Ищет SQL-кандидата заново по API identity после reject первого SQL."""
-    from dataset.resolve.defaults import extract_api_title, has_api_imdb_values
+    from dataset.resolve.defaults import extract_api_title
 
     sql_search_func = sql_search_func or sql_search.search_title_in_sql
     attempts = []

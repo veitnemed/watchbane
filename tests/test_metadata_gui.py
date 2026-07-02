@@ -58,12 +58,25 @@ def test_build_watched_movie_card_uses_meta_description() -> None:
 
 
 def test_build_add_meta_payload_from_resolve() -> None:
-    from dataset.title_resolve import build_add_meta_payload
+    from dataset.meta.payload import build_add_meta_payload
 
     resolved = {
         "source_values": {"description": "TMDb overview text"},
         "sources": {"description": "tmdb_api"},
-        "tmdb_data": {"tmdb_id": 123, "imdb_id": "tt123"},
+        "tmdb_data": {
+            "tmdb_id": 123,
+            "imdb_id": "tt123",
+            "poster_path": "/poster.jpg",
+            "poster_url": "https://image.tmdb.org/t/p/original/poster.jpg",
+            "tmdb_score": 7.8,
+            "tmdb_votes": 456,
+            "tmdb_popularity": 12.3,
+            "kp_id": 999,
+            "kp_score": 9.9,
+            "kp_votes": 1000,
+            "imdb_score": 8.8,
+            "imdb_votes": 2000,
+        },
         "api_data": {},
     }
 
@@ -71,22 +84,51 @@ def test_build_add_meta_payload_from_resolve() -> None:
 
     assert payload["description"] == "TMDb overview text"
     assert payload["tmdb_id"] == 123
-    assert payload["source"] == "tmdb_api"
+    assert payload["imdb_id"] == "tt123"
+    assert payload["poster_path"] == "/poster.jpg"
+    assert payload["poster_url"] == "https://image.tmdb.org/t/p/original/poster.jpg"
+    assert payload["source"] == "tmdb"
+    assert payload["raw_scores"] == {
+        "tmdb_score": 7.8,
+        "tmdb_votes": 456,
+        "tmdb_popularity": 12.3,
+    }
+    assert "kp_id" not in payload
+    assert "kp_score" not in payload
+    assert "kp_votes" not in payload
+    assert "imdb_score" not in payload
+    assert "imdb_votes" not in payload
 
 
 def test_build_candidate_meta_payload_uses_overview() -> None:
-    from dataset.title_resolve import build_candidate_meta_payload
+    from dataset.meta.payload import build_candidate_meta_payload
 
     payload = build_candidate_meta_payload(
         {
             "title": "Candidate",
             "overview": "Overview text",
             "tmdb_id": 42,
+            "tmdb_score": 7.1,
+            "tmdb_votes": 900,
+            "tmdb_popularity": 5.5,
+            "kp_score": 9.9,
+            "kp_votes": 1000,
+            "imdb_score": 8.8,
+            "imdb_votes": 2000,
         }
     )
 
     assert payload["description"] == "Overview text"
     assert payload["tmdb_id"] == 42
+    assert payload["raw_scores"] == {
+        "tmdb_score": 7.1,
+        "tmdb_votes": 900,
+        "tmdb_popularity": 5.5,
+    }
+    assert "kp_score" not in payload
+    assert "kp_votes" not in payload
+    assert "imdb_score" not in payload
+    assert "imdb_votes" not in payload
 
 
 def test_upsert_poster_cache_entry_preserves_local_path() -> None:

@@ -1,36 +1,49 @@
-"""Tests for dataset.resolve.priority source merge."""
+"""Tests for TMDb-only add defaults priority wrapper."""
 
 from config import constant
-from dataset.resolve.priority import build_add_defaults_by_priority
+from dataset.resolve.priority import build_add_defaults_by_priority, build_add_defaults_from_tmdb
 
 
-def test_priority_prefers_kp_title_over_input_and_sql() -> None:
+def test_tmdb_data_produces_defaults() -> None:
+    tmdb_data = {
+        "title": "TMDb Title",
+        "year": 2020,
+        "country": "США",
+        "tmdb_score": 7.8,
+        "tmdb_votes": 500,
+        "tmdb_popularity": 12.3,
+        "genres_tmdb": ["Crime", "Drama"],
+        "overview": "Overview text",
+    }
+
+    built = build_add_defaults_from_tmdb("Input Title", tmdb_data)
+
+    assert built["defaults"]["main_info"]["title"] == "TMDb Title"
+    assert built["defaults"]["main_info"]["year"] == 2020
+    assert built["defaults"]["main_info"]["country"] == "США"
+    assert built["sources"]["title"] == "tmdb_api"
+    assert built["defaults"]["raw_scores"] == {
+        "tmdb_score": 7.8,
+        "tmdb_votes": 500,
+        "tmdb_popularity": 12.3,
+    }
+    assert built["defaults"]["genre"]["has_crime"] == 1
+    assert built["defaults"]["genre"]["has_drama"] == 1
+    assert built["source_values"]["description"] == "Overview text"
+
+
+def test_priority_wrapper_ignores_sql_and_kp_data() -> None:
     sql_data = {
         "title": "SQL Title",
         "year": 2010,
-        "genres": ["Animation"],
         "imdb_rating": 6.0,
         "imdb_votes": 100,
     }
     api_data = {
         "name": "KP Title",
-        "year": 2020,
-        "rating": {"kp": 7.0},
-        "votes": {"kp": 500},
-        "genres": [{"name": "драма"}],
+        "rating": {"kp": 8.0, "imdb": 7.0},
+        "votes": {"kp": 1000, "imdb": 500},
     }
-
-    built = build_add_defaults_by_priority("Input Title", sql_data, api_data, None)
-
-    assert built["defaults"]["main_info"]["title"] == "KP Title"
-    assert built["sources"]["title"] == "kp_api"
-    assert built["sources"]["year"] == "kp_api"
-    assert built["sources"]["genres"] == "kp_api"
-
-
-def test_priority_uses_tmdb_when_kp_missing() -> None:
-    sql_data = None
-    api_data = None
     tmdb_data = {
         "title": "TMDb Title",
         "year": 2015,
@@ -40,41 +53,34 @@ def test_priority_uses_tmdb_when_kp_missing() -> None:
 
     built = build_add_defaults_by_priority("Input Title", sql_data, api_data, tmdb_data)
 
-    assert built["defaults"]["main_info"]["title"] == "Input Title"
+    assert built["defaults"]["main_info"]["title"] == "TMDb Title"
     assert built["sources"]["year"] == "tmdb_api"
     assert built["sources"]["genres"] == "tmdb_api"
     assert built["defaults"]["genre"]["has_crime"] == 1
     assert built["defaults"]["genre"]["has_drama"] == 1
+    assert "sql_identity" not in built
+    assert "kp_score" not in built["defaults"]["raw_scores"]
+    assert "kp_votes" not in built["defaults"]["raw_scores"]
+    assert "imdb_score" not in built["defaults"]["raw_scores"]
+    assert "imdb_votes" not in built["defaults"]["raw_scores"]
+    assert "kp_api" not in set(built["sources"].values())
+    assert "imdb_sql" not in set(built["sources"].values())
+    assert "imdb_sql_second_pass" not in set(built["sources"].values())
 
 
-def test_priority_rejects_sql_year_mismatch() -> None:
-    sql_data = {
-        "title": "Псих",
-        "year": 2010,
-        "genres": ["драма"],
-        "imdb_rating": 6.0,
-        "imdb_votes": 100,
-    }
-    api_data = {
-        "name": "Псих",
-        "year": 2020,
-        "rating": {"kp": 7.3, "imdb": 7.0},
-        "votes": {"kp": 1000, "imdb": 500},
-        "genres": [{"name": "драма"}],
-    }
+def test_empty_tmdb_title_falls_back_to_input_source() -> None:
+    built = build_add_defaults_by_priority("Input Title", {"title": "SQL"}, {"name": "KP"}, {})
 
-    built = build_add_defaults_by_priority("Псих", sql_data, api_data, None)
-
-    assert built["sql_identity"]["accepted"] is False
-    assert built["sql_identity"]["reason"] == "year_mismatch"
-    assert built["defaults"]["raw_scores"]["imdb_score"] == 7.0
+    assert built["defaults"]["main_info"]["title"] == "Input Title"
+    assert built["sources"]["title"] == "input"
+    assert built["defaults"]["raw_scores"] == {}
 
 
 def test_genre_defaults_cover_full_schema() -> None:
     built = build_add_defaults_by_priority(
         "Test",
         None,
-        {"name": "Test", "genres": [{"name": "драма"}]},
-        None,
+        {"name": "Ignored", "genres": [{"name": "ignored"}]},
+        {"title": "Test", "genres_tmdb": ["драма"]},
     )
     assert set(built["defaults"]["genre"].keys()) == set(constant.GENRE)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from candidates import service as candidate_service
 from dataset import service
+from dataset.resolve.poster_hints import build_poster_hints_from_candidate
 
 SORT_MODE_METRIC_PREFIX = {
     "final_score": "Итог",
@@ -107,8 +108,6 @@ def candidate_poster_url_for_download(candidate: dict) -> str | None:
     """Return poster URL when local preview file is missing."""
     if resolve_local_poster_path_for_candidate(candidate) not in (None, ""):
         return None
-
-    from dataset.title_resolve import build_poster_hints_from_candidate
 
     hints = build_poster_hints_from_candidate(candidate)
     poster_url = hints.get("poster_url")

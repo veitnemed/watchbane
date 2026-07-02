@@ -32,25 +32,20 @@ SHEME_VALIDATORS = {
         }
     },
     RAW_SCORES: {
-        "kp_score": {
+        "tmdb_score": {
             "tag": ["score"],
             "type": float,
             "formated": None
         },
-        "kp_votes": {
+        "tmdb_votes": {
             "tag": ["votes"],
             "type": int,
-            "formated": "kp_popularity"
-        },
-        "imdb_score": {
-            "tag": ["score"],
-            "type": float,
             "formated": None
         },
-        "imdb_votes": {
-            "tag": ["votes"],
-            "type": int,
-            "formated": "imdb_popularity"
+        "tmdb_popularity": {
+            "tag": [],
+            "type": float,
+            "formated": None
         }
     },
     GENRE: {},

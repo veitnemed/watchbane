@@ -29,7 +29,7 @@ def test_service_facade_exports_core_operations() -> None:
     assert hasattr(service, "get_dataset_stats")
     assert hasattr(service, "export_dataset_to_excel")
     assert hasattr(service, "apply_genre_markup")
-    assert hasattr(service, "fetch_series_raw")
+    assert hasattr(service, "build_tmdb_add_defaults")
 
 
 def test_dataset_package_exports_service() -> None:

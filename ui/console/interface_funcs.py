@@ -18,6 +18,7 @@ from ui.console.candidate_pool_tools import (
     show_title_candidate_duplicates,
 )
 from ui.console import request
+from ui.console import title_presenters
 from ui.console.poster_tools import (
     diagnose_unresolved_watched_tmdb_metadata,
     download_poster_images_local,
@@ -269,20 +270,20 @@ def load_genre_markup():
 
 
 def show_api_features():
-    """Ищет сериал через API и печатает полный JSON найденного объекта."""
+    """Ищет сериал через TMDb и печатает краткую сводку найденного объекта."""
     title = request.loop_input(
         text='Название сериала >> ',
         funcs_list=[valid.is_correct_title]
     )
-    result = service.fetch_series_raw(title, "Россия")
+    result = service.resolve_title_data_for_add(title, "Россия")
 
-    if result["ok"] is False:
-        print(f'Сериал не найден в списке API: {result["details"]}')
+    if result["found"] is False:
+        error = result.get("tmdb_error") or {}
+        print(f'Сериал не найден в TMDb: {error.get("details") or error.get("error") or "нет данных"}')
         return
 
-    print('\nСериал найден в списке API.\n')
-    for line in service.format_series_lines(result["data"]):
-        print(line)
+    print('\nСериал найден в TMDb.\n')
+    title_presenters.print_api_add_preview(result["tmdb_data"])
 
 
 def show_dataset_genres() -> None:

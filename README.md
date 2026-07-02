@@ -49,7 +49,7 @@ watched library
 
 - **My library**: browse watched titles with posters, your ratings, TMDb signals, metadata and detail cards.
 - **Candidates**: search a shared pool of possible next titles, hide noise, transfer good picks.
-- **Information**: inspect read-only analytics without mutating your data.
+- **Information**: inspect genre reports and build custom local charts without mutating your data.
 - **TMDb-only build flow**: discover candidates by country/mode, fetch TMDb Details, score them, import into the shared pool.
 - **Poster cache**: keep preview posters local and avoid waiting on CDN during normal browsing.
 - **Console tools**: maintenance, diagnostics, imports and longer-running operations stay available.
@@ -120,7 +120,7 @@ py -m pytest
 
 Public setup for candidate discovery requires only `TMDB_TOKEN` in the environment, `.env.local`, or `tmdb.env`.
 
-No KP API token or local IMDb dataset is required for the public candidate-pool product.
+No KP API token or local IMDb dataset is required for the public product.
 
 ## TMDb-Only Candidate Pool
 
@@ -135,6 +135,38 @@ The public recommendation flow is TMDb-only:
 The candidate contract does not require KP/IMDb ratings. `imdb_id` may exist only as an external id.
 
 See [TMDb-only candidate flow](docs/TMDB_ONLY_CANDIDATE_FLOW.md) for the full contract, migration scripts, refresh scripts, scoring notes and limitations.
+
+## TMDb-Only Add Title
+
+Adding a watched title is also TMDb-only:
+
+1. enter an input title;
+2. search TMDb TV;
+3. fetch TMDb Details;
+4. preview title/year/metadata/poster/genres;
+5. enter your `user_score`;
+6. save into the watched dataset.
+
+KP API is not needed. A local IMDb dataset is not needed. IMDb rating/votes are not used. `imdb_id` may be stored only as an external id returned by TMDb.
+
+## Information And Charts
+
+The Information tab is intentionally small:
+
+- watched genre counts;
+- candidate pool genre counts;
+- a chart constructor for local dependencies.
+
+The constructor supports watched titles and candidate pool data, bar/function chart types, X axes such as year, genre, country, TMDb rating/votes/popularity, and Y metrics such as title count, average user score, average TMDb rating and average final score. No network calls are made while building these charts.
+
+Useful maintenance commands:
+
+```powershell
+py scripts/migrate_candidate_pool_tmdb_only.py --dry-run
+py scripts/refresh_candidate_pool_from_tmdb.py --dry-run
+py scripts/migrate_watched_raw_scores_tmdb_only.py --dry-run
+py scripts/refresh_watched_from_tmdb.py --dry-run
+```
 
 ## Repository Notes
 

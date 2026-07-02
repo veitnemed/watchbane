@@ -185,6 +185,104 @@ def build_score_distribution_html(rows: list[dict]) -> str:
     return _plotly_html_page(chart, SCORE_DISTRIBUTION_CHART_HEIGHT)
 
 
+def _format_constructor_hover(row: dict, y_label: str) -> str:
+    label = escape(str(row.get("label") or ""))
+    value = row.get("value", 0)
+    count = int(row.get("count") or 0)
+    examples = [escape(str(title)) for title in row.get("example_titles", []) if title]
+    lines = [label, f"{escape(y_label)}: {float(value):.2f}".rstrip("0").rstrip("."), f"{count} тайтлов"]
+    if examples:
+        lines.append(f"Примеры: {', '.join(examples)}")
+    extra_count = int(row.get("extra_count") or 0)
+    if extra_count > 0:
+        lines.append(f"ещё {extra_count}")
+    return "<br>".join(lines)
+
+
+def build_constructor_chart_figure(payload: dict):
+    """Build a generic Plotly chart for the analytics constructor."""
+    import plotly.graph_objects as go
+
+    rows = payload.get("rows") or []
+    labels = [str(row.get("label") or "") for row in rows]
+    values = [float(row.get("value") or 0) for row in rows]
+    y_label = str(payload.get("y_label") or "")
+    x_label = str(payload.get("x_label") or "")
+    hover_texts = [_format_constructor_hover(row, y_label) for row in rows]
+    chart_type = payload.get("chart_type") or "bar"
+
+    if chart_type == "function":
+        trace = go.Scatter(
+            x=labels,
+            y=values,
+            mode="lines+markers",
+            line={"color": BAR_COLOR, "width": 2.5, "shape": "spline"},
+            marker={
+                "size": 8,
+                "color": BAR_COLOR,
+                "line": {"color": BAR_HOVER_COLOR, "width": 1.5},
+            },
+            fill="tozeroy",
+            fillcolor=COLOR_ACCENT_PLOT_FILL,
+            hovertext=hover_texts,
+            hovertemplate="%{hovertext}<extra></extra>",
+        )
+        bargap = None
+    else:
+        trace = go.Bar(
+            x=labels,
+            y=values,
+            marker={
+                "color": BAR_COLOR,
+                "line": {"color": BAR_HOVER_COLOR, "width": 1},
+            },
+            hovertext=hover_texts,
+            hovertemplate="%{hovertext}<extra></extra>",
+        )
+        bargap = 0.28
+
+    fig = go.Figure(data=[trace])
+    _apply_chart_layout(
+        fig,
+        height=SCORE_DISTRIBUTION_CHART_HEIGHT,
+        margin=CHART_MARGIN_DEFAULT,
+        bargap=bargap,
+    )
+    fig.update_layout(
+        xaxis={
+            "title": {"text": x_label, "font": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE}},
+            "gridcolor": GRID_COLOR,
+            "linecolor": GRID_COLOR,
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
+            "showgrid": False,
+        },
+        yaxis={
+            "title": {"text": y_label, "font": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE}},
+            "gridcolor": GRID_COLOR,
+            "linecolor": GRID_COLOR,
+            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
+            "rangemode": "tozero",
+        },
+    )
+    if len(labels) > 12:
+        fig.update_xaxes(tickangle=-35)
+    return fig
+
+
+def build_constructor_chart_html(payload: dict) -> str:
+    """Build standalone HTML for a chart-constructor payload."""
+    import plotly.io as pio
+
+    fig = build_constructor_chart_figure(payload)
+    chart = pio.to_html(
+        fig,
+        include_plotlyjs=True,
+        full_html=False,
+        config={"displayModeBar": False, "responsive": True},
+    )
+    return _plotly_html_page(chart, SCORE_DISTRIBUTION_CHART_HEIGHT)
+
+
 def _format_genre_count_hover(row: dict) -> str:
     label = escape(str(row["label"]))
     count = int(row["count"])

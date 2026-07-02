@@ -9,10 +9,9 @@ from config import scheme
 
 def _make_movie(title: str, user_score: float, year: int, poster_url: str | None = None) -> dict:
     raw_scores = {
-        "kp_score": 8.0,
-        "kp_votes": 120000,
-        "imdb_score": 8.0,
-        "imdb_votes": 1200,
+        "tmdb_score": 8.0,
+        "tmdb_votes": 1200,
+        "tmdb_popularity": 42.5,
     }
     main_info = {
         "title": title,

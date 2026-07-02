@@ -127,6 +127,16 @@ def build_movie_from_row(row: dict, row_number: int) -> dict:
                 print(f'Строка {row_number}: некорректное количество голосов')
                 return None
             raw_scores[feature] = int(value)
+        elif feature == "tmdb_popularity":
+            try:
+                popularity = valid.parse_float(value)
+            except ValueError:
+                print(f'Строка {row_number}: некорректное значение {feature}')
+                return None
+            if popularity < 0:
+                print(f'Строка {row_number}: некорректное значение {feature}')
+                return None
+            raw_scores[feature] = popularity
         else:
             if valid.is_correct_score(value) is False:
                 print(f'Строка {row_number}: некорректное значение {feature}')

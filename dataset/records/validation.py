@@ -131,7 +131,7 @@ def validate_add_record_payload(record_payload: dict, *, data: dict) -> AddRecor
 
 def validate_add_features(features: dict, *, title: str) -> AddRecordResult | None:
     required_features = {constant.BIAS_FEATURE, *constant.TAGS_VIBE, *constant.GENRE}
-    supported_computed = set(constant.COMPUTED_SCORES) | {"tmdb_score", "tmdb_votes", "tmdb_popularity"}
+    supported_computed = set(constant.COMPUTED_SCORES)
     supported_features = required_features | supported_computed
     if required_features.issubset(set(features.keys())) is False or set(features.keys()).issubset(supported_features) is False:
         return AddRecordResult(

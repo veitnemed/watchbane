@@ -65,6 +65,56 @@ QFrame#sameScoreCard {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {RADIUS_CARD}px;
 }}
+QFrame#chartConstructorControls {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CARD}px;
+    padding: 10px;
+}}
+QWidget#chartConstructorField {{
+    background: transparent;
+}}
+QLabel#chartConstructorLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_summary_label}px;
+    font-weight: 600;
+}}
+QComboBox#chartConstructorCombo {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {font_base}px;
+    padding: 8px 12px;
+    min-height: 20px;
+}}
+QComboBox#chartConstructorCombo:focus {{
+    border-color: {COLOR_ACCENT};
+}}
+QComboBox#chartConstructorCombo::drop-down {{
+    border: none;
+    width: 24px;
+}}
+QComboBox#chartConstructorCombo QAbstractItemView {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    color: {COLOR_TEXT};
+    selection-background-color: {COLOR_ACCENT_SOFT};
+}}
+QPushButton#chartConstructorBuildButton {{
+    background-color: {COLOR_ACCENT_SOFT};
+    border: 1px solid {COLOR_ACCENT};
+    border-radius: {RADIUS_BUTTON}px;
+    color: {COLOR_TEXT};
+    font-size: {font_base}px;
+    font-weight: 700;
+    padding: 9px 14px;
+}}
+QPushButton#chartConstructorBuildButton:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_ACCENT_HOVER};
+}}
 QFrame#summaryCardStale {{
     background-color: {COLOR_STALE_BG};
     border: 1px solid {COLOR_STALE_BORDER};

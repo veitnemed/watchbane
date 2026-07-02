@@ -9,6 +9,7 @@ from config import scheme
 from dataset.resolve.countries import extract_country_value
 from dataset.resolve.defaults import build_empty_add_defaults
 from dataset.resolve.genres import build_genre_defaults, extract_tmdb_genres
+from dataset.resolve.sources import search_tmdb_defaults_data
 
 ADD_TITLE_RESOLVE_PROGRESS_TOTAL = 4
 
@@ -109,6 +110,7 @@ def _build_tmdb_source_values(tmdb_data: dict[str, Any]) -> dict:
 
 def search_tmdb_title_for_add(
     title: str,
+    country: str = "",
     *,
     search_func=None,
     choose_func=None,
@@ -116,36 +118,16 @@ def search_tmdb_title_for_add(
     normalizer=None,
 ) -> dict[str, Any]:
     """Search TMDb and return normalized add-flow data without KP/IMDb ratings."""
-    search_func = search_func or api_tmdb.search_tv_by_name
-    choose_func = choose_func or api_tmdb.choose_best_result
-    details_func = details_func or api_tmdb.get_tv_details
-    normalizer = normalizer or api_tmdb.normalize_tmdb_tv
-
-    try:
-        results = search_func(title)
-        selected = choose_func(results)
-        if selected is None:
-            return {
-                "data": None,
-                "error": _tmdb_error("not_found", f"TMDb не нашёл объект: {title}"),
-                "status": "не найдено",
-            }
-
-        details = details_func(
-            int(selected["id"]),
-            append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
-        )
-        return {
-            "data": _clean_tmdb_data(normalizer(details)),
-            "error": None,
-            "status": "найдено",
-        }
-    except Exception as error:  # noqa: BLE001 - внешний API не должен ронять ручное добавление.
-        return {
-            "data": None,
-            "error": _tmdb_error("network_error", str(error)),
-            "status": "ошибка",
-        }
+    result = search_tmdb_defaults_data(
+        [{"title": title, "country": country}],
+        search_func=search_func,
+        choose_func=choose_func,
+        details_func=details_func,
+        normalizer=normalizer,
+    )
+    if result["data"] is not None:
+        result["data"] = _clean_tmdb_data(result["data"])
+    return result
 
 
 def resolve_title_data_for_add(
@@ -165,6 +147,7 @@ def resolve_title_data_for_add(
     _report_add_progress(on_progress, 1, "TMDb Search", "Поиск")
     tmdb_result = search_tmdb_title_for_add(
         title,
+        country,
         search_func=tmdb_search_func,
         choose_func=tmdb_choose_func,
         details_func=tmdb_details_func,

@@ -8,9 +8,10 @@ from desktop.watched.model.load import WatchedEntry
 
 SORT_OPTIONS: tuple[tuple[str, str], ...] = (
     ("user_score", "Моя оценка"),
+    ("tmdb_score", "TMDb"),
+    ("tmdb_votes", "Голоса TMDb"),
+    ("tmdb_popularity", "Популярность TMDb"),
     ("year", "Год"),
-    ("imdb_score", "IMDb"),
-    ("kp_score", "КП"),
     ("title", "Название"),
 )
 
@@ -167,7 +168,15 @@ def sort_entries(entries: list[WatchedEntry], sort_key: str) -> list[WatchedEntr
         )
 
     def numeric_sort_key(entry: WatchedEntry) -> tuple[int, float | int]:
-        value = entry[2].get(sort_key)
+        raw_value = entry[2].get(sort_key)
+        if raw_value is None:
+            return (1, 0)
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            return (1, 0)
+        if value.is_integer():
+            value = int(value)
         if value is None:
             return (1, 0)
         return (0, value)

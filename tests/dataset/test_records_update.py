@@ -7,10 +7,9 @@ def _make_movie(title: str, user_score: float, year: int) -> dict:
     tags_vibe = {feature: 0 for feature in constant.TAGS_VIBE}
     genre_tags = {feature: 0 for feature in constant.GENRE}
     raw_scores = {
-        "kp_score": 8.0,
-        "kp_votes": 120000,
-        "imdb_score": 8.0,
-        "imdb_votes": 1200,
+        "tmdb_score": 8.0,
+        "tmdb_votes": 1200,
+        "tmdb_popularity": 42.5,
     }
     main_info = {"title": title, "user_score": user_score, "year": year, "country": "Россия"}
     return {
@@ -60,7 +59,7 @@ def test_update_dataset_record_syncs_meta_on_raw_only_change(monkeypatch) -> Non
 
     result = update_dataset_record(
         "Alpha",
-        {"raw_scores": {"kp_score": 8.0, "kp_votes": 120000, "imdb_score": 8.0, "imdb_votes": 1200}},
+        {"raw_scores": {"tmdb_score": 8.0, "tmdb_votes": 1200, "tmdb_popularity": 42.5}},
     )
 
     assert result.ok is True

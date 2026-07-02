@@ -2,7 +2,9 @@
 
 from config import constant
 from config import scheme
-from dataset import service
+from dataset.resolve.countries import extract_country_value
+from dataset.resolve.defaults import extract_tmdb_description, extract_tmdb_raw_scores, extract_tmdb_title
+from dataset.resolve.genres import extract_tmdb_genres
 
 
 def short_text(value, limit: int = 50) -> str:
@@ -25,24 +27,18 @@ def print_sql_add_preview(sql_data: dict) -> None:
 
 
 def print_api_add_preview(api_data: dict) -> None:
-    """Показывает краткую API-сводку для будущего сохранения."""
-    countries = service.extract_api_countries(api_data)
-    genres_line = ", ".join(service.extract_api_genres(api_data)) or "нет данных"
-    raw_scores = service.extract_api_raw_scores(api_data)
+    """Показывает краткую TMDb-сводку для будущего сохранения."""
+    countries = extract_country_value(api_data)
+    genres_line = ", ".join(extract_tmdb_genres(api_data)) or "нет данных"
+    raw_scores = extract_tmdb_raw_scores(api_data)
 
-    print("\nAPI обогатил объект:")
-    print(f"Название: {service.extract_api_title(api_data) or 'нет данных'}")
+    print("\nTMDb обогатил объект:")
+    print(f"Название: {extract_tmdb_title(api_data) or 'нет данных'}")
     print(f"Год: {api_data.get('year') or 'нет данных'}")
-    print(f"Страны: {countries if countries != 'None' else 'нет данных'}")
+    print(f"Страны: {countries or 'нет данных'}")
     print(f"Жанры: {genres_line}")
-    if "tmdb_score" in raw_scores or "tmdb_votes" in raw_scores:
-        print(f"TMDb: {raw_scores.get('tmdb_score') or '-'} / голосов {raw_scores.get('tmdb_votes') or '-'}")
-    else:
-        print(f"KP: {raw_scores.get('kp_score') or '-'} / голосов {raw_scores.get('kp_votes') or '-'}")
-        print(f"IMDb: {raw_scores.get('imdb_score') or '-'} / голосов {raw_scores.get('imdb_votes') or '-'}")
-    print(
-        f"Описание: {short_text(api_data.get('description') or api_data.get('shortDescription'), 80) or 'нет данных'}"
-    )
+    print(f"TMDb: {raw_scores.get('tmdb_score') or '-'} / голосов {raw_scores.get('tmdb_votes') or '-'}")
+    print(f"Описание: {short_text(extract_tmdb_description(api_data), 80) or 'нет данных'}")
 
 
 def print_final_add_preview(defaults: dict) -> None:
@@ -57,11 +53,7 @@ def print_final_add_preview(defaults: dict) -> None:
     print("\nИтог для добавления:")
     print(f"Название: {defaults.get(scheme.MAIN_INFO, {}).get('title') or 'нет данных'}")
     print(f"Год: {defaults.get(scheme.MAIN_INFO, {}).get('year') or 'нет данных'}")
-    if "tmdb_score" in raw_scores or "tmdb_votes" in raw_scores:
-        print(f"TMDb: {raw_scores.get('tmdb_score') or '-'} / голосов {raw_scores.get('tmdb_votes') or '-'}")
-    else:
-        print(f"KP: {raw_scores.get('kp_score') or '-'} / голосов {raw_scores.get('kp_votes') or '-'}")
-        print(f"IMDb: {raw_scores.get('imdb_score') or '-'} / голосов {raw_scores.get('imdb_votes') or '-'}")
+    print(f"TMDb: {raw_scores.get('tmdb_score') or '-'} / голосов {raw_scores.get('tmdb_votes') or '-'}")
     print(f"Жанры: {', '.join(genres) if len(genres) > 0 else 'нет данных'}")
 
 

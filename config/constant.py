@@ -51,12 +51,9 @@ FIELD_LABELS = {
     "user_score": "Ваша оценка",
     "year": "Год выхода",
     BIAS_FEATURE: "Свободный член",
-    "kp_score": "Рейтинг Кинопоиска",
-    "kp_votes": "Количество голосов Кинопоиска",
-    "imdb_score": "Рейтинг IMDb",
-    "imdb_votes": "Количество голосов IMDb",
-    "kp_popularity": "Популярность Кинопоиска",
-    "imdb_popularity": "Популярность IMDb",
+    "tmdb_score": "Рейтинг TMDb",
+    "tmdb_votes": "Голоса TMDb",
+    "tmdb_popularity": "Популярность TMDb",
 }
 
 TAG_RULES = {}
@@ -64,17 +61,15 @@ TAG_RULES = {}
 TRANSLATION = {
     "features": {
         BIAS_FEATURE: "Bias",
-        "kp_score": "Kinopoisk score",
-        "kp_popularity": "Kinopoisk popularity",
-        "imdb_score": "IMDb score",
-        "imdb_popularity": "IMDb popularity",
+        "tmdb_score": "TMDb score",
+        "tmdb_votes": "TMDb votes",
+        "tmdb_popularity": "TMDb popularity",
     },
     "meta features": {
         "year": "Year",
-        "kp_score": "Kinopoisk score",
-        "kp_votes": "Kinopoisk votes",
-        "imdb_score": "IMDb score",
-        "imdb_votes": "IMDb votes",
+        "tmdb_score": "TMDb score",
+        "tmdb_votes": "TMDb votes",
+        "tmdb_popularity": "TMDb popularity",
     },
 }
 
@@ -106,12 +101,9 @@ def refresh_dynamic_fields() -> None:
         "user_score": "Ваша оценка",
         "year": "Год выхода",
         BIAS_FEATURE: "Свободный член",
-        "kp_score": "Рейтинг Кинопоиска",
-        "kp_votes": "Количество голосов Кинопоиска",
-        "imdb_score": "Рейтинг IMDb",
-        "imdb_votes": "Количество голосов IMDb",
-        "kp_popularity": "Популярность Кинопоиска",
-        "imdb_popularity": "Популярность IMDb",
+        "tmdb_score": "Рейтинг TMDb",
+        "tmdb_votes": "Голоса TMDb",
+        "tmdb_popularity": "Популярность TMDb",
     }
     FIELD_LABELS.update(tags_work.get_tag_labels())
     FIELD_LABELS.update(genre_tags.get_genre_labels())
@@ -120,13 +112,18 @@ def refresh_dynamic_fields() -> None:
 
     TRANSLATION["features"] = {
         BIAS_FEATURE: "Bias",
-        "kp_score": "Kinopoisk score",
-        "kp_popularity": "Kinopoisk popularity",
-        "imdb_score": "IMDb score",
-        "imdb_popularity": "IMDb popularity",
+        "tmdb_score": "TMDb score",
+        "tmdb_votes": "TMDb votes",
+        "tmdb_popularity": "TMDb popularity",
     }
     TRANSLATION["features"].update(tags_work.get_tag_translations())
     TRANSLATION["features"].update(genre_tags.get_genre_translations())
+    TRANSLATION["meta features"] = {
+        "year": "Year",
+        "tmdb_score": "TMDb score",
+        "tmdb_votes": "TMDb votes",
+        "tmdb_popularity": "TMDb popularity",
+    }
 
 
 refresh_dynamic_fields()

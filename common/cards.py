@@ -310,6 +310,8 @@ def build_watched_movie_card(
         "tmdb_score": _first_number("tmdb_score", tmdb_sections, _to_float),
         "tmdb_votes": _first_number("tmdb_votes", tmdb_sections, _to_int),
         "tmdb_popularity": _first_number("tmdb_popularity", tmdb_sections, _to_float),
+        "quality_score": _first_number("quality_score", tmdb_sections, _to_float),
+        "final_score": _first_number("final_score", tmdb_sections, _to_float),
         "genres": _genres(movie),
         "country": _resolve_country(movie, title, year, lookup_cache=lookup_cache, meta_obj=meta_obj),
         "object_type": _object_type(movie, default="series"),

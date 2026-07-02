@@ -17,10 +17,9 @@ def _valid_add_payload(title: str = "New Title") -> dict:
             "country": "Россия",
         },
         "raw_scores": {
-            "kp_score": 8.0,
-            "kp_votes": 1000,
-            "imdb_score": 8.0,
-            "imdb_votes": 100,
+            "tmdb_score": 8.0,
+            "tmdb_votes": 1000,
+            "tmdb_popularity": 42.5,
         },
         constant.TAGS_VIBE_SECTION: {feature: 0 for feature in constant.TAGS_VIBE},
         constant.GENRE_SECTION: {feature: 0 for feature in constant.GENRE},

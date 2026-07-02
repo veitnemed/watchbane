@@ -49,8 +49,7 @@ def search_watched_records_by_query(query: str, data: dict | None = None) -> lis
                 "title": title,
                 "year": year,
                 "user_score": main_info.get("user_score"),
-                "kp_score": raw_scores.get("kp_score"),
-                "imdb_score": raw_scores.get("imdb_score"),
+                "tmdb_score": raw_scores.get("tmdb_score"),
             }
         )
 
@@ -87,8 +86,8 @@ def build_watched_delete_preview(dataset_key: str, data: dict | None = None) -> 
         "title": title,
         "year": year,
         "user_score": main_info.get("user_score"),
-        "kp_score": raw_scores.get("kp_score"),
-        "imdb_score": raw_scores.get("imdb_score"),
+        "tmdb_score": raw_scores.get("tmdb_score"),
+        "tmdb_votes": raw_scores.get("tmdb_votes"),
         "has_meta": meta_key is not None,
         "meta_key": meta_key,
         "has_poster_cache": cache_entry is not None,

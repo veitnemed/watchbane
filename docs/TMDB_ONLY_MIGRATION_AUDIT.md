@@ -36,14 +36,27 @@ Optional fields:
 - `actors_top` / `crew_top`;
 - `imdb_id` как external id, без рейтингового контракта.
 
+## Add-Title Public Path
+
+Add-title flow теперь тоже TMDb-only:
+
+- input title;
+- TMDb TV Search;
+- TMDb TV Details;
+- preview;
+- user_score;
+- save watched.
+
+KP API не нужен. IMDb local dataset не нужен. IMDb rating/votes не используются. `imdb_id` может храниться только как external id из TMDb.
+
 ## Non-Candidate Internal Helpers
 
-Некоторые external/local helpers могут оставаться вне candidate flow, если они используются add-title/defaults или diagnostics. Они не должны возвращаться в публичный candidate build/import/search путь.
+Некоторые external/local helpers могут оставаться только для legacy/internal diagnostics. Они не должны возвращаться в public candidate или add-title flow.
 
 ## Current Risks
 
-- В watched/add-title flow ещё могут быть свои источники defaults. Это отдельный продуктовый путь, не candidate pool.
-- Старые runtime данные могли содержать external rating fields; write-path и migration scripts должны их вычищать при сохранении candidate pool.
+- Старые runtime данные могли содержать external rating fields; write-path и migration scripts должны их вычищать при сохранении candidate pool и watched raw scores.
+- Для watched записей без `tmdb_id` refresh не должен угадывать при uncertain match; такие записи уходят в report `needs_manual_match`.
 
 ## Проверки
 

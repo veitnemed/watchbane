@@ -1,55 +1,51 @@
-"""Default values built from SQL, KP API, and TMDb candidates."""
+"""TMDb-only default values for add-title flow."""
 
 from config import constant
 from config import scheme
 from dataset.resolve.countries import extract_country_value
-from dataset.resolve.genres import build_genre_defaults, extract_api_genres
-from dataset.resolve.helpers import unique_preserve_order
-from apis import kp_api as api
+from dataset.resolve.genres import build_genre_defaults, extract_tmdb_genres
 
 
-def extract_api_title(series: dict) -> str:
-    """Достаёт лучшее доступное название из сырого ответа API."""
-    for key in ("title", "name", "alternativeName", "enName"):
+def extract_tmdb_title(series: dict) -> str:
+    """Return the best available title from a normalized TMDb object."""
+    for key in ("title", "name", "original_title", "original_name"):
         value = series.get(key)
         if str(value or "").strip() != "":
             return str(value).strip()
     return ""
 
 
-def extract_api_raw_scores(series: dict) -> dict:
-    """Собирает рейтинги и голоса из ответа API в плоский словарь."""
-    tmdb_raw_scores = {
+def extract_api_title(series: dict) -> str:
+    """Compatibility alias for TMDb title extraction."""
+    return extract_tmdb_title(series)
+
+
+def extract_tmdb_raw_scores(series: dict) -> dict:
+    """Return only TMDb score fields for watched raw_scores."""
+    return {
         key: series.get(key)
         for key in ("tmdb_score", "tmdb_votes", "tmdb_popularity")
         if series.get(key) not in (None, "")
     }
-    if tmdb_raw_scores:
-        return tmdb_raw_scores
-
-    return {
-        "kp_score": series.get("kp_score", api.safe_nested(series, "rating", "kp")),
-        "kp_votes": series.get("kp_votes", api.safe_nested(series, "votes", "kp")),
-        "imdb_score": series.get("imdb_score", api.safe_nested(series, "rating", "imdb")),
-        "imdb_votes": series.get("imdb_votes", api.safe_nested(series, "votes", "imdb")),
-    }
 
 
-def has_api_imdb_values(series: dict | None) -> bool:
-    """Проверяет, дал ли API хотя бы часть IMDb score/votes."""
-    if not isinstance(series, dict):
-        return False
-    raw_scores = extract_api_raw_scores(series)
-    return raw_scores.get("imdb_score") not in (None, "") or raw_scores.get("imdb_votes") not in (None, "")
+def extract_api_raw_scores(series: dict) -> dict:
+    """Compatibility alias for TMDb-only raw score extraction."""
+    return extract_tmdb_raw_scores(series)
+
+
+def extract_tmdb_description(series: dict) -> str:
+    """Return the best available TMDb description text."""
+    return str(series.get("description") or series.get("overview") or "").strip()
 
 
 def extract_api_description(series: dict) -> str:
-    """Возвращает лучшее доступное описание из KP API."""
-    return str(series.get("description") or series.get("shortDescription") or "").strip()
+    """Compatibility alias for TMDb description extraction."""
+    return extract_tmdb_description(series)
 
 
 def build_empty_add_defaults(input_title: str) -> dict:
-    """Собирает минимальные defaults для ручного добавления без внешних данных."""
+    """Build minimal defaults for manual add-title flow."""
     return {
         scheme.MAIN_INFO: {
             "title": input_title,
@@ -63,31 +59,8 @@ def build_empty_add_defaults(input_title: str) -> dict:
     }
 
 
-def build_sql_defaults(series: dict) -> dict:
-    """Собирает значения по умолчанию из локального SQL-результата."""
-    genres = unique_preserve_order(series.get("genres", []) or [])
-    genre_defaults = build_genre_defaults(genres)
-
-    return {
-        scheme.MAIN_INFO: {
-            "title": series.get("title") or series.get("original_title"),
-            "user_score": None,
-            "year": series.get("year"),
-            "country": extract_country_value(series),
-        },
-        scheme.RAW_SCORES: {
-            "kp_score": None,
-            "kp_votes": None,
-            "imdb_score": series.get("imdb_rating"),
-            "imdb_votes": series.get("imdb_votes"),
-        },
-        scheme.TAGS_VIBE: {},
-        scheme.GENRE: genre_defaults,
-    }
-
-
 def merge_defaults(base: dict, extra: dict) -> dict:
-    """Объединяет defaults из нескольких источников с приоритетом extra."""
+    """Merge two defaults payloads with non-empty values from extra taking priority."""
     merged = {
         scheme.MAIN_INFO: {},
         scheme.RAW_SCORES: {},
@@ -118,22 +91,22 @@ def merge_defaults(base: dict, extra: dict) -> dict:
     return merged
 
 
-def build_api_defaults(series: dict, genres: list | None = None) -> dict:
-    """Собирает значения API для подстановки в ручную форму."""
+def build_tmdb_add_defaults(series: dict, genres: list | None = None) -> dict:
+    """Build add-title defaults from a normalized TMDb object."""
     if genres is None:
-        genres = extract_api_genres(series)
-
-    genre_defaults = build_genre_defaults(genres)
-    raw_scores = extract_api_raw_scores(series)
+        genres = extract_tmdb_genres(series)
 
     return {
         scheme.MAIN_INFO: {
-            "title": extract_api_title(series),
+            "title": extract_tmdb_title(series),
             "user_score": None,
             "year": series.get("year"),
             "country": extract_country_value(series),
         },
-        scheme.RAW_SCORES: raw_scores,
+        scheme.RAW_SCORES: extract_tmdb_raw_scores(series),
         scheme.TAGS_VIBE: {},
-        scheme.GENRE: genre_defaults,
+        scheme.GENRE: build_genre_defaults(genres),
     }
+
+
+build_api_defaults = build_tmdb_add_defaults

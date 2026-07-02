@@ -87,7 +87,7 @@ def normalize_raw_scores(raw: dict) -> dict:
     if isinstance(raw, dict) is False:
         return {}
     normalized = {}
-    supported_fields = set(constant.RAW_SCORES) | {"tmdb_score", "tmdb_votes", "tmdb_popularity"}
+    supported_fields = set(constant.RAW_SCORES)
     for feature, value in raw.items():
         if feature not in supported_fields or value in (None, ""):
             continue

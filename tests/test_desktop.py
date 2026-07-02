@@ -974,6 +974,7 @@ def test_format_delete_preview_lines() -> None:
             "title": "Alpha",
             "year": 2020,
             "user_score": 8.0,
+            "tmdb_score": 7.8,
             "kp_score": 7.5,
             "imdb_score": 8.1,
             "has_meta": True,
@@ -983,8 +984,9 @@ def test_format_delete_preview_lines() -> None:
     assert "Название: Alpha" in lines
     assert "Год: 2020" in lines
     assert "Моя оценка: 8.0" in lines
-    assert "КП: 7.5" in lines
-    assert "IMDb: 8.1" in lines
+    assert "TMDb: 7.8" in lines
+    assert "КП: 7.5" not in lines
+    assert "IMDb: 8.1" not in lines
     assert "Meta: есть" in lines
     assert "Poster-cache: нет" in lines
 
@@ -1136,22 +1138,15 @@ def test_build_year_average_html_smoke() -> None:
     assert "2020" in html
 
 
-def test_analytics_imdb_delta_uses_collapsible_text_list() -> None:
+def test_analytics_view_removes_imdb_delta_report() -> None:
     import inspect
 
     import desktop.analytics.view as analytics_view_module
 
-    fill_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_imdb_delta)
-    assert "_render_imdb_delta_list" in fill_source
-    assert "build_imdb_delta_html" not in fill_source
-
-    render_source = inspect.getsource(analytics_view_module.AnalyticsView._render_imdb_delta_list)
-    assert "format_imdb_delta_line" in render_source
-    assert "IMDB_DELTA_LIST_PREVIEW_LIMIT" in render_source
-    assert "_make_list_expand_button" in render_source
-
-    button_source = inspect.getsource(analytics_view_module.AnalyticsView._make_list_expand_button)
-    assert "analyticsListExpand" in button_source
+    source = inspect.getsource(analytics_view_module.AnalyticsView)
+    assert "_fill_imdb_delta" not in source
+    assert "_render_imdb_delta_list" not in source
+    assert "build_imdb_delta_html" not in source
 
 
 def test_analytics_style_includes_list_expand_button() -> None:
@@ -1161,25 +1156,18 @@ def test_analytics_style_includes_list_expand_button() -> None:
     assert "QPushButton#analyticsListExpand" in style
 
 
-def test_analytics_distribution_uses_score_count_points() -> None:
+def test_analytics_update_entries_uses_only_genres_and_constructor() -> None:
     import inspect
 
     import desktop.analytics.view as analytics_view_module
 
     source = inspect.getsource(analytics_view_module.AnalyticsView.update_entries)
-    assert 'analytics["score_count_points"]' in source
-    assert 'analytics["dataset_completeness"]' in source
-    assert 'analytics["genre_count_rows"]' in source
     assert "get_pool_genre_count_rows" in source
-    assert 'analytics["year_average_points"]' in source
-    assert 'analytics["rating_lower_than_public"]' in source
-    assert 'analytics["imdb_delta_rows"]' not in source
-    assert 'analytics["rating_higher_than_public"]' not in source
-    assert 'analytics["suspicious_ratings"]' not in source
-    assert "_fill_completeness" in source
-    fill_distribution_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_distribution)
-    assert "build_score_count_html" in fill_distribution_source
-    assert "_fill_plotly_chart" in fill_distribution_source
+    assert "build_genre_count_rows" in source
+    assert "_render_chart_constructor" in source
+    assert "build_score_analytics" not in source
+    assert "_fill_year_average" not in source
+    assert "_fill_rating_lower" not in source
 
 
 def test_analytics_mvp_sections_wired() -> None:
@@ -1190,8 +1178,9 @@ def test_analytics_mvp_sections_wired() -> None:
     init_source = inspect.getsource(analytics_view_module.AnalyticsView.__init__)
     assert "Количество тайтлов по жанрам" in init_source
     assert "Количество тайтлов по жанрам (pool)" in init_source
-    assert "Средняя моя оценка по годам" in init_source
-    assert "Я сильно ниже IMDb" in init_source
+    assert "Конструктор графика" in init_source
+    assert "Средняя моя оценка по годам" not in init_source
+    assert "Я сильно ниже IMDb" not in init_source
     assert "Отличие моих оценок от IMDb" not in init_source
     assert "Я сильно выше IMDb" not in init_source
     assert "Подозрительные оценки" not in init_source
@@ -1199,25 +1188,24 @@ def test_analytics_mvp_sections_wired() -> None:
     update_source = inspect.getsource(analytics_view_module.AnalyticsView.update_entries)
     assert "_fill_genre_count" in update_source
     assert "_fill_pool_genre_count" in update_source
-    assert "_fill_year_average" in update_source
-    assert "_fill_rating_lower" in update_source
+    assert "_render_chart_constructor" in update_source
+    assert "_fill_year_average" not in update_source
+    assert "_fill_rating_lower" not in update_source
     assert "_fill_imdb_delta" not in update_source
     assert "_fill_rating_higher" not in update_source
     assert "_fill_suspicious" not in update_source
 
 
-def test_analytics_renders_dataset_completeness_block() -> None:
+def test_analytics_hides_dataset_completeness_block() -> None:
     import inspect
 
     import desktop.analytics.view as analytics_view_module
 
     init_source = inspect.getsource(analytics_view_module.AnalyticsView.__init__)
-    assert "completenessHeadline" in init_source
-    assert "completenessSubline" in init_source
-    fill_source = inspect.getsource(analytics_view_module.AnalyticsView._fill_completeness)
-    assert "summarize_dataset_completeness" in fill_source
-    assert "headline_text" in fill_source
-    assert "subline_text" in fill_source
+    source = inspect.getsource(analytics_view_module.AnalyticsView)
+    assert "completenessHeadline" not in init_source
+    assert "completenessSubline" not in init_source
+    assert "_fill_completeness" not in source
 
 
 def test_score_count_chart_height_matches_plotly_constant() -> None:
@@ -1254,15 +1242,21 @@ def test_analytics_style_includes_plotly_chart_selector() -> None:
     assert "QWebEngineView#analyticsPlotlyChart" in style
 
 
-def test_analytics_summary_cards_use_icon_badges() -> None:
+def test_analytics_constructor_controls_are_wired() -> None:
     import inspect
 
     import desktop.analytics.view as analytics_view_module
 
-    source = inspect.getsource(analytics_view_module.AnalyticsView._make_summary_card)
-    assert "summaryIconBadge" in source
-    assert "summaryIcon" in source
-    assert "Expanding" in source
+    source = inspect.getsource(analytics_view_module.AnalyticsView._build_chart_constructor_controls)
+    assert "chartConstructorControls" in source
+    assert "chartConstructorCombo" in source
+    assert "chartConstructorBuildButton" in source
+    assert "Просмотренные тайтлы" in source
+    assert "Candidate pool" in source
+    assert "Оценка пользователя" in source
+    assert "TMDb рейтинг" in source
+    assert "Функция" in source
+    assert "Построить график" in source
 
 
 def test_analytics_insights_use_bullet_rows() -> None:
@@ -1921,7 +1915,9 @@ def test_analytics_view_hides_removed_imdb_sections() -> None:
     assert "Отличие моих оценок от IMDb" not in icons
     assert "Я сильно выше IMDb" not in icons
     assert "Подозрительные оценки" not in icons
-    assert "Я сильно ниже IMDb" in source
+    assert "Я сильно ниже IMDb" not in source
+    assert "Я сильно ниже IMDb" not in icons
+    assert "Конструктор графика" in source
 
 
 def test_genre_chip_selector_tracks_selection(qapp) -> None:

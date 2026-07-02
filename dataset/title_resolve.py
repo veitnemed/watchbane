@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataset.meta.payload import build_add_meta_payload, build_candidate_meta_payload
-from dataset.resolve.defaults import build_api_defaults, build_empty_add_defaults
+from dataset.resolve.defaults import build_api_defaults, build_empty_add_defaults, build_tmdb_add_defaults
 from dataset.resolve.poster_hints import (
     build_poster_hints_from_candidate,
     build_poster_hints_from_resolve,
@@ -19,8 +19,6 @@ from dataset.transfer.candidate import (
     build_candidate_transfer_genre_defaults,
     build_candidate_transfer_payload,
 )
-
-build_tmdb_add_defaults = build_api_defaults
 
 __all__ = [
     "ADD_TITLE_RESOLVE_PROGRESS_TOTAL",

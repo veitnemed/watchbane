@@ -62,14 +62,15 @@ desktop/
     presenters.py                # format/map candidate records
     workers/poster_worker.py
   analytics/
-    view.py                      # AnalyticsView orchestrator
+    view.py                      # Information/AnalyticsView orchestrator
+    chart_constructor.py         # pure chart-constructor aggregation
     constants.py                 # typography, spacing, icons
     sections/
-      summary.py                 # KPI, completeness, insights
+      summary.py                 # legacy/internal helpers, not active Information UI
       charts_host.py             # Plotly host
       fallback_bars.py           # bar fallbacks
-      lists.py                   # IMDb delta, gaps, dense scores
-    charts.py                    # Plotly HTML builders
+      lists.py                   # legacy/internal list helpers, not active Information UI
+    charts.py                    # Plotly HTML builders, generic constructor charts
   shared/
     detail/
       types.py                   # DetailEntry
@@ -122,9 +123,10 @@ desktop/
 | `candidates/list_view.py` | вкладка Кандидаты | feature view |
 | `candidates/list_delegate.py` | card-style list row delegate | shared UI |
 | `candidates/presenters.py` | format/map для UI | presenter |
-| `analytics/view.py` | read-only вкладка Analytics (orchestrator) | feature view |
-| `analytics/sections/*` | KPI, charts, lists section mixins | feature view |
-| `analytics/charts.py` | Plotly chart builders | charts |
+| `analytics/view.py` | read-only вкладка Information/Analytics (genre reports + chart constructor) | feature view |
+| `analytics/chart_constructor.py` | pure aggregation for custom charts | model |
+| `analytics/sections/*` | Plotly host, fallback bars and legacy/internal section helpers | feature view |
+| `analytics/charts.py` | Plotly chart builders, including generic constructor charts | charts |
 | `shared/widgets/` | range_slider, list_search, chip selectors | shared |
 | `theme/tokens.py` | colors, fonts, spacing | theme |
 | `theme/styles/*` | QSS builders per screen | theme |

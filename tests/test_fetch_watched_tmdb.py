@@ -20,17 +20,15 @@ def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0
             "year": year,
         },
         "raw_scores": {
-            "kp_score": raw_score,
-            "kp_votes": 120000,
-            "imdb_score": raw_score,
-            "imdb_votes": 1200,
+            "tmdb_score": raw_score,
+            "tmdb_votes": 1200,
+            "tmdb_popularity": 42.5,
         },
         "computed_scores": format_score.raw_to_struct(
             {
-                "kp_score": raw_score,
-                "kp_votes": 120000,
-                "imdb_score": raw_score,
-                "imdb_votes": 1200,
+                "tmdb_score": raw_score,
+                "tmdb_votes": 1200,
+                "tmdb_popularity": 42.5,
             },
             {
                 "title": title,
@@ -341,7 +339,7 @@ def test_format_watched_tmdb_unresolved_report() -> None:
 
 
 def test_build_add_meta_payload_includes_poster_fields() -> None:
-    from dataset.title_resolve import build_add_meta_payload
+    from dataset.meta.payload import build_add_meta_payload
 
     payload = build_add_meta_payload(
         {
@@ -351,6 +349,7 @@ def test_build_add_meta_payload_includes_poster_fields() -> None:
                 "tmdb_id": 55,
                 "poster_path": "/poster.jpg",
                 "poster_url": "https://image.tmdb.org/t/p/original/poster.jpg",
+                "kp_id": 777,
             },
             "api_data": {},
         }
@@ -359,6 +358,8 @@ def test_build_add_meta_payload_includes_poster_fields() -> None:
     assert payload["tmdb_id"] == 55
     assert payload["poster_path"] == "/poster.jpg"
     assert payload["poster_url"] == "https://image.tmdb.org/t/p/original/poster.jpg"
+    assert payload["source"] == "tmdb"
+    assert "kp_id" not in payload
 
 
 def test_add_dataset_record_syncs_poster_cache_from_meta_payload(monkeypatch) -> None:

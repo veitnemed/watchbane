@@ -26,7 +26,7 @@ def popularity_by_votes(votes: int, year: int, min_votes: int, max_votes: int) -
 
 
 def popularity_kp(kp_votes: int, year: int) -> float:
-    """Считает популярность по голосам Кинопоиска."""
+    """Deprecated: legacy KP popularity helper kept for old diagnostics."""
     return popularity_by_votes(
         votes=kp_votes,
         year=year,
@@ -36,7 +36,7 @@ def popularity_kp(kp_votes: int, year: int) -> float:
 
 
 def popularity_score(imdb_votes: int, year: int) -> float:
-    """Считает популярность  по голосам IMDb."""
+    """Deprecated: legacy IMDb popularity helper kept for old diagnostics."""
     return popularity_by_votes(
         votes=imdb_votes,
         year=year,
@@ -45,25 +45,14 @@ def popularity_score(imdb_votes: int, year: int) -> float:
     )
 
 
-FORMATTERS = {
-    "kp_popularity": lambda raw, main_info: popularity_kp(raw["kp_votes"], main_info["year"]),
-    "imdb_popularity": lambda raw, main_info: popularity_score(raw["imdb_votes"], main_info["year"])
-}
-
-
 def raw_to_struct(raw: dict, main_info: dict):
     """Преобразует сырые оценки в вычисленные признаки модели."""
     computed_scores = {}
     raw = raw if isinstance(raw, dict) else {}
 
-    for raw_feature in ("kp_score", "imdb_score", "tmdb_score", "tmdb_votes", "tmdb_popularity"):
+    for raw_feature in ("tmdb_score", "tmdb_votes", "tmdb_popularity"):
         if raw_feature in raw:
             computed_scores[raw_feature] = raw[raw_feature]
-
-    if "kp_votes" in raw:
-        computed_scores["kp_popularity"] = FORMATTERS["kp_popularity"](raw, main_info)
-    if "imdb_votes" in raw:
-        computed_scores["imdb_popularity"] = FORMATTERS["imdb_popularity"](raw, main_info)
 
     return computed_scores
 

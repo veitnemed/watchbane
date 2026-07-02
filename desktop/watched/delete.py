@@ -26,13 +26,9 @@ def format_delete_preview_lines(preview: dict) -> list[str]:
         f"Моя оценка: {format_user_score_display(preview.get('user_score'))}",
     ]
 
-    kp_score = preview.get("kp_score")
-    if kp_score not in (None, ""):
-        lines.append(f"КП: {kp_score}")
-
-    imdb_score = preview.get("imdb_score")
-    if imdb_score not in (None, ""):
-        lines.append(f"IMDb: {imdb_score}")
+    tmdb_score = preview.get("tmdb_score")
+    if tmdb_score not in (None, ""):
+        lines.append(f"TMDb: {tmdb_score}")
 
     lines.append(f"Meta: {'есть' if preview.get('has_meta') else 'нет'}")
     lines.append(f"Poster-cache: {'есть' if preview.get('has_poster_cache') else 'нет'}")

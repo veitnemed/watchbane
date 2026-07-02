@@ -4,7 +4,6 @@ from dataset.resolve.identity import (
     is_sql_candidate_identity_safe,
     title_identity_match,
 )
-from dataset.resolve.priority import build_add_defaults_by_priority
 from dataset.resolve.status import get_sql_status
 
 
@@ -29,15 +28,13 @@ def test_sql_rejected_on_identity_mismatch() -> None:
         "genres": [{"name": "драма"}],
     }
 
-    built = build_add_defaults_by_priority("Псих", sql_data, api_data, None)
-    sql_status = get_sql_status(sql_data, built["sql_identity"])
+    accepted, reason = is_sql_candidate_identity_safe(sql_data, api_data, "Псих")
+    sql_identity = {"accepted": accepted, "reason": reason}
+    sql_status = get_sql_status(sql_data, sql_identity)
 
-    assert built["sql_identity"]["accepted"] is False
-    assert built["sql_identity"]["reason"] == "identity_mismatch"
+    assert accepted is False
+    assert reason == "identity_mismatch"
     assert sql_status == "найдено, но отклонено (identity_mismatch)"
-    assert built["defaults"]["main_info"]["title"] == "Псих"
-    assert built["defaults"]["raw_scores"]["imdb_score"] == 7.0
-    assert built["sources"]["imdb_score"] == "kp_api"
 
 
 def test_sql_accepted_when_imdb_id_matches() -> None:
@@ -59,12 +56,9 @@ def test_sql_accepted_when_imdb_id_matches() -> None:
     }
 
     accepted, reason = is_sql_candidate_identity_safe(sql_data, api_data, "Input Title")
-    built = build_add_defaults_by_priority("Input Title", sql_data, api_data, None)
 
     assert accepted is True
     assert reason == "imdb_id_match"
-    assert built["defaults"]["raw_scores"]["imdb_score"] == 7.8
-    assert built["sources"]["imdb_score"] == "imdb_sql"
 
 
 def test_sql_only_flow_accepted() -> None:
@@ -77,9 +71,7 @@ def test_sql_only_flow_accepted() -> None:
         "imdb_votes": 3480,
     }
 
-    built = build_add_defaults_by_priority("Mad", sql_data, None, None)
+    accepted, reason = is_sql_candidate_identity_safe(sql_data, None, "Mad")
 
-    assert built["sql_identity"]["accepted"] is True
-    assert built["sql_identity"]["reason"] == "sql_only"
-    assert built["defaults"]["raw_scores"]["imdb_score"] == 6.0
-    assert built["sources"]["imdb_score"] == "imdb_sql"
+    assert accepted is True
+    assert reason == "sql_only"

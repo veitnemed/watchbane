@@ -98,13 +98,11 @@ Analytics read-only.
 
 Порядок секций:
 
-1. KPI summary;
-2. dataset completeness;
-3. score distribution;
-4. genre distribution;
-5. average by year;
-6. gaps/suspicious records;
-7. fallback text blocks.
+Active Information/Analytics sections:
+
+1. watched genre distribution;
+2. candidate pool genre distribution;
+3. chart constructor.
 
 Правила:
 
@@ -113,6 +111,8 @@ Analytics read-only.
 - Plotly chart живет в отдельном контейнере;
 - fallback должен быть полноценным, а не пустым placeholder;
 - analytics не пишет dataset/pool/cache.
+- chart constructor controls stay compact and use dedicated object names/styles;
+- chart constructor supports bar/function rendering and local-only aggregation.
 
 ## Search Layout
 

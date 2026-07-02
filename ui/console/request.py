@@ -7,6 +7,8 @@ from config import scheme
 from common import valid
 from storage import data as storage_data
 from dataset import service
+from dataset.resolve.defaults import merge_defaults
+from dataset.resolve.genres import extract_tmdb_genres, split_known_genres
 from ui.console import title_presenters
 from candidates.sources.tmdb import country_options as tmdb_country_options
 
@@ -172,18 +174,18 @@ def choose_genre_values_by_numbers(default_values: dict | None = None) -> dict:
     return genre_values
 
 
-def confirm_or_edit_api_genres(series: dict) -> list:
-    """Показывает жанры из API и дает принять или изменить их."""
-    genres = service.extract_api_genres(series)
+def confirm_or_edit_tmdb_genres(series: dict) -> list:
+    """Показывает жанры из TMDb и дает принять или изменить их."""
+    genres = extract_tmdb_genres(series)
     genres_line = ", ".join(genres) if len(genres) > 0 else "жанры не найдены"
 
     print(f"Краткое описание: {short_text(series.get('description'), 80)}")
-    print(f"Жанры из API: {genres_line}")
-    answer = input("Принять жанры из API? yes / edit >> ").strip().lower()
+    print(f"Жанры из TMDb: {genres_line}")
+    answer = input("Принять жанры из TMDb? yes / edit >> ").strip().lower()
     if answer in ("yes", "y", "да"):
         return genres
 
-    known_genres, unknown_genres = service.split_known_genres(genres)
+    known_genres, unknown_genres = split_known_genres(genres)
     if len(unknown_genres) > 0:
         print(f"Как подсказка будут проигнорированы неизвестные жанры: {', '.join(unknown_genres)}")
     return choose_genre_names_by_numbers(
@@ -196,8 +198,8 @@ def confirm_or_edit_api_genres(series: dict) -> list:
 
 def confirm_or_edit_dataset_genres(series: dict) -> list:
     """Показывает жанры для dataset без автодобавления новых feature."""
-    genres = service.extract_api_genres(series)
-    known_genres, unknown_genres = service.split_known_genres(genres)
+    genres = extract_tmdb_genres(series)
+    known_genres, unknown_genres = split_known_genres(genres)
     genres_line = ", ".join(genres) if len(genres) > 0 else "жанры не найдены"
     known_line = ", ".join(known_genres) if len(known_genres) > 0 else "нет"
 
@@ -223,7 +225,7 @@ def confirm_or_edit_dataset_genres(series: dict) -> list:
 
 def build_manual_defaults(input_title: str, base_defaults: dict | None = None) -> dict:
     """Собирает минимальные defaults для ручного добавления без SQL/API."""
-    defaults = service.merge_defaults(
+    defaults = merge_defaults(
         service.build_empty_add_defaults(input_title),
         base_defaults or {},
     )
@@ -235,11 +237,9 @@ def build_manual_defaults(input_title: str, base_defaults: dict | None = None) -
 
 def format_source(source: str | None) -> str:
     labels = {
-        "imdb_sql": "IMDb SQL",
-        "imdb_sql_second_pass": "IMDb SQL second pass",
-        "kp_api": "KP API",
         "tmdb_api": "TMDb API",
         "input": "ручной ввод",
+        "manual": "ручной ввод",
     }
     return labels.get(source or "", "не заполнено")
 
@@ -263,7 +263,30 @@ def format_score_pair(score, votes, score_source: str | None, votes_source: str 
     )
 
 
-def print_autofill_status(resolved: dict, *, manual_mode: bool) -> None:
+def _format_tmdb_metric(value, source: str | None) -> str:
+    if value is None or value == "":
+        return "не заполнено"
+    return f"{value} ({format_source(source)})"
+
+
+def _poster_status(poster_hints: dict | None = None, meta_payload: dict | None = None) -> str | None:
+    for payload in (poster_hints, meta_payload):
+        if isinstance(payload, dict) is False:
+            continue
+        if payload.get("poster_url") not in (None, ""):
+            return "найден poster_url"
+        if payload.get("poster_path") not in (None, ""):
+            return "найден poster_path"
+    return None
+
+
+def print_autofill_status(
+    resolved: dict,
+    *,
+    manual_mode: bool,
+    poster_hints: dict | None = None,
+    meta_payload: dict | None = None,
+) -> None:
     """Показывает, откуда взялись defaults для формы добавления."""
     statuses = resolved.get("statuses", {})
     defaults = resolved.get("defaults") or build_manual_defaults(resolved.get("title", ""))
@@ -277,18 +300,17 @@ def print_autofill_status(resolved: dict, *, manual_mode: bool) -> None:
 
     print("\nАвтозаполнение:")
     print(f"TMDb API: {statuses.get('tmdb_api', 'не найдено')}")
-    print("")
+    print(f"TMDb score: {_format_tmdb_metric(raw_scores.get('tmdb_score'), sources.get('tmdb_score'))}")
+    print(f"TMDb votes: {_format_tmdb_metric(raw_scores.get('tmdb_votes'), sources.get('tmdb_votes'))}")
     print(
-        "TMDb: "
-        + format_score_pair(
-            raw_scores.get("tmdb_score"),
-            raw_scores.get("tmdb_votes"),
-            sources.get("tmdb_score"),
-            sources.get("tmdb_votes"),
-        )
+        "TMDb popularity: "
+        + _format_tmdb_metric(raw_scores.get("tmdb_popularity"), sources.get("tmdb_popularity"))
     )
     print(f"Жанры: {genres_text} ({format_source(genres_source)})" if genres else "Жанры: не заполнено")
     print(f"Описание: {format_value_with_source(short_text(description, 80), sources.get('description'))}")
+    poster_status = _poster_status(poster_hints, meta_payload)
+    if poster_status is not None:
+        print(f"Постер: {poster_status}")
     print(f"Режим: {'ручная разметка' if manual_mode else 'автозаполнение + ручная проверка'}")
 
 
@@ -322,7 +344,7 @@ def resolve_title_for_add(
 
         defaults = build_manual_defaults(resolved["title"])
         defaults[scheme.MAIN_INFO]["country"] = country
-        print_autofill_status(resolved, manual_mode=True)
+        print_autofill_status(resolved, manual_mode=True, poster_hints=poster_hints, meta_payload=meta_payload)
         return defaults, meta_payload, poster_hints
 
     defaults = resolved["defaults"]
@@ -331,10 +353,9 @@ def resolve_title_for_add(
         print(f"Название: {tmdb_data.get('title') or 'нет данных'}")
         print(f"Год: {tmdb_data.get('year') or 'нет данных'}")
         print(f"TMDb: {tmdb_data.get('tmdb_score') or '-'} / голосов {tmdb_data.get('tmdb_votes') or '-'}")
-        print(f"IMDb ID: {tmdb_data.get('imdb_id') or '-'}")
         print(f"Описание: {short_text(tmdb_data.get('overview'), 80) or 'нет данных'}")
 
-    print_autofill_status(resolved, manual_mode=False)
+    print_autofill_status(resolved, manual_mode=False, poster_hints=poster_hints, meta_payload=meta_payload)
     title_presenters.print_final_add_preview(defaults)
     answer = input("\nЭто нужный объект? Введи yes >> ").strip().lower()
     if answer != "yes":
@@ -377,7 +398,7 @@ def request_user_score(defaults: dict | None = None) -> dict:
     default_score = main_info.get("user_score")
 
     print("\n--- Подтверждение ---")
-    print("Название, год, рейтинги и жанры берутся из найденных данных без изменений.")
+    print("Название, год, TMDb-метаданные и жанры берутся из найденных данных без изменений.")
     title = main_info.get("title") or "?"
     year = main_info.get("year") or "?"
     print(f"Тайтл: {title} ({year})")

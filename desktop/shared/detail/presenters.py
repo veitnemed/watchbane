@@ -114,26 +114,6 @@ def build_score_ring_item(card: dict) -> dict | None:
     }
 
 
-def format_imdb_pill(score: str) -> dict:
-    return {
-        "kind": "rating_indicator",
-        "source": "imdb",
-        "label": "IMDb",
-        "score": score,
-        "accent": COLOR_ACCENT,
-    }
-
-
-def format_kp_pill(score: str) -> dict:
-    return {
-        "kind": "rating_indicator",
-        "source": "kp",
-        "label": "КП",
-        "score": score,
-        "accent": COLOR_ACCENT,
-    }
-
-
 def format_tmdb_pill(score: str) -> dict:
     return {
         "kind": "score_ring",

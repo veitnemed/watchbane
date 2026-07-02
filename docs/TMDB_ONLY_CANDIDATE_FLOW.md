@@ -26,6 +26,19 @@ KP/IMDb rating enrichment не входит в public candidate flow. `imdb_id` 
 9. Snapshot сохраняется в `data/exports/candidate_pool/`.
 10. Importer мерджит snapshot в `data/candidates/pool.json`.
 
+## Add-Title Flow
+
+Watched add-title flow тоже public TMDb-only:
+
+1. пользователь вводит title;
+2. Watchbane делает TMDb TV Search;
+3. для найденного match загружает TMDb TV Details;
+4. показывает preview: title, year, TMDb score/votes/popularity, description, poster, genres;
+5. пользователь вводит только `user_score`;
+6. запись сохраняется в watched dataset и meta.
+
+KP API не нужен. IMDb local dataset не нужен. IMDb rating/votes не используются. `imdb_id` может храниться только как external id из TMDb `external_ids`.
+
 ## Candidate Object Contract
 
 Required/core поля:
@@ -137,6 +150,41 @@ Behavior:
 - scoring and completeness are recomputed;
 - `--apply` creates a backup before writing;
 - report path: `data/diagnostics/candidate_pool_tmdb_refresh_report.json`.
+
+Migrate watched raw scores to the TMDb-only schema:
+
+```powershell
+py scripts/migrate_watched_raw_scores_tmdb_only.py --dry-run
+py scripts/migrate_watched_raw_scores_tmdb_only.py --apply
+```
+
+Behavior:
+
+- strips watched/meta `kp_score`, `kp_votes`, `imdb_score`, `imdb_votes`;
+- keeps existing `tmdb_score`, `tmdb_votes`, `tmdb_popularity`;
+- recomputes watched `computed_scores`;
+- writes `data/diagnostics/watched_raw_scores_tmdb_only_migration_report.json`.
+
+Refresh watched metadata and TMDb raw scores:
+
+```powershell
+py scripts/refresh_watched_from_tmdb.py --dry-run
+py scripts/refresh_watched_from_tmdb.py --apply
+py scripts/refresh_watched_from_tmdb.py --dry-run --limit 50
+py scripts/refresh_watched_from_tmdb.py --apply --only-missing
+py scripts/refresh_watched_from_tmdb.py --apply --force-refresh
+```
+
+Behavior:
+
+- records with `meta.tmdb_id` are refreshed via TMDb TV Details;
+- records without `tmdb_id` are searched by title/year;
+- uncertain matches are reported as `needs_manual_match`;
+- updates meta `tmdb_id`, `imdb_id`, description and poster fields;
+- updates watched `raw_scores.tmdb_score`, `tmdb_votes`, `tmdb_popularity`;
+- does not touch `user_score`, vibe tags, manual genre markup or personal notes;
+- does not save KP/IMDb rating fields;
+- report path: `data/diagnostics/watched_tmdb_refresh_report.json`.
 
 ## Scoring
 

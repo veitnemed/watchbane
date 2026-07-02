@@ -62,6 +62,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         )
         self._add_title_button = handles["add_title_button"]
         self._search_input = handles["search_input"]
+        self._debounced_search = handles["debounced_search"]
         self._sort_combo = handles["sort_combo"]
         self._filters = handles["filters"]
         self._list_counter_label = handles["list_counter_label"]

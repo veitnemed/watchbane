@@ -45,7 +45,6 @@ def build_add_meta_payload(resolve_result: dict) -> dict:
     """Собирает meta-payload для ручного добавления записи."""
     payload = {}
     source_values = resolve_result.get("source_values") or {}
-    sources = resolve_result.get("sources") or {}
     tmdb_data = resolve_result.get("tmdb_data") or {}
 
     description = source_values.get("description")
@@ -71,10 +70,7 @@ def build_add_meta_payload(resolve_result: dict) -> dict:
         if raw_scores:
             payload["raw_scores"] = raw_scores
 
-    source = sources.get("description")
-    if source not in (None, ""):
-        payload["source"] = source
-    elif isinstance(tmdb_data, dict) and tmdb_data.get("source"):
-        payload["source"] = tmdb_data.get("source")
+    if payload:
+        payload["source"] = "tmdb"
 
     return payload
