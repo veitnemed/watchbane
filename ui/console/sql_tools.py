@@ -1,4 +1,7 @@
-"""Console actions for local IMDb SQL search."""
+"""Internal console helper for local SQL search.
+
+This module is not part of the public candidate flow.
+"""
 
 from apis import imdb_sql as sql_search
 from ui.console import request
@@ -11,7 +14,7 @@ def print_sql_title_result(data: dict) -> None:
 
 
 def search_sql_title_by_name() -> None:
-    """Search a title in the local IMDb SQLite database by title and country."""
+    """Search a title in the local SQL database by title and country."""
     title = request.loop_input(
         text="\u041d\u0430\u0437\u0432\u0430\u043d\u0438\u0435 >> ",
         funcs_list=[lambda value: str(value).strip() != ""],

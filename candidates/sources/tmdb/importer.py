@@ -7,28 +7,42 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from candidates.models.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key
-from candidates.models.schema import normalize_candidate_for_storage
+from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
+from candidates.models.schema import EXTERNAL_RATING_FIELDS, normalize_candidate_for_storage, strip_external_rating_fields
 from candidates.pool.dataset_overlap import build_dataset_title_keys
 from candidates.pool.normalization import normalize_storage_pool
+from candidates.pool.storage import candidate_storage_key, find_candidate_storage_match
 from candidates.pool.watched_cleanup import build_watched_signatures, is_watched_candidate
 from candidates.repositories.criteria_repository import load_candidate_criteria, save_named_criteria
 from candidates.repositories.pool_repository import load_candidate_pool, save_candidate_pool
 from candidates.scoring.sort_keys import candidate_sort_score
+from candidates.sources.tmdb.scoring import (
+    compute_metadata_completeness_score,
+    compute_tmdb_final_score,
+    compute_tmdb_hidden_gem_score,
+    compute_tmdb_quality_score,
+)
 from candidates.sources.tmdb.output import list_tmdb_result_files
 
 
+def _count_external_rating_fields(candidate: dict[str, Any]) -> int:
+    return sum(1 for field_name in EXTERNAL_RATING_FIELDS if field_name in candidate)
+
+
 def normalize_tmdb_candidate_for_common_import(candidate: dict[str, Any], criteria_name: str) -> dict[str, Any]:
-    normalized = dict(candidate)
+    normalized = strip_external_rating_fields(candidate)
     normalized.update({
-        "id": candidate.get("kp_id"),
         "title": candidate.get("title"),
         "alternative_title": candidate.get("original_title"),
         "year": candidate.get("year"),
+        "first_air_date": candidate.get("first_air_date"),
         "type": candidate.get("type") or "series",
         "description": candidate.get("description") or candidate.get("overview") or "",
-        "countries": candidate.get("countries") or candidate.get("tmdb_origin_countries") or [],
+        "overview": candidate.get("overview") or candidate.get("description") or "",
+        "countries": candidate.get("countries") or candidate.get("tmdb_origin_countries") or candidate.get("origin_country") or [],
+        "country_codes": candidate.get("country_codes") or candidate.get("tmdb_country_codes") or candidate.get("origin_country") or [],
         "genres": candidate.get("genres") or candidate.get("genres_tmdb") or [],
+        "genre_keys": candidate.get("genre_keys") or [],
         "criteria_name": criteria_name,
         "source": "tmdb",
         "source_provider": "tmdb",
@@ -37,10 +51,14 @@ def normalize_tmdb_candidate_for_common_import(candidate: dict[str, Any], criter
         "imdb_id": candidate.get("imdb_id"),
         "tmdb_score": candidate.get("tmdb_score") if candidate.get("tmdb_score") is not None else candidate.get("tmdb_rating"),
         "tmdb_votes": candidate.get("tmdb_votes"),
-        "is_complete": candidate.get("is_complete"),
+        "tmdb_popularity": candidate.get("tmdb_popularity"),
         "signals": candidate.get("signals") or [],
         "saved_at": datetime.now().isoformat(timespec="seconds"),
     })
+    normalized["metadata_completeness_score"] = compute_metadata_completeness_score(normalized)
+    normalized["quality_score"] = compute_tmdb_quality_score(normalized)
+    normalized["hidden_gem_score"] = compute_tmdb_hidden_gem_score(normalized)
+    normalized["final_score"] = compute_tmdb_final_score(normalized)
     return normalize_candidate_for_storage(normalized)
 
 
@@ -84,10 +102,14 @@ def _base_import_stats(read: int, criteria_name: str, pool_size_before: int) -> 
         "skipped_duplicates": 0,
         "errors": 0,
         "criteria_name": criteria_name,
-        "source": "tmdb_imdb_kp_v1",
+        "source": "tmdb",
+        "source_version": 2,
         "pool_size_before": pool_size_before,
         "pool_size_after": pool_size_before,
         "pool_size": pool_size_before,
+        "skipped_existing": 0,
+        "incomplete": 0,
+        "stripped_external_rating_fields": 0,
     }
 
 
@@ -96,12 +118,8 @@ def build_tmdb_import_criteria_defaults(criteria_name: str) -> dict[str, Any]:
     return {
         "criteria_name": criteria_name,
         "count": 0,
-        "min_kp": None,
-        "max_kp": None,
-        "min_imdb": None,
-        "max_imdb": None,
-        "min_kp_votes": None,
-        "min_imdb_votes": None,
+        "min_tmdb_score": None,
+        "min_tmdb_votes": None,
         "min_year": None,
         "max_year": None,
         "genres": [],
@@ -123,7 +141,8 @@ def build_tmdb_import_criteria_metadata(
         "criteria_name": criteria_name,
         "country": result_metadata.get("country"),
         "mode": result_metadata.get("mode"),
-        "source": "tmdb_imdb_kp_v1",
+        "source": "tmdb",
+        "source_version": 2,
         "settings": result_metadata.get("settings") or {},
         "result_file": str(result_path) if result_path is not None else "",
         "updated_at": timestamp,
@@ -150,7 +169,8 @@ def import_tmdb_candidates_to_common_pool(
 ) -> dict[str, Any]:
     result_metadata = result_metadata or {}
     resolved_criteria_name = resolve_tmdb_import_criteria_name(result_metadata, criteria_name)
-    pool = normalize_storage_pool(load_candidate_pool())
+    raw_pool = load_candidate_pool()
+    pool = normalize_storage_pool(raw_pool)
     watched_signatures = build_watched_signatures()
     dataset_title_keys = build_dataset_title_keys()
     stats = _base_import_stats(len(candidates), resolved_criteria_name, len(pool))
@@ -160,10 +180,13 @@ def import_tmdb_candidates_to_common_pool(
             stats["errors"] += 1
             continue
 
+        stats["stripped_external_rating_fields"] += _count_external_rating_fields(raw_candidate)
         candidate = normalize_tmdb_candidate_for_common_import(raw_candidate, resolved_criteria_name)
         if not candidate.get("title") or not candidate.get("year"):
             stats["errors"] += 1
             continue
+        if candidate.get("is_complete") is not True:
+            stats["incomplete"] += 1
 
         if is_watched_candidate(
             candidate,
@@ -174,19 +197,21 @@ def import_tmdb_candidates_to_common_pool(
             stats["skipped_watched"] += 1
             continue
 
-        matched_key = pool_entry_key(candidate)
-        matched_candidate = pool.get(matched_key)
-        if matched_candidate is None:
-            pool[matched_key] = candidate
+        matched_key, _match_reason = find_candidate_storage_match(pool, candidate)
+        if matched_key is None:
+            pool[candidate_storage_key(candidate)] = candidate
             stats["added"] += 1
             continue
 
+        matched_candidate = normalize_candidate_for_storage(pool.get(matched_key) or {})
+        stats["stripped_external_rating_fields"] += _count_external_rating_fields(raw_pool.get(matched_key) or {})
         if candidate_sort_score(candidate) > candidate_sort_score(matched_candidate):
             pool[matched_key] = candidate
             stats["updated"] += 1
         else:
             stats["duplicates"] += 1
             stats["skipped_duplicates"] += 1
+            stats["skipped_existing"] += 1
 
     existing_criteria = load_candidate_criteria().get(resolved_criteria_name) or {}
     criteria_entry = build_tmdb_import_criteria_defaults(resolved_criteria_name)

@@ -131,7 +131,7 @@ def show_candidate_pool_cleanup_menu():
     print(" 10 >> Лог фоновой загрузки preview-постеров")
     print(" 11 >> Остановить фоновую загрузку preview-постеров")
     print(" 12 >> Скачать preview-постеры вручную")
-    print(" 13 >> Добрать KP для неполных кандидатов")
+    print(" 13 >> Диагностика metadata кандидатов")
     print(" 0 >> Назад\n")
 
 
@@ -140,8 +140,7 @@ def show_candidate_pool_import_menu():
     show_menu_title("ИМПОРТ / СБОР POOL")
     print(" 1 >> Собрать TMDb pool")
     print(" 2 >> Импортировать TMDb result")
-    print(" 3 >> Собрать pool через KP API (legacy)")
-    print(" 4 >> Defaults фильтров поиска")
+    print(" 3 >> Defaults фильтров поиска")
     print(" 0 >> Назад\n")
 
 
@@ -159,9 +158,8 @@ def show_search_menu():
     """Print read-only search menu."""
     show_menu_title("ПОИСК")
     print(" 1 >> Поиск в candidate pool")
-    print(" 2 >> Поиск в IMDb SQL")
-    print(" 3 >> Показать жанры датасета")
-    print(" 4 >> Просмотр API признаков")
+    print(" 2 >> Показать жанры датасета")
+    print(" 3 >> Просмотр API признаков")
     print(" 0 >> Главное меню\n")
 
 

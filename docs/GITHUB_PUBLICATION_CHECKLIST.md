@@ -10,7 +10,6 @@ Things that cannot be fully configured from files in the repository.
   - `python`
   - `pyqt6`
   - `tmdb`
-  - `imdb`
   - `watchlist`
   - `recommendation-system`
   - `local-first`

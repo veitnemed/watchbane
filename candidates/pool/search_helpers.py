@@ -24,10 +24,8 @@ def build_search_filter_defaults(criteria_name: str | None = None) -> dict:
         "year_max": None,
         "include_genres": [],
         "exclude_genres": [],
-        "min_kp_score": None,
-        "min_kp_votes": None,
-        "min_imdb_score": None,
-        "min_imdb_votes": None,
+        "min_tmdb_score": None,
+        "min_tmdb_votes": None,
         "only_complete": True,
     }
 
@@ -42,10 +40,8 @@ def build_search_filter_defaults(criteria_name: str | None = None) -> dict:
         "year_max": criteria.get("max_year"),
         "include_genres": list(criteria.get("genres") or []),
         "exclude_genres": list(criteria.get("excluded_genres") or []),
-        "min_kp_score": criteria.get("min_kp"),
-        "min_kp_votes": criteria.get("min_kp_votes"),
-        "min_imdb_score": criteria.get("min_imdb"),
-        "min_imdb_votes": criteria.get("min_imdb_votes"),
+        "min_tmdb_score": criteria.get("min_tmdb_score") or criteria.get("min_tmdb"),
+        "min_tmdb_votes": criteria.get("min_tmdb_votes"),
     })
     return defaults
 
@@ -162,10 +158,8 @@ def filter_saved_candidates_for_search(candidates: list, filters: dict) -> list:
     year_max = filters.get("year_max")
     include_genres = filters.get("include_genres") or []
     exclude_genres = filters.get("exclude_genres") or []
-    min_kp_score = filters.get("min_kp_score")
-    min_kp_votes = filters.get("min_kp_votes")
-    min_imdb_score = filters.get("min_imdb_score")
-    min_imdb_votes = filters.get("min_imdb_votes")
+    min_tmdb_score = filters.get("min_tmdb_score") or filters.get("min_tmdb")
+    min_tmdb_votes = filters.get("min_tmdb_votes")
     only_complete = filters.get("only_complete", True)
 
     filtered = []
@@ -184,13 +178,9 @@ def filter_saved_candidates_for_search(candidates: list, filters: dict) -> list:
         if _matches_optional_genres(candidate, include_genres, exclude_genres) is False:
             continue
 
-        if _matches_min_value(candidate, "kp_score", min_kp_score) is False:
+        if _matches_min_value(candidate, "tmdb_score", min_tmdb_score) is False:
             continue
-        if _matches_min_value(candidate, "kp_votes", min_kp_votes) is False:
-            continue
-        if _matches_min_value(candidate, "imdb_score", min_imdb_score) is False:
-            continue
-        if _matches_min_value(candidate, "imdb_votes", min_imdb_votes) is False:
+        if _matches_min_value(candidate, "tmdb_votes", min_tmdb_votes) is False:
             continue
 
         if only_complete and schema_is_candidate_complete(candidate) is False:

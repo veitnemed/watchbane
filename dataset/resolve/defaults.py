@@ -19,6 +19,14 @@ def extract_api_title(series: dict) -> str:
 
 def extract_api_raw_scores(series: dict) -> dict:
     """Собирает рейтинги и голоса из ответа API в плоский словарь."""
+    tmdb_raw_scores = {
+        key: series.get(key)
+        for key in ("tmdb_score", "tmdb_votes", "tmdb_popularity")
+        if series.get(key) not in (None, "")
+    }
+    if tmdb_raw_scores:
+        return tmdb_raw_scores
+
     return {
         "kp_score": series.get("kp_score", api.safe_nested(series, "rating", "kp")),
         "kp_votes": series.get("kp_votes", api.safe_nested(series, "votes", "kp")),
@@ -49,12 +57,7 @@ def build_empty_add_defaults(input_title: str) -> dict:
             "year": None,
             "country": "",
         },
-        scheme.RAW_SCORES: {
-            "kp_score": None,
-            "kp_votes": None,
-            "imdb_score": None,
-            "imdb_votes": None,
-        },
+        scheme.RAW_SCORES: {},
         scheme.TAGS_VIBE: {feature: 0 for feature in constant.TAGS_VIBE},
         scheme.GENRE: {feature: 0 for feature in constant.GENRE},
     }
@@ -130,12 +133,7 @@ def build_api_defaults(series: dict, genres: list | None = None) -> dict:
             "year": series.get("year"),
             "country": extract_country_value(series),
         },
-        scheme.RAW_SCORES: {
-            "kp_score": raw_scores.get("kp_score"),
-            "kp_votes": raw_scores.get("kp_votes"),
-            "imdb_score": raw_scores.get("imdb_score"),
-            "imdb_votes": raw_scores.get("imdb_votes"),
-        },
+        scheme.RAW_SCORES: raw_scores,
         scheme.TAGS_VIBE: {},
         scheme.GENRE: genre_defaults,
     }

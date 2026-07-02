@@ -35,8 +35,11 @@ def print_api_add_preview(api_data: dict) -> None:
     print(f"Год: {api_data.get('year') or 'нет данных'}")
     print(f"Страны: {countries if countries != 'None' else 'нет данных'}")
     print(f"Жанры: {genres_line}")
-    print(f"KP: {raw_scores.get('kp_score') or '-'} / голосов {raw_scores.get('kp_votes') or '-'}")
-    print(f"IMDb: {raw_scores.get('imdb_score') or '-'} / голосов {raw_scores.get('imdb_votes') or '-'}")
+    if "tmdb_score" in raw_scores or "tmdb_votes" in raw_scores:
+        print(f"TMDb: {raw_scores.get('tmdb_score') or '-'} / голосов {raw_scores.get('tmdb_votes') or '-'}")
+    else:
+        print(f"KP: {raw_scores.get('kp_score') or '-'} / голосов {raw_scores.get('kp_votes') or '-'}")
+        print(f"IMDb: {raw_scores.get('imdb_score') or '-'} / голосов {raw_scores.get('imdb_votes') or '-'}")
     print(
         f"Описание: {short_text(api_data.get('description') or api_data.get('shortDescription'), 80) or 'нет данных'}"
     )
@@ -54,8 +57,11 @@ def print_final_add_preview(defaults: dict) -> None:
     print("\nИтог для добавления:")
     print(f"Название: {defaults.get(scheme.MAIN_INFO, {}).get('title') or 'нет данных'}")
     print(f"Год: {defaults.get(scheme.MAIN_INFO, {}).get('year') or 'нет данных'}")
-    print(f"KP: {raw_scores.get('kp_score') or '-'} / голосов {raw_scores.get('kp_votes') or '-'}")
-    print(f"IMDb: {raw_scores.get('imdb_score') or '-'} / голосов {raw_scores.get('imdb_votes') or '-'}")
+    if "tmdb_score" in raw_scores or "tmdb_votes" in raw_scores:
+        print(f"TMDb: {raw_scores.get('tmdb_score') or '-'} / голосов {raw_scores.get('tmdb_votes') or '-'}")
+    else:
+        print(f"KP: {raw_scores.get('kp_score') or '-'} / голосов {raw_scores.get('kp_votes') or '-'}")
+        print(f"IMDb: {raw_scores.get('imdb_score') or '-'} / голосов {raw_scores.get('imdb_votes') or '-'}")
     print(f"Жанры: {', '.join(genres) if len(genres) > 0 else 'нет данных'}")
 
 

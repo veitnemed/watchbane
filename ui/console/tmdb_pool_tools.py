@@ -1,7 +1,5 @@
 """Console workflows for TMDb candidate pool build and import flows."""
 
-from pathlib import Path
-
 from config import constant
 from candidates import service as candidate_service
 from candidates.sources.tmdb import country_options as tmdb_country_options
@@ -88,8 +86,7 @@ def _print_tmdb_candidate_top(candidates: list, limit: int = 20) -> None:
             f"{index:>2}. {_fit_title(candidate.get('title'))} | "
             f"final={final_score:.3f} | "
             f"country={country_score:.2f} | "
-            f"TMDb={candidate.get('tmdb_rating') or '-'}/{candidate.get('tmdb_votes') or 0} | "
-            f"IMDb={candidate.get('imdb_rating') or '-'}/{candidate.get('imdb_votes') or 0}"
+            f"TMDb={candidate.get('tmdb_score') or '-'}/{candidate.get('tmdb_votes') or 0}"
         )
 
 
@@ -97,20 +94,16 @@ def _print_tmdb_candidate_test_details(candidates: list, limit: int = 5) -> None
     print("\nКандидаты test-run:\n")
     for index, candidate in enumerate(candidates[:limit], start=1):
         print(f"{index}. {candidate.get('title') or 'Без названия'}")
-        print(f"   TMDb: {candidate.get('tmdb_score') or candidate.get('tmdb_rating') or '-'} / {candidate.get('tmdb_votes') or 0}")
-        print(f"   IMDb: {candidate.get('imdb_score') or candidate.get('imdb_rating') or '-'} / {candidate.get('imdb_votes') or 0}")
-        print(f"   KP: {candidate.get('kp_status') or 'not_requested'}")
-        print(f"   KP score: {candidate.get('kp_score') or candidate.get('kp_rating') or '-'} / {candidate.get('kp_votes') or 0}")
+        print(f"   TMDb: {candidate.get('tmdb_score') or '-'} / {candidate.get('tmdb_votes') or 0}")
+        print(f"   IMDb ID: {candidate.get('imdb_id') or '-'}")
         print(f"   signals: {', '.join(candidate.get('signals') or []) or 'нет'}\n")
 
 
 def _print_tmdb_candidate_stats(result: dict) -> None:
     stats = result.get("stats") or {}
-    discover_filters = stats.get("discover_filters") or {}
     print("\nСтатистика TMDb candidate_pool:")
-    print(f"Enrichment mode: {stats.get('enrichment_mode', 'full')}")
-    if stats.get("kp_top_limit") is not None:
-        print(f"KP top limit: {stats.get('kp_top_limit')}")
+    print(f"Источник: {stats.get('source', 'tmdb')} v{stats.get('source_version', 2)}")
+    discover_filters = (result.get("settings") or {})
     print("TMDb Discover filters:")
     print(f"Минимальный год: {discover_filters.get('year_min') if discover_filters.get('year_min') is not None else 'не важно'}")
     print(f"Максимальный год: {discover_filters.get('year_max') if discover_filters.get('year_max') is not None else 'не важно'}")
@@ -123,27 +116,11 @@ def _print_tmdb_candidate_stats(result: dict) -> None:
     print(f"Пропущено уже просмотренных: {stats.get('watched_skipped', 0)}")
     print(f"Пропущено уже в pool по TMDb ID: {stats.get('existing_pool_skipped_tmdb_id', 0)}")
     print(f"Пропущено уже в pool по title/year: {stats.get('existing_pool_skipped_title_year', 0)}")
-    print(f"Новых перед TMDb Details: {stats.get('novel_before_details', 0)}")
-    print(f"Novelty rate перед Details: {stats.get('novelty_rate_before_details', 0)}")
     print(f"Запрошено TMDb Details: {stats.get('details_requested', 0)}")
-    print(f"TMDb Details ошибок сети: {stats.get('tmdb_details_errors', 0)}")
-    print(f"TMDb Details пропущено после ошибок: {stats.get('tmdb_details_skipped_after_errors', 0)}")
-    print(f"С IMDb ID: {stats.get('has_imdb_id', 0)}")
-    print(f"Найдено в IMDb dataset: {stats.get('found_in_imdb_sql', 0)}")
-    print(f"KP найдено в кэше: {stats.get('kp_cache_hit', 0)}")
-    print(f"KP API запросов: {stats.get('kp_api_requested', 0)}")
-    print(f"KP API найдено: {stats.get('kp_api_found', 0)}")
-    print(f"KP API не найдено: {stats.get('kp_api_not_found', 0)}")
-    print(f"KP API отклонено match-check: {stats.get('kp_api_rejected_by_match', 0)}")
-    print(f"KP API ошибок: {stats.get('kp_api_errors', 0)}")
-    print(f"KP API пропущено после ошибок: {stats.get('kp_api_skipped_after_errors', 0)}")
-    print(f"KP API пропущено из-за кэша: {stats.get('kp_api_skipped_cache', 0)}")
-    print(f"KP API пропущено вне top-N: {stats.get('kp_api_skipped_not_top', 0)}")
-    print(f"KP ожидает добора из-за лимита: {stats.get('kp_pending_limit', 0)}")
-    print(f"Неполных кандидатов по KP: {stats.get('kp_incomplete_candidates', 0)}")
-    print(f"Полностью обогащённых кандидатов: {stats.get('complete_candidates', 0)}")
-    print(f"Прошли country_score: {stats.get('country_passed', 0)}")
-    print(f"Отклонено adult/titleType: {stats.get('adult_title_type_rejected', 0)}")
+    print(f"TMDb Details ошибок сети: {stats.get('details_errors', 0)}")
+    print(f"С IMDb ID из TMDb external_ids: {stats.get('external_ids_imdb_id_count', 0)}")
+    print(f"Complete кандидатов: {stats.get('complete_candidates', 0)}")
+    print(f"С неполной TMDb/core metadata: {stats.get('incomplete_candidates', 0)}")
     print(f"Итоговых кандидатов: {stats.get('final_candidates', 0)}")
 
 
@@ -153,36 +130,6 @@ def _tmdb_mode_label(mode: str) -> str:
         "hidden_gems": "поиск по недооценённым",
     }
     return labels.get(mode, mode)
-
-
-def _input_enrichment_mode(input_func=input, output_func=print) -> tuple[str, int | None]:
-    output_func("\nРежим обогащения:")
-    output_func(" 1 >> Full: TMDb + IMDb SQL + KP API")
-    output_func(" 2 >> Fast: только TMDb Discover + Details")
-    output_func(" 3 >> KP cache: TMDb + локальный KP cache")
-    output_func(" 4 >> KP top-N: TMDb, затем KP API только для top-N")
-    while True:
-        answer = input_func("Выбор [1] >> ").strip()
-        if answer in {"", "1"}:
-            return "full", None
-        if answer == "2":
-            return "fast", None
-        if answer == "3":
-            return "kp_cache", None
-        if answer == "4":
-            limit_answer = input_func("Сколько top-кандидатов отправить в KP API [50] >> ").strip()
-            return "kp_top", _parse_bounded_int(limit_answer, default=50, min_value=0, max_value=500)
-        output_func("Выберите 1, 2, 3 или 4.")
-
-
-def _enrichment_mode_label(enrichment_mode: str) -> str:
-    labels = {
-        "full": "Full: TMDb + IMDb SQL + KP API",
-        "fast": "Fast: только TMDb",
-        "kp_cache": "TMDb + локальный KP cache",
-        "kp_top": "TMDb + KP API только для top-N",
-    }
-    return labels.get(enrichment_mode, enrichment_mode)
 
 
 def _parse_tmdb_genre_indexes(value: str, options: list[dict] | None = None) -> list[int] | None:
@@ -358,15 +305,11 @@ def maybe_auto_import_tmdb_result(
 
 
 def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
-    """Запускает новый TMDb candidate_pool v1 без смешивания со старым общим пулом."""
-    from pathlib import Path
-
-    from apis import imdb_sql as sql_search
-
+    """Запускает новый TMDb-only candidate_pool v2."""
     from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
 
     ui.clean_terminal()
-    print("TMDb candidate_pool v1\n")
+    print("TMDb candidate_pool v2\n")
     country_codes = request_tmdb_country_codes(input_func=input, output_func=print)
     if len(country_codes) > 1:
         print("Пока один запуск TMDb candidate_pool поддерживает одну страну. Выберите один номер.")
@@ -400,10 +343,9 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     min_tmdb_score = _parse_optional_bounded_float(input("Минимальный TMDb рейтинг [не важно] >> ").strip(), 0.0, 10.0)
     min_tmdb_votes = _parse_optional_bounded_int(input("Минимум голосов TMDb [не важно] >> ").strip(), 0, 10_000_000)
     with_genres, without_genres = request_tmdb_discover_genre_filters(input_func=input, output_func=print)
-    enrichment_mode, kp_top_limit = _input_enrichment_mode(input_func=input, output_func=print)
     criteria_name = COMMON_POOL_CRITERIA_NAME
 
-    print("\nБудет запущен TMDb candidate_pool v1:\n")
+    print("\nБудет запущен TMDb-only candidate_pool v2:\n")
     print("Обновление общего pool")
     print(f"Страна: {country}")
     print(f"Режим: {_tmdb_mode_label(mode)}")
@@ -417,9 +359,6 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     print(f"Минимум голосов TMDb: {min_tmdb_votes if min_tmdb_votes is not None else 'не важно'}")
     print(f"Include жанры (TMDb): {tmdb_genre_options.describe_filter_value(with_genres)}")
     print(f"Exclude жанры (TMDb): {tmdb_genre_options.describe_filter_value(without_genres)}")
-    print(f"Обогащение: {_enrichment_mode_label(enrichment_mode)}")
-    if kp_top_limit is not None:
-        print(f"KP top-N limit: {kp_top_limit}")
     if is_test_run:
         print("\nПлан тестового режима:")
         print(f"Лимит TMDb Details: {details_limit}")
@@ -429,10 +368,6 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     confirmation = input("\nПродолжить? [y/N]: ").strip().casefold()
     if confirmation not in {"y", "yes", "д", "да"}:
         print("Операция отменена.")
-        return
-
-    if enrichment_mode == "full" and Path(sql_search.DEFAULT_DB_PATH).is_file() is False:
-        print("Ошибка: не найдена локальная IMDb SQLite база. Проверь путь в настройках.")
         return
 
     try:
@@ -448,8 +383,6 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
             min_tmdb_votes=min_tmdb_votes,
             with_genres=with_genres,
             without_genres=without_genres,
-            enrichment_mode=enrichment_mode,
-            kp_top_limit=kp_top_limit,
         )
         if is_test_run:
             print("Сохранение test candidate_pool: Ожидание")
@@ -485,23 +418,13 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
         print(f"Лимит TMDb Details: {details_limit}")
         print(f"Будет детально обработано не больше {details_limit} кандидатов.")
     else:
-        print("\nTMDb candidate_pool v1 готов.")
+        print("\nTMDb candidate_pool v2 готов.")
     if is_test_run is False:
         print(f"TMDb result сохранён: {json_path}")
         maybe_auto_import_tmdb_result(json_path, criteria_name)
     print(f"JSON: {json_path}")
     print(f"CSV: {csv_path}")
     _print_tmdb_candidate_stats(result)
-
-    kp_debug = result.get("kp_debug")
-    if isinstance(kp_debug, dict):
-        from candidates.sources.tmdb import debug as kp_tmdb_build_debug
-
-        for line in kp_tmdb_build_debug.format_kp_debug_lines(kp_debug):
-            print(line)
-        debug_path = json_path.with_name(f"{json_path.stem}_kp_debug.json")
-        if debug_path.is_file():
-            print(f"KP debug JSON: {debug_path}")
 
     candidates = result.get("candidates") or []
     if len(candidates) > 0:

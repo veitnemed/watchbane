@@ -84,12 +84,17 @@ def normalize_main_info(main_info: dict) -> dict:
 
 def normalize_raw_scores(raw: dict) -> dict:
     """Приводит сырые оценки и голоса к нужным типам."""
+    if isinstance(raw, dict) is False:
+        return {}
     normalized = {}
-    for feature in constant.RAW_SCORES:
+    supported_fields = set(constant.RAW_SCORES) | {"tmdb_score", "tmdb_votes", "tmdb_popularity"}
+    for feature, value in raw.items():
+        if feature not in supported_fields or value in (None, ""):
+            continue
         if feature.endswith("_votes"):
-            normalized[feature] = int(raw[feature])
+            normalized[feature] = int(value)
         else:
-            normalized[feature] = valid.parse_float(raw[feature])
+            normalized[feature] = valid.parse_float(value)
     return normalized
 
 

@@ -8,14 +8,13 @@
 
 - хранить watched/dataset и meta-данные в JSON;
 - добавлять записи через безопасный путь `dataset.storage_movie.add_movie() -> dataset.dataset_records.add_dataset_record()`;
-- подтягивать defaults из IMDb SQL / KP / TMDb перед сохранением записи;
+- подтягивать defaults из локальных/внешних источников перед сохранением watched-записи;
 - поддерживать жанры, vibe-теги, оценки и постеры;
 - открывать desktop PyQt GUI для watched-базы;
 - показывать read-only карточку тайтла, постер, метаданные, оценки и аналитику;
-- собирать TMDb candidate pool v1;
+- собирать TMDb-only candidate pool;
 - импортировать TMDb result в общий candidate pool;
 - строить top prediction из общего пула по runtime-фильтрам;
-- добирать KP для incomplete-кандидатов;
 - переносить кандидатов из пула в watched/dataset через форму ручного подтверждения;
 - экспортировать watched/add-title карточки через read-only слой `web/`.
 
@@ -53,7 +52,7 @@ py start_app.py
 - `posters/` - poster-cache и загрузка постеров.
 - `web/` - read-only экспорт карточек watched/add-title.
 - `storage/` - низкоуровневое хранение, backup, файлы, нормализация.
-- `apis/` - внешние источники: KP, TMDb, IMDb SQL.
+- `apis/` - внешние и локальные источники данных.
 - `common/` - чистые утилиты.
 - `config/` - константы, схемы, каталоги тегов/жанров.
 - `scripts/` - ручные diagnostic/build utilities.
@@ -63,7 +62,7 @@ py start_app.py
 
 ## Candidate Pool
 
-Общий пул хранится в `data/candidates/pool.json`. Named pools больше не создаются: TMDb build, import и legacy KP-сбор обновляют один pool. Defaults фильтров и параметров сбора — в `data/candidates/criteria.json` (запись `"pool"`).
+Общий пул хранится в `data/candidates/pool.json`. Named pools больше не создаются: TMDb build и import обновляют один pool. Defaults фильтров и параметров сбора — в `data/candidates/criteria.json` (запись `"pool"`).
 
 Счётчики в UI/console:
 
@@ -75,14 +74,13 @@ py start_app.py
 - exact-дубли и legacy-ключи;
 - похожие названия одного года (остаётся лучшая запись).
 
-TMDb candidate pool v1:
+TMDb candidate pool:
 
 1. TMDb Discover.
 2. TMDb Details.
-3. IMDb SQL enrichment.
-4. KP enrichment.
-5. Сохранение отдельного JSON/CSV результата.
-6. При необходимости импорт в общий candidate pool.
+3. TMDb-only нормализация и scoring.
+4. Сохранение отдельного JSON/CSV результата.
+5. При необходимости импорт в общий candidate pool.
 
 CLI-примеры:
 
@@ -146,6 +144,7 @@ py -m pytest
 - [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления/изменения записей.
 - [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - визуальный контракт desktop GUI.
 - [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) - roadmap desktop GUI.
+- [TMDB_ONLY_CANDIDATE_FLOW.md](TMDB_ONLY_CANDIDATE_FLOW.md) - public TMDb-only candidate flow, contract, migration, refresh and scoring.
 
 ## Важно
 
@@ -154,3 +153,4 @@ py -m pytest
 - TMDb import и перенос кандидата в dataset - разные шаги.
 - Финальное сообщение об успешном добавлении печатает UI-слой, а не storage.
 - Legacy model лежит в `archive/legacy/model/` и не импортируется активным runtime.
+- Public candidate flow требует только `TMDB_TOKEN`; KP API и локальный IMDb dataset не нужны для candidate pool.

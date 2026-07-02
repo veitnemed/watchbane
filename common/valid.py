@@ -70,20 +70,25 @@ def is_correct_votes(votes: str) -> bool:
 
 def is_valid_raw_meta(raw: dict) -> bool:
     """Validate raw meta payload."""
-    if set(raw.keys()) != set(constant.RAW_META_FIELDS):
+    if isinstance(raw, dict) is False:
+        return False
+    supported_fields = set(constant.RAW_META_FIELDS) | {"tmdb_score", "tmdb_votes", "tmdb_popularity"}
+    if set(raw.keys()).issubset(supported_fields) is False:
         return False
 
-    if is_correct_score(raw["kp_score"]) is False:
-        return False
+    for score_field in ("kp_score", "imdb_score", "tmdb_score"):
+        if score_field in raw and is_correct_score(raw[score_field]) is False:
+            return False
+    if "tmdb_popularity" in raw:
+        try:
+            if parse_float(raw["tmdb_popularity"]) < 0:
+                return False
+        except (TypeError, ValueError):
+            return False
 
-    if is_correct_votes(raw["imdb_votes"]) is False:
-        return False
-
-    if is_correct_votes(raw["kp_votes"]) is False:
-        return False
-
-    if is_correct_score(raw["imdb_score"]) is False:
-        return False
+    for votes_field in ("kp_votes", "imdb_votes", "tmdb_votes"):
+        if votes_field in raw and is_correct_votes(raw[votes_field]) is False:
+            return False
 
     return True
 

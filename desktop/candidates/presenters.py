@@ -6,10 +6,12 @@ from candidates import service as candidate_service
 from dataset import service
 
 SORT_MODE_METRIC_PREFIX = {
-    "kp_score": "KP",
-    "imdb_score": "IMDb",
-    "kp_votes": "KP",
-    "imdb_votes": "IMDb",
+    "final_score": "Итог",
+    "quality_score": "Качество",
+    "tmdb_score": "TMDb",
+    "tmdb_votes": "TMDb",
+    "tmdb_popularity": "Популярность",
+    "year": "Год",
 }
 
 
@@ -24,7 +26,7 @@ def format_candidate_metric_value(candidate: dict, sort_mode: str) -> str:
     """Secondary list metric for the active sort mode."""
     from candidates.models.schema import coerce_candidate_number
 
-    field_name = sort_mode if sort_mode in candidate_service.SEARCH_SORT_MODES else "kp_score"
+    field_name = sort_mode if sort_mode in candidate_service.SEARCH_SORT_MODES else candidate_service.DEFAULT_SEARCH_SORT_MODE
     prefix = SORT_MODE_METRIC_PREFIX.get(field_name, "")
     value = coerce_candidate_number(candidate.get(field_name))
     if value is None:
@@ -40,7 +42,7 @@ def format_candidate_metric_value(candidate: dict, sort_mode: str) -> str:
         return f"{prefix} {value}"
 
 
-def format_candidate_list_label(candidate: dict, sort_mode: str = "kp_score") -> str:
+def format_candidate_list_label(candidate: dict, sort_mode: str = "final_score") -> str:
     """Legacy single-line label (title + metric)."""
     return f"{format_candidate_title_line(candidate)}  {format_candidate_metric_value(candidate, sort_mode)}"
 
@@ -144,10 +146,12 @@ def build_candidate_readonly_card(candidate: dict) -> dict:
     if overview_text:
         card["overview"] = overview_text
 
-    for field in ("kp_score", "imdb_score", "kp_votes", "imdb_votes"):
+    for field in ("tmdb_score", "tmdb_votes", "final_score"):
         value = coerce_candidate_number(candidate.get(field))
         if value is not None:
             card[field] = value
+    if candidate.get("imdb_id") not in (None, ""):
+        card["imdb_id"] = candidate.get("imdb_id")
 
     genres_display = candidate.get("genres_display") or candidate.get("genres") or []
     if isinstance(genres_display, list) and len(genres_display) > 0:

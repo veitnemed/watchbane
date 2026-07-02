@@ -1,8 +1,4 @@
-"""Список стран для выбора TMDb Discover country в консольном UI.
-
-Русские названия синхронизированы с candidates.sources.kp.enrichment.KP_COUNTRY_BY_ISO2
-для перевода ISO-2 -> country label в KP API enrichment.
-"""
+"""Список стран для выбора TMDb Discover country в консольном UI."""
 
 from __future__ import annotations
 
@@ -166,4 +162,3 @@ def choose_single_country_label(input_func=input, output_func=print) -> str:
         if index == 0:
             return ""
         return options[index - 1]["label"]
-

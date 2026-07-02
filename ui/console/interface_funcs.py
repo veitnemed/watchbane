@@ -5,13 +5,12 @@ from dataset import service
 from ui.console.api_tools import ping_external_apis
 from ui.console.candidate_pool_tools import (
     clean_common_pool_duplicates,
-    collect_candidate_pool,
     delete_candidate_pool,
     download_candidate_pool_preview_posters,
     edit_candidate_pool_filters,
     purge_pool_dataset_title_matches,
-    retry_kp_for_incomplete_candidates,
     show_candidate_pool,
+    show_candidate_metadata_diagnostics,
     show_candidate_poster_diagnostics,
     show_cross_year_candidate_duplicates,
     show_global_candidate_top,
@@ -26,7 +25,6 @@ from ui.console.poster_tools import (
     fetch_watched_tmdb_metadata,
     sync_watched_descriptions_and_posters,
 )
-from ui.console.sql_tools import print_sql_title_result, search_sql_title_by_name
 from ui.console.tmdb_pool_tools import (
     ask_auto_import_choice,
     import_tmdb_result_to_common_pool_flow,
@@ -152,8 +150,8 @@ def mark_candidate_as_watched() -> None:
     defaults = transfer_payload["defaults"]
     meta_payload = transfer_payload["meta_payload"]
     if candidate_service.is_pool_candidate_incomplete(candidate):
-        print("Кандидат неполный: нет KP/IMDb данных.")
-        print("Можно продолжить вручную, но проверь raw_scores.\n")
+        print("Кандидат неполный: не хватает TMDb/core metadata.")
+        print("Можно продолжить вручную, но проверь карточку перед добавлением.\n")
     print_candidate_genre_transfer_preview(
         service.build_candidate_genre_transfer_preview(candidate)
     )

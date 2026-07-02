@@ -54,14 +54,16 @@ FORMATTERS = {
 def raw_to_struct(raw: dict, main_info: dict):
     """Преобразует сырые оценки в вычисленные признаки модели."""
     computed_scores = {}
-    raw_schema = scheme.get_schema(scheme.RAW_SCORES)
+    raw = raw if isinstance(raw, dict) else {}
 
-    for raw_feature, settings in raw_schema.items():
-        formated = settings["formated"]
-        if formated is None:
+    for raw_feature in ("kp_score", "imdb_score", "tmdb_score", "tmdb_votes", "tmdb_popularity"):
+        if raw_feature in raw:
             computed_scores[raw_feature] = raw[raw_feature]
-        else:
-            computed_scores[formated] = FORMATTERS[formated](raw, main_info)
+
+    if "kp_votes" in raw:
+        computed_scores["kp_popularity"] = FORMATTERS["kp_popularity"](raw, main_info)
+    if "imdb_votes" in raw:
+        computed_scores["imdb_popularity"] = FORMATTERS["imdb_popularity"](raw, main_info)
 
     return computed_scores
 

@@ -8,12 +8,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from candidates.sources.tmdb import debug as kp_tmdb_build_debug
-from candidates.sources.tmdb.transformer import (
-    _genre_values_from_field,
-    safe_int,
-    unique_non_empty,
-)
 from apis import tmdb_api as api_tmdb
 
 
@@ -26,23 +20,22 @@ CSV_FIELDS = [
     "country_score",
     "quality_score",
     "hidden_gem_score",
+    "metadata_completeness_score",
     "title",
     "original_title",
     "year",
-    "tmdb_rating",
     "tmdb_score",
     "tmdb_votes",
-    "imdb_rating",
-    "imdb_score",
-    "imdb_votes",
-    "kp_score",
-    "kp_status",
+    "tmdb_popularity",
     "is_complete",
-    "genres_tmdb",
-    "imdb_genres",
+    "missing_fields",
+    "genres",
+    "genre_keys",
+    "countries",
+    "country_codes",
     "original_language",
-    "production_countries",
     "networks",
+    "production_companies",
     "imdb_id",
     "tmdb_id",
     "country_signals",
@@ -61,19 +54,46 @@ def ensure_diagnostics_dir(output_dir: str | Path | None = None) -> Path:
     return path
 
 
+def safe_int(value) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def unique_non_empty(values) -> list[str]:
+    result: list[str] = []
+    for value in values or []:
+        text = str(value or "").strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+def _genre_values_from_field(value) -> list[str]:
+    result: list[str] = []
+    for item in value or []:
+        if isinstance(item, dict):
+            text = str(item.get("name") or item.get("label") or "").strip()
+        else:
+            text = str(item or "").strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
 def output_base_path(country: str, mode: str) -> Path:
     ensure_output_dir()
     return OUTPUT_DIR / f"candidate_pool_{country.upper()}_{mode}"
 
 
 def _write_build_json(result: dict[str, Any], json_path: Path) -> Path | None:
-    """Writes build JSON without kp_debug blob; saves debug report separately."""
+    """Writes build JSON."""
     payload = dict(result)
-    kp_debug = payload.pop("kp_debug", None)
     with open(json_path, "w", encoding="utf-8") as file:
         json.dump(payload, file, ensure_ascii=False, indent=2)
-    if isinstance(kp_debug, dict):
-        return kp_tmdb_build_debug.save_kp_debug_report(kp_debug, json_path)
     return None
 
 
@@ -356,36 +376,17 @@ def build_summary_lines(result: dict[str, Any]) -> list[str]:
     """Возвращает строки итогового отчёта (печать выполняет UI/CLI)."""
     stats = result["stats"]
     lines = [
-        f"Enrichment mode: {stats.get('enrichment_mode', 'full')}",
+        f"Источник: {stats.get('source', 'tmdb')} v{stats.get('source_version', 2)}",
         f"Найдено через TMDb Discover: {stats['discover_total']}",
         f"Удалено дублей: {stats['duplicates_removed']}",
         f"Пропущено уже просмотренных: {stats['watched_skipped']}",
         f"Пропущено уже в pool по TMDb ID: {stats.get('existing_pool_skipped_tmdb_id', 0)}",
         f"Пропущено уже в pool по title/year: {stats.get('existing_pool_skipped_title_year', 0)}",
-        f"Новых перед TMDb Details: {stats.get('novel_before_details', 0)}",
-        f"Novelty rate перед Details: {stats.get('novelty_rate_before_details', 0)}",
         f"Запрошено TMDb Details: {stats['details_requested']}",
-        f"TMDb Details ошибок сети: {stats.get('tmdb_details_errors', 0)}",
-        f"TMDb Details пропущено после ошибок: {stats.get('tmdb_details_skipped_after_errors', 0)}",
-        f"С IMDb ID: {stats['has_imdb_id']}",
-        f"Найдено в IMDb dataset: {stats['found_in_imdb_sql']}",
-        f"KP найдено в кэше: {stats['kp_cache_hit']}",
-        f"KP API запросов: {stats['kp_api_requested']}",
-        f"KP API найдено: {stats['kp_api_found']}",
-        f"KP API не найдено: {stats['kp_api_not_found']}",
-        f"KP API отклонено match-check: {stats['kp_api_rejected_by_match']}",
-        f"KP API ошибок: {stats['kp_api_errors']}",
-        f"KP API пропущено после ошибок: {stats.get('kp_api_skipped_after_errors', 0)}",
-        f"KP API пропущено из-за кэша: {stats['kp_api_skipped_cache']}",
-        f"KP API пропущено вне top-N: {stats.get('kp_api_skipped_not_top', 0)}",
-        f"KP ожидает добора из-за лимита: {stats['kp_pending_limit']}",
-        f"Неполных кандидатов по KP: {stats['kp_incomplete_candidates']}",
-        f"Полностью обогащённых кандидатов: {stats['complete_candidates']}",
-        f"Прошли country_score: {stats['country_passed']}",
-        f"Пограничный country_score: {stats['country_borderline']}",
-        f"Отклонено по country_score: {stats['country_rejected']}",
-        f"Отклонено adult/titleType: {stats['adult_title_type_rejected']}",
-        f"Отклонено IMDb-фильтрами всего: {stats['imdb_filter_rejected']}",
+        f"TMDb Details ошибок сети: {stats.get('details_errors', 0)}",
+        f"С IMDb ID из TMDb external_ids: {stats.get('external_ids_imdb_id_count', 0)}",
+        f"Complete кандидатов: {stats['complete_candidates']}",
+        f"С неполной TMDb/core metadata: {stats.get('incomplete_candidates', 0)}",
         f"Итоговых кандидатов: {stats['final_candidates']}",
         "",
         "Топ-20 по final_score",
@@ -395,7 +396,6 @@ def build_summary_lines(result: dict[str, Any]) -> list[str]:
         lines.append(
             f"{index:>2}. {candidate.get('final_score'):.3f} | "
             f"{candidate.get('title') or '-'} ({candidate.get('year') or '-'}) | "
-            f"TMDb {candidate.get('tmdb_rating') or '-'} / {candidate.get('tmdb_votes') or 0} | "
-            f"IMDb {candidate.get('imdb_rating') or '-'} / {candidate.get('imdb_votes') or 0}"
+            f"TMDb {candidate.get('tmdb_score') or '-'} / {candidate.get('tmdb_votes') or 0}"
         )
     return lines

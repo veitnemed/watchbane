@@ -22,15 +22,19 @@ def _sort_number(value) -> float:
 
 def candidate_sort_score(candidate: dict) -> tuple:
     """Возвращает ключ качества кандидата для выбора лучшего дубля."""
+    completeness_score = (
+        candidate.get("completeness_score")
+        if candidate.get("completeness_score") is not None
+        else candidate.get("metadata_completeness_score")
+    )
     return (
         _sort_number(candidate.get("final_score")),
         _sort_number(candidate.get("quality_score")),
         _sort_number(candidate.get("tmdb_score")),
         _sort_number(candidate.get("tmdb_votes")),
-        _sort_number(candidate.get("kp_score")),
-        _sort_number(candidate.get("kp_votes")),
-        _sort_number(candidate.get("imdb_score")),
-        _sort_number(candidate.get("imdb_votes")),
+        _sort_number(candidate.get("tmdb_popularity")),
+        _sort_number(completeness_score),
+        str(candidate.get("title") or "").casefold(),
     )
 
 
@@ -45,7 +49,7 @@ def _safe_rank_float(value) -> float:
 
 def _filled_score_votes_count(candidate: dict) -> int:
     count = 0
-    for field_name in ("kp_score", "kp_votes", "imdb_score", "imdb_votes", "tmdb_score", "tmdb_votes"):
+    for field_name in ("tmdb_score", "tmdb_votes", "tmdb_popularity"):
         if candidate.get(field_name) not in (None, ""):
             count += 1
     return count
@@ -60,10 +64,12 @@ def _search_duplicate_tiebreak_key(candidate: dict, order_index: int) -> tuple:
         1 if schema_is_candidate_complete(candidate) else 0,
         1 if candidate.get("is_complete") is True else 0,
         _filled_score_votes_count(candidate),
-        _safe_rank_float(candidate.get("quality_score")),
         _safe_rank_float(candidate.get("final_score")),
-        _safe_rank_float(candidate.get("kp_score")),
-        _safe_rank_float(candidate.get("imdb_score")),
+        _safe_rank_float(candidate.get("quality_score")),
+        _safe_rank_float(candidate.get("tmdb_score")),
+        _safe_rank_float(candidate.get("tmdb_votes")),
+        _safe_rank_float(candidate.get("tmdb_popularity")),
+        _safe_rank_float(candidate.get("completeness_score") if candidate.get("completeness_score") is not None else candidate.get("metadata_completeness_score")),
         -order_index,
     )
 

@@ -27,8 +27,8 @@ def format_pool_stats_user(stats: dict) -> str:
     incomplete_total = int(stats.get("incomplete_total", 0) or 0)
     return (
         f"В базе {series_count_phrase(unique_total)}"
-        f" · {ready_total} с рейтингами КП/IMDb"
-        f" · {incomplete_total} без полных данных"
+        f" · {ready_total} с полной TMDb metadata"
+        f" · {incomplete_total} требуют metadata диагностики"
     )
 
 

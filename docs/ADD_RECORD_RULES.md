@@ -116,8 +116,6 @@ Defaults собираются через `dataset.title_resolve`.
 
 Источники:
 
-- IMDb SQL;
-- KP API/cache;
 - TMDb;
 - candidate pool record.
 
@@ -152,7 +150,6 @@ Dataset хранит жанры как `has_*` поля из `config/genre_tags.
 
 - `genre_keys`;
 - TMDb genres;
-- IMDb genres;
 - raw labels.
 
 Маппинг выполняется через candidates/dataset helpers, а не вручную в UI.

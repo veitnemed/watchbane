@@ -15,7 +15,6 @@ data/
   cache/
     posters/
     tmdb/
-    kp/
   exports/
     candidate_pool/
     edit_dataset.xlsx
@@ -40,7 +39,6 @@ data/
 
 - `data/cache/posters/` - poster-cache и локальные изображения.
 - `data/cache/tmdb/` - TMDb Discover/Details cache.
-- `data/cache/kp/` - KP enrichment cache.
 
 Cache можно удалить без потери watched-базы.
 
@@ -53,6 +51,11 @@ Cache можно удалить без потери watched-базы.
 - `data/backups/` - backups перед изменениями.
 
 Generated файлы не хранятся в git.
+
+TMDb-only candidate migration/refresh reports:
+
+- `data/diagnostics/candidate_pool_tmdb_only_migration_report.json`;
+- `data/diagnostics/candidate_pool_tmdb_refresh_report.json`.
 
 ## Main Info Country
 

@@ -6,11 +6,22 @@ from config import scheme
 from dataset.genres.mapping import candidate_genre_keys_to_dataset_genres
 from dataset.meta.payload import build_candidate_meta_payload
 from dataset.resolve.countries import extract_country_value
-from dataset.resolve.defaults import build_api_defaults
 from dataset.resolve.genres import (
     build_genre_defaults,
     extract_candidate_fallback_genres,
 )
+
+TMDB_TRANSFER_SCORE_FIELDS = ("tmdb_score", "tmdb_votes", "tmdb_popularity")
+
+
+def _candidate_year(candidate: dict):
+    year = candidate.get("year")
+    if year not in (None, ""):
+        return year
+    first_air_date = str(candidate.get("first_air_date") or "").strip()
+    if len(first_air_date) >= 4 and first_air_date[:4].isdigit():
+        return int(first_air_date[:4])
+    return None
 
 
 def _normalize_candidate_genre_keys(candidate: dict) -> list[str]:
@@ -21,7 +32,7 @@ def _normalize_candidate_genre_keys(candidate: dict) -> list[str]:
 
 
 def _candidate_has_raw_genre_signals(candidate: dict) -> bool:
-    for field_name in ("genres", "imdb_genres", "genres_tmdb"):
+    for field_name in ("genres", "genres_tmdb"):
         values = candidate.get(field_name)
         if isinstance(values, list) is False:
             continue
@@ -35,7 +46,7 @@ def _candidate_has_raw_genre_signals(candidate: dict) -> bool:
 
 def _extract_raw_genre_strings(candidate: dict) -> list[str]:
     raw_genres = []
-    for field_name in ("genres", "imdb_genres", "genres_tmdb"):
+    for field_name in ("genres", "genres_tmdb"):
         values = candidate.get(field_name) or []
         if isinstance(values, list) is False:
             continue
@@ -51,6 +62,14 @@ def _extract_raw_genre_strings(candidate: dict) -> list[str]:
     return raw_genres
 
 
+def _extract_transfer_fallback_genres(candidate: dict) -> list[str]:
+    for field_name in ("genres", "genres_tmdb"):
+        scoped = extract_candidate_fallback_genres({field_name: candidate.get(field_name)})
+        if scoped:
+            return scoped
+    return []
+
+
 def build_candidate_transfer_genre_defaults(candidate: dict) -> dict:
     """Собирает genre defaults для переноса кандидата из pool genre_keys или raw genres."""
     genre_keys = candidate.get("genre_keys")
@@ -58,7 +77,7 @@ def build_candidate_transfer_genre_defaults(candidate: dict) -> dict:
         genre_result = candidate_genre_keys_to_dataset_genres(genre_keys)
         if genre_result["status"] != "missing":
             return dict(genre_result["dataset_genre"])
-    return build_genre_defaults(extract_candidate_fallback_genres(candidate))
+    return build_genre_defaults(_extract_transfer_fallback_genres(candidate))
 
 
 def build_candidate_genre_transfer_preview(candidate: dict) -> dict:
@@ -80,7 +99,7 @@ def build_candidate_genre_transfer_preview(candidate: dict) -> dict:
 
     if mapper_status == "missing":
         used_fallback = True
-        dataset_genre = build_genre_defaults(extract_candidate_fallback_genres(candidate))
+        dataset_genre = build_genre_defaults(_extract_transfer_fallback_genres(candidate))
 
     active_has_features = [
         feature_name
@@ -111,9 +130,21 @@ def build_candidate_genre_transfer_preview(candidate: dict) -> dict:
 
 def build_candidate_transfer_payload(candidate: dict) -> dict:
     """Собирает defaults и meta для переноса кандидата из общего пула в dataset."""
-    defaults = build_api_defaults(candidate)
-    defaults[scheme.MAIN_INFO]["country"] = extract_country_value(candidate)
-    defaults[scheme.GENRE] = build_candidate_transfer_genre_defaults(candidate)
+    defaults = {
+        scheme.MAIN_INFO: {
+            "title": candidate.get("title") or candidate.get("name") or "",
+            "user_score": None,
+            "year": _candidate_year(candidate),
+            "country": extract_country_value(candidate),
+        },
+        scheme.RAW_SCORES: {
+            field_name: candidate.get(field_name)
+            for field_name in TMDB_TRANSFER_SCORE_FIELDS
+            if candidate.get(field_name) not in (None, "")
+        },
+        scheme.TAGS_VIBE: {},
+        scheme.GENRE: build_candidate_transfer_genre_defaults(candidate),
+    }
     meta_payload = build_candidate_meta_payload(candidate)
     return {
         "defaults": defaults,

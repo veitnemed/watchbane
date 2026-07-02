@@ -8,6 +8,40 @@ from dataset.add_title_service import (
 from config import scheme
 
 
+def test_build_api_defaults_uses_tmdb_scores_without_kp_imdb() -> None:
+    from dataset.resolve.defaults import build_api_defaults
+
+    defaults = build_api_defaults(
+        {
+            "title": "TMDb API Show",
+            "year": 2021,
+            "country": "США",
+            "genres": ["Drama"],
+            "tmdb_score": 8.0,
+            "tmdb_votes": 2000,
+            "tmdb_popularity": 33.3,
+            "kp_score": 9.9,
+            "imdb_score": 9.1,
+        }
+    )
+
+    assert defaults[scheme.RAW_SCORES] == {
+        "tmdb_score": 8.0,
+        "tmdb_votes": 2000,
+        "tmdb_popularity": 33.3,
+    }
+    assert "kp_score" not in defaults[scheme.RAW_SCORES]
+    assert "imdb_score" not in defaults[scheme.RAW_SCORES]
+
+
+def test_build_empty_add_defaults_does_not_create_external_rating_fields() -> None:
+    from dataset.resolve.defaults import build_empty_add_defaults
+
+    defaults = build_empty_add_defaults("Manual Title")
+
+    assert defaults[scheme.RAW_SCORES] == {}
+
+
 def test_build_movie_record_from_defaults_sets_score_from_defaults() -> None:
     defaults = {
         scheme.MAIN_INFO: {"title": "Test Show", "year": 2020, "user_score": None},
@@ -32,12 +66,7 @@ def test_build_movie_record_from_defaults_sets_score_from_defaults() -> None:
 def test_build_preview_card_uses_genre_labels_ru() -> None:
     defaults = {
         scheme.MAIN_INFO: {"title": "Crime Show", "year": 2019, "user_score": None},
-        scheme.RAW_SCORES: {
-            "kp_score": None,
-            "kp_votes": None,
-            "imdb_score": None,
-            "imdb_votes": None,
-        },
+        scheme.RAW_SCORES: {},
         scheme.GENRE: {"has_crime": 1, "has_drama": 0},
         scheme.TAGS_VIBE: {},
     }
@@ -129,10 +158,10 @@ def test_build_candidate_transfer_bundle_maps_candidate_fields() -> None:
         "title": "Pool Show",
         "year": 2018,
         "country": "Россия",
-        "kp_score": 7.8,
-        "kp_votes": 5000,
-        "imdb_score": 7.2,
-        "imdb_votes": 800,
+        "tmdb_id": 123,
+        "tmdb_score": 7.8,
+        "tmdb_votes": 5000,
+        "tmdb_popularity": 12.5,
         "overview": "Test overview",
         "genre_keys": ["drama"],
     }
@@ -142,7 +171,15 @@ def test_build_candidate_transfer_bundle_maps_candidate_fields() -> None:
     assert bundle.title == "Pool Show"
     assert bundle.pool_candidate == candidate
     assert bundle.defaults["main_info"]["year"] == 2018
+    assert bundle.defaults["raw_scores"] == {
+        "tmdb_score": 7.8,
+        "tmdb_votes": 5000,
+        "tmdb_popularity": 12.5,
+    }
+    assert "kp_score" not in bundle.defaults["raw_scores"]
+    assert "imdb_score" not in bundle.defaults["raw_scores"]
     assert bundle.meta_payload.get("description") == "Test overview"
+    assert bundle.meta_payload.get("tmdb_id") == 123
     assert bundle.preview_card["title"] == "Pool Show"
 
 
@@ -173,6 +210,40 @@ def test_save_add_title_record_passes_pool_candidate(monkeypatch) -> None:
     save_add_title_record(defaults, 8.0, pool_candidate=pool_candidate)
 
     assert captured["kwargs"]["pool_candidate"] == pool_candidate
+
+
+def test_save_add_title_record_keeps_tmdb_scores_without_kp_imdb(monkeypatch) -> None:
+    captured = {}
+
+    def fake_add_movie(movie, **kwargs):
+        captured["movie"] = movie
+        captured["kwargs"] = kwargs
+
+        class Result:
+            ok = True
+            message = "ok"
+            title = movie["main_info"]["title"]
+
+        return Result()
+
+    monkeypatch.setattr("dataset.add_flow.save.add_movie", fake_add_movie)
+
+    defaults = {
+        scheme.MAIN_INFO: {"title": "TMDb Pool", "year": 2020, "country": "Россия"},
+        scheme.RAW_SCORES: {"tmdb_score": 8.1, "tmdb_votes": 1200, "tmdb_popularity": 44.0},
+        scheme.GENRE: {},
+        scheme.TAGS_VIBE: {},
+    }
+
+    save_add_title_record(defaults, 8.0, pool_candidate={"title": "TMDb Pool"})
+
+    assert captured["movie"]["raw_scores"] == {
+        "tmdb_score": 8.1,
+        "tmdb_votes": 1200,
+        "tmdb_popularity": 44.0,
+    }
+    assert "kp_score" not in captured["movie"]["raw_scores"]
+    assert "imdb_score" not in captured["movie"]["raw_scores"]
 
 
 def test_request_user_score_builds_payload_without_other_edits(monkeypatch) -> None:

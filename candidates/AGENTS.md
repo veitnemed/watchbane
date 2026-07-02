@@ -6,7 +6,7 @@
 
 - UI должен ходить через `candidates.service`, а не напрямую в `pool/`, `repositories/` или `sources/tmdb/builder.py`.
 - `load_candidate_pool()` и read-view функции не должны писать JSON.
-- Любой write-path должен быть явным: import, save, clear pool, dedupe, retry KP, mark watched.
+- Любой write-path должен быть явным: import, save, clear pool, dedupe, mark watched.
 - Единый pool: `criteria_name = "pool"`, UI не создаёт named pools.
 - Не меняй формат `candidate_pool.json` и `candidate_criteria.json` без отдельной задачи, миграции и тестов.
 - Не смешивай `sources/tmdb/genre_options.py` и `genres.py`.
@@ -21,8 +21,7 @@
 - `pool/` — dedupe, queries, stats, diagnostics, search helpers, completeness.
 - `scoring/` — sort keys для ranking/dedupe.
 - `views/` — formatters (dict → str).
-- `sources/tmdb/` — discover_query, discover_dedupe, transformer, builder, output, importer.
-- `sources/kp/` — enrichment, retry.
+- `sources/tmdb/` — discovery, details normalization, scoring, builder, output, importer.
 - `genres.py` — runtime жанры saved pool.
 - `sources/tmdb/genre_options.py` — TMDb TV genre IDs.
 - `sources/tmdb/country_options.py` — страны Discover UI.

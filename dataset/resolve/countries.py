@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from candidates.sources.kp import enrichment as kp_enrichment
+from candidates.models import country_reference
 from candidates.sources.tmdb import country_options as tmdb_country_options
 
 
@@ -40,18 +40,7 @@ def extract_country_value(source: dict | None) -> str:
 
 def country_value_to_iso2(value: str) -> str | None:
     """Map one raw country label/code to ISO-2 when alias is known."""
-    text = str(value or "").strip()
-    if text == "":
-        return None
-
-    iso2 = kp_enrichment.normalize_iso2_country(text)
-    if iso2 in kp_enrichment.KP_COUNTRY_BY_ISO2:
-        return iso2
-
-    canonical = kp_enrichment.normalize_country_alias(text)
-    if canonical in kp_enrichment.KP_COUNTRY_BY_ISO2:
-        return canonical
-    return None
+    return country_reference.country_value_to_iso2(value)
 
 
 def country_labels_by_code() -> dict[str, str]:

@@ -65,12 +65,8 @@ def build_main_info_items(card: dict) -> list[dict[str, str]]:
         }
     )
 
-    imdb_votes = format_votes_display(card.get("imdb_votes"))
-    if imdb_votes is not None:
-        items.append({"label": "Голоса IMDb", "value": imdb_votes})
-
-    kp_votes = format_votes_display(card.get("kp_votes"))
-    if kp_votes is not None:
-        items.append({"label": "Голоса КП", "value": kp_votes})
+    tmdb_votes = format_votes_display(card.get("tmdb_votes"))
+    if tmdb_votes is not None:
+        items.append({"label": "Голоса TMDb", "value": tmdb_votes})
 
     return items

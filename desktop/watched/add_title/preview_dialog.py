@@ -181,7 +181,7 @@ class AddTitlePreviewDialog(QDialog):
 
             if candidate_service.is_pool_candidate_incomplete(self._bundle.pool_candidate):
                 self._warning_label.setText(
-                    "Кандидат неполный: нет KP/IMDb данных. "
+                    "Кандидат неполный: не хватает TMDb/core metadata. "
                     "Можно продолжить, но проверьте карточку перед сохранением."
                 )
                 self._warning_label.show()

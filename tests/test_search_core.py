@@ -100,16 +100,16 @@ def test_explain_candidate_returns_search_reasons() -> None:
     assert "Не скрыт" in text
 
 
-def test_sort_search_candidates_orders_by_kp_score() -> None:
+def test_sort_search_candidates_orders_by_final_score() -> None:
     from candidates import service
 
     candidates = [
-        {"title": "Low", "year": 2020, "kp_score": 6.0, "imdb_score": 8.0},
-        {"title": "High", "year": 2021, "kp_score": 9.0, "imdb_score": 7.0},
+        {"title": "Low", "year": 2020, "final_score": 6.0, "tmdb_score": 8.0},
+        {"title": "High", "year": 2021, "final_score": 9.0, "tmdb_score": 7.0},
     ]
-    result = service.sort_search_candidates(candidates, "kp_score")
+    result = service.sort_search_candidates(candidates, "final_score")
     assert result["candidates"][0]["title"] == "High"
-    assert result["sort_mode"] == "kp_score"
+    assert result["sort_mode"] == "final_score"
 
 
 def test_sort_search_candidates_puts_missing_values_last() -> None:
@@ -117,11 +117,32 @@ def test_sort_search_candidates_puts_missing_values_last() -> None:
 
     candidates = [
         {"title": "Missing", "year": 2020},
-        {"title": "Rated", "year": 2021, "imdb_score": 7.5},
+        {"title": "Rated", "year": 2021, "tmdb_score": 7.5},
     ]
-    result = service.sort_search_candidates(candidates, "imdb_score")
+    result = service.sort_search_candidates(candidates, "tmdb_score")
     assert result["candidates"][0]["title"] == "Rated"
     assert result["candidates"][-1]["title"] == "Missing"
+
+
+def test_incomplete_filter_does_not_depend_on_kp_imdb() -> None:
+    assert candidate_matches(
+        _candidate(kp_score=None, kp_votes=None, imdb_score=None, imdb_votes=None),
+        {"only_complete": True},
+    ) is True
+
+
+def test_service_build_public_params_do_not_include_kp_imdb() -> None:
+    import inspect
+
+    from candidates import service
+
+    params = set(inspect.signature(service.build_tmdb_candidate_pool).parameters)
+    assert "enrichment_mode" not in params
+    assert "kp_api_limit" not in params
+    assert "kp_top_limit" not in params
+    assert "db_path" not in params
+    assert hasattr(service, "get_retry_kp_view") is False
+    assert hasattr(service, "retry_kp_enrichment_in_pool") is False
 
 
 def test_candidate_service_exposes_search_named_views(monkeypatch) -> None:

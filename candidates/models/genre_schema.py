@@ -153,9 +153,9 @@ def genre_keys_match_none(candidate_keys: list[str], excluded_keys: list[str]) -
 
 
 def build_genre_keys(candidate: dict) -> list[str]:
-    """Builds ordered unique genre keys from imdb_genres, genres_tmdb, then legacy genres."""
+    """Builds ordered unique genre keys from TMDb genres, then legacy genres."""
     raw_values: list[str] = []
-    for field_name in ("imdb_genres", "genres_tmdb", "genres"):
+    for field_name in ("genres_tmdb", "genres"):
         raw_values.extend(_iter_raw_genres(candidate.get(field_name)))
 
     keys: list[str] = []

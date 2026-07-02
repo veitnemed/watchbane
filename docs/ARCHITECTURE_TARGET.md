@@ -2,7 +2,7 @@
 
 Документ описывает архитектуру, к которой должен постепенно прийти `Watchbane`.
 
-Проект должен стать чистым локальным поисковиком сериалов и тайтлов с личной watched-базой, candidate pool, внешним enrichment и удобным UI. Старые ML-эксперименты, временные JSON, diagnostics и ручные скрипты не должны определять активную структуру приложения.
+Проект должен стать чистым локальным поисковиком сериалов и тайтлов с личной watched-базой, TMDb-only candidate pool и удобным UI. Старые ML-эксперименты, временные JSON, diagnostics и ручные скрипты не должны определять активную структуру приложения.
 
 ## Главная Идея
 
@@ -11,9 +11,9 @@
 ```text
 локальная watched-база
         +
-поиск новых сериалов через candidate pool
+поиск новых сериалов через TMDb-only candidate pool
         +
-enrichment из TMDb / IMDb SQL / KP
+TMDb metadata/scoring
         +
 console и desktop UI поверх стабильных сервисов
 ```
@@ -37,7 +37,7 @@ watchbane/
   candidates/          # candidate pool, поиск, фильтры, dedupe
   posters/             # poster-cache и локальные постеры
 
-  apis/                # TMDb, KP, IMDb SQL
+  apis/                # внешние и локальные источники данных
   storage/             # load/save/init/backup низкого уровня
   config/              # схемы, константы, справочники
   common/              # чистые утилиты
@@ -134,7 +134,6 @@ data/
   cache/
     posters/
     tmdb/
-    kp/
 
   exports/
     candidate_pool/
@@ -202,7 +201,7 @@ genre:
 - хранить кандидатов между запусками;
 - позволять фильтровать по стране, году, жанрам, рейтингам;
 - не показывать уже просмотренное;
-- поддерживать добор KP/IMDb/TMDb данных;
+- поддерживать TMDb metadata и scoring;
 - переносить выбранного кандидата в watched через ручное подтверждение.
 
 Инварианты:
@@ -210,9 +209,11 @@ genre:
 - runtime-фильтр не пересобирает и не портит сохраненный pool;
 - read-path не удаляет кандидатов;
 - write-path после переноса в watched чистит watched-кандидата из pool;
-- incomplete-кандидаты можно видеть отдельно и добирать через enrichment;
+- incomplete-кандидаты можно видеть отдельно как diagnostics неполной TMDb/core metadata;
 - dedupe централизован в `candidates`: `deduplicate_pool`, `dedupe_pool_by_similar_titles`, `clean_common_pool_duplicates`;
 - UI показывает `unique_total`; при расхождении с JSON — предупреждение и пункт очистки дублей в console.
+
+Public candidate flow описан в [TMDB_ONLY_CANDIDATE_FLOW.md](TMDB_ONLY_CANDIDATE_FLOW.md). Он требует только `TMDB_TOKEN`, не зависит от KP API и не требует локальный IMDb dataset.
 
 ## Add / Update / Delete
 
@@ -254,12 +255,11 @@ Storage отвечает только за:
 
 `apis/` не должен становиться доменной логикой.
 
-TMDb, KP и IMDb SQL должны возвращать данные в предсказуемом формате, а решение “что с этим делать” принимают `dataset` или `candidates`.
+Внешние и локальные источники должны возвращать данные в предсказуемом формате, а решение “что с этим делать” принимают `dataset` или `candidates`.
 
 Токены и локальные базы:
 
 - `TMDB_TOKEN` не хранится в git;
-- IMDb SQLite лежит локально в `datasets/dataset_sql_light/imdb_light.sqlite3`;
 - API cache лежит в `data/cache/`.
 
 ## UI

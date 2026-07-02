@@ -33,9 +33,13 @@ def make_pill_label(text: str, object_name: str, rich: bool = False):
 
 def make_meta_pill(item: dict, profile: DetailCardLayoutProfile = DETAIL_CARD_LAYOUT_PROFILE):
     return RatingCircleIndicator(
-        item.get("label", ""),
+        item.get("display_label") or item.get("label", ""),
         item.get("score"),
         item.get("accent", COLOR_ACCENT),
+        display_value=item.get("display_value"),
+        display_label=item.get("display_label") or item.get("label", ""),
+        ring_progress=item.get("ring_progress"),
+        footer_label=item.get("footer_label"),
         widget_size=profile.rating_widget_size,
         circle_diameter=profile.rating_circle_diameter,
         value_font_point=profile.rating_value_font_point,

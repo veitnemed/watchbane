@@ -44,8 +44,8 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates  <-  ui
 - Новый пункт меню / экран / форма / prompt → `ui/console/` (`global_menu.py`, `interface_funcs.py`, `request.py`, `ui.py`).
 - Новый desktop PyQt экран / карточка / dialog → `desktop/`; visual-polish сверять с [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md).
 - Новый сценарий над пользовательским dataset (add/update/stats/excel/tags/genre) → `dataset/`.
-- Новая логика пулов кандидатов (сбор, фильтры, dedupe, ranking, retry) → `candidates/`.
-- Новый внешний источник или эндпоинт (KP/TMDb/IMDb SQL) → `apis/`.
+- Новая логика пулов кандидатов (сбор, фильтры, dedupe, ranking) → `candidates/`.
+- Новый внешний или локальный источник данных → `apis/`.
 - Новое низкоуровневое чтение/запись файла, backup, init → `storage/`.
 - Новая чистая утилита (валидация, формат, нормализация текста) → `common/`.
 - Новая константа/путь/схема/каталог тегов или жанров → `config/`.
@@ -75,7 +75,7 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates  <-  ui
 
 ### Добавить вызов внешнего API
 
-1. Реализовать запрос в `apis/` (`kp_api`, `tmdb_api`, `imdb_sql`) — только получение данных.
+1. Реализовать запрос в `apis/` — только получение данных.
 2. Обернуть в сервис `dataset/title_resolve.py` (или `candidates/`), если нужен UI.
 3. UI вызывает сервис, а не `apis` напрямую.
 
@@ -84,6 +84,12 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates  <-  ui
 Не печатать из `candidates`. Использовать `report_progress(source, status)`;
 UI/CLI регистрируют печать через `candidates.sources.tmdb.builder.set_progress_reporter(...)`.
 Итоговые отчёты возвращать как данные/строки (`build_summary_lines`), печатает их UI/CLI.
+
+### Candidate pool источники
+
+Public candidate flow сейчас TMDb-only. Для новых candidate-функций не добавлять внешнее rating enrichment, старые режимы добора или обязательный локальный rating dataset.
+
+Подробный контракт: [TMDB_ONLY_CANDIDATE_FLOW.md](TMDB_ONLY_CANDIDATE_FLOW.md).
 
 ## 5. Чего не делать без отдельного подтверждения
 
@@ -95,7 +101,7 @@ UI/CLI регистрируют печать через `candidates.sources.tmdb
 - Делать массовые переименования/рефакторинги.
 - Трогать или коммитить секреты (`.env.local`, `tmdb.env`, `api_token.py`).
 - Вызывать TMDb Details по всем ID подряд без лимита и без skip-gate по сетевым ошибкам.
-- Считать, что TMDb candidate build не использует KP API: после IMDb SQL build может добирать KP из cache и затем из KP API с match-check и лимитом.
+- Возвращать KP/IMDb enrichment в публичный candidate flow. Candidate pool сейчас TMDb-only.
 
 ## 6. Обязательные проверки перед коммитом
 

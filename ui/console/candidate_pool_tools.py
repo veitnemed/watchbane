@@ -8,39 +8,6 @@ from ui.console import request
 from ui.console import ui
 
 
-def collect_candidate_pool() -> None:
-    """Собирает кандидатов в общий pool по сохранённым настройкам (legacy KP API)."""
-    ui.clean_terminal()
-    selected = candidate_pool_ui.choose_or_create_criteria()
-    if selected is None:
-        print("Настройки сбора не заданы.")
-        return
-
-    criteria_name, criteria = selected
-    print(f"\nЗапуск подбора в общий pool")
-    result = candidate_service.collect_candidates_legacy(criteria_name, criteria)
-
-    print("\nСбор в общий pool завершён.")
-    print(f"Нужно было собрать: {result['target_count']}")
-    print(f"Новых кандидатов добавлено: {result['added']}")
-    print(f"Совпадений уже в JSON: {result['duplicates']}")
-    print(f"Уже есть в основном датасете: {result['watched_skipped']}")
-    print(f"Проверено объектов API: {result['scanned']}")
-    print(f"Последняя страница: {result['last_page']}")
-    print(f"Текущий размер пула: {result['pool_size']}")
-
-    if result.get("api_unavailable"):
-        print("API сейчас недоступен. Общий пул сохранён без изменений.")
-
-    if result["reached_end"]:
-        print("Выдача API закончилась раньше, чем набралось нужное количество.")
-
-    if len(result["errors"]) > 0:
-        print("Ошибки API/сети:")
-        for error in result["errors"]:
-            print(f"- {error}")
-
-
 def edit_candidate_pool_filters() -> None:
     """Обновляет saved defaults фильтров поиска для общего pool."""
     ui.clean_terminal()
@@ -53,7 +20,7 @@ def edit_candidate_pool_filters() -> None:
 
     print("\nDefaults фильтров поиска для общего pool")
     print("Жанры берутся из сохранённых кандидатов pool. Это не запускает TMDb Discover.")
-    print(f"Текущий KP: {criteria.get('min_kp', 'не важно')}")
+    print(f"Текущий TMDb: {criteria.get('min_tmdb_score', criteria.get('min_tmdb', 'не важно'))}")
     print(f"Текущие жанры (saved pool): {', '.join(criteria.get('genres', [])) or 'не важно'}")
     print(f"Исключить жанры (saved pool): {', '.join(criteria.get('excluded_genres', [])) or 'не важно'}\n")
 
@@ -62,7 +29,7 @@ def edit_candidate_pool_filters() -> None:
     print("Filters сохраняются как defaults поиска по уже сохранённым кандидатам (Enter = default).")
     print("Ручной ввод в поиске действует только на текущий запуск.")
     print("Filters не пересобирают pool, не делают новый TMDb-запрос и не удаляют кандидатов из candidate_pool.json.")
-    print(f"KP: {updated.get('min_kp', 'не важно')}")
+    print(f"TMDb: {updated.get('min_tmdb_score', updated.get('min_tmdb', 'не важно'))}")
     print(f"Жанры (saved pool): {', '.join(updated.get('genres', [])) or 'не важно'}")
     print(f"Жанры исключить (saved pool): {', '.join(updated.get('excluded_genres', [])) or 'не важно'}")
 
@@ -88,23 +55,24 @@ def show_candidate_pool() -> None:
     for idx, candidate in enumerate(candidates, start=1):
         title = candidate.get("title") or "Без названия"
         year = candidate.get("year") or "?"
-        kp_score = candidate.get("kp_score")
-        imdb_score = candidate.get("imdb_score")
-        kp_votes = candidate.get("kp_votes")
+        tmdb_score = candidate.get("tmdb_score")
+        tmdb_votes = candidate.get("tmdb_votes")
+        final_score = candidate.get("final_score")
         genres = ", ".join(genre_schema.candidate_genres_for_display(candidate)) or "нет"
         description = request.short_text(candidate.get("description"), 80) or "без описания"
-        kp_status = candidate.get("kp_status")
         is_complete = candidate.get("is_complete")
+        missing_fields = candidate.get("missing_fields") or []
 
-        kp_score_label = kp_score if kp_score is not None else "-"
-        imdb_score_label = imdb_score if imdb_score is not None else "-"
-        kp_votes_label = kp_votes if kp_votes is not None else "-"
+        tmdb_score_label = tmdb_score if tmdb_score is not None else "-"
+        tmdb_votes_label = tmdb_votes if tmdb_votes is not None else "-"
+        final_score_label = final_score if final_score is not None else "-"
 
         print(f"{idx}) {title} ({year})")
-        print(f"   KP: {kp_score_label} | IMDb: {imdb_score_label} | KP votes: {kp_votes_label}")
-        if kp_status is not None or is_complete is not None:
+        print(f"   TMDb: {tmdb_score_label} | votes: {tmdb_votes_label} | итог: {final_score_label}")
+        if is_complete is not None or missing_fields:
             complete_label = "yes" if is_complete is True else "no"
-            print(f"   KP status: {kp_status or 'unknown'} | complete: {complete_label}")
+            missing_label = ", ".join(str(item) for item in missing_fields) or "-"
+            print(f"   metadata complete: {complete_label} | missing: {missing_label}")
         print(f"   Жанры: {genres}")
         print(f"   Описание: {description}\n")
 
@@ -124,63 +92,36 @@ def _print_incomplete_candidates_preview(candidates: list, limit: int = 5) -> No
     for index, candidate in enumerate(preview, start=1):
         title = candidate.get("title") or "Без названия"
         year = candidate.get("year") or "?"
-        kp_status = candidate.get("kp_status") or "unknown"
         complete_label = "yes" if candidate.get("is_complete") is True else "no"
-        print(f"{index}. {title} ({year}) | KP status: {kp_status} | complete: {complete_label}")
+        missing = ", ".join(str(item) for item in (candidate.get("missing_fields") or [])) or "-"
+        print(f"{index}. {title} ({year}) | metadata complete: {complete_label} | missing: {missing}")
 
     remaining = len(candidates) - len(preview)
     if remaining > 0:
         print(f"\n...и ещё {remaining}")
 
 
-def retry_kp_for_incomplete_candidates() -> None:
-    """Запускает повторный добор KP-данных для неполных кандидатов общего пула."""
+def show_candidate_metadata_diagnostics() -> None:
+    """Shows read-only diagnostics for candidates missing TMDb/core metadata."""
     ui.clean_terminal()
-    retry_view = candidate_service.get_retry_kp_view()
-    if retry_view["is_empty"]:
+    diagnostics_view = candidate_service.get_metadata_diagnostics_view()
+    if diagnostics_view["is_empty"]:
         print("Общий пул кандидатов пуст.")
         return
 
-    print("Добор KP для неполных кандидатов\n")
-    print(f"Неполных кандидатов всего: {retry_view['incomplete_count']}")
-    if retry_view["incomplete_count"] == 0:
-        print("Добор не требуется.")
+    print("Диагностика metadata кандидатов\n")
+    print("Incomplete = не хватает TMDb/core metadata для candidate contract.")
+    print(f"Неполных кандидатов всего: {diagnostics_view['incomplete_count']}")
+    if diagnostics_view["incomplete_count"] == 0:
+        print("Проблем metadata не найдено.")
         return
 
-    scoped_incomplete = retry_view["incomplete_candidates"]
+    scoped_incomplete = diagnostics_view["incomplete_candidates"]
     if len(scoped_incomplete) == 0:
         print("Для выбранного набора неполных кандидатов нет.")
         return
 
-    limit_answer = input("Лимит попыток [10] >> ").strip()
-    try:
-        limit = int(limit_answer or 10)
-    except ValueError:
-        limit = 10
-    limit = max(1, min(limit, len(scoped_incomplete)))
-    selected_candidates = scoped_incomplete[:limit]
-
-    print("\nБудет запущен добор KP:")
-    print(f"Неполных найдено: {len(scoped_incomplete)}")
-    print(f"Попыток будет выполнено: {limit}")
-    print("\nПервые кандидаты на добор:\n")
-    _print_incomplete_candidates_preview(selected_candidates, limit=limit)
-    answer = input("\nЗапустить добор KP для этих кандидатов? [y/N] ").strip().casefold()
-    if answer not in {"y", "yes", "д", "да"}:
-        print("Добор KP отменён.")
-        return
-
-    result = candidate_service.retry_kp_enrichment_in_pool(limit=limit)
-    stats = result["stats"]
-
-    print("\nДобор KP завершён.")
-    print(f"Неполных найдено: {stats['incomplete_found']}")
-    print(f"Попыток выполнено: {stats['attempted']}")
-    print(f"KP найден: {stats['kp_found']}")
-    print(f"KP не найден: {stats['kp_not_found']}")
-    print(f"Ошибок API: {stats['api_errors']}")
-    print(f"Стали complete: {stats['became_complete']}")
-    print(f"Остались incomplete: {stats['remaining_incomplete']}")
+    _print_incomplete_candidates_preview(scoped_incomplete, limit=20)
 
 
 def delete_candidate_pool() -> None:
@@ -318,11 +259,10 @@ def show_cross_year_candidate_duplicates() -> None:
         for entry in group.get("entries") or []:
             year = entry.get("year") or "?"
             source = entry.get("source") or entry.get("criteria_name") or "?"
-            kp_id = entry.get("kp_id") or entry.get("id") or "-"
             imdb_id = entry.get("imdb_id") or "-"
             tmdb_id = entry.get("tmdb_id") or "-"
             print(
-                f"   - ({year}) source={source} | KP={kp_id} | IMDb={imdb_id} | TMDb={tmdb_id}"
+                f"   - ({year}) source={source} | TMDb={tmdb_id} | IMDb ID={imdb_id}"
             )
         print("")
 
@@ -360,11 +300,10 @@ def show_title_candidate_duplicates() -> None:
         for entry in group.get("entries") or []:
             year = entry.get("year") or "?"
             source = entry.get("source") or entry.get("criteria_name") or "?"
-            kp_id = entry.get("kp_id") or entry.get("id") or "-"
             imdb_id = entry.get("imdb_id") or "-"
             tmdb_id = entry.get("tmdb_id") or "-"
             print(
-                f"   [pool] ({year}) source={source} | KP={kp_id} | IMDb={imdb_id} | TMDb={tmdb_id}"
+                f"   [pool] ({year}) source={source} | TMDb={tmdb_id} | IMDb ID={imdb_id}"
             )
         for dataset_entry in group.get("dataset_entries") or []:
             year = dataset_entry.get("year") or "?"

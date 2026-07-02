@@ -1,14 +1,14 @@
 ﻿# План: жанры и перенос кандидата в dataset
 
 Дата: 2026-06-23  
-Статус: черновик плана  
+Статус: archived draft, частично устарел после перехода candidate pool на TMDb-only flow
 Связанные документы: [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md), [candidates/README.md](../candidates/README.md)
 
 Примечание: desktop GUI visual-polish описан отдельно в [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) и не меняет жанровый pipeline, mapper или формат dataset.
 
 ## Цель
 
-Сделать цепочку **TMDb → IMDb SQL → KP → candidate pool → dataset** предсказуемой по жанрам:
+Сделать цепочку **TMDb → candidate pool → dataset** предсказуемой по жанрам:
 
 - один маппер из внешних жанров в `has_*` модели;
 - без тихой потери разметки при переносе из пула;
@@ -39,13 +39,13 @@
 
 ### Задачи
 
-- [ ] **0.1** Таблица маппинга: IMDb/TMDb строка → pool `genre_key` → `has_*`.
+- [ ] **0.1** Таблица маппинга: TMDb строка → pool `genre_key` → `has_*`.
 - [ ] **0.2** Скрипт/отчёт по текущему `candidate_pool.json`:
   - сколько кандидатов с непустыми `genres`;
   - сколько после `build_genre_defaults()` получают все `has_* = 0`;
   - топ unknown жанров.
 - [ ] **0.3** Сверка документации с кодом:
-  - `docs/add_functions.md` — KP API в TMDb build;
+  - `docs/add_functions.md` — актуальный TMDb-only candidate build;
   - `docs/ADD_RECORD_RULES.md` — различие pool transfer vs ручное добавление.
 
 ### Критерий готовности
@@ -99,7 +99,7 @@
 ### Задачи
 
 - [ ] **2.1** В `mark_candidate_as_watched()` перед формой показать:
-  - `genres` / `imdb_genres` / `genres_tmdb`;
+  - `genres` / `genres_tmdb`;
   - результат маппинга в `has_*`;
   - список `unknown` жанров, если есть.
 - [ ] **2.2** Предупреждение, если все `has_* = 0` при непустых исходных жанрах.
@@ -121,11 +121,10 @@
 
 - [ ] **3.1** При сборе defaults для pool transfer объединять:
   - `candidate["genres"]`
-  - `candidate["imdb_genres"]`
   - `candidate["genres_tmdb"]`
   (как в `genre_schema.build_genre_keys()`).
 - [ ] **3.2** Дедупликация с сохранением порядка.
-- [ ] **3.3** Тест: кандидат с пустым `genres`, но непустым `imdb_genres` — defaults не нулевые.
+- [ ] **3.3** Тест: кандидат с пустым `genres`, но непустым `genres_tmdb` — defaults не нулевые.
 
 ### Критерий готовности
 
@@ -140,7 +139,7 @@ Transfer не зависит от того, в какое поле попали 
 
 ### Задачи
 
-- [ ] **4.1 Import:** при импорте snapshot повторно проверять `country_score >= 0.40` и `passes_imdb_filters()` — отклонённые помечать или не импортировать (выбрать одну политику и задокументировать).
+- [ ] **4.1 Import:** при импорте snapshot повторно проверять `country_score >= 0.40` и TMDb metadata gate — отклонённые помечать или не импортировать (выбрать одну политику и задокументировать).
 - [ ] **4.2 Migration:** при `is_pool_candidate_incomplete()` — блокировать save, пока пользователь не заполнит все `raw_scores` в форме, либо явное подтверждение «продолжить с неполными данными».
 - [ ] **4.3 Build:** подключить `SERIOUS_GENRES_TMDB` / `WITHOUT_GENRES_TMDB` к Discover **или** удалить мёртвые константы.
 
@@ -157,7 +156,7 @@ Transfer не зависит от того, в какое поле попали 
 ### Задачи
 
 - [ ] **5.1** Обновить `docs/ADD_RECORD_RULES.md` — жанровый контракт и pool transfer.
-- [ ] **5.2** Обновить `docs/add_functions.md` — актуальный KP API flow.
+- [ ] **5.2** Обновить `docs/add_functions.md` — актуальный TMDb-only candidate flow.
 - [ ] **5.3** Добавить в `candidates/AGENTS.md` ссылку на маппер и запрет смешивать три слоя жанров.
 - [ ] **5.4** Прогон:
   ```powershell

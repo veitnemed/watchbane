@@ -77,7 +77,7 @@ def open_candidate_pool_cleanup_menu() -> None:
             elif command == "12":
                 candidate_pool_tools.download_candidate_pool_preview_posters()
             elif command == "13":
-                candidate_pool_tools.retry_kp_for_incomplete_candidates()
+                candidate_pool_tools.show_candidate_metadata_diagnostics()
         except KeyboardInterrupt:
             print("\nДействие прервано. Возвращаюсь в меню.")
 
@@ -93,7 +93,7 @@ def open_candidate_pool_import_menu() -> None:
         ui.clean_terminal()
         ui.show_candidate_pool_import_menu()
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 4)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 3)])
         if command == "0":
             return
         if command == "1":
@@ -101,8 +101,6 @@ def open_candidate_pool_import_menu() -> None:
         elif command == "2":
             tmdb_pool_tools.import_tmdb_result_to_common_pool_flow()
         elif command == "3":
-            candidate_pool_tools.collect_candidate_pool()
-        elif command == "4":
             candidate_pool_tools.edit_candidate_pool_filters()
 
         ui.press_enter()

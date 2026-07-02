@@ -19,8 +19,7 @@ candidates/
   scoring/                # sort keys
   views/                  # formatters
   sources/
-    tmdb/                 # discover_query, discover_dedupe, transformer, builder, output, importer
-    kp/                   # enrichment, retry
+    tmdb/                 # discovery, details, normalizer, scoring, builder, output, importer
 ```
 
 Новый код импортирует из `models/`, `pool/`, `repositories/`, `sources/`. UI — через `service.py`.
@@ -29,11 +28,11 @@ candidates/
 
 ### `service.py`
 
-Facade для UI и console: pool view/stats, search, TMDb build/import, retry KP, dedupe, diagnostics.
+Facade для UI и console: pool view/stats, search, TMDb build/import, dedupe, diagnostics.
 
 ### `models/`
 
-- `schema.py` — нормализация, `kp_status`, completeness.
+- `schema.py` — нормализация, TMDb-only completeness.
 - `keys.py` — `title_identity_key`, `pool_entry_key`, `COMMON_POOL_CRITERIA_NAME`.
 - `country_schema.py`, `genre_schema.py` — canonical keys в pool record.
 
@@ -44,11 +43,11 @@ Facade для UI и console: pool view/stats, search, TMDb build/import, retry K
 
 ### `pool/`
 
-normalization, dedupe, watched_cleanup, dataset_overlap, queries, stats, diagnostics, search_helpers, completeness, legacy_collect.
+normalization, dedupe, watched_cleanup, dataset_overlap, queries, stats, diagnostics, search_helpers, completeness.
 
 ### `sources/tmdb/`
 
-Build pipeline: `discover_query` → Discover API → `discover_dedupe` → `builder` (orchestration) → `transformer` (enrich/score) → `output` (JSON/CSV). Import snapshot: `importer`.
+Build pipeline: discovery slices → TMDb Discover API → merge/dedupe → TMDb Details → `normalizer` → `scoring` → `builder` → `output` (JSON/CSV). Import snapshot: `importer`.
 
 ### Top-level без переноса
 
@@ -61,7 +60,7 @@ Build pipeline: `discover_query` → Discover API → `discover_dedupe` → `bui
 - `constant.CRITERIA_POOL_JSON` → `candidate_criteria.json` (запись `"pool"`)
 - TMDb snapshots → `data/exports/candidate_pool/*.json`
 - diagnostics → `data/diagnostics`
-- KP cache → `data/cache/kp`
+- TMDb cache/runtime exports → `data/cache/tmdb`, `data/exports/candidate_pool`
 
 ## Важные границы
 
@@ -81,7 +80,7 @@ Import в общий pool: `service.import_tmdb_result_to_pool(...)` или `sou
 
 Read-only: `service` views, `load_candidate_pool()`, `get_all_candidates()`, diagnostics.
 
-Write-path: `save_candidate_pool()`, import, retry KP, dedupe, clear pool.
+Write-path: `save_candidate_pool()`, import, dedupe, clear pool.
 
 ## Единый pool и счётчики
 
@@ -106,4 +105,4 @@ py -m compileall candidates
 py -m pytest tests/candidate_modules tests/test_search_core.py tests/test_filter_popularity.py -q
 ```
 
-Offline-тесты с `patch(...)`; без реальных TMDb/KP запросов.
+Offline-тесты с `patch(...)`; без реальных TMDb-запросов.

@@ -1,4 +1,4 @@
-"""SQLite title search helpers for the local IMDb database."""
+"""Internal/non-candidate SQLite title search helpers."""
 
 from __future__ import annotations
 

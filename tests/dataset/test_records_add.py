@@ -57,3 +57,89 @@ def test_add_dataset_record_rejects_duplicate(monkeypatch) -> None:
 
     assert result.ok is False
     assert result.reason == "duplicate_title"
+
+
+def test_add_dataset_record_accepts_tmdb_only_raw_scores(monkeypatch) -> None:
+    from dataset.records import add as add_module
+    from dataset.records.add import add_dataset_record
+
+    saved = {}
+    meta_saved = {}
+
+    monkeypatch.setattr(add_module, "load_dataset", lambda: {})
+    monkeypatch.setattr(add_module, "save_dataset", lambda data: saved.update(data))
+    monkeypatch.setattr(add_module, "get_meta_obj", lambda _title: None)
+    monkeypatch.setattr(add_module, "add_movies_to_meta", lambda _main, raw, extra_meta=None: meta_saved.update(raw) or True)
+    monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
+
+    payload = _valid_add_payload("TMDb Only")
+    payload["raw_scores"] = {
+        "tmdb_score": 8.1,
+        "tmdb_votes": 1200,
+        "tmdb_popularity": 42.5,
+    }
+
+    result = add_dataset_record(payload)
+
+    assert result.ok is True
+    movie = saved["TMDb Only"]
+    assert movie["raw_scores"] == {
+        "tmdb_score": 8.1,
+        "tmdb_votes": 1200,
+        "tmdb_popularity": 42.5,
+    }
+    assert "kp_score" not in movie["raw_scores"]
+    assert "imdb_score" not in movie["raw_scores"]
+    assert movie["computed_scores"]["tmdb_score"] == 8.1
+    assert meta_saved["tmdb_votes"] == 1200
+
+
+def test_add_dataset_record_saves_new_meta_from_tmdb_meta_payload(monkeypatch) -> None:
+    from dataset.records import add as add_module
+    from dataset.records.add import add_dataset_record
+
+    saved = {}
+    meta_calls = []
+
+    monkeypatch.setattr(add_module, "load_dataset", lambda: {})
+    monkeypatch.setattr(add_module, "save_dataset", lambda data: saved.update(data))
+    monkeypatch.setattr(add_module, "get_meta_obj", lambda _title: None)
+    monkeypatch.setattr(
+        add_module,
+        "add_movies_to_meta",
+        lambda main, raw, extra_meta=None: meta_calls.append({
+            "main": dict(main),
+            "raw": dict(raw),
+            "extra_meta": dict(extra_meta or {}),
+        }) or True,
+    )
+    monkeypatch.setattr(add_module, "load_meta", lambda: {})
+    monkeypatch.setattr(add_module, "save_meta", lambda _meta: None)
+    monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
+
+    payload = _valid_add_payload("TMDb Meta")
+    payload["raw_scores"] = {
+        "tmdb_score": 7.7,
+        "tmdb_votes": 22,
+        "tmdb_popularity": 39.2,
+    }
+    meta_payload = {
+        "raw_scores": dict(payload["raw_scores"]),
+        "tmdb_id": 153581,
+        "description": "TMDb description.",
+        "poster_path": "/poster.jpg",
+    }
+
+    result = add_dataset_record(payload, meta_payload=meta_payload)
+
+    assert result.ok is True
+    assert "TMDb Meta" in saved
+    assert meta_calls == [{
+        "main": payload["main_info"],
+        "raw": payload["raw_scores"],
+        "extra_meta": {
+            "tmdb_id": 153581,
+            "description": "TMDb description.",
+            "poster_path": "/poster.jpg",
+        },
+    }]

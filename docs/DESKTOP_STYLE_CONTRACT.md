@@ -34,7 +34,7 @@
 | Muted text | `#71717a` |
 | Accent | `#10a37f` |
 
-Дополнительные цвета для IMDb/KP не должны превращать интерфейс в пеструю витрину. Они используются только как небольшие semantic accents.
+Score ring в карточке использует TMDb-only contract: число внутри круга - `tmdb_score`, подпись - `TMDb`, прогресс и цвет обводки - `final_score`. Цветовая шкала идет от красного к янтарному и зеленому.
 
 ## Typography
 
@@ -58,7 +58,8 @@
 
 - poster имеет стабильный размер и не растягивается от текста;
 - title переносится и не перекрывает chips/ratings;
-- ratings остаются read-only;
+- ratings остаются read-only и не показывают legacy IMDb/KP поля;
+- блок "Основная информация" показывает `Голоса TMDb`, если они есть в watched/meta/candidate fallback;
 - overview идет отдельным full-width блоком ниже верхней строки;
 - если overview пустой, блок скрывается;
 - card root не должен прыгать по высоте при hover/action states.
@@ -135,7 +136,6 @@ Read-only состояние:
 Write actions:
 
 - mark watched;
-- retry KP;
 - delete criteria;
 - import saved result.
 
@@ -161,7 +161,7 @@ GUI-polish не должен менять:
 | --- | --- |
 | long title wraps | filters do not resize layout |
 | missing poster state | empty results are explicit |
-| missing IMDb/KP values | incomplete candidates are visible |
+| missing metadata values | incomplete candidates are visible |
 | overview hidden when empty | Plotly fallback works |
 | sidebar counter stable | text blocks do not overflow |
 

@@ -4,7 +4,15 @@
 def build_candidate_meta_payload(candidate: dict) -> dict:
     """Собирает дополнительный meta-payload для переноса кандидата в dataset."""
     payload = {}
-    for key in ("tmdb_id", "imdb_id", "kp_id", "description", "source"):
+    for key in (
+        "tmdb_id",
+        "imdb_id",
+        "description",
+        "source",
+        "tmdb_score",
+        "tmdb_votes",
+        "tmdb_popularity",
+    ):
         if key not in candidate:
             continue
         value = candidate.get(key)
@@ -21,6 +29,14 @@ def build_candidate_meta_payload(candidate: dict) -> dict:
         value = candidate.get(key)
         if value not in (None, ""):
             payload[key] = value
+
+    raw_scores = {
+        key: candidate.get(key)
+        for key in ("tmdb_score", "tmdb_votes", "tmdb_popularity")
+        if candidate.get(key) not in (None, "")
+    }
+    if raw_scores:
+        payload["raw_scores"] = raw_scores
 
     return payload
 

@@ -63,6 +63,15 @@ def add_dataset_record(
             )
     else:
         raw_scores = meta_obj.get("raw_scores", meta_obj.get("raw"))
+        if get_meta_obj(title) is None:
+            normalized_meta_raw = normalize_raw_scores(raw_scores)
+            if add_movies_to_meta(main_info, normalized_meta_raw, extra_meta=extra_meta) is False:
+                return AddRecordResult(
+                    ok=False,
+                    title=title,
+                    message="Ошибка добавления! Некорректные meta-данные",
+                    reason="invalid_payload",
+                )
         if extra_meta:
             stored_meta = load_meta()
             for meta_title, current_meta in stored_meta.items():

@@ -6,9 +6,9 @@
 [![Local first](https://img.shields.io/badge/data-local--first-111827.svg)](docs/DATA_STORAGE_PLAN.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**The local-first app that turns your watchlist into a ranked candidate pool.**
+**The local-first app that turns your watchlist into a TMDb-powered candidate pool.**
 
-Watchbane helps you keep your own watched base, discover new films and series, compare signals from TMDb / IMDb / KP, and move good candidates into your personal library without giving the whole process to a black-box service.
+Watchbane helps you keep your own watched base, discover new films and series through TMDb, rank them with transparent local scoring, and move good candidates into your personal library without giving the whole process to a black-box service.
 
 It is local-first, inspectable, and built around a persistent candidate pool instead of one-off search results.
 
@@ -30,7 +30,7 @@ You keep the source of truth locally. The app enriches it with external metadata
 watched library
    + candidate pool
    + TMDb discovery
-   + IMDb / KP signals
+   + TMDb-only metadata and scoring
    + poster cache
    + PyQt desktop UI
 ```
@@ -41,16 +41,16 @@ watched library
 | --- | --- |
 | A throwaway search result | A persistent candidate pool you can filter, clean and revisit |
 | A locked platform watchlist | Local JSON data you can inspect and back up |
-| Blind recommendations | Visible signals: ratings, votes, country, type, metadata completeness |
+| Blind recommendations | Visible signals: TMDb rating, votes, popularity, country, type, metadata completeness |
 | Manual copy-paste | Add-title and candidate-transfer flows with preview and confirmation |
 | A pile of scripts | Clear UI / Domain / Infra / Project architecture |
 
 ## Current Experience
 
-- **My library**: browse watched titles with posters, ratings, metadata and detail cards.
+- **My library**: browse watched titles with posters, your ratings, TMDb signals, metadata and detail cards.
 - **Candidates**: search a shared pool of possible next titles, hide noise, transfer good picks.
 - **Information**: inspect read-only analytics without mutating your data.
-- **TMDb build flow**: discover candidates by country/mode, enrich them, import into the shared pool.
+- **TMDb-only build flow**: discover candidates by country/mode, fetch TMDb Details, score them, import into the shared pool.
 - **Poster cache**: keep preview posters local and avoid waiting on CDN during normal browsing.
 - **Console tools**: maintenance, diagnostics, imports and longer-running operations stay available.
 
@@ -66,7 +66,7 @@ watched library
     </td>
   </tr>
   <tr>
-    <td><strong>My library</strong><br>Personal ratings, public scores, posters, metadata and synopsis.</td>
+    <td><strong>My library</strong><br>Personal ratings, TMDb signals, posters, metadata and synopsis.</td>
     <td><strong>Candidate pool</strong><br>Ranked recommendations with filters, hide/transfer actions and vote signals.</td>
   </tr>
 </table>
@@ -118,12 +118,27 @@ Tests:
 py -m pytest
 ```
 
-TMDb flows need `TMDB_TOKEN` in the environment, `.env.local`, or `tmdb.env`.
+Public setup for candidate discovery requires only `TMDB_TOKEN` in the environment, `.env.local`, or `tmdb.env`.
+
+No KP API token or local IMDb dataset is required for the public candidate-pool product.
+
+## TMDb-Only Candidate Pool
+
+The public recommendation flow is TMDb-only:
+
+1. TMDb Discover finds possible TV titles by country, year and genre slices.
+2. TMDb Details adds metadata: overview, poster, genres, countries, external ids, credits, keywords and providers.
+3. Watchbane normalizes each item into a local candidate contract.
+4. Local scoring computes `quality_score`, `hidden_gem_score` and `final_score`.
+5. The result can be imported into `data/candidates/pool.json` and searched from GUI/console.
+
+The candidate contract does not require KP/IMDb ratings. `imdb_id` may exist only as an external id.
+
+See [TMDb-only candidate flow](docs/TMDB_ONLY_CANDIDATE_FLOW.md) for the full contract, migration scripts, refresh scripts, scoring notes and limitations.
 
 ## Repository Notes
 
 - Runtime user data lives under `data/` and is ignored by git.
-- Large local IMDb resources live under `datasets/` and are ignored by git.
 - Legacy experiments live under `archive/` and are not active runtime.
 - Contribution and project hygiene docs live in [`docs/`](docs/).
 

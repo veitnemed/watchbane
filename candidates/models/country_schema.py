@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from candidates.sources.kp import enrichment as kp_enrichment
+from candidates.models import country_reference
 
 
 _COUNTRY_SOURCE_FIELDS = (
@@ -35,18 +35,7 @@ def _iter_raw_countries(values: Any) -> list[str]:
 
 def country_value_to_iso2(value: str) -> str | None:
     """Maps one raw country label/code to ISO-2 when alias is known."""
-    text = str(value or "").strip()
-    if text == "":
-        return None
-
-    iso2 = kp_enrichment.normalize_iso2_country(text)
-    if iso2 in kp_enrichment.KP_COUNTRY_BY_ISO2:
-        return iso2
-
-    canonical = kp_enrichment.normalize_country_alias(text)
-    if canonical in kp_enrichment.KP_COUNTRY_BY_ISO2:
-        return canonical
-    return None
+    return country_reference.country_value_to_iso2(value)
 
 
 def normalize_country_filter(value: str | None) -> str | None:
@@ -120,7 +109,7 @@ def build_country_codes(candidate: dict) -> list[str]:
 def build_country_display(country_codes: list[str]) -> str | None:
     """Maps primary ISO-2 country code to Russian UI label."""
     for iso2 in country_codes:
-        label = kp_enrichment.KP_COUNTRY_BY_ISO2.get(iso2)
+        label = country_reference.COUNTRY_NAME_BY_ISO2.get(iso2)
         if label:
             return label
     return None

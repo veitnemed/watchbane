@@ -22,7 +22,6 @@ def test_global_menu_prints_candidate_summary(capsys) -> None:
 
 
 def test_candidate_pool_tools_keep_interface_compatibility() -> None:
-    assert interface_funcs.collect_candidate_pool is candidate_pool_tools.collect_candidate_pool
     assert interface_funcs.show_candidate_pool is candidate_pool_tools.show_candidate_pool
     assert interface_funcs.clean_common_pool_duplicates is candidate_pool_tools.clean_common_pool_duplicates
     assert interface_funcs.purge_pool_dataset_title_matches is candidate_pool_tools.purge_pool_dataset_title_matches
@@ -38,7 +37,8 @@ def test_candidate_pool_menus_route_to_scenario_module() -> None:
     cleanup_source = inspect.getsource(pool_menu.open_candidate_pool_cleanup_menu)
 
     assert "candidate_pool_tools.show_candidate_pool" in pool_menu_source
-    assert "candidate_pool_tools.collect_candidate_pool" in import_source
+    assert "tmdb_pool_tools.run_tmdb_candidate_pool_flow" in import_source
+    assert "candidate_pool_tools.collect_candidate_pool" not in import_source
     assert "candidate_pool_tools.clean_common_pool_duplicates" in cleanup_source
     assert "candidate_pool_tools.show_candidate_poster_diagnostics" in cleanup_source
     assert "candidate_pool_tools.start_candidate_pool_preview_poster_job" in cleanup_source
@@ -142,7 +142,7 @@ def test_tmdb_pool_menus_route_to_scenario_module() -> None:
     assert "tmdb_pool_tools.show_tmdb_dataset_genre_diagnostics" not in cleanup_source
 
 
-def test_tmdb_flow_passes_fast_enrichment_mode(monkeypatch, capsys) -> None:
+def test_tmdb_flow_passes_tmdb_only_build_kwargs(monkeypatch, capsys) -> None:
     answers = iter([
         "1",
         "1",
@@ -154,9 +154,7 @@ def test_tmdb_flow_passes_fast_enrichment_mode(monkeypatch, capsys) -> None:
         "",
         "",
         "",
-        "2",
         "y",
-        "n",
     ])
     build_kwargs = {}
 
@@ -164,12 +162,12 @@ def test_tmdb_flow_passes_fast_enrichment_mode(monkeypatch, capsys) -> None:
         build_kwargs.update(kwargs)
         return {
             "stats": {
-                "discover_filters": {},
+                "source": "tmdb",
+                "source_version": 2,
                 "discover_total": 0,
                 "duplicates_removed": 0,
                 "watched_skipped": 0,
                 "details_requested": 0,
-                "enrichment_mode": kwargs.get("enrichment_mode"),
             },
             "candidates": [],
         }
@@ -189,52 +187,13 @@ def test_tmdb_flow_passes_fast_enrichment_mode(monkeypatch, capsys) -> None:
 
     tmdb_pool_tools.run_tmdb_candidate_pool_flow()
 
-    assert build_kwargs["enrichment_mode"] == "fast"
-    assert build_kwargs["kp_top_limit"] is None
+    assert build_kwargs["country"] == "RU"
+    assert build_kwargs["pages"] == 1
+    assert build_kwargs["details_limit"] == 1
+    assert "enrichment_mode" not in build_kwargs
+    assert "kp_top_limit" not in build_kwargs
     output = capsys.readouterr().out
-    assert "Fast: только TMDb" in output
-
-
-def test_tmdb_flow_passes_kp_top_limit(monkeypatch) -> None:
-    answers = iter([
-        "1",
-        "1",
-        "1",
-        "1",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "4",
-        "7",
-        "y",
-        "n",
-    ])
-    build_kwargs = {}
-
-    monkeypatch.setattr(tmdb_pool_tools.ui, "clean_terminal", lambda: None)
-    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
-    monkeypatch.setattr(
-        tmdb_pool_tools.candidate_service,
-        "build_tmdb_candidate_pool",
-        lambda **kwargs: build_kwargs.update(kwargs) or {"stats": {"discover_filters": {}}, "candidates": []},
-    )
-    monkeypatch.setattr(
-        tmdb_pool_tools.candidate_service,
-        "save_tmdb_build_result",
-        lambda _result, is_test_run=False: {
-            "json_path": type("P", (), {"with_name": lambda self, _name: self, "is_file": lambda self: False})(),
-            "csv_path": "out.csv",
-        },
-    )
-    monkeypatch.setattr(tmdb_pool_tools, "maybe_auto_import_tmdb_result", lambda *_args, **_kwargs: None)
-
-    tmdb_pool_tools.run_tmdb_candidate_pool_flow()
-
-    assert build_kwargs["enrichment_mode"] == "kp_top"
-    assert build_kwargs["kp_top_limit"] == 7
+    assert "TMDb-only candidate_pool v2" in output
 
 
 def test_global_menu_is_maintenance_first() -> None:

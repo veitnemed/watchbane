@@ -1,50 +1,28 @@
-﻿"""Build orchestration for TMDb + local IMDb SQL candidate pools."""
+"""TMDb-only build orchestration for candidate pool snapshots."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
+from apis import tmdb_api as api_tmdb
 from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
-from candidates.pool.existing_index import (
-    build_existing_candidate_index,
-    discover_item_existing_reason,
-)
+from candidates.pool.existing_index import build_existing_candidate_index, discover_item_existing_reason
 from candidates.repositories.pool_repository import load_candidate_pool
-from candidates.sources.tmdb import debug as kp_tmdb_build_debug
-from candidates.sources.tmdb.discover_dedupe import (
-    deduplicate_discover_results,
-    remove_watched_discover,
-    sort_discover_for_details,
-)
+from candidates.sources.tmdb.discover_dedupe import remove_watched_discover, sort_discover_for_details
 from candidates.sources.tmdb.discover_query import (
-    apply_discover_filters,
-    discover_defaults,
+    build_tmdb_criteria_name,
     is_iso2_country_code,
     normalize_country_code,
     normalize_optional_tmdb_genre_filter,
 )
-from candidates.sources.tmdb.transformer import (
-    NETWORK_ERROR_SKIP_THRESHOLD,
-    append_signal,
-    compute_final_score,
-    compute_hidden_gem_score,
-    compute_quality_score,
-    connect_imdb,
-    enrich_from_imdb_sql,
-    enrich_from_kp_api_if_needed,
-    enrich_from_kp_cache_only,
-    mark_kp_pending_limit,
-    normalize_tmdb_candidate_for_common_pool,
-    passes_imdb_filters,
-    prepare_candidate,
-    report_progress,
+from candidates.sources.tmdb.discovery_strategy import build_discovery_slices, merge_discovery_results
+from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate
+from candidates.sources.tmdb.scoring import (
+    compute_metadata_completeness_score,
+    compute_tmdb_final_score,
+    compute_tmdb_hidden_gem_score,
+    compute_tmdb_quality_score,
 )
-from apis import imdb_sql as sql_search
-from apis import tmdb_api as api_tmdb
-
-
-ENRICHMENT_MODES = {"full", "fast", "kp_cache", "kp_top"}
 
 
 def _sort_candidates_by_scores(candidates: list[dict[str, Any]]) -> None:
@@ -53,9 +31,150 @@ def _sort_candidates_by_scores(candidates: list[dict[str, Any]]) -> None:
             -(candidate.get("final_score") or 0),
             -(candidate.get("quality_score") or 0),
             -(candidate.get("tmdb_votes") or 0),
+            -(candidate.get("tmdb_popularity") or 0),
             candidate.get("title") or "",
         )
     )
+
+
+def _unique_upper(values) -> set[str]:
+    result = set()
+    for value in values or []:
+        text = str(value or "").strip().upper()
+        if text:
+            result.add(text)
+    return result
+
+
+def compute_country_score(candidate: dict[str, Any], target_country: str) -> tuple[float, list[str]]:
+    target_country = normalize_country_code(target_country)
+    codes = _unique_upper(candidate.get("country_codes"))
+    language = str(candidate.get("original_language") or "").strip().casefold()
+    networks = {str(item or "").strip().casefold() for item in candidate.get("networks") or []}
+    companies = {str(item or "").strip().casefold() for item in candidate.get("production_companies") or []}
+    score = 0.0
+    signals: list[str] = []
+
+    if target_country in codes:
+        score += 0.70
+        signals.append("country_code_match")
+    if target_country == "RU" and language == "ru":
+        score += 0.20
+        signals.append("original_language_ru")
+    if target_country == "RU" and networks & {"kinopoisk", "channel one", "russia-1", "ntv", "start", "premier"}:
+        score += 0.05
+        signals.append("russian_network")
+    if target_country == "RU" and companies & {"sreda", "kinopoisk", "plus studio", "1-2-3 production"}:
+        score += 0.05
+        signals.append("russian_production_company")
+    if target_country != "RU" and language:
+        score += 0.10
+        signals.append("has_original_language")
+
+    return round(min(score, 1.0), 4), signals
+
+
+def _discover_params(
+    slice_query: dict[str, Any],
+    *,
+    language: str,
+    min_tmdb_score: float | None,
+    min_tmdb_votes: int | None,
+    page: int,
+) -> dict[str, Any]:
+    params = {
+        "include_adult": "false",
+        "language": language,
+        "page": int(page),
+        "sort_by": slice_query.get("sort_by") or "vote_count.desc",
+    }
+    for field_name in (
+        "with_origin_country",
+        "with_original_language",
+        "first_air_date.gte",
+        "first_air_date.lte",
+        "with_genres",
+        "without_genres",
+    ):
+        value = slice_query.get(field_name)
+        if value not in (None, ""):
+            params[field_name] = value
+    if min_tmdb_score is not None:
+        params["vote_average.gte"] = float(min_tmdb_score)
+    if min_tmdb_votes is not None:
+        params["vote_count.gte"] = int(min_tmdb_votes)
+    return params
+
+
+def _fetch_discovery_slices(
+    slices: list[dict[str, Any]],
+    *,
+    language: str,
+    min_tmdb_score: float | None,
+    min_tmdb_votes: int | None,
+    force_refresh: bool,
+    token: str,
+) -> tuple[list[dict[str, Any]], int]:
+    results_by_slice: list[dict[str, Any]] = []
+    discover_total = 0
+    for discovery_slice in slices:
+        query = discovery_slice.get("query") or {}
+        max_pages = int(discovery_slice.get("pages_per_slice") or query.get("max_pages") or 1)
+        max_pages = max(1, max_pages)
+        for page in range(1, max_pages + 1):
+            params = _discover_params(
+                query,
+                language=language,
+                min_tmdb_score=min_tmdb_score,
+                min_tmdb_votes=min_tmdb_votes,
+                page=page,
+            )
+            payload = api_tmdb.tmdb_get("/discover/tv", params=params, token=token)
+            page_results = payload.get("results") if isinstance(payload, dict) else []
+            page_results = page_results if isinstance(page_results, list) else []
+            discover_total += len(page_results)
+            results_by_slice.append({
+                "slice_name": discovery_slice.get("slice_name"),
+                "query": params,
+                "page": page,
+                "results": page_results,
+            })
+            total_pages = int((payload or {}).get("total_pages") or page)
+            if page >= total_pages:
+                break
+    if force_refresh:
+        # Kept as a named input for CLI/API compatibility with cache-aware callers.
+        # Direct Discover requests are intentionally uncached in this TMDb-only builder.
+        pass
+    return results_by_slice, discover_total
+
+
+def _filter_existing_discover_items(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int, int]:
+    existing_index = build_existing_candidate_index(load_candidate_pool())
+    novel_results: list[dict[str, Any]] = []
+    skipped_tmdb_id = 0
+    skipped_title_year = 0
+    for item in items:
+        existing_reason = discover_item_existing_reason(item, existing_index)
+        if existing_reason == "tmdb_id":
+            skipped_tmdb_id += 1
+            continue
+        if existing_reason == "title_year":
+            skipped_title_year += 1
+            continue
+        novel_results.append(item)
+    return novel_results, skipped_tmdb_id, skipped_title_year
+
+
+def _score_candidate(candidate: dict[str, Any], country: str, mode: str) -> dict[str, Any]:
+    country_score, country_signals = compute_country_score(candidate, country)
+    candidate["country_score"] = country_score
+    candidate["country_signals"] = country_signals
+    candidate["metadata_completeness_score"] = compute_metadata_completeness_score(candidate)
+    candidate["quality_score"] = compute_tmdb_quality_score(candidate)
+    candidate["hidden_gem_score"] = compute_tmdb_hidden_gem_score(candidate)
+    candidate["final_score"] = compute_tmdb_final_score(candidate, mode)
+    return candidate
 
 
 def build_candidate_pool(
@@ -71,270 +190,114 @@ def build_candidate_pool(
     with_genres: str | None = None,
     without_genres: str | None = None,
     force_refresh: bool = False,
-    db_path: str | Path = sql_search.DEFAULT_DB_PATH,
-    kp_api_limit: int | None = None,
-    kp_build_debug: bool = True,
-    skip_existing_pool: bool = False,
-    enrichment_mode: str = "full",
-    kp_top_limit: int | None = None,
+    skip_existing_pool: bool = True,
 ) -> dict[str, Any]:
     country = normalize_country_code(country)
     if is_iso2_country_code(country) is False:
         raise ValueError("country must be a 2-letter ISO code")
     if mode not in {"quality", "hidden_gems"}:
         raise ValueError("mode должен быть quality или hidden_gems")
-    if enrichment_mode not in ENRICHMENT_MODES:
-        raise ValueError("enrichment_mode должен быть full, fast, kp_cache или kp_top")
     criteria_name = str(criteria_name or "").strip() or COMMON_POOL_CRITERIA_NAME
 
     token = api_tmdb.load_tmdb_token()
-    query = apply_discover_filters(
-        discover_defaults(country),
+    language = api_tmdb.DEFAULT_LANGUAGE
+    slices = build_discovery_slices(
+        country,
         year_min=year_min,
         year_max=year_max,
-        min_tmdb_score=min_tmdb_score,
-        min_tmdb_votes=min_tmdb_votes,
         with_genres=with_genres,
         without_genres=without_genres,
+        pages_per_slice=pages,
     )
-    report_progress("TMDb Discover", "Ожидание ответа")
-    try:
-        discover_results = api_tmdb.discover_tv_candidates(
-            max_pages=pages,
-            force_refresh=force_refresh,
-            token=token,
-            **query,
-        )
-    except Exception:
-        report_progress("TMDb Discover", "Ошибка сети")
-        raise
-    report_progress("TMDb Discover", f"Успешно, кандидатов: {len(discover_results)}")
-    unique_results, duplicates_removed = deduplicate_discover_results(discover_results)
-    not_watched_results, watched_skipped = remove_watched_discover(unique_results)
-    novelty_source_total = len(not_watched_results)
-    existing_pool_skipped_tmdb_id = 0
-    existing_pool_skipped_title_year = 0
+    results_by_slice, discover_total = _fetch_discovery_slices(
+        slices,
+        language=language,
+        min_tmdb_score=min_tmdb_score,
+        min_tmdb_votes=min_tmdb_votes,
+        force_refresh=force_refresh,
+        token=token,
+    )
+    merged_results = merge_discovery_results(results_by_slice)
+    duplicates_removed = max(0, discover_total - len(merged_results))
+    not_watched_results, watched_skipped = remove_watched_discover(merged_results)
     if skip_existing_pool:
-        existing_index = build_existing_candidate_index(load_candidate_pool())
-        novel_results: list[dict[str, Any]] = []
-        for item in not_watched_results:
-            existing_reason = discover_item_existing_reason(item, existing_index)
-            if existing_reason == "tmdb_id":
-                existing_pool_skipped_tmdb_id += 1
-                continue
-            if existing_reason == "title_year":
-                existing_pool_skipped_title_year += 1
-                continue
-            novel_results.append(item)
-        not_watched_results = novel_results
+        novel_results, existing_pool_skipped_tmdb_id, existing_pool_skipped_title_year = _filter_existing_discover_items(
+            not_watched_results
+        )
+    else:
+        novel_results = not_watched_results
+        existing_pool_skipped_tmdb_id = 0
+        existing_pool_skipped_title_year = 0
 
-    sorted_results = sort_discover_for_details(not_watched_results)
-    details_candidates = sorted_results[: int(details_limit)]
-    novelty_rate_before_details = (
-        len(not_watched_results) / novelty_source_total
-        if novelty_source_total > 0
-        else 0.0
-    )
-
-    use_imdb_sql = enrichment_mode == "full"
-    use_kp_cache = enrichment_mode in {"full", "kp_cache", "kp_top"}
-    use_kp_api = enrichment_mode in {"full", "kp_top"}
-    kp_top_limit_value = int(kp_top_limit) if kp_top_limit is not None else int(kp_api_limit or 50)
-    kp_top_limit_value = max(0, kp_top_limit_value)
-
-    conn = connect_imdb(db_path) if use_imdb_sql and len(details_candidates) > 0 else None
+    details_candidates = sort_discover_for_details(novel_results)[: int(details_limit)]
     candidates: list[dict[str, Any]] = []
+    details_errors = 0
+    external_ids_imdb_id_count = 0
+
+    for item in details_candidates:
+        try:
+            details = api_tmdb.get_tv_details(
+                int(item["id"]),
+                language=language,
+                append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
+                force_refresh=force_refresh,
+                token=token,
+            )
+        except Exception:
+            details_errors += 1
+            continue
+
+        candidate = prepare_tmdb_candidate(
+            details,
+            country=country,
+            source_query={
+                "country": country,
+                "language": language,
+                "min_tmdb_score": min_tmdb_score,
+                "min_tmdb_votes": min_tmdb_votes,
+                "with_genres": normalize_optional_tmdb_genre_filter(with_genres),
+                "without_genres": normalize_optional_tmdb_genre_filter(without_genres),
+            },
+            source_trace=item.get("source_trace"),
+        )
+        if candidate.get("imdb_id"):
+            external_ids_imdb_id_count += 1
+        candidate = _score_candidate(candidate, country, mode)
+        candidates.append(candidate)
+
+    _sort_candidates_by_scores(candidates)
     stats = {
-        "discover_total": len(discover_results),
-        "discover_filters": {
-            "year_min": year_min,
-            "year_max": year_max,
+        "source": "tmdb",
+        "source_version": 2,
+        "discover_total": discover_total,
+        "duplicates_removed": duplicates_removed,
+        "watched_skipped": watched_skipped,
+        "existing_pool_skipped_tmdb_id": existing_pool_skipped_tmdb_id,
+        "existing_pool_skipped_title_year": existing_pool_skipped_title_year,
+        "details_requested": len(details_candidates),
+        "details_errors": details_errors,
+        "external_ids_imdb_id_count": external_ids_imdb_id_count,
+        "complete_candidates": sum(1 for candidate in candidates if candidate.get("is_complete") is True),
+        "incomplete_candidates": sum(1 for candidate in candidates if candidate.get("is_complete") is not True),
+        "final_candidates": len(candidates),
+    }
+
+    return {
+        "criteria_name": criteria_name,
+        "country": country,
+        "mode": mode,
+        "source": "tmdb",
+        "source_provider": "tmdb",
+        "source_version": 2,
+        "query": {
+            "country": country,
+            "language": language,
+            "slices": slices,
             "min_tmdb_score": min_tmdb_score,
             "min_tmdb_votes": min_tmdb_votes,
             "with_genres": normalize_optional_tmdb_genre_filter(with_genres),
             "without_genres": normalize_optional_tmdb_genre_filter(without_genres),
         },
-        "duplicates_removed": duplicates_removed,
-        "watched_skipped": watched_skipped,
-        "existing_pool_skipped_tmdb_id": existing_pool_skipped_tmdb_id,
-        "existing_pool_skipped_title_year": existing_pool_skipped_title_year,
-        "novel_before_details": len(not_watched_results),
-        "novelty_rate_before_details": round(novelty_rate_before_details, 4),
-        "details_requested": len(details_candidates),
-        "tmdb_details_errors": 0,
-        "tmdb_details_skipped_after_errors": 0,
-        "has_imdb_id": 0,
-        "found_in_imdb_sql": 0,
-        "country_passed": 0,
-        "country_borderline": 0,
-        "country_rejected": 0,
-        "imdb_filter_rejected": 0,
-        "adult_title_type_rejected": 0,
-        "kp_cache_hit": 0,
-        "kp_api_requested": 0,
-        "kp_api_found": 0,
-        "kp_api_not_found": 0,
-        "kp_api_rejected_by_match": 0,
-        "kp_api_errors": 0,
-        "kp_api_skipped_after_errors": 0,
-        "kp_api_skipped_cache": 0,
-        "kp_api_skipped_not_top": 0,
-        "kp_pending_limit": 0,
-        "kp_incomplete_candidates": 0,
-        "complete_candidates": 0,
-        "final_candidates": 0,
-        "enrichment_mode": enrichment_mode,
-        "kp_top_limit": kp_top_limit_value if enrichment_mode == "kp_top" else None,
-    }
-
-    tmdb_details_consecutive_errors = 0
-    tmdb_details_skip_network = False
-    kp_api_consecutive_errors = 0
-    kp_api_skip_network = False
-    kp_debug_session = None
-    if kp_build_debug:
-        kp_debug_session = kp_tmdb_build_debug.KpBuildDebugSession(
-            country=country,
-            criteria_name=criteria_name,
-        )
-
-    try:
-        for detail_index, item in enumerate(details_candidates, start=1):
-            if tmdb_details_skip_network:
-                stats["tmdb_details_skipped_after_errors"] += 1
-                report_progress("TMDb Details", f"Пропущено [{detail_index}/{len(details_candidates)}]")
-                continue
-
-            report_progress("TMDb Details", f"Ожидание ответа [{detail_index}/{len(details_candidates)}]")
-            try:
-                details = api_tmdb.get_tv_details(
-                    int(item["id"]),
-                    language=query["language"],
-                    force_refresh=force_refresh,
-                    token=token,
-                )
-            except Exception:
-                stats["tmdb_details_errors"] += 1
-                tmdb_details_consecutive_errors += 1
-                report_progress("TMDb Details", "Ошибка сети")
-                if tmdb_details_consecutive_errors >= NETWORK_ERROR_SKIP_THRESHOLD:
-                    tmdb_details_skip_network = True
-                continue
-            tmdb_details_consecutive_errors = 0
-            report_progress("TMDb Details", f"Успешно [{detail_index}/{len(details_candidates)}]")
-            candidate = prepare_candidate(details, country, source_query=query)
-            if candidate.get("imdb_id"):
-                stats["has_imdb_id"] += 1
-            if use_imdb_sql:
-                report_progress("IMDb dataset", f"Поиск [{detail_index}/{len(details_candidates)}]")
-                candidate = enrich_from_imdb_sql(candidate, conn)
-                if candidate.get("imdb_found_in_sql"):
-                    stats["found_in_imdb_sql"] += 1
-                    report_progress("IMDb dataset", f"Успешно [{detail_index}/{len(details_candidates)}]")
-                else:
-                    report_progress("IMDb dataset", f"Нет кандидатов [{detail_index}/{len(details_candidates)}]")
-
-            if use_kp_cache:
-                candidate = enrich_from_kp_cache_only(candidate)
-                if "kp_cache_hit" in candidate.get("signals", []):
-                    stats["kp_cache_hit"] += 1
-            else:
-                candidate["kp_id"] = None
-                candidate["kp_rating"] = None
-                candidate["kp_votes"] = None
-                candidate["kp_status"] = "not_requested"
-                candidate["is_complete"] = False
-
-            if candidate["country_score"] >= 0.70:
-                stats["country_passed"] += 1
-            elif candidate["country_score"] >= 0.40:
-                stats["country_borderline"] += 1
-                append_signal(candidate, "borderline_country_score")
-            else:
-                stats["country_rejected"] += 1
-                continue
-
-            passes, reason = passes_imdb_filters(candidate)
-            if passes is False:
-                stats["imdb_filter_rejected"] += 1
-                if reason in {"adult", "title_type"}:
-                    stats["adult_title_type_rejected"] += 1
-                append_signal(candidate, f"rejected_{reason}")
-                continue
-
-            candidate["quality_score"] = compute_quality_score(candidate)
-            candidate["hidden_gem_score"] = compute_hidden_gem_score(candidate)
-            candidate["final_score"] = compute_final_score(candidate, mode)
-            candidates.append(candidate)
-    finally:
-        if conn is not None:
-            conn.close()
-
-    _sort_candidates_by_scores(candidates)
-    if use_kp_api:
-        kp_api_candidates = candidates
-        if enrichment_mode == "kp_top":
-            kp_api_candidates = candidates[:kp_top_limit_value]
-            stats["kp_api_skipped_not_top"] = max(0, len(candidates) - len(kp_api_candidates))
-
-        kp_api_candidate_ids = {id(candidate) for candidate in kp_api_candidates}
-        for candidate in candidates:
-            if id(candidate) not in kp_api_candidate_ids:
-                continue
-
-            if kp_api_skip_network:
-                candidate = enrich_from_kp_api_if_needed(
-                    candidate, country, stats, skip_network=True, kp_debug_session=kp_debug_session,
-                )
-            elif candidate.get("kp_status") == "cache_hit":
-                candidate = enrich_from_kp_api_if_needed(
-                    candidate, country, stats, kp_debug_session=kp_debug_session,
-                )
-            elif (
-                enrichment_mode == "full"
-                and kp_api_limit is not None
-                and stats["kp_api_requested"] >= int(kp_api_limit)
-            ):
-                candidate = mark_kp_pending_limit(candidate)
-                report_progress("KP API", "Лимит, добрать позже")
-            else:
-                kp_errors_before = stats["kp_api_errors"]
-                kp_requested_before = stats["kp_api_requested"]
-                candidate = enrich_from_kp_api_if_needed(
-                    candidate, country, stats, kp_debug_session=kp_debug_session,
-                )
-                if stats["kp_api_errors"] > kp_errors_before:
-                    kp_api_consecutive_errors += 1
-                    if kp_api_consecutive_errors >= NETWORK_ERROR_SKIP_THRESHOLD:
-                        kp_api_skip_network = True
-                elif stats["kp_api_requested"] > kp_requested_before:
-                    kp_api_consecutive_errors = 0
-
-            candidate["quality_score"] = compute_quality_score(candidate)
-            candidate["hidden_gem_score"] = compute_hidden_gem_score(candidate)
-            candidate["final_score"] = compute_final_score(candidate, mode)
-
-        _sort_candidates_by_scores(candidates)
-
-    normalized_candidates = [
-        normalize_tmdb_candidate_for_common_pool(candidate, criteria_name=criteria_name)
-        for candidate in candidates
-    ]
-    stats["final_candidates"] = len(candidates)
-    stats["kp_pending_limit"] = sum(
-        1 for candidate in normalized_candidates if candidate.get("kp_status") == "pending_limit"
-    )
-    stats["kp_incomplete_candidates"] = sum(
-        1 for candidate in normalized_candidates if candidate.get("is_complete") is not True
-    )
-    stats["complete_candidates"] = sum(1 for candidate in normalized_candidates if candidate.get("is_complete") is True)
-
-    result_payload = {
-        "criteria_name": criteria_name,
-        "country": country,
-        "mode": mode,
-        "source": "tmdb_discover_imdb_sql",
-        "query": query,
         "settings": {
             "criteria_name": criteria_name,
             "country": country,
@@ -348,18 +311,29 @@ def build_candidate_pool(
             "with_genres": normalize_optional_tmdb_genre_filter(with_genres),
             "without_genres": normalize_optional_tmdb_genre_filter(without_genres),
             "skip_existing_pool": bool(skip_existing_pool),
-            "enrichment_mode": enrichment_mode,
-            "kp_top_limit": kp_top_limit_value if enrichment_mode == "kp_top" else None,
         },
         "stats": stats,
-        "candidates": normalized_candidates,
+        "candidates": candidates,
     }
-    if kp_debug_session is not None:
-        result_payload["kp_debug"] = kp_debug_session.to_report()
-    return result_payload
 
 
-from candidates.sources.tmdb.discover_dedupe import *  # noqa: E402, F403
-from candidates.sources.tmdb.discover_query import *  # noqa: E402, F403
-from candidates.sources.tmdb.output import *  # noqa: E402, F403
-from candidates.sources.tmdb.transformer import *  # noqa: E402, F403
+def build_tmdb_candidate_pool(**kwargs) -> dict[str, Any]:
+    return build_candidate_pool(**kwargs)
+
+
+def save_candidate_pool_result(result: dict[str, Any]):
+    from candidates.sources.tmdb.output import save_candidate_pool_result as save_result
+
+    return save_result(result)
+
+
+def save_candidate_pool_test_result(result: dict[str, Any]):
+    from candidates.sources.tmdb.output import save_candidate_pool_test_result as save_result
+
+    return save_result(result)
+
+
+def build_summary_lines(result: dict[str, Any]) -> list[str]:
+    from candidates.sources.tmdb.output import build_summary_lines as build_lines
+
+    return build_lines(result)

@@ -6,7 +6,7 @@ from candidates.pool.normalization import normalize_storage_pool
 from candidates.models.schema import (
     compute_completeness as schema_compute_completeness,
 )
-from candidates.scoring.sort_keys import _sort_number
+from candidates.scoring.sort_keys import candidate_sort_score
 
 
 def _load_pool() -> dict:
@@ -24,11 +24,8 @@ def get_candidates_by_criteria(criteria_name: str) -> list:
         if candidate.get("criteria_name") == criteria_name
     ]
     candidates.sort(
-        key=lambda item: (
-            -_sort_number(item.get("kp_score")),
-            -_sort_number(item.get("kp_votes")),
-            str(item.get("title") or "")
-        )
+        key=candidate_sort_score,
+        reverse=True,
     )
     return candidates
 
@@ -38,11 +35,8 @@ def get_all_candidates() -> list:
     pool = normalize_storage_pool(_load_pool())
     candidates = list(pool.values())
     candidates.sort(
-        key=lambda item: (
-            -_sort_number(item.get("kp_score")),
-            -_sort_number(item.get("kp_votes")),
-            str(item.get("title") or "")
-        )
+        key=candidate_sort_score,
+        reverse=True,
     )
     return candidates
 

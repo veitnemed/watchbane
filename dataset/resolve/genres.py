@@ -19,9 +19,9 @@ def extract_api_genres(series: dict) -> list:
 
 
 def extract_candidate_fallback_genres(candidate: dict) -> list:
-    """Собирает raw-жанры для fallback переноса из imdb_genres, genres_tmdb и genres."""
+    """Собирает raw-жанры для fallback переноса из genres и genres_tmdb."""
     merged: list[str] = []
-    for field_name in ("imdb_genres", "genres_tmdb", "genres"):
+    for field_name in ("genres", "genres_tmdb"):
         if field_name == "genres":
             merged.extend(extract_api_genres(candidate))
             continue

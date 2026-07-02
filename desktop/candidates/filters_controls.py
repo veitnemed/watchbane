@@ -8,8 +8,8 @@ from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
 
 from desktop.shared.widgets.range_slider import RangeSlider
 
-KP_SCORE_SLIDER_MAX = 100
-KP_SCORE_SLIDER_STEP = 0.1
+SCORE_SLIDER_MAX = 100
+SCORE_SLIDER_STEP = 0.1
 VOTES_SLIDER_STEPS = (
     0,
     100,
@@ -69,7 +69,7 @@ def make_min_threshold_slider(
 def format_min_score_label(tenths: int) -> str:
     if tenths <= 0:
         return "—"
-    return f"{tenths * KP_SCORE_SLIDER_STEP:.1f}+"
+    return f"{tenths * SCORE_SLIDER_STEP:.1f}+"
 
 
 def score_tenths_from_slider(slider: RangeSlider) -> int:
@@ -81,18 +81,18 @@ def min_score_from_slider(slider: RangeSlider) -> float | None:
     tenths = score_tenths_from_slider(slider)
     if tenths <= 0:
         return None
-    return round(tenths * KP_SCORE_SLIDER_STEP, 1)
+    return round(tenths * SCORE_SLIDER_STEP, 1)
 
 
 def set_score_slider_from_default(slider: RangeSlider, value) -> None:
     tenths = 0
     if value not in (None, ""):
         try:
-            tenths = max(0, min(KP_SCORE_SLIDER_MAX, int(round(float(value) / KP_SCORE_SLIDER_STEP))))
+            tenths = max(0, min(SCORE_SLIDER_MAX, int(round(float(value) / SCORE_SLIDER_STEP))))
         except (TypeError, ValueError):
             tenths = 0
     slider.blockSignals(True)
-    slider.setValues(tenths, KP_SCORE_SLIDER_MAX)
+    slider.setValues(tenths, SCORE_SLIDER_MAX)
     slider.blockSignals(False)
 
 

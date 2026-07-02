@@ -46,7 +46,7 @@ def patch_criteria_filters(
     criteria_name: str,
     current: dict,
     *,
-    min_kp,
+    min_tmdb_score,
     genres: list,
     excluded_genres: list,
 ) -> dict:
@@ -54,7 +54,7 @@ def patch_criteria_filters(
     all_criteria = load_candidate_criteria()
 
     updated = dict(current)
-    updated["min_kp"] = min_kp
+    updated["min_tmdb_score"] = min_tmdb_score
     updated["genres"] = genres
     updated["excluded_genres"] = excluded_genres
     updated["updated_at"] = datetime.now().isoformat(timespec="seconds")
@@ -69,8 +69,8 @@ def build_criteria_label(criteria_name: str, criteria: dict) -> str:
     parts = [criteria_name]
     if criteria.get("count"):
         parts.append(f"count={criteria['count']}")
-    if criteria.get("min_kp") is not None:
-        parts.append(f"KP>={criteria['min_kp']}")
+    if criteria.get("min_tmdb_score") is not None:
+        parts.append(f"TMDb>={criteria['min_tmdb_score']}")
     if criteria.get("min_year") is not None:
         parts.append(f"year>={criteria['min_year']}")
     if criteria.get("country"):
@@ -92,10 +92,7 @@ def ensure_common_pool_criteria() -> tuple[str, dict]:
     criteria = {
         "country": None,
         "count": 50,
-        "min_kp": None,
-        "min_imdb": None,
-        "min_kp_votes": None,
-        "min_imdb_votes": None,
+        "min_tmdb_score": None,
         "min_year": None,
         "max_year": None,
         "genres": [],

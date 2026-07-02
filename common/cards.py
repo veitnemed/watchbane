@@ -169,6 +169,23 @@ def _pool_candidate_for_title(title: str, year, lookup_cache: dict | None) -> di
     return candidate if isinstance(candidate, dict) else None
 
 
+def _first_number(field_name: str, sections: list[dict], converter):
+    for section in sections:
+        value = converter(section.get(field_name))
+        if value is not None:
+            return value
+    return None
+
+
+def _tmdb_score_sections(movie: dict, raw_scores: dict, meta_obj: dict | None, pool_candidate: dict | None) -> list[dict]:
+    sections = [raw_scores, movie]
+    if isinstance(meta_obj, dict):
+        sections.extend([_as_dict(meta_obj.get("raw_scores")), meta_obj])
+    if isinstance(pool_candidate, dict):
+        sections.append(pool_candidate)
+    return sections
+
+
 def _resolve_country(movie: dict, title: str, year, lookup_cache: dict | None = None, meta_obj=None) -> str | None:
     country = _country(movie)
     if country is not None:
@@ -282,15 +299,17 @@ def build_watched_movie_card(
     title = _clean_text(main_info.get("title")) or _clean_text(movie.get("title")) or ""
     year = _to_int(main_info.get("year", movie.get("year")))
     poster_fields = _resolve_poster_fields(movie, poster_cache=poster_cache)
+    resolved_meta = _meta_obj_for_title(title, lookup_cache, meta_obj=meta_obj)
+    pool_candidate = _pool_candidate_for_title(title, year, lookup_cache)
+    tmdb_sections = _tmdb_score_sections(movie, raw_scores, resolved_meta, pool_candidate)
 
     return {
         "title": title,
         "year": year,
         "user_score": _to_float(main_info.get("user_score", movie.get("user_score"))),
-        "kp_score": _to_float(raw_scores.get("kp_score", movie.get("kp_score"))),
-        "imdb_score": _to_float(raw_scores.get("imdb_score", movie.get("imdb_score"))),
-        "kp_votes": _to_int(raw_scores.get("kp_votes", movie.get("kp_votes"))),
-        "imdb_votes": _to_int(raw_scores.get("imdb_votes", movie.get("imdb_votes"))),
+        "tmdb_score": _first_number("tmdb_score", tmdb_sections, _to_float),
+        "tmdb_votes": _first_number("tmdb_votes", tmdb_sections, _to_int),
+        "tmdb_popularity": _first_number("tmdb_popularity", tmdb_sections, _to_float),
         "genres": _genres(movie),
         "country": _resolve_country(movie, title, year, lookup_cache=lookup_cache, meta_obj=meta_obj),
         "object_type": _object_type(movie, default="series"),

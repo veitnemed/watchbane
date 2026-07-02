@@ -427,22 +427,21 @@ def test_build_meta_pill_items() -> None:
     items = build_meta_pill_items(
         {
             "year": 2025,
-            "imdb_score": 7.34,
-            "kp_score": 7.8,
+            "tmdb_score": 7.4,
+            "final_score": 0.74,
+            "imdb_score": 9.9,
+            "kp_score": 9.8,
         }
     )
 
-    assert len(items) == 2
-    assert items[0]["kind"] == "rating_indicator"
-    assert items[0]["source"] == "imdb"
-    assert items[0]["label"] == "IMDb"
-    assert items[0]["score"] == "7.3"
-    assert items[0]["accent"] == "#8b949e"
-    assert items[1]["kind"] == "rating_indicator"
-    assert items[1]["source"] == "kp"
-    assert items[1]["label"] == "КП"
-    assert items[1]["score"] == "7.8"
-    assert items[1]["accent"] == "#87978f"
+    assert len(items) == 1
+    assert items[0]["kind"] == "score_ring"
+    assert items[0]["source"] == "tmdb"
+    assert items[0]["display_value"] == "7.4"
+    assert items[0]["display_label"] == "TMDb"
+    assert items[0]["ring_progress"] == 0.74
+    assert items[0]["footer_label"] == "Итог 74"
+    assert all(item.get("source") not in {"imdb", "kp"} for item in items)
 
 
 def test_build_meta_pill_labels() -> None:
@@ -451,12 +450,92 @@ def test_build_meta_pill_labels() -> None:
     pills = build_meta_pill_labels(
         {
             "year": 2025,
-            "imdb_score": 7.34,
-            "kp_score": 7.8,
+            "tmdb_score": 7.34,
+            "final_score": 0.74,
         }
     )
 
-    assert pills == ["2025", "IMDb 7.3", "КП 7.8"]
+    assert pills == ["2025", "TMDb 7.3", "Итог 74"]
+
+
+def test_normalize_and_format_final_score() -> None:
+    from desktop.watched import format_final_score, normalize_final_score
+
+    assert normalize_final_score(0.74) == 0.74
+    assert normalize_final_score(74) == 0.74
+    assert normalize_final_score(None) == 0.0
+    assert format_final_score(0.74) == "Итог 74"
+    assert format_final_score(74) == "Итог 74"
+    assert format_final_score(None) == "Итог —"
+
+
+def test_score_ring_item_uses_tmdb_display_and_final_progress() -> None:
+    from desktop.watched import build_score_ring_item, score_ring_color_for_final_score
+
+    item = build_score_ring_item({"tmdb_score": 7.4, "final_score": 0.74})
+
+    assert item is not None
+    assert item["display_value"] == "7.4"
+    assert item["display_label"] == "TMDb"
+    assert item["ring_progress"] == 0.74
+    assert item["footer_label"] == "Итог 74"
+    assert item["accent"] == score_ring_color_for_final_score(0.74)
+
+
+def test_score_ring_color_uses_red_to_green_quality_scale() -> None:
+    from desktop.watched import score_ring_color_for_final_score
+
+    assert score_ring_color_for_final_score(0) == "#ef4444"
+    assert score_ring_color_for_final_score(0.5) == "#f59e0b"
+    assert score_ring_color_for_final_score(1) == "#22c55e"
+
+
+def test_score_ring_item_accepts_percent_final_score() -> None:
+    from desktop.watched import build_score_ring_item
+
+    item = build_score_ring_item({"tmdb_score": 8.9, "final_score": 48})
+
+    assert item is not None
+    assert item["display_value"] == "8.9"
+    assert item["ring_progress"] == 0.48
+
+
+def test_score_ring_item_handles_missing_final_score() -> None:
+    from desktop.watched import build_score_ring_item
+
+    item = build_score_ring_item({"tmdb_score": 7.4})
+
+    assert item is not None
+    assert item["ring_progress"] == 0.0
+    assert item["footer_label"] == "Итог —"
+
+
+def test_score_ring_item_handles_missing_tmdb_score() -> None:
+    from desktop.watched import build_score_ring_item
+
+    item = build_score_ring_item({"final_score": 0.74})
+
+    assert item is not None
+    assert item["display_value"] == "—"
+    assert item["display_label"] == "TMDb"
+    assert item["ring_progress"] == 0.74
+
+
+def test_rating_circle_indicator_accepts_tmdb_score_ring_payload(qapp) -> None:
+    from desktop.shared.detail.rating_indicator import RatingCircleIndicator
+
+    ring = RatingCircleIndicator(
+        "TMDb",
+        display_value="7.4",
+        display_label="TMDb",
+        ring_progress=0.74,
+        footer_label="Итог 74",
+    )
+
+    assert ring._display_value == "7.4"
+    assert ring._display_label == "TMDb"
+    assert ring._ring_progress == 0.74
+    assert ring._footer_label == "Итог 74"
 
 
 def test_build_genre_pill_labels_hides_empty() -> None:
@@ -490,14 +569,14 @@ def test_build_main_info_items_formats_country_type_and_votes() -> None:
         {
             "country": "Россия",
             "object_type": "series",
+            "tmdb_votes": 3456,
             "imdb_votes": 1200,
             "kp_votes": 128536,
         }
     ) == [
         {"label": "Страна", "value": "Россия"},
         {"label": "Тип", "value": "Сериал"},
-        {"label": "Голоса IMDb", "value": "1 200"},
-        {"label": "Голоса КП", "value": "128 536"},
+        {"label": "Голоса TMDb", "value": "3 456"},
     ]
 
 
@@ -523,14 +602,27 @@ def test_build_watched_movie_card_includes_main_info_type() -> None:
     card = build_watched_movie_card(
         {
             "main_info": {"title": "Alpha", "year": 2024, "user_score": 8.0},
-            "raw_scores": {"kp_score": 7.5, "kp_votes": 1200, "imdb_score": 7.1, "imdb_votes": 900},
+            "raw_scores": {
+                "kp_score": 7.5,
+                "kp_votes": 1200,
+                "imdb_score": 7.1,
+                "imdb_votes": 900,
+                "tmdb_score": 7.8,
+                "tmdb_votes": 456,
+                "tmdb_popularity": 12.3,
+            },
         },
         poster_cache={},
     )
 
     assert card["object_type"] == "series"
-    assert card["kp_votes"] == 1200
-    assert card["imdb_votes"] == 900
+    assert card["tmdb_score"] == 7.8
+    assert card["tmdb_votes"] == 456
+    assert card["tmdb_popularity"] == 12.3
+    assert "kp_score" not in card
+    assert "kp_votes" not in card
+    assert "imdb_score" not in card
+    assert "imdb_votes" not in card
 
 
 def test_build_watched_movie_card_uses_meta_country_fallback() -> None:
@@ -545,6 +637,53 @@ def test_build_watched_movie_card_uses_meta_country_fallback() -> None:
     card = build_watched_movie_card(movie, poster_cache={}, lookup_cache=lookup_cache)
 
     assert card["country"] == "США"
+
+
+def test_build_watched_movie_card_uses_meta_tmdb_fallback() -> None:
+    from web.export import build_export_lookup_cache, build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Alpha", "year": 2024, "user_score": 8.0},
+        "raw_scores": {"kp_score": 7.5, "kp_votes": 1200},
+    }
+    lookup_cache = build_export_lookup_cache(
+        meta={
+            "Alpha": {
+                "main_info": {"country": "США"},
+                "raw_scores": {"tmdb_score": 7.9, "tmdb_votes": 321, "tmdb_popularity": 14.5},
+            }
+        },
+        pool_by_identity={},
+    )
+
+    card = build_watched_movie_card(movie, poster_cache={}, lookup_cache=lookup_cache)
+
+    assert card["tmdb_score"] == 7.9
+    assert card["tmdb_votes"] == 321
+    assert card["tmdb_popularity"] == 14.5
+    assert "kp_votes" not in card
+
+
+def test_build_watched_movie_card_uses_candidate_pool_tmdb_fallback() -> None:
+    from candidates.models.keys import title_identity_key
+    from web.export import build_export_lookup_cache, build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Alpha", "year": 2024, "user_score": 8.0},
+        "raw_scores": {"kp_score": 7.5, "kp_votes": 1200},
+    }
+    candidate = {"title": "Alpha", "year": 2024, "tmdb_score": 8.1, "tmdb_votes": 777, "tmdb_popularity": 21.0}
+    lookup_cache = build_export_lookup_cache(
+        meta={},
+        pool_by_identity={title_identity_key(candidate): candidate},
+    )
+
+    card = build_watched_movie_card(movie, poster_cache={}, lookup_cache=lookup_cache)
+
+    assert card["tmdb_score"] == 8.1
+    assert card["tmdb_votes"] == 777
+    assert card["tmdb_popularity"] == 21.0
+    assert "kp_votes" not in card
 
 
 def test_format_genre_pill_label_unknown_genre() -> None:
@@ -1507,17 +1646,17 @@ def test_format_candidate_list_label_shows_sort_metric() -> None:
     candidate = {
         "title": "Test Show",
         "year": 2020,
-        "kp_score": 8.1,
-        "imdb_score": 7.4,
-        "kp_votes": 12000,
-        "imdb_votes": 900,
+        "final_score": 8.4,
+        "tmdb_score": 8.1,
+        "tmdb_votes": 12000,
+        "tmdb_popularity": 33.5,
     }
     assert format_candidate_title_line(candidate) == "Test Show (2020)"
-    assert format_candidate_metric_value(candidate, "kp_score") == "KP 8.1"
-    assert format_candidate_metric_value(candidate, "imdb_votes") == "IMDb 900"
-    label = format_candidate_list_label(candidate, "kp_score")
+    assert format_candidate_metric_value(candidate, "final_score") == "Итог 8.4"
+    assert format_candidate_metric_value(candidate, "tmdb_votes") == "TMDb 12 000"
+    label = format_candidate_list_label(candidate, "final_score")
     assert "Test Show (2020)" in label
-    assert "KP 8.1" in label
+    assert "Итог 8.4" in label
     assert "incomplete" not in label
     assert "Q " not in label
 
@@ -1535,15 +1674,19 @@ def test_build_candidate_readonly_card_passes_main_info_fields(monkeypatch) -> N
             "year": 2020,
             "country_display": "Россия",
             "number_of_seasons": 2,
-            "kp_votes": 12000,
-            "imdb_votes": 900,
+            "tmdb_score": 8.1,
+            "tmdb_votes": 12000,
+            "imdb_id": "tt123",
         }
     )
 
     assert card["country"] == "Россия"
     assert card["object_type"] == "series"
-    assert card["kp_votes"] == 12000
-    assert card["imdb_votes"] == 900
+    assert card["tmdb_score"] == 8.1
+    assert card["tmdb_votes"] == 12000
+    assert card["imdb_id"] == "tt123"
+    assert "kp_votes" not in card
+    assert "imdb_votes" not in card
 
 
 def test_build_candidate_readonly_card_ignores_tmdb_scripted_type(monkeypatch) -> None:
@@ -1589,8 +1732,8 @@ def test_format_pool_stats_user_uses_plain_language() -> None:
         {"unique_total": 305, "ready_total": 204, "incomplete_total": 101},
     )
     assert "305 сериалов" in text
-    assert "204 с рейтингами" in text
-    assert "101 без полных данных" in text
+    assert "204 с полной TMDb metadata" in text
+    assert "101 требуют metadata диагностики" in text
     assert "ready" not in text
     assert "pool" not in text.lower()
 
@@ -1625,10 +1768,8 @@ def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch
     assert filters["year_max"] is None
     assert view._country_selector.is_all_selected() is True
     assert view._year_slider.values() == (CANDIDATE_YEAR_MIN, constant.NOW_YEAR)
-    assert filters["min_kp_score"] is None
-    assert filters["min_imdb_score"] is None
-    assert filters["min_kp_votes"] is None
-    assert filters["min_imdb_votes"] is None
+    assert filters["min_tmdb_score"] is None
+    assert filters["min_tmdb_votes"] is None
     assert view._only_complete_check.isChecked() is False
 
 
@@ -1675,7 +1816,7 @@ def test_chip_expand_control_shows_five_chips_when_collapsed(qapp) -> None:
 
 def test_candidate_filters_view_numeric_threshold_sliders_collect_values(monkeypatch, qapp) -> None:
     from desktop.candidates.filters_view import (
-        KP_SCORE_SLIDER_MAX,
+        SCORE_SLIDER_MAX,
         VOTES_SLIDER_MAX_INDEX,
         CandidateFiltersView,
     )
@@ -1695,17 +1836,13 @@ def test_candidate_filters_view_numeric_threshold_sliders_collect_values(monkeyp
     )
 
     view = CandidateFiltersView(CandidateSearchSession())
-    view._kp_score_slider.setValues(75, KP_SCORE_SLIDER_MAX)
-    view._imdb_score_slider.setValues(60, KP_SCORE_SLIDER_MAX)
-    view._kp_votes_slider.setValues(4, VOTES_SLIDER_MAX_INDEX)
-    view._imdb_votes_slider.setValues(2, VOTES_SLIDER_MAX_INDEX)
+    view._tmdb_score_slider.setValues(75, SCORE_SLIDER_MAX)
+    view._tmdb_votes_slider.setValues(4, VOTES_SLIDER_MAX_INDEX)
 
     filters = view._collect_filters()
 
-    assert filters["min_kp_score"] == 7.5
-    assert filters["min_imdb_score"] == 6.0
-    assert filters["min_kp_votes"] == 10_000
-    assert filters["min_imdb_votes"] == 1_000
+    assert filters["min_tmdb_score"] == 7.5
+    assert filters["min_tmdb_votes"] == 10_000
 
 
 def test_candidate_filters_view_uses_threshold_sliders_not_spinboxes() -> None:
@@ -1718,8 +1855,8 @@ def test_candidate_filters_view_uses_threshold_sliders_not_spinboxes() -> None:
     form_source = inspect.getsource(form_module.build_filters_form)
     source = init_source + form_source
     assert "build_filters_form" in init_source
-    assert "kp_score_slider" in source
-    assert "kp_votes_slider" in source
+    assert "tmdb_score_slider" in source
+    assert "tmdb_votes_slider" in source
     assert "_make_score_spin" not in source
     assert "_make_votes_spin" not in source
     assert "QDoubleSpinBox" not in source
@@ -1826,8 +1963,10 @@ def test_build_candidate_readonly_detail_entry_maps_fields() -> None:
         "title": "Pool Show",
         "year": 2018,
         "country": "Россия",
-        "kp_score": 7.8,
-        "imdb_score": 7.2,
+        "tmdb_score": 7.8,
+        "tmdb_votes": 1200,
+        "final_score": 0.74,
+        "imdb_id": "tt123",
         "overview": "Test overview",
         "genres_display": ["Драма", "Комедия"],
         "poster_url": "https://example.com/poster.jpg",
@@ -1840,8 +1979,12 @@ def test_build_candidate_readonly_detail_entry_maps_fields() -> None:
     assert card["title"] == "Pool Show"
     assert card["year"] == 2018
     assert card["country"] == "Россия"
-    assert card["kp_score"] == 7.8
-    assert card["imdb_score"] == 7.2
+    assert card["tmdb_score"] == 7.8
+    assert card["tmdb_votes"] == 1200
+    assert card["final_score"] == 0.74
+    assert card["imdb_id"] == "tt123"
+    assert "kp_score" not in card
+    assert "imdb_score" not in card
     assert card["overview"] == "Test overview"
     assert card["genres"] == ["Драма", "Комедия"]
     assert "poster_path" not in card
@@ -1874,9 +2017,9 @@ def test_candidate_search_session_sorts_once_and_returns_all(monkeypatch) -> Non
 
     calls = {"count": 0}
     candidates = [
-        {"title": "A", "kp_score": 9.0},
-        {"title": "B", "kp_score": 8.0},
-        {"title": "C", "kp_score": 7.0},
+        {"title": "A", "final_score": 9.0},
+        {"title": "B", "final_score": 8.0},
+        {"title": "C", "final_score": 7.0},
     ]
 
     def fake_sort(items, sort_mode):
@@ -1907,7 +2050,7 @@ def test_candidate_search_session_sorts_once_and_returns_all(monkeypatch) -> Non
     assert [item["title"] for item in session.sorted_candidates()] == ["A", "B", "C"]
     assert session.sorted_total_count() == 3
 
-    session.set_sort_mode("imdb_score")
+    session.set_sort_mode("tmdb_score")
     assert calls["count"] == 2
     assert len(session.sorted_candidates()) == 3
 

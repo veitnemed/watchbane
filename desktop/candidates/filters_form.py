@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from desktop.candidates.filters_controls import (
-    KP_SCORE_SLIDER_MAX,
+    SCORE_SLIDER_MAX,
     VOTES_SLIDER_MAX_INDEX,
     add_threshold_filter_row,
     field_label,
@@ -35,14 +35,10 @@ class FiltersFormWidgets:
     year_slider: RangeSlider
     include_genre_selector: GenreChipSelector
     exclude_genre_selector: GenreChipSelector
-    kp_score_range_label: QLabel
-    kp_score_slider: RangeSlider
-    imdb_score_range_label: QLabel
-    imdb_score_slider: RangeSlider
-    kp_votes_range_label: QLabel
-    kp_votes_slider: RangeSlider
-    imdb_votes_range_label: QLabel
-    imdb_votes_slider: RangeSlider
+    tmdb_score_range_label: QLabel
+    tmdb_score_slider: RangeSlider
+    tmdb_votes_range_label: QLabel
+    tmdb_votes_slider: RangeSlider
     only_complete_check: QCheckBox
     only_unwatched_check: QCheckBox
     hide_hidden_check: QCheckBox
@@ -96,50 +92,25 @@ def build_filters_form(
     form.addWidget(field_label("Исключить жанры"))
     form.addWidget(exclude_genre_selector)
 
-    kp_score_range_label = QLabel("")
-    kp_score_range_label.setObjectName("candidateSearchFilterValue")
-    kp_score_slider = make_min_threshold_slider(
+    tmdb_score_range_label = QLabel("")
+    tmdb_score_range_label.setObjectName("candidateSearchFilterValue")
+    tmdb_score_slider = make_min_threshold_slider(
         0,
-        KP_SCORE_SLIDER_MAX,
-        "candidateSearchKpScoreRange",
-        lambda: update_score_range_label(kp_score_slider, kp_score_range_label),
+        SCORE_SLIDER_MAX,
+        "candidateSearchTmdbScoreRange",
+        lambda: update_score_range_label(tmdb_score_slider, tmdb_score_range_label),
     )
-    add_threshold_filter_row(form, "Мин. KP", kp_score_range_label, kp_score_slider)
+    add_threshold_filter_row(form, "Мин. TMDb", tmdb_score_range_label, tmdb_score_slider)
 
-    imdb_score_range_label = QLabel("")
-    imdb_score_range_label.setObjectName("candidateSearchFilterValue")
-    imdb_score_slider = make_min_threshold_slider(
-        0,
-        KP_SCORE_SLIDER_MAX,
-        "candidateSearchImdbScoreRange",
-        lambda: update_score_range_label(imdb_score_slider, imdb_score_range_label),
-    )
-    add_threshold_filter_row(form, "Мин. IMDb", imdb_score_range_label, imdb_score_slider)
-
-    kp_votes_range_label = QLabel("")
-    kp_votes_range_label.setObjectName("candidateSearchFilterValue")
-    kp_votes_slider = make_min_threshold_slider(
+    tmdb_votes_range_label = QLabel("")
+    tmdb_votes_range_label.setObjectName("candidateSearchFilterValue")
+    tmdb_votes_slider = make_min_threshold_slider(
         0,
         VOTES_SLIDER_MAX_INDEX,
-        "candidateSearchKpVotesRange",
-        lambda: update_votes_range_label(kp_votes_slider, kp_votes_range_label),
+        "candidateSearchTmdbVotesRange",
+        lambda: update_votes_range_label(tmdb_votes_slider, tmdb_votes_range_label),
     )
-    add_threshold_filter_row(form, "Мин. голосов KP", kp_votes_range_label, kp_votes_slider)
-
-    imdb_votes_range_label = QLabel("")
-    imdb_votes_range_label.setObjectName("candidateSearchFilterValue")
-    imdb_votes_slider = make_min_threshold_slider(
-        0,
-        VOTES_SLIDER_MAX_INDEX,
-        "candidateSearchImdbVotesRange",
-        lambda: update_votes_range_label(imdb_votes_slider, imdb_votes_range_label),
-    )
-    add_threshold_filter_row(
-        form,
-        "Мин. голосов IMDb",
-        imdb_votes_range_label,
-        imdb_votes_slider,
-    )
+    add_threshold_filter_row(form, "Мин. голосов TMDb", tmdb_votes_range_label, tmdb_votes_slider)
 
     only_complete_check = QCheckBox("Только complete")
     only_complete_check.setObjectName("candidateSearchOnlyComplete")
@@ -163,14 +134,10 @@ def build_filters_form(
         year_slider=year_slider,
         include_genre_selector=include_genre_selector,
         exclude_genre_selector=exclude_genre_selector,
-        kp_score_range_label=kp_score_range_label,
-        kp_score_slider=kp_score_slider,
-        imdb_score_range_label=imdb_score_range_label,
-        imdb_score_slider=imdb_score_slider,
-        kp_votes_range_label=kp_votes_range_label,
-        kp_votes_slider=kp_votes_slider,
-        imdb_votes_range_label=imdb_votes_range_label,
-        imdb_votes_slider=imdb_votes_slider,
+        tmdb_score_range_label=tmdb_score_range_label,
+        tmdb_score_slider=tmdb_score_slider,
+        tmdb_votes_range_label=tmdb_votes_range_label,
+        tmdb_votes_slider=tmdb_votes_slider,
         only_complete_check=only_complete_check,
         only_unwatched_check=only_unwatched_check,
         hide_hidden_check=hide_hidden_check,

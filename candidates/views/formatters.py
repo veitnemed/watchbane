@@ -68,12 +68,10 @@ def format_search_filter_default_lines(defaults: dict) -> list[str]:
             f"year: {_format_optional_filter_value(defaults.get('year_min'))}"
             f"..{_format_optional_filter_value(defaults.get('year_max'))}"
         ),
-        f"include genres (saved pool / KP-IMDb-TMDb data): {_format_optional_filter_value(defaults.get('include_genres'))}",
-        f"exclude genres (saved pool / KP-IMDb-TMDb data): {_format_optional_filter_value(defaults.get('exclude_genres'))}",
-        f"min KP: {_format_optional_filter_value(defaults.get('min_kp_score'))}",
-        f"min KP votes: {_format_optional_filter_value(defaults.get('min_kp_votes'))}",
-        f"min IMDb: {_format_optional_filter_value(defaults.get('min_imdb_score'))}",
-        f"min IMDb votes: {_format_optional_filter_value(defaults.get('min_imdb_votes'))}",
+        f"include genres (saved pool / TMDb data): {_format_optional_filter_value(defaults.get('include_genres'))}",
+        f"exclude genres (saved pool / TMDb data): {_format_optional_filter_value(defaults.get('exclude_genres'))}",
+        f"min TMDb: {_format_optional_filter_value(defaults.get('min_tmdb_score'))}",
+        f"min TMDb votes: {_format_optional_filter_value(defaults.get('min_tmdb_votes'))}",
     ]
 
 

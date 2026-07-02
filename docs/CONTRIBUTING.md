@@ -60,4 +60,4 @@ py -m compileall app apis candidates common config dataset desktop posters scrip
 py -m pytest
 ```
 
-No real TMDb/KP/IMDb network calls should be required in unit tests.
+No real external network calls should be required in unit tests.

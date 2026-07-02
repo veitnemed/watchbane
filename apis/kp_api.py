@@ -1,4 +1,4 @@
-"""Получает данные о сериале из внешнего API и возвращает единый JSON-словарь."""
+"""Internal/non-candidate external API helper for watched/add-title defaults."""
 
 import json
 import os
@@ -297,10 +297,15 @@ def normalize_country_name(country: str) -> str:
 
 def movie_has_country(movie: dict, country: str) -> bool:
     """Проверяет, есть ли нужная страна среди стран объекта."""
-    from candidates.sources.kp import enrichment as kp_enrichment
-
-    kp_countries = kp_enrichment.extract_kp_country_values(movie)
-    return kp_enrichment.countries_match(country, kp_countries)
+    expected = normalize_country_name(country)
+    for item in movie.get("countries") or []:
+        if isinstance(item, dict):
+            value = item.get("name") or item.get("value") or item.get("country")
+        else:
+            value = item
+        if normalize_country_name(str(value or "")) == expected:
+            return True
+    return False
 
 
 def _normalize_kp_type(value) -> str:

@@ -35,12 +35,9 @@ TOP_CSV_FIELDS = [
     "title",
     "original_title",
     "year",
-    "tmdb_rating",
+    "tmdb_score",
     "tmdb_votes",
-    "imdb_rating",
-    "imdb_votes",
     "genres_tmdb",
-    "imdb_genres",
     "original_language",
     "production_countries",
     "networks",
@@ -59,12 +56,9 @@ SUSPICIOUS_CSV_FIELDS = [
     "title",
     "original_title",
     "year",
-    "tmdb_rating",
+    "tmdb_score",
     "tmdb_votes",
-    "imdb_rating",
-    "imdb_votes",
     "genres_tmdb",
-    "imdb_genres",
     "original_language",
     "production_countries",
     "networks",
@@ -202,17 +196,17 @@ def build_duplicate_sets(candidates: list[dict]) -> dict[str, set]:
 
 
 def candidate_has_comedy(candidate: dict) -> bool:
-    genres = {normalize_genre_name(item) for item in as_list(candidate.get("genres_tmdb")) + as_list(candidate.get("imdb_genres"))}
+    genres = {normalize_genre_name(item) for item in as_list(candidate.get("genres_tmdb"))}
     return "comedy" in genres
 
 
 def candidate_has_serious_genre(candidate: dict) -> bool:
-    genres = {normalize_genre_name(item) for item in as_list(candidate.get("genres_tmdb")) + as_list(candidate.get("imdb_genres"))}
+    genres = {normalize_genre_name(item) for item in as_list(candidate.get("genres_tmdb"))}
     return bool(genres & SERIOUS_GENRES)
 
 
 def candidate_has_unwanted_genre(candidate: dict) -> bool:
-    genres = {normalize_genre_name(item) for item in as_list(candidate.get("genres_tmdb")) + as_list(candidate.get("imdb_genres"))}
+    genres = {normalize_genre_name(item) for item in as_list(candidate.get("genres_tmdb"))}
     return bool(genres & UNWANTED_GENRES)
 
 
@@ -224,20 +218,16 @@ def find_suspicious(candidates: list[dict]) -> list[dict]:
         reasons = []
         country_score = safe_float(candidate.get("country_score")) or 0
         tmdb_votes = safe_int(candidate.get("tmdb_votes")) or 0
-        imdb_votes = safe_int(candidate.get("imdb_votes")) or 0
         final_score = safe_float(candidate.get("final_score")) or 0
         overview = str(candidate.get("overview") or "").strip()
         imdb_id = candidate.get("imdb_id")
-        imdb_rating = safe_float(candidate.get("imdb_rating"))
 
         if country_score < 0.40:
             reasons.append("low_country_score")
-        if tmdb_votes < 10 and imdb_votes < 500:
-            reasons.append("few_votes")
+        if tmdb_votes < 10:
+            reasons.append("few_tmdb_votes")
         if imdb_id in (None, ""):
             reasons.append("missing_imdb_id")
-        if imdb_rating is None:
-            reasons.append("missing_imdb_rating")
         if overview == "":
             reasons.append("missing_overview")
         if candidate_has_unwanted_genre(candidate):
@@ -271,12 +261,9 @@ def build_csv_row(candidate: dict, rank: int, reasons: list[str] | None = None) 
         "title": candidate.get("title") or "",
         "original_title": candidate.get("original_title") or "",
         "year": candidate.get("year") or "",
-        "tmdb_rating": candidate.get("tmdb_rating") or "",
+        "tmdb_score": candidate.get("tmdb_score") or candidate.get("tmdb_rating") or "",
         "tmdb_votes": candidate.get("tmdb_votes") or "",
-        "imdb_rating": candidate.get("imdb_rating") or "",
-        "imdb_votes": candidate.get("imdb_votes") or "",
         "genres_tmdb": ", ".join(str(item) for item in as_list(candidate.get("genres_tmdb"))),
-        "imdb_genres": ", ".join(str(item) for item in as_list(candidate.get("imdb_genres"))),
         "original_language": candidate.get("original_language") or "",
         "production_countries": ", ".join(str(item) for item in as_list(candidate.get("tmdb_production_countries"))),
         "networks": ", ".join(str(item) for item in as_list(candidate.get("networks"))),
@@ -293,7 +280,6 @@ def build_report(candidates: list[dict]) -> dict:
     duplicate_sets = build_duplicate_sets(candidates)
     country_signal_counter = counter_from_field(candidates, "country_signals")
     tmdb_genres_counter = counter_from_field(candidates, "genres_tmdb")
-    imdb_genres_counter = counter_from_field(candidates, "imdb_genres")
 
     high_final_low_country = [
         candidate for candidate in sorted_by_final
@@ -303,9 +289,8 @@ def build_report(candidates: list[dict]) -> dict:
     high_rating_low_votes = [
         candidate for candidate in sorted_by_final
         if (
-            max(safe_float(candidate.get("tmdb_rating")) or 0, safe_float(candidate.get("imdb_rating")) or 0) >= 7.5
+            (safe_float(candidate.get("tmdb_score")) or safe_float(candidate.get("tmdb_rating")) or 0) >= 7.5
             and (safe_int(candidate.get("tmdb_votes")) or 0) < 30
-            and ((safe_int(candidate.get("imdb_votes")) or 0) < 500)
         )
     ]
     comedy_candidates = [candidate for candidate in sorted_by_final if candidate_has_comedy(candidate)]
@@ -316,23 +301,17 @@ def build_report(candidates: list[dict]) -> dict:
         "total": len(candidates),
         "with_tmdb_id": sum(1 for candidate in candidates if candidate.get("tmdb_id") not in (None, "")),
         "with_imdb_id": sum(1 for candidate in candidates if candidate.get("imdb_id") not in (None, "")),
-        "with_imdb_rating": sum(1 for candidate in candidates if safe_float(candidate.get("imdb_rating")) is not None),
         "without_imdb_id": sum(1 for candidate in candidates if candidate.get("imdb_id") in (None, "")),
         "without_overview": sum(1 for candidate in candidates if str(candidate.get("overview") or "").strip() == ""),
-        "with_kp_id": sum(1 for candidate in candidates if candidate.get("kp_id") not in (None, "")),
-        "without_kp_id": sum(1 for candidate in candidates if candidate.get("kp_id") in (None, "")),
         "country_ge_070": sum(1 for candidate in candidates if (safe_float(candidate.get("country_score")) or 0) >= 0.70),
         "country_ge_040_lt_070": sum(1 for candidate in candidates if 0.40 <= (safe_float(candidate.get("country_score")) or 0) < 0.70),
         "country_lt_040": sum(1 for candidate in candidates if (safe_float(candidate.get("country_score")) or 0) < 0.40),
         "country_signal_counter": country_signal_counter,
         "high_final_low_country": high_final_low_country,
-        "mean_tmdb_rating": mean_of(candidates, "tmdb_rating"),
-        "mean_imdb_rating": mean_of(candidates, "imdb_rating"),
+        "mean_tmdb_score": mean_of(candidates, "tmdb_score"),
         "mean_tmdb_votes": mean_of(candidates, "tmdb_votes"),
-        "mean_imdb_votes": mean_of(candidates, "imdb_votes"),
         "high_rating_low_votes": high_rating_low_votes,
         "tmdb_genres_counter": tmdb_genres_counter,
-        "imdb_genres_counter": imdb_genres_counter,
         "comedy_candidates": comedy_candidates,
         "comedy_without_serious": comedy_without_serious,
         "unwanted_genre_candidates": unwanted_genre_candidates,
@@ -350,8 +329,7 @@ def print_candidate_line(rank: int, candidate: dict, score_field: str) -> None:
         f"{rank:>2}. {candidate.get('title') or 'Без названия'} | "
         f"{score_field}={safe_float(candidate.get(score_field)) or 0:.3f} | "
         f"country={safe_float(candidate.get('country_score')) or 0:.2f} | "
-        f"TMDb={candidate.get('tmdb_rating') or '-'}/{candidate.get('tmdb_votes') or 0} | "
-        f"IMDb={candidate.get('imdb_rating') or '-'}/{candidate.get('imdb_votes') or 0}"
+        f"TMDb={candidate.get('tmdb_score') or candidate.get('tmdb_rating') or '-'}/{candidate.get('tmdb_votes') or 0}"
     )
 
 
@@ -383,11 +361,8 @@ def main() -> None:
     print(f"Всего кандидатов: {report['total']}")
     print(f"С tmdb_id: {report['with_tmdb_id']}")
     print(f"С imdb_id: {report['with_imdb_id']}")
-    print(f"С imdb_rating: {report['with_imdb_rating']}")
     print(f"Без imdb_id: {report['without_imdb_id']}")
     print(f"Без overview: {report['without_overview']}")
-    print(f"С kp_id: {report['with_kp_id']}")
-    print(f"Без kp_id: {report['without_kp_id']}")
     print("")
     print("Страна")
     print("-" * 60)
@@ -399,16 +374,13 @@ def main() -> None:
     print("")
     print("Рейтинги и голоса")
     print("-" * 60)
-    print(f"Средний tmdb_rating: {safe_float(report['mean_tmdb_rating']) or 0:.3f}")
-    print(f"Средний imdb_rating: {safe_float(report['mean_imdb_rating']) or 0:.3f}")
+    print(f"Средний tmdb_score: {safe_float(report['mean_tmdb_score']) or 0:.3f}")
     print(f"Среднее tmdb_votes: {safe_float(report['mean_tmdb_votes']) or 0:.1f}")
-    print(f"Среднее imdb_votes: {safe_float(report['mean_imdb_votes']) or 0:.1f}")
     print(f"Высокий рейтинг при малом числе голосов: {len(report['high_rating_low_votes'])}")
     print("")
     print("Жанры")
     print("-" * 60)
     print(f"Top genres_tmdb: {report['tmdb_genres_counter'].most_common(10)}")
-    print(f"Top imdb_genres: {report['imdb_genres_counter'].most_common(10)}")
     print(f"Кандидаты с Comedy: {len(report['comedy_candidates'])}")
     print(f"Comedy без serious genres: {len(report['comedy_without_serious'])}")
     print(f"Кандидаты с нежелательными жанрами: {len(report['unwanted_genre_candidates'])}")

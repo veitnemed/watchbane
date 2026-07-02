@@ -19,7 +19,7 @@ Domain
   posters/      poster domain/cache logic
 
 Infra
-  apis/         TMDb/KP/IMDb clients
+  apis/         external/local data clients; public candidate flow uses TMDb
   storage/      runtime data read/write
   config/       settings, tags, constants
   common/       shared small utilities
@@ -47,7 +47,7 @@ Legacy / hidden
 - отвечает за окна, кнопки, ввод пользователя, таблицы, preview, console/web представление;
 - может вызывать Domain-сервисы;
 - не пишет `data/*.json` напрямую;
-- не содержит сетевую логику KP/TMDb;
+- не содержит сетевую логику внешних источников;
 - не содержит тяжёлую бизнес-логику рекомендаций.
 
 ### Domain

@@ -85,7 +85,10 @@ def print_search_candidate_card(index: int, candidate: dict) -> None:
         quality_label = "-"
 
     print(f"{index}. {title} ({year})")
-    print(f"   Рейтинг: KP: {_format_card_score(candidate.get('kp_score'))} / IMDb: {_format_card_score(candidate.get('imdb_score'))}")
+    print(
+        f"   TMDb: {_format_card_score(candidate.get('tmdb_score'))} "
+        f"/ голосов: {candidate.get('tmdb_votes') or '-'}"
+    )
     print(f"   Страна: {_format_card_list(countries)}")
     print(f"   Жанр: {_format_card_list(genres)}")
     print(f"   Описание: {description}")
@@ -272,7 +275,7 @@ def _input_optional_search_csv_list(label: str, default: list) -> list[str]:
 def request_search_candidate_filters() -> dict:
     print("\nФильтр кандидатов перед поиском:")
     print("Жанры для поиска (по сохранённым данным pool).")
-    print("Жанры (saved pool / KP-IMDb-TMDb data).")
+    print("Жанры (saved pool / TMDb data).")
     print("Это не пересобирает pool и не делает новый TMDb-запрос.")
     print("Enter в списках стран/жанров = не важно; в числовых полях = saved default.\n")
 
@@ -291,10 +294,8 @@ def request_search_candidate_filters() -> dict:
     year_max = _input_optional_search_int("Максимальный год", defaults.get("year_max"), 1900, constant.NOW_YEAR)
     include_genres = choose_search_genre_list("Включить жанры (saved pool)?", genre_options)
     exclude_genres = choose_search_genre_list("Исключить жанры (saved pool)?", genre_options)
-    min_kp_score = _input_optional_search_float("Минимальный KP", defaults.get("min_kp_score"), 0.0, 10.0)
-    min_kp_votes = _input_optional_search_int("Минимум голосов KP", defaults.get("min_kp_votes"), 0, 10_000_000)
-    min_imdb_score = _input_optional_search_float("Минимальный IMDb", defaults.get("min_imdb_score"), 0.0, 10.0)
-    min_imdb_votes = _input_optional_search_int("Минимум голосов IMDb", defaults.get("min_imdb_votes"), 0, 10_000_000)
+    min_tmdb_score = _input_optional_search_float("Минимальный TMDb", defaults.get("min_tmdb_score"), 0.0, 10.0)
+    min_tmdb_votes = _input_optional_search_int("Минимум голосов TMDb", defaults.get("min_tmdb_votes"), 0, 10_000_000)
     only_complete_default = defaults.get("only_complete", True)
     only_complete_label = "Y/n" if only_complete_default is True else "y/N"
     only_complete_answer = input(f"Только complete-кандидаты? [{only_complete_label}] >> ").strip().casefold()
@@ -318,10 +319,8 @@ def request_search_candidate_filters() -> dict:
         "year_max": year_max,
         "include_genres": include_genres,
         "exclude_genres": exclude_genres,
-        "min_kp_score": min_kp_score,
-        "min_kp_votes": min_kp_votes,
-        "min_imdb_score": min_imdb_score,
-        "min_imdb_votes": min_imdb_votes,
+        "min_tmdb_score": min_tmdb_score,
+        "min_tmdb_votes": min_tmdb_votes,
         "only_complete": only_complete,
         "only_unwatched": only_unwatched,
         "hide_hidden": hide_hidden,

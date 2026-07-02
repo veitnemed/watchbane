@@ -7,7 +7,7 @@ from typing import Callable
 from candidates import service as candidate_service
 from desktop.candidates.workers.search_worker import CandidateSearchWorker
 
-DEFAULT_SORT_MODE = "kp_score"
+DEFAULT_SORT_MODE = "final_score"
 
 DEFAULT_BROWSE_FILTERS = {
     "criteria_name": None,
@@ -17,10 +17,8 @@ DEFAULT_BROWSE_FILTERS = {
     "year_max": None,
     "include_genres": [],
     "exclude_genres": [],
-    "min_kp_score": None,
-    "min_kp_votes": None,
-    "min_imdb_score": None,
-    "min_imdb_votes": None,
+    "min_tmdb_score": None,
+    "min_tmdb_votes": None,
     "only_complete": False,
     "only_unwatched": True,
     "hide_hidden": False,

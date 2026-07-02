@@ -19,10 +19,9 @@ def _searchable_candidate() -> dict:
         "year": 2024,
         "is_searchable": True,
         "is_complete": False,
-        "kp_score": None,
-        "kp_votes": None,
-        "imdb_score": None,
-        "imdb_votes": None,
+        "tmdb_score": None,
+        "tmdb_votes": None,
+        "final_score": None,
         "overview": "Can be searched before prediction data is ready.",
     }
 
@@ -34,21 +33,22 @@ def _predict_ready_candidate() -> dict:
         "year": 2023,
         "is_searchable": True,
         "is_complete": True,
-        "kp_score": 8.1,
-        "kp_votes": 10000,
-        "imdb_score": 7.7,
-        "imdb_votes": 2000,
+        "tmdb_score": 8.1,
+        "tmdb_votes": 10000,
+        "final_score": 8.0,
         "overview": "Has enough scores for prediction-ready mode.",
     }
 
 
 class FakeCandidateService:
-    SEARCH_SORT_MODES = ("kp_score", "imdb_score", "kp_votes", "imdb_votes")
+    SEARCH_SORT_MODES = ("final_score", "quality_score", "tmdb_score", "tmdb_votes", "tmdb_popularity", "year")
     SEARCH_SORT_MODE_LABELS = {
-        "kp_score": "KP",
-        "imdb_score": "IMDb",
-        "kp_votes": "KP votes",
-        "imdb_votes": "IMDb votes",
+        "final_score": "Итог",
+        "quality_score": "Качество",
+        "tmdb_score": "TMDb",
+        "tmdb_votes": "Голоса TMDb",
+        "tmdb_popularity": "Популярность TMDb",
+        "year": "Год",
     }
 
     def __init__(self, candidates: list[dict] | None = None) -> None:

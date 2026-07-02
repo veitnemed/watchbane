@@ -23,7 +23,6 @@ from candidates.pool.diagnostics import (
     find_suspicious_duplicates,
     find_title_duplicate_groups,
 )
-from candidates.pool.legacy_collect import collect_candidates
 from candidates.pool.queries import (
     get_all_candidates,
     get_incomplete_candidates,
@@ -44,7 +43,6 @@ from candidates.repositories.criteria_repository import (
 )
 from candidates.repositories.pool_repository import load_candidate_pool
 from candidates.scoring.sort_keys import dedupe_ranked_candidates_by_title_identity
-from candidates.sources.kp.retry import retry_kp_enrichment_for_pool
 from candidates.sources.tmdb import builder as tmdb_build
 from candidates.sources.tmdb import country_options as tmdb_country_options
 from candidates.sources.tmdb import importer as tmdb_import
@@ -190,8 +188,8 @@ def mark_candidate_watched_in_pool(candidate: dict) -> dict:
     }
 
 
-def get_retry_kp_view(criteria_name: str | None = None) -> dict:
-    """Prepares incomplete-candidate data for retry KP UI without writing JSON."""
+def get_metadata_diagnostics_view(criteria_name: str | None = None) -> dict:
+    """Prepares incomplete TMDb/core metadata diagnostics without writing JSON."""
     del criteria_name
     pool = load_candidate_pool()
     incomplete_candidates = get_incomplete_candidates(pool, criteria_name=None)
@@ -200,19 +198,6 @@ def get_retry_kp_view(criteria_name: str | None = None) -> dict:
         "is_empty": len(pool) == 0,
         "incomplete_candidates": incomplete_candidates,
         "incomplete_count": len(incomplete_candidates),
-    }
-
-
-def retry_kp_enrichment_in_pool(limit: int = 10, criteria_name: str | None = None) -> dict:
-    """Retries KP enrichment for incomplete pool candidates via existing write-path."""
-    stats = retry_kp_enrichment_for_pool(
-        limit=limit,
-        criteria_name=criteria_name,
-    )
-    return {
-        "stats": stats,
-        "attempted": stats.get("attempted", 0),
-        "saved_pool": stats.get("attempted", 0) > 0,
     }
 
 
@@ -307,13 +292,9 @@ def build_tmdb_candidate_pool(
     with_genres: str | None = None,
     without_genres: str | None = None,
     force_refresh: bool = False,
-    db_path=None,
-    kp_api_limit: int | None = None,
-    skip_existing_pool: bool = False,
-    enrichment_mode: str = "full",
-    kp_top_limit: int | None = None,
+    skip_existing_pool: bool = True,
 ) -> dict:
-    """Builds TMDb candidate snapshot via existing discover/details path."""
+    """Builds TMDb-only candidate snapshot via discover/details path."""
     build_kwargs = {
         "country": country,
         "pages": pages,
@@ -327,13 +308,8 @@ def build_tmdb_candidate_pool(
         "with_genres": with_genres,
         "without_genres": without_genres,
         "force_refresh": force_refresh,
-        "kp_api_limit": kp_api_limit,
         "skip_existing_pool": skip_existing_pool,
-        "enrichment_mode": enrichment_mode,
-        "kp_top_limit": kp_top_limit,
     }
-    if db_path is not None:
-        build_kwargs["db_path"] = db_path
     return tmdb_build.build_candidate_pool(**build_kwargs)
 
 
@@ -634,11 +610,6 @@ def ensure_common_pool_criteria() -> tuple[str, dict]:
     return _ensure_common_pool_criteria_impl()
 
 
-def collect_candidates_legacy(criteria_name: str, criteria: dict) -> dict:
-    """Collects candidates via legacy KP Discover write-path."""
-    return collect_candidates(criteria_name, criteria)
-
-
 def rank_search_candidates(candidates: list) -> dict:
     """Ranks and dedupes candidates by explainable quality score."""
     scored_candidates = search_ranking.rank_candidates(candidates)
@@ -651,14 +622,24 @@ def rank_search_candidates(candidates: list) -> dict:
     }
 
 
-SEARCH_SORT_MODES = ("kp_score", "imdb_score", "kp_votes", "imdb_votes")
+SEARCH_SORT_MODES = (
+    "final_score",
+    "quality_score",
+    "tmdb_score",
+    "tmdb_votes",
+    "tmdb_popularity",
+    "year",
+)
 
 SEARCH_SORT_MODE_LABELS = {
-    "kp_score": "KP",
-    "imdb_score": "IMDb",
-    "kp_votes": "Голоса KP",
-    "imdb_votes": "Голоса IMDb",
+    "final_score": "Итог",
+    "quality_score": "Качество",
+    "tmdb_score": "TMDb",
+    "tmdb_votes": "Голоса TMDb",
+    "tmdb_popularity": "Популярность TMDb",
+    "year": "Год",
 }
+DEFAULT_SEARCH_SORT_MODE = "final_score"
 
 
 def _sort_field_value(candidate: dict, field_name: str) -> float | None:
@@ -668,7 +649,7 @@ def _sort_field_value(candidate: dict, field_name: str) -> float | None:
 
 
 def _sort_candidates_by_mode(candidates: list, sort_mode: str) -> list:
-    field_name = sort_mode if sort_mode in SEARCH_SORT_MODES else "kp_score"
+    field_name = sort_mode if sort_mode in SEARCH_SORT_MODES else DEFAULT_SEARCH_SORT_MODE
 
     def sort_key(candidate: dict) -> tuple:
         value = _sort_field_value(candidate, field_name)
@@ -682,7 +663,7 @@ def _sort_candidates_by_mode(candidates: list, sort_mode: str) -> list:
 
 def sort_search_candidates(candidates: list, sort_mode: str) -> dict:
     """Dedupes and sorts filtered candidates by a numeric pool field."""
-    normalized_mode = sort_mode if sort_mode in SEARCH_SORT_MODES else "kp_score"
+    normalized_mode = sort_mode if sort_mode in SEARCH_SORT_MODES else DEFAULT_SEARCH_SORT_MODE
     before_dedupe_count = len(candidates)
     deduped = dedupe_ranked_candidates_by_title_identity(list(candidates))
     sorted_candidates = _sort_candidates_by_mode(deduped, normalized_mode)

@@ -10,8 +10,8 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolic
 from candidates import service as candidate_service
 from config import constant
 from desktop.candidates.filters_controls import (
-    KP_SCORE_SLIDER_MAX,
-    KP_SCORE_SLIDER_STEP,
+    SCORE_SLIDER_MAX,
+    SCORE_SLIDER_STEP,
     VOTES_SLIDER_MAX_INDEX,
     VOTES_SLIDER_STEPS,
     min_score_from_slider,
@@ -141,36 +141,20 @@ class CandidateFiltersView:
         return self._form.exclude_genre_selector
 
     @property
-    def _kp_score_slider(self):
-        return self._form.kp_score_slider
+    def _tmdb_score_slider(self):
+        return self._form.tmdb_score_slider
 
     @property
-    def _kp_score_range_label(self):
-        return self._form.kp_score_range_label
+    def _tmdb_score_range_label(self):
+        return self._form.tmdb_score_range_label
 
     @property
-    def _imdb_score_slider(self):
-        return self._form.imdb_score_slider
+    def _tmdb_votes_slider(self):
+        return self._form.tmdb_votes_slider
 
     @property
-    def _imdb_score_range_label(self):
-        return self._form.imdb_score_range_label
-
-    @property
-    def _kp_votes_slider(self):
-        return self._form.kp_votes_slider
-
-    @property
-    def _kp_votes_range_label(self):
-        return self._form.kp_votes_range_label
-
-    @property
-    def _imdb_votes_slider(self):
-        return self._form.imdb_votes_slider
-
-    @property
-    def _imdb_votes_range_label(self):
-        return self._form.imdb_votes_range_label
+    def _tmdb_votes_range_label(self):
+        return self._form.tmdb_votes_range_label
 
     @property
     def _only_complete_check(self):
@@ -234,10 +218,8 @@ class CandidateFiltersView:
         self._year_range_label.setText(f"{year_from}–{year_to}")
 
     def _refresh_threshold_labels(self) -> None:
-        update_score_range_label(self._kp_score_slider, self._kp_score_range_label)
-        update_score_range_label(self._imdb_score_slider, self._imdb_score_range_label)
-        update_votes_range_label(self._kp_votes_slider, self._kp_votes_range_label)
-        update_votes_range_label(self._imdb_votes_slider, self._imdb_votes_range_label)
+        update_score_range_label(self._tmdb_score_slider, self._tmdb_score_range_label)
+        update_votes_range_label(self._tmdb_votes_slider, self._tmdb_votes_range_label)
 
     def _set_year_slider_from_defaults(self, year_min, year_max) -> None:
         lower = CANDIDATE_YEAR_MIN
@@ -288,10 +270,8 @@ class CandidateFiltersView:
         self._country_selector.set_options(country_options, defaults.get("country"))
 
         self._set_year_slider_from_defaults(defaults.get("year_min"), defaults.get("year_max"))
-        set_score_slider_from_default(self._kp_score_slider, defaults.get("min_kp_score"))
-        set_score_slider_from_default(self._imdb_score_slider, defaults.get("min_imdb_score"))
-        set_votes_slider_from_default(self._kp_votes_slider, defaults.get("min_kp_votes"))
-        set_votes_slider_from_default(self._imdb_votes_slider, defaults.get("min_imdb_votes"))
+        set_score_slider_from_default(self._tmdb_score_slider, defaults.get("min_tmdb_score"))
+        set_votes_slider_from_default(self._tmdb_votes_slider, defaults.get("min_tmdb_votes"))
         self._refresh_threshold_labels()
         self._only_complete_check.setChecked(DEFAULT_BROWSE_FILTERS["only_complete"])
         self._only_unwatched_check.setChecked(DEFAULT_BROWSE_FILTERS["only_unwatched"])
@@ -309,10 +289,8 @@ class CandidateFiltersView:
             "year_max": year_max,
             "include_genres": self._include_genre_selector.selected_genres(),
             "exclude_genres": self._exclude_genre_selector.selected_genres(),
-            "min_kp_score": min_score_from_slider(self._kp_score_slider),
-            "min_kp_votes": min_votes_from_slider(self._kp_votes_slider),
-            "min_imdb_score": min_score_from_slider(self._imdb_score_slider),
-            "min_imdb_votes": min_votes_from_slider(self._imdb_votes_slider),
+            "min_tmdb_score": min_score_from_slider(self._tmdb_score_slider),
+            "min_tmdb_votes": min_votes_from_slider(self._tmdb_votes_slider),
             "only_complete": self._only_complete_check.isChecked(),
             "only_unwatched": self._only_unwatched_check.isChecked(),
             "hide_hidden": self._hide_hidden_check.isChecked(),

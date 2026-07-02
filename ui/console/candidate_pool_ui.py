@@ -155,10 +155,10 @@ def create_criteria_interactive() -> tuple[str, dict] | None:
     country_answer = input(f"Страна [{format_optional_default(country_default)}] >> ").strip()
     country = country_answer if country_answer != "" else country_default
     count = prompt_optional_int("Сколько кандидатов собрать", current.get("count", 20), min_value=1)
-    min_kp = prompt_optional_score("Минимальный рейтинг KP", current.get("min_kp"))
-    min_imdb = prompt_optional_score("Минимальный рейтинг IMDb", current.get("min_imdb"))
-    min_kp_votes = prompt_optional_int("Минимум голосов KP", current.get("min_kp_votes"))
-    min_imdb_votes = prompt_optional_int("Минимум голосов IMDb", current.get("min_imdb_votes"))
+    min_tmdb_score = prompt_optional_score(
+        "Минимальный рейтинг TMDb",
+        current.get("min_tmdb_score") or current.get("min_tmdb"),
+    )
     min_year = prompt_optional_year("Минимальный год", current.get("min_year"))
     max_year = prompt_optional_year("Максимальный год", current.get("max_year"))
     genres_default = current.get("genres", [])
@@ -175,10 +175,7 @@ def create_criteria_interactive() -> tuple[str, dict] | None:
     criteria = {
         "country": country,
         "count": count,
-        "min_kp": min_kp,
-        "min_imdb": min_imdb,
-        "min_kp_votes": min_kp_votes,
-        "min_imdb_votes": min_imdb_votes,
+        "min_tmdb_score": min_tmdb_score,
         "min_year": min_year,
         "max_year": max_year,
         "genres": genres,
@@ -191,7 +188,10 @@ def create_criteria_interactive() -> tuple[str, dict] | None:
 
 def update_criteria_filters(criteria_name: str, current: dict) -> dict:
     """Интерактивно обновляет у общего pool только блок фильтрации."""
-    min_kp = prompt_optional_score("Минимальный рейтинг KP", current.get("min_kp"))
+    min_tmdb_score = prompt_optional_score(
+        "Минимальный рейтинг TMDb",
+        current.get("min_tmdb_score") or current.get("min_tmdb"),
+    )
     genres = choose_genres_by_numbers(
         current.get("genres", []),
         criteria_name=criteria_name,
@@ -209,7 +209,7 @@ def update_criteria_filters(criteria_name: str, current: dict) -> dict:
     return patch_criteria_filters(
         criteria_name,
         current,
-        min_kp=min_kp,
+        min_tmdb_score=min_tmdb_score,
         genres=genres,
         excluded_genres=excluded_genres,
     )

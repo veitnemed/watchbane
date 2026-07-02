@@ -114,14 +114,6 @@ def candidate_matches(candidate: dict, criteria: dict | None = None) -> bool:
         return False
     if _matches_min(candidate, "tmdb_votes", _criteria_value(criteria, "min_tmdb_votes")) is False:
         return False
-    if _matches_min(candidate, "kp_score", _criteria_value(criteria, "min_kp", "min_kp_score")) is False:
-        return False
-    if _matches_min(candidate, "kp_votes", _criteria_value(criteria, "min_kp_votes")) is False:
-        return False
-    if _matches_min(candidate, "imdb_score", _criteria_value(criteria, "min_imdb", "min_imdb_score")) is False:
-        return False
-    if _matches_min(candidate, "imdb_votes", _criteria_value(criteria, "min_imdb_votes")) is False:
-        return False
 
     if _criteria_value(criteria, "only_complete", default=False) and candidate.get("is_complete") is not True:
         return False
