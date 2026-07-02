@@ -110,6 +110,10 @@ def candidate_matches(candidate: dict, criteria: dict | None = None) -> bool:
         _criteria_value(criteria, "exclude_genres", "excluded_genres", default=[]),
     ) is False:
         return False
+    if _matches_min(candidate, "tmdb_score", _criteria_value(criteria, "min_tmdb", "min_tmdb_score")) is False:
+        return False
+    if _matches_min(candidate, "tmdb_votes", _criteria_value(criteria, "min_tmdb_votes")) is False:
+        return False
     if _matches_min(candidate, "kp_score", _criteria_value(criteria, "min_kp", "min_kp_score")) is False:
         return False
     if _matches_min(candidate, "kp_votes", _criteria_value(criteria, "min_kp_votes")) is False:

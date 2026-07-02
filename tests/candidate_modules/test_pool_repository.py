@@ -15,6 +15,20 @@ def _workspace_tmp_dir() -> Path:
     return path
 
 
+def _tmdb_candidate(**overrides) -> dict:
+    candidate = {
+        "title": "Show",
+        "year": 2018,
+        "tmdb_id": 123,
+        "tmdb_score": 7.5,
+        "tmdb_votes": 200,
+        "genres_tmdb": ["Drama"],
+        "country_codes": ["US"],
+    }
+    candidate.update(overrides)
+    return candidate
+
+
 def test_load_candidate_pool_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
     tmp_dir = _workspace_tmp_dir()
     pool_path = tmp_dir / "candidate_pool.json"
@@ -50,3 +64,117 @@ def test_save_candidate_pool_normalizes_and_writes(monkeypatch: pytest.MonkeyPat
 
     saved = json.loads(pool_path.read_text(encoding="utf-8"))
     assert len(saved) == 1
+
+
+def test_save_candidate_pool_strips_external_rating_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    tmp_dir = _workspace_tmp_dir()
+    pool_path = tmp_dir / "candidate_pool.json"
+    pool_path.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(pool_repository.constant, "CANDIDATE_POOL_JSON", str(pool_path))
+    monkeypatch.setattr(
+        "candidates.pool.watched_cleanup.build_watched_signatures",
+        lambda: set(),
+    )
+    monkeypatch.setattr(
+        "candidates.pool.watched_cleanup.build_dataset_title_keys",
+        lambda: set(),
+    )
+
+    pool_repository.save_candidate_pool({
+        "show|2018": _tmdb_candidate(
+            kp_score=8.0,
+            kp_votes=100,
+            kp_rating=8.1,
+            kp_id=123,
+            kp_status="done",
+            kp_year=2018,
+            imdb_score=7.5,
+            imdb_rating=7.6,
+            imdb_votes=200,
+            imdb_start_year=2018,
+            imdb_end_year=2020,
+            imdb_genres=["Drama"],
+            imdb_title_type="tvSeries",
+            imdb_is_adult=0,
+            imdb_found_in_sql=True,
+            imdb_id="tt123",
+            tmdb_popularity=10.5,
+        )
+    })
+
+    saved = json.loads(pool_path.read_text(encoding="utf-8"))
+    candidate = next(iter(saved.values()))
+    for field_name in (
+        "kp_score",
+        "kp_votes",
+        "kp_rating",
+        "kp_id",
+        "kp_status",
+        "kp_year",
+        "imdb_score",
+        "imdb_rating",
+        "imdb_votes",
+        "imdb_start_year",
+        "imdb_end_year",
+        "imdb_genres",
+        "imdb_title_type",
+        "imdb_is_adult",
+        "imdb_found_in_sql",
+    ):
+        assert field_name not in candidate
+    assert candidate["imdb_id"] == "tt123"
+    assert candidate["tmdb_id"] == 123
+    assert candidate["tmdb_score"] == 7.5
+    assert candidate["tmdb_votes"] == 200
+    assert candidate["tmdb_popularity"] == 10.5
+
+
+def test_tmdb_import_update_existing_strips_external_rating_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    from candidates.repositories import criteria_repository
+    from candidates.sources.tmdb import importer
+
+    saved: dict = {}
+    existing = _tmdb_candidate(kp_score=7.0, imdb_rating=6.5, imdb_id="tt123")
+    incoming = _tmdb_candidate(
+        tmdb_score=8.2,
+        tmdb_votes=500,
+        kp_score=9.0,
+        kp_votes=1000,
+        imdb_rating=8.0,
+        imdb_votes=2000,
+        imdb_id="tt123",
+    )
+
+    monkeypatch.setattr(importer, "load_candidate_pool", lambda: {"show|2018": existing})
+    monkeypatch.setattr(importer, "save_candidate_pool", lambda pool: saved.update({"pool": pool}))
+    monkeypatch.setattr(importer, "build_watched_signatures", lambda: set())
+    monkeypatch.setattr(importer, "build_dataset_title_keys", lambda: set())
+    monkeypatch.setattr(criteria_repository, "load_candidate_criteria", lambda: {})
+    monkeypatch.setattr(importer, "load_candidate_criteria", lambda: {})
+    monkeypatch.setattr(importer, "save_named_criteria", lambda name, criteria: (name, criteria))
+
+    result = importer.import_tmdb_candidates_to_common_pool([incoming], criteria_name="pool")
+
+    assert result["updated"] == 1
+    candidate = next(iter(saved["pool"].values()))
+    assert candidate["tmdb_score"] == 8.2
+    assert candidate["tmdb_votes"] == 500
+    assert candidate["imdb_id"] == "tt123"
+    for field_name in (
+        "kp_score",
+        "kp_votes",
+        "kp_rating",
+        "kp_id",
+        "kp_status",
+        "kp_year",
+        "imdb_score",
+        "imdb_rating",
+        "imdb_votes",
+        "imdb_start_year",
+        "imdb_end_year",
+        "imdb_genres",
+        "imdb_title_type",
+        "imdb_is_adult",
+        "imdb_found_in_sql",
+    ):
+        assert field_name not in candidate

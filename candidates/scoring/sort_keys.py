@@ -23,6 +23,10 @@ def _sort_number(value) -> float:
 def candidate_sort_score(candidate: dict) -> tuple:
     """Возвращает ключ качества кандидата для выбора лучшего дубля."""
     return (
+        _sort_number(candidate.get("final_score")),
+        _sort_number(candidate.get("quality_score")),
+        _sort_number(candidate.get("tmdb_score")),
+        _sort_number(candidate.get("tmdb_votes")),
         _sort_number(candidate.get("kp_score")),
         _sort_number(candidate.get("kp_votes")),
         _sort_number(candidate.get("imdb_score")),

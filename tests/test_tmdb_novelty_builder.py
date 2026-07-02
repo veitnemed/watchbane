@@ -250,7 +250,7 @@ def test_enrichment_mode_fast_skips_imdb_sql_and_kp(monkeypatch) -> None:
     assert result["stats"]["enrichment_mode"] == "fast"
     assert result["stats"]["found_in_imdb_sql"] == 0
     assert result["stats"]["kp_api_requested"] == 0
-    assert result["candidates"][0]["kp_status"] == "not_requested"
+    assert "kp_status" not in result["candidates"][0]
     assert result["candidates"][0]["quality_score"] > 0
 
 

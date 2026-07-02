@@ -28,6 +28,9 @@ def _candidate(**overrides):
     base = {
         "title": "Метод",
         "year": 2015,
+        "tmdb_id": 100,
+        "tmdb_score": 7.8,
+        "tmdb_votes": 300,
         "countries": ["Россия"],
         "genres": ["драма", "детектив"],
         "kp_score": 8.1,
@@ -47,16 +50,14 @@ def test_candidate_matches_search_criteria() -> None:
         "year_max": 2020,
         "include_genres": ["Драма"],
         "exclude_genres": ["Комедия"],
-        "min_kp_score": 7.0,
-        "min_kp_votes": 1000,
-        "min_imdb_score": 7.0,
-        "min_imdb_votes": 1000,
+        "min_tmdb_score": 7.0,
+        "min_tmdb_votes": 100,
         "only_complete": True,
     }
 
     assert candidate_matches(_candidate(), criteria) is True
     assert candidate_matches(_candidate(genres=["комедия"]), criteria) is False
-    assert candidate_matches(_candidate(kp_score=6.9), criteria) is False
+    assert candidate_matches(_candidate(tmdb_score=6.9), criteria) is False
 
 
 def test_candidate_matches_skips_watched_and_hidden() -> None:
@@ -69,12 +70,12 @@ def test_candidate_matches_skips_watched_and_hidden() -> None:
     assert filter_candidates([candidate], {"hidden_identities": set()})[0]["title"] == "Метод"
 
 
-def test_quality_score_prefers_reliable_kp_and_votes() -> None:
-    reliable = _candidate(title="Надёжный", kp_score=8.0, kp_votes=20000, imdb_score=7.0, imdb_votes=200)
-    noisy_imdb = _candidate(title="Шумный", kp_score=7.0, kp_votes=500, imdb_score=9.8, imdb_votes=50)
+def test_quality_score_prefers_reliable_tmdb_and_votes() -> None:
+    reliable = _candidate(title="Надёжный", tmdb_score=8.0, tmdb_votes=20000)
+    noisy_tmdb = _candidate(title="Шумный", tmdb_score=9.8, tmdb_votes=10)
 
-    assert calculate_quality_score(reliable) > calculate_quality_score(noisy_imdb)
-    assert rank_candidates([noisy_imdb, reliable])[0]["title"] == "Надёжный"
+    assert calculate_quality_score(reliable) > calculate_quality_score(noisy_tmdb)
+    assert rank_candidates([noisy_tmdb, reliable])[0]["title"] == "Надёжный"
 
 
 def test_explain_candidate_returns_search_reasons() -> None:
@@ -92,8 +93,8 @@ def test_explain_candidate_returns_search_reasons() -> None:
 
     text = "\n".join(reasons)
     assert "Оценка качества" in text
-    assert "Высокий KP" in text
-    assert "IMDb учтён" in text
+    assert "Высокий TMDb" in text
+    assert "Много голосов TMDb" in text
     assert "Подходит по жанрам" in text
     assert "Не просмотрен" in text
     assert "Не скрыт" in text
@@ -457,23 +458,23 @@ def test_download_candidate_pool_preview_posters_service(monkeypatch) -> None:
 
 def test_deduplicate_pool_keeps_best_record() -> None:
     pool = {
-        "show|2018": {"title": "Show", "year": 2018, "kp_score": 7.0},
-        "other|2018": {"title": "Show", "year": 2018, "kp_score": 8.5},
+        "show|2018": {"title": "Show", "year": 2018, "tmdb_score": 7.0, "tmdb_votes": 100},
+        "other|2018": {"title": "Show", "year": 2018, "tmdb_score": 8.5, "tmdb_votes": 200},
     }
     deduped = deduplicate_pool(pool)
     assert len(deduped) == 1
-    assert list(deduped.values())[0]["kp_score"] == 8.5
+    assert list(deduped.values())[0]["tmdb_score"] == 8.5
 
 
 def test_dedupe_pool_by_similar_titles_merges_same_show() -> None:
     pool = {
-        "a|2015": {"title": "Метод", "year": 2015, "kp_score": 8.0},
-        "b|2015": {"title": "метод", "year": 2015, "kp_score": 6.0},
+        "a|2015": {"title": "Метод", "year": 2015, "tmdb_score": 8.0},
+        "b|2015": {"title": "метод", "year": 2015, "tmdb_score": 6.0},
     }
     deduped, removed = dedupe_pool_by_similar_titles(pool)
     assert len(deduped) == 1
     assert removed == 1
-    assert list(deduped.values())[0]["kp_score"] == 8.0
+    assert list(deduped.values())[0]["tmdb_score"] == 8.0
 
 
 def test_format_pool_stats_summary_shows_unique_and_duplicates() -> None:
@@ -508,8 +509,8 @@ def test_clean_common_pool_duplicates_writes_normalized_pool(monkeypatch) -> Non
     from candidates.repositories import pool_repository
 
     raw_pool = {
-        "legacy|show|2018": {"title": "Show", "year": 2018, "kp_score": 7.0},
-        "show|2018": {"title": "Show", "year": 2018, "kp_score": 8.5},
+        "legacy|show|2018": {"title": "Show", "year": 2018, "tmdb_score": 7.0},
+        "show|2018": {"title": "Show", "year": 2018, "tmdb_score": 8.5},
     }
     saved = {}
 
@@ -520,14 +521,14 @@ def test_clean_common_pool_duplicates_writes_normalized_pool(monkeypatch) -> Non
     assert result["removed_exact"] == 1
     assert result["unique_total"] == 1
     assert len(saved["pool"]) == 1
-    assert list(saved["pool"].values())[0]["kp_score"] == 8.5
+    assert list(saved["pool"].values())[0]["tmdb_score"] == 8.5
 
 
-def test_resolve_canonical_year_prefers_imdb_start_year() -> None:
+def test_resolve_canonical_year_ignores_imdb_start_year() -> None:
     from candidates.models.schema import resolve_canonical_year
 
     candidate = {"imdb_start_year": 2016, "year": 2015}
-    assert resolve_canonical_year(candidate) == 2016
+    assert resolve_canonical_year(candidate) == 2015
 
 
 def test_find_cross_year_title_groups_groups_different_years() -> None:
@@ -609,15 +610,15 @@ def test_get_title_duplicates_view_uses_service_facade(monkeypatch) -> None:
 
 def test_dedupe_pool_cross_year_titles_merges_within_one_year() -> None:
     pool = {
-        "show|2015": {"title": "Show", "year": 2015, "kp_score": 7.0},
-        "show|2016": {"title": "Show", "year": 2016, "imdb_start_year": 2015, "kp_score": 8.0},
+        "show|2015": {"title": "Show", "year": 2015, "tmdb_score": 7.0},
+        "show|2016": {"title": "Show", "year": 2016, "tmdb_score": 8.0},
     }
     deduped, removed = dedupe_pool_cross_year_titles(pool)
     assert removed == 1
     assert len(deduped) == 1
     entry = list(deduped.values())[0]
-    assert entry["year"] == 2015
-    assert entry["kp_score"] == 8.0
+    assert entry["year"] == 2016
+    assert entry["tmdb_score"] == 8.0
 
 
 def test_dedupe_pool_cross_year_titles_skips_conflicting_imdb_ids() -> None:
@@ -634,8 +635,8 @@ def test_clean_common_pool_duplicates_merges_cross_year(monkeypatch) -> None:
     from candidates.repositories import pool_repository
 
     raw_pool = {
-        "show|2015": {"title": "Show", "year": 2015, "kp_score": 7.0, "tmdb_id": "1"},
-        "show|2016": {"title": "Show", "year": 2016, "kp_score": 8.0, "imdb_id": "tt999"},
+        "show|2015": {"title": "Show", "year": 2015, "tmdb_score": 7.0, "tmdb_id": "1"},
+        "show|2016": {"title": "Show", "year": 2016, "tmdb_score": 8.0, "imdb_id": "tt999"},
     }
     saved = {}
 
@@ -647,7 +648,7 @@ def test_clean_common_pool_duplicates_merges_cross_year(monkeypatch) -> None:
     assert result["unique_total"] == 1
     assert len(saved["pool"]) == 1
     merged = list(saved["pool"].values())[0]
-    assert merged["kp_score"] == 8.0
+    assert merged["tmdb_score"] == 8.0
     assert merged["tmdb_id"] == "1"
     assert merged["imdb_id"] == "tt999"
 

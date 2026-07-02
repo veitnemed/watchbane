@@ -26,6 +26,18 @@ def imdb_vote_weight(imdb_votes) -> float:
     return 0.35
 
 
+def tmdb_vote_weight(tmdb_votes) -> float:
+    """Returns the TMDb signal weight based on vote reliability."""
+    votes = _number(tmdb_votes) or 0.0
+    if votes < 50:
+        return 0.25
+    if votes < 300:
+        return 0.55
+    if votes < 1000:
+        return 0.8
+    return 1.0
+
+
 def _vote_bonus(votes, scale: float, cap: float) -> float:
     value = _number(votes) or 0.0
     if value <= 0:
@@ -39,9 +51,16 @@ def calculate_quality_score(candidate) -> float:
     kp_score = _number(candidate.get("kp_score"))
     imdb_score = _number(candidate.get("imdb_score"))
     imdb_votes = _number(candidate.get("imdb_votes")) or 0.0
+    tmdb_score = _number(candidate.get("tmdb_score"))
+    tmdb_votes = _number(candidate.get("tmdb_votes")) or 0.0
 
     weighted_sum = 0.0
     weight_sum = 0.0
+
+    if tmdb_score is not None:
+        weight = tmdb_vote_weight(tmdb_votes)
+        weighted_sum += tmdb_score * weight
+        weight_sum += 1.0
 
     if kp_score is not None:
         weighted_sum += kp_score * 0.75
@@ -56,6 +75,7 @@ def calculate_quality_score(candidate) -> float:
         return 0.0
 
     score = weighted_sum / weight_sum
+    score += _vote_bonus(tmdb_votes, scale=0.08, cap=0.5)
     score += _vote_bonus(candidate.get("kp_votes"), scale=0.15, cap=0.8)
     if imdb_votes >= 300:
         score += _vote_bonus(imdb_votes, scale=0.08, cap=0.4)
@@ -72,6 +92,8 @@ def rank_candidates(candidates: list[dict]) -> list[dict]:
     ranked.sort(
         key=lambda item: (
             float(item.get("quality_score") or 0),
+            float(_number(item.get("tmdb_score")) or 0),
+            float(_number(item.get("tmdb_votes")) or 0),
             float(_number(item.get("kp_score")) or 0),
             float(_number(item.get("kp_votes")) or 0),
             str(item.get("title") or "").casefold(),
