@@ -177,6 +177,14 @@ def _first_number(field_name: str, sections: list[dict], converter):
     return None
 
 
+def _first_existing(field_name: str, sections: list[dict]):
+    for section in sections:
+        value = section.get(field_name)
+        if value not in (None, "", []):
+            return value
+    return None
+
+
 def _tmdb_score_sections(movie: dict, raw_scores: dict, meta_obj: dict | None, pool_candidate: dict | None) -> list[dict]:
     sections = [raw_scores, movie]
     if isinstance(meta_obj, dict):
@@ -184,6 +192,64 @@ def _tmdb_score_sections(movie: dict, raw_scores: dict, meta_obj: dict | None, p
     if isinstance(pool_candidate, dict):
         sections.append(pool_candidate)
     return sections
+
+
+def _compute_watched_tmdb_scores(movie: dict, sections: list[dict], country: str | None) -> dict:
+    if _first_number("tmdb_score", sections, _to_float) is None:
+        return {}
+
+    candidate_like = {
+        "title": _first_existing("title", sections),
+        "year": _first_number("year", sections, _to_int),
+        "tmdb_score": _first_number("tmdb_score", sections, _to_float),
+        "tmdb_votes": _first_number("tmdb_votes", sections, _to_int),
+        "tmdb_popularity": _first_number("tmdb_popularity", sections, _to_float),
+        "country": country,
+        "countries": _first_existing("countries", sections),
+        "country_codes": _first_existing("country_codes", sections),
+        "origin_country": _first_existing("origin_country", sections),
+        "original_language": _first_existing("original_language", sections),
+        "genres": _genres(movie) or _first_existing("genres", sections),
+        "genre_keys": _first_existing("genre_keys", sections),
+        "genres_tmdb": _first_existing("genres_tmdb", sections),
+        "description": _first_existing("description", sections),
+        "overview": _first_existing("overview", sections),
+        "poster_path": _first_existing("poster_path", sections),
+        "poster_url": _first_existing("poster_url", sections),
+        "content_rating": _first_existing("content_rating", sections),
+        "actors_top": _first_existing("actors_top", sections),
+        "crew_top": _first_existing("crew_top", sections),
+        "keywords": _first_existing("keywords", sections),
+        "networks": _first_existing("networks", sections),
+        "production_companies": _first_existing("production_companies", sections),
+        "first_air_date": _first_existing("first_air_date", sections),
+        "imdb_id": _first_existing("imdb_id", sections),
+    }
+
+    from candidates.sources.tmdb.scoring import (
+        compute_metadata_completeness_score,
+        compute_tmdb_final_score,
+        compute_tmdb_hidden_gem_score,
+        compute_tmdb_quality_score,
+    )
+
+    metadata_score = compute_metadata_completeness_score(candidate_like)
+    quality_score = compute_tmdb_quality_score(candidate_like)
+    hidden_gem_score = compute_tmdb_hidden_gem_score(candidate_like)
+    final_score = compute_tmdb_final_score(
+        {
+            **candidate_like,
+            "metadata_completeness_score": metadata_score,
+            "quality_score": quality_score,
+            "hidden_gem_score": hidden_gem_score,
+        }
+    )
+    return {
+        "metadata_completeness_score": metadata_score,
+        "quality_score": quality_score,
+        "hidden_gem_score": hidden_gem_score,
+        "final_score": final_score,
+    }
 
 
 def _resolve_country(movie: dict, title: str, year, lookup_cache: dict | None = None, meta_obj=None) -> str | None:
@@ -302,6 +368,10 @@ def build_watched_movie_card(
     resolved_meta = _meta_obj_for_title(title, lookup_cache, meta_obj=meta_obj)
     pool_candidate = _pool_candidate_for_title(title, year, lookup_cache)
     tmdb_sections = _tmdb_score_sections(movie, raw_scores, resolved_meta, pool_candidate)
+    country = _resolve_country(movie, title, year, lookup_cache=lookup_cache, meta_obj=resolved_meta)
+    computed_tmdb_scores = _compute_watched_tmdb_scores(movie, tmdb_sections, country)
+    quality_score = _first_number("quality_score", tmdb_sections, _to_float)
+    final_score = _first_number("final_score", tmdb_sections, _to_float)
 
     return {
         "title": title,
@@ -310,10 +380,10 @@ def build_watched_movie_card(
         "tmdb_score": _first_number("tmdb_score", tmdb_sections, _to_float),
         "tmdb_votes": _first_number("tmdb_votes", tmdb_sections, _to_int),
         "tmdb_popularity": _first_number("tmdb_popularity", tmdb_sections, _to_float),
-        "quality_score": _first_number("quality_score", tmdb_sections, _to_float),
-        "final_score": _first_number("final_score", tmdb_sections, _to_float),
+        "quality_score": quality_score if quality_score is not None else computed_tmdb_scores.get("quality_score"),
+        "final_score": final_score if final_score is not None else computed_tmdb_scores.get("final_score"),
         "genres": _genres(movie),
-        "country": _resolve_country(movie, title, year, lookup_cache=lookup_cache, meta_obj=meta_obj),
+        "country": country,
         "object_type": _object_type(movie, default="series"),
         "overview": _resolve_overview(movie, title, year, lookup_cache=lookup_cache, meta_obj=meta_obj),
         "poster_url": poster_fields["poster_url"],

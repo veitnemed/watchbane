@@ -17,7 +17,7 @@ from desktop.shared.detail.profiles import (
     DetailCardLayoutProfile,
     POSTER_PLACEHOLDER_STYLE,
 )
-from desktop.shared.detail.rating_indicator import RatingCircleIndicator
+from desktop.shared.detail.rating_indicator import RatingCircleIndicator, StarRatingIndicator
 from desktop.shared.detail.types import DetailEntry
 from desktop.theme import (
     COLOR_ACCENT,
@@ -28,6 +28,11 @@ from desktop.theme import (
     OVERVIEW_TITLE_DIVIDER_SPACING,
     TRANSPARENT_STYLE,
 )
+
+RATING_CIRCLES_SPACING = 1
+RATING_META_PILLS_SPACING = 1
+STAR_ROW_LEFT_MARGIN = 0
+STAR_TOP_GAP = 20
 
 
 class WatchedDetailCard(DetailCardPosterMixin):
@@ -86,6 +91,13 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._poster_label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._poster_label.customContextMenuRequested.connect(self._show_poster_context_menu)
 
+        self._poster_column_widget = QWidget()
+        self._poster_column_widget.setStyleSheet(TRANSPARENT_STYLE)
+        poster_column = QVBoxLayout(self._poster_column_widget)
+        poster_column.setContentsMargins(0, 0, 0, 0)
+        poster_column.setSpacing(10)
+        poster_column.addWidget(self._poster_label, alignment=Qt.AlignmentFlag.AlignTop)
+
         self._info_column_widget = QWidget()
         self._info_column_widget.setStyleSheet(TRANSPARENT_STYLE)
         self._info_column_widget.setSizePolicy(
@@ -102,12 +114,12 @@ class WatchedDetailCard(DetailCardPosterMixin):
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.setSpacing(8)
 
-        self._title_actions_widget = QWidget()
-        self._title_actions_widget.setObjectName("detailTitleActions")
-        self._title_actions_widget.setStyleSheet(TRANSPARENT_STYLE)
-        self._title_actions_layout = QHBoxLayout(self._title_actions_widget)
-        self._title_actions_layout.setContentsMargins(0, 0, 0, 0)
-        self._title_actions_layout.setSpacing(6)
+        self._poster_actions_widget = QWidget()
+        self._poster_actions_widget.setObjectName("detailPosterActions")
+        self._poster_actions_widget.setStyleSheet(TRANSPARENT_STYLE)
+        self._poster_actions_layout = QHBoxLayout(self._poster_actions_widget)
+        self._poster_actions_layout.setContentsMargins(0, 0, 0, 0)
+        self._poster_actions_layout.setSpacing(8)
 
         self._title_label = QLabel("Выберите тайтл слева")
         self._title_label.setObjectName("detailTitle")
@@ -124,7 +136,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._metrics_row_widget = metrics_row_widget
         self._metrics_row = QHBoxLayout(metrics_row_widget)
         self._metrics_row.setContentsMargins(0, 0, 0, 0)
-        self._metrics_row.setSpacing(10)
+        self._metrics_row.setSpacing(RATING_CIRCLES_SPACING)
 
         self._score_indicator = None
         if self._profile.show_user_score:
@@ -140,13 +152,14 @@ class WatchedDetailCard(DetailCardPosterMixin):
 
         self._meta_pills_widget = QWidget()
         self._meta_pills_widget.setStyleSheet(TRANSPARENT_STYLE)
+        self._meta_pills_widget.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         self._meta_pills_layout = QHBoxLayout(self._meta_pills_widget)
         self._meta_pills_layout.setContentsMargins(0, 0, 0, 0)
-        self._meta_pills_layout.setSpacing(10)
+        self._meta_pills_layout.setSpacing(RATING_META_PILLS_SPACING)
 
+        self._metrics_row.addWidget(self._meta_pills_widget, alignment=Qt.AlignmentFlag.AlignVCenter)
         if self._score_indicator is not None:
             self._metrics_row.addWidget(self._score_indicator, alignment=Qt.AlignmentFlag.AlignLeft)
-        self._metrics_row.addWidget(self._meta_pills_widget, alignment=Qt.AlignmentFlag.AlignVCenter)
         if self._profile.show_mark_watched_button:
             self._mark_watched_button = QPushButton()
             self._mark_watched_button.setObjectName("candidateMarkWatchedButton")
@@ -158,9 +171,9 @@ class WatchedDetailCard(DetailCardPosterMixin):
             self._mark_watched_button.setFixedSize(36, 36)
             self._mark_watched_button.setEnabled(False)
             self._mark_watched_button.clicked.connect(self._on_mark_watched_clicked)
-            self._title_actions_layout.addWidget(
+            self._poster_actions_layout.addWidget(
                 self._mark_watched_button,
-                alignment=Qt.AlignmentFlag.AlignTop,
+                alignment=Qt.AlignmentFlag.AlignLeft,
             )
         if self._profile.show_hide_candidate_button:
             self._hide_button = QPushButton()
@@ -173,16 +186,28 @@ class WatchedDetailCard(DetailCardPosterMixin):
             self._hide_button.setFixedSize(36, 36)
             self._hide_button.setEnabled(False)
             self._hide_button.clicked.connect(self._on_hide_clicked)
-            self._title_actions_layout.addWidget(
+            self._poster_actions_layout.addWidget(
                 self._hide_button,
-                alignment=Qt.AlignmentFlag.AlignTop,
+                alignment=Qt.AlignmentFlag.AlignLeft,
             )
-        self._title_actions_widget.setVisible(
+        self._poster_actions_layout.addStretch(1)
+        self._poster_actions_widget.setVisible(
             self._profile.show_mark_watched_button or self._profile.show_hide_candidate_button
         )
-        title_row.addWidget(self._title_actions_widget, alignment=Qt.AlignmentFlag.AlignTop)
         title_row.addWidget(self._title_label, stretch=1)
         self._metrics_row.addStretch()
+        poster_column.addWidget(self._poster_actions_widget)
+        poster_column.addStretch(1)
+
+        self._rating_stars_widget = StarRatingIndicator()
+        self._rating_stars_row = QWidget()
+        self._rating_stars_row.setStyleSheet(TRANSPARENT_STYLE)
+        self._rating_stars_layout = QHBoxLayout(self._rating_stars_row)
+        self._rating_stars_layout.setContentsMargins(STAR_ROW_LEFT_MARGIN, 0, 0, 0)
+        self._rating_stars_layout.setSpacing(0)
+        self._rating_stars_layout.addWidget(self._rating_stars_widget, alignment=Qt.AlignmentFlag.AlignLeft)
+        self._rating_stars_layout.addStretch(1)
+        self._rating_stars_row.hide()
 
         self._genre_section = QWidget()
         self._genre_section.setStyleSheet(TRANSPARENT_STYLE)
@@ -253,10 +278,12 @@ class WatchedDetailCard(DetailCardPosterMixin):
         info_column.addWidget(self._genre_section)
         info_column.addSpacing(2)
         info_column.addWidget(metrics_row_widget)
+        info_column.addSpacing(STAR_TOP_GAP)
+        info_column.addWidget(self._rating_stars_row)
         info_column.addSpacing(6)
         info_column.addWidget(self._main_info_section)
 
-        top_row.addWidget(self._poster_label, alignment=Qt.AlignmentFlag.AlignTop)
+        top_row.addWidget(self._poster_column_widget, alignment=Qt.AlignmentFlag.AlignTop)
         top_row.addWidget(self._info_column_widget, stretch=1, alignment=Qt.AlignmentFlag.AlignTop)
         root.addLayout(top_row)
         root.addWidget(self._overview_frame)
@@ -317,6 +344,8 @@ class WatchedDetailCard(DetailCardPosterMixin):
             self._score_indicator.set_score(None)
         fill_meta_pill_row(self._meta_pills_layout, [], self._profile)
         self._meta_pills_widget.setVisible(False)
+        self._rating_stars_widget.set_stars(None)
+        self._rating_stars_row.hide()
         fill_pill_rows(self._genre_pills_layout, [], "genrePill")
         self._genre_section.setVisible(False)
         self._overview_label.setText("")
@@ -340,6 +369,13 @@ class WatchedDetailCard(DetailCardPosterMixin):
         meta_pills = build_meta_pill_items(card)
         fill_meta_pill_row(self._meta_pills_layout, meta_pills, self._profile)
         self._meta_pills_widget.setVisible(len(meta_pills) > 0)
+        star_item = next((item for item in meta_pills if item.get("footer_stars") is not None), None)
+        if star_item is not None:
+            self._rating_stars_widget.set_stars(star_item.get("footer_stars"), star_item.get("footer_label") or "")
+            self._rating_stars_row.show()
+        else:
+            self._rating_stars_widget.set_stars(None)
+            self._rating_stars_row.hide()
         if self._mark_watched_button is not None:
             self._mark_watched_button.setEnabled(self._mark_watched_handler is not None)
         if self._hide_button is not None:

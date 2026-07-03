@@ -32,6 +32,18 @@ def _details(tmdb_id: int = 123, title: str = "Show") -> dict:
         "overview": "TMDb overview",
         "poster_path": "/poster.jpg",
         "external_ids": {"imdb_id": "tt123"},
+        "origin_country": ["US"],
+        "original_language": "en",
+        "production_countries": [{"iso_3166_1": "US", "name": "United States of America"}],
+        "genres": [{"id": 18, "name": "Drama"}],
+        "networks": [{"name": "HBO"}],
+        "production_companies": [{"name": "Studio"}],
+        "content_ratings": {"results": [{"iso_3166_1": "US", "rating": "TV-MA"}]},
+        "aggregate_credits": {
+            "cast": [{"id": 1, "name": "Actor", "roles": [{"character": "Lead", "episode_count": 8}]}],
+            "crew": [{"id": 2, "name": "Creator", "jobs": [{"job": "Creator", "episode_count": 8}]}],
+        },
+        "keywords": {"results": [{"name": "marriage"}]},
     }
 
 
@@ -63,6 +75,20 @@ def test_refresh_watched_by_existing_tmdb_id_updates_meta_and_raw_scores() -> No
     assert meta_obj["description"] == "TMDb overview"
     assert meta_obj["poster_path"] == "/poster.jpg"
     assert meta_obj["poster_url"].endswith("/poster.jpg")
+    assert meta_obj["origin_country"] == ["US"]
+    assert meta_obj["country_codes"] == ["US"]
+    assert meta_obj["countries"] == ["US", "United States of America"]
+    assert meta_obj["genres"] == ["Drama"]
+    assert meta_obj["genre_keys"] == ["drama"]
+    assert meta_obj["original_language"] == "en"
+    assert meta_obj["networks"] == ["HBO"]
+    assert meta_obj["production_companies"] == ["Studio"]
+    assert meta_obj["content_rating"] == "US: TV-MA"
+    assert meta_obj["actors_top"][0]["name"] == "Actor"
+    assert meta_obj["crew_top"][0]["name"] == "Creator"
+    assert meta_obj["keywords"] == ["marriage"]
+    assert meta_obj["quality_score"] > 0
+    assert meta_obj["final_score"] > 0
     assert meta_obj["personal_notes"] == "keep me"
 
 

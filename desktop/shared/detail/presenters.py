@@ -50,6 +50,17 @@ def normalize_final_score(value) -> float:
     return max(0.0, min(1.0, score))
 
 
+def normalize_tmdb_score(value) -> float:
+    """Normalize TMDb rating from 0..10 to 0..1 for the visible TMDb ring."""
+    if value in (None, ""):
+        return 0.0
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return round(max(0.0, min(1.0, score / 10.0)), 4)
+
+
 def format_final_score(value) -> str:
     """Format final score as a compact 0..100 UI label."""
     if value in (None, ""):
@@ -60,6 +71,22 @@ def format_final_score(value) -> str:
         return "Итог —"
     rounded = Decimal(str(normalized * 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     return f"Итог {int(rounded)}"
+
+
+def final_score_to_stars(value) -> float | None:
+    """Convert final score to a compact 0..5 star value in 0.5 steps."""
+    if value in (None, ""):
+        return None
+    normalized = normalize_final_score(value)
+    if normalized <= 0:
+        return 0.0
+    rounded_tens = (
+        (Decimal(str(normalized * 100)) / Decimal("10"))
+        .quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        * Decimal("10")
+    )
+    stars = float(rounded_tens / Decimal("20"))
+    return max(0.5, min(5.0, stars))
 
 
 def _hex_to_rgb(color: str) -> tuple[int, int, int]:
@@ -83,12 +110,21 @@ def _blend_color(start: str, end: str, amount: float) -> str:
     )
 
 
-def score_ring_color_for_final_score(value) -> str:
-    """Return red-to-green ring color for final score quality."""
-    progress = normalize_final_score(value)
+def _score_ring_color_for_progress(progress: float) -> str:
+    """Return red-to-green ring color for normalized 0..1 progress."""
     if progress <= 0.5:
         return _blend_color(SCORE_RING_RED, SCORE_RING_AMBER, progress / 0.5)
     return _blend_color(SCORE_RING_AMBER, SCORE_RING_GREEN, (progress - 0.5) / 0.5)
+
+
+def score_ring_color_for_final_score(value) -> str:
+    """Return red-to-green ring color for final score quality."""
+    return _score_ring_color_for_progress(normalize_final_score(value))
+
+
+def score_ring_color_for_tmdb_score(value) -> str:
+    """Return red-to-green ring color for TMDb rating."""
+    return _score_ring_color_for_progress(normalize_tmdb_score(value))
 
 
 def format_year_pill(year) -> str:
@@ -103,14 +139,18 @@ def build_score_ring_item(card: dict) -> dict | None:
         return None
 
     display_value = format_rating_score_display(card.get("tmdb_score")) if has_tmdb_score else None
+    ring_progress = normalize_tmdb_score(card.get("tmdb_score"))
+    final_score = card.get("final_score")
+    footer_label = format_final_score(final_score) if final_score not in (None, "") else ""
     return {
         "kind": "score_ring",
         "source": "tmdb",
         "display_value": display_value or "—",
         "display_label": "TMDb",
-        "ring_progress": normalize_final_score(card.get("final_score")),
-        "footer_label": format_final_score(card.get("final_score")),
-        "accent": score_ring_color_for_final_score(card.get("final_score")),
+        "ring_progress": ring_progress,
+        "footer_label": footer_label,
+        "footer_stars": final_score_to_stars(final_score),
+        "accent": score_ring_color_for_tmdb_score(card.get("tmdb_score")),
     }
 
 
@@ -120,9 +160,9 @@ def format_tmdb_pill(score: str) -> dict:
         "source": "tmdb",
         "display_value": score,
         "display_label": "TMDb",
-        "ring_progress": 0.0,
-        "footer_label": "Итог —",
-        "accent": COLOR_ACCENT,
+        "ring_progress": normalize_tmdb_score(score),
+        "footer_label": "",
+        "accent": score_ring_color_for_tmdb_score(score),
     }
 
 

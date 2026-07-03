@@ -19,7 +19,7 @@ QLabel#detailTitle {{
     font-weight: 700;
     padding: 0 0 {SPACING_XSMALL}px 0;
 }}
-QWidget#detailTitleActions {{
+QWidget#detailPosterActions {{
     background: transparent;
 }}
 QPushButton#candidateMarkWatchedButton,

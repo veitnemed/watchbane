@@ -15,6 +15,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from apis import tmdb_api
+from candidates.models import genre_schema
 from common import format_score
 from config import constant, scheme
 from posters.fetch_watched_tmdb import match_tmdb_search_result
@@ -93,22 +94,67 @@ def _raw_scores_from_details(raw_details: dict[str, Any]) -> dict[str, Any]:
     return normalize_raw_scores({key: value for key, value in raw_scores.items() if _has_value(value)})
 
 
+def _unique_non_empty(values) -> list:
+    result = []
+    seen = set()
+    for value in values or []:
+        text = str(value or "").strip()
+        if text == "" or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _genre_keys(genres: list[str]) -> list[str]:
+    keys = []
+    seen = set()
+    for genre in genres:
+        key = genre_schema.normalize_genre_to_key(genre)
+        if key is None or key in seen:
+            continue
+        seen.add(key)
+        keys.append(key)
+    return keys
+
+
 def _meta_fields_from_details(raw_details: dict[str, Any]) -> dict[str, Any]:
     poster_path = tmdb_api.extract_best_poster_path(raw_details)
     overview = tmdb_api.extract_best_overview(raw_details)
     external_ids = tmdb_api.extract_external_ids(raw_details)
+    genres = tmdb_api.names_from_items(raw_details.get("genres"))
+    origin_country = _unique_non_empty(raw_details.get("origin_country") or [])
+    production_country_names = tmdb_api.names_from_items(raw_details.get("production_countries"))
+    production_country_codes = tmdb_api.country_codes_from_items(raw_details.get("production_countries"))
+    aggregate_credits = tmdb_api.extract_aggregate_credits_top(raw_details, limit=10)
     fields: dict[str, Any] = {
         "source": "tmdb",
         "tmdb_id": raw_details.get("id"),
         "imdb_id": external_ids.get("imdb_id"),
         "description": overview,
+        "overview": overview,
         "poster_path": poster_path,
         "poster_url": tmdb_api.image_link(poster_path),
+        "first_air_date": raw_details.get("first_air_date"),
+        "last_air_date": raw_details.get("last_air_date"),
+        "original_language": raw_details.get("original_language"),
+        "origin_country": origin_country,
+        "countries": _unique_non_empty([*origin_country, *production_country_names]),
+        "country_codes": _unique_non_empty([*origin_country, *production_country_codes]),
+        "genres": genres,
+        "genre_keys": _genre_keys(genres),
+        "networks": tmdb_api.names_from_items(raw_details.get("networks")),
+        "production_companies": tmdb_api.names_from_items(raw_details.get("production_companies")),
+        "content_rating": tmdb_api.get_content_rating(raw_details),
+        "watch_providers": tmdb_api.get_watch_providers(raw_details),
+        "actors_top": aggregate_credits["actors_top"],
+        "crew_top": aggregate_credits["crew_top"],
+        "keywords": tmdb_api.extract_keywords(raw_details),
     }
     return {
         key: value
         for key, value in fields.items()
-        if value not in (None, "")
+        if value not in (None, "", [])
     }
 
 
@@ -117,6 +163,39 @@ def _strip_legacy_raw_scores(raw_scores: dict[str, Any]) -> dict[str, Any]:
         key: value
         for key, value in normalize_raw_scores(raw_scores).items()
         if key not in LEGACY_RATING_FIELDS
+    }
+
+
+def _tmdb_score_fields_for_meta(meta_obj: dict[str, Any], raw_scores: dict[str, Any]) -> dict[str, float]:
+    from candidates.sources.tmdb.scoring import (
+        compute_metadata_completeness_score,
+        compute_tmdb_final_score,
+        compute_tmdb_hidden_gem_score,
+        compute_tmdb_quality_score,
+    )
+
+    main_info = meta_obj.get(scheme.MAIN_INFO) or {}
+    candidate_like = {
+        **meta_obj,
+        **raw_scores,
+        "country": meta_obj.get("country") or main_info.get("country"),
+    }
+    metadata_score = compute_metadata_completeness_score(candidate_like)
+    quality_score = compute_tmdb_quality_score(candidate_like)
+    hidden_gem_score = compute_tmdb_hidden_gem_score(candidate_like)
+    final_score = compute_tmdb_final_score(
+        {
+            **candidate_like,
+            "metadata_completeness_score": metadata_score,
+            "quality_score": quality_score,
+            "hidden_gem_score": hidden_gem_score,
+        }
+    )
+    return {
+        "metadata_completeness_score": metadata_score,
+        "quality_score": quality_score,
+        "hidden_gem_score": hidden_gem_score,
+        "final_score": final_score,
     }
 
 
@@ -148,6 +227,7 @@ def _apply_details_to_record(
     updated_meta[scheme.RAW_SCORES] = dict(new_raw_scores)
     for key, value in _meta_fields_from_details(raw_details).items():
         updated_meta[key] = value
+    updated_meta.update(_tmdb_score_fields_for_meta(updated_meta, new_raw_scores))
 
     del dataset_key, meta_title
     return updated_movie, updated_meta, changed_raw

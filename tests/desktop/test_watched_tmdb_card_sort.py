@@ -61,8 +61,9 @@ def test_watched_card_uses_candidate_pool_tmdb_scores_and_final_score() -> None:
     assert "imdb_score" not in card
     assert ring["display_value"] == "8.1"
     assert ring["display_label"] == "TMDb"
-    assert ring["ring_progress"] == 0.74
+    assert ring["ring_progress"] == 0.81
     assert ring["footer_label"] == "Итог 74"
+    assert ring["footer_stars"] == 3.5
 
 
 def test_delete_preview_lines_are_tmdb_only() -> None:

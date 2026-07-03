@@ -459,6 +459,7 @@ def test_build_meta_pill_labels() -> None:
 
 
 def test_normalize_and_format_final_score() -> None:
+    from desktop.shared.detail.presenters import final_score_to_stars
     from desktop.watched import format_final_score, normalize_final_score
 
     assert normalize_final_score(0.74) == 0.74
@@ -467,9 +468,13 @@ def test_normalize_and_format_final_score() -> None:
     assert format_final_score(0.74) == "Итог 74"
     assert format_final_score(74) == "Итог 74"
     assert format_final_score(None) == "Итог —"
+    assert final_score_to_stars(0.86) == 4.5
+    assert final_score_to_stars(60) == 3.0
+    assert final_score_to_stars(0.52) == 2.5
+    assert final_score_to_stars(None) is None
 
 
-def test_score_ring_item_uses_tmdb_display_and_final_progress() -> None:
+def test_score_ring_item_uses_tmdb_display_and_tmdb_progress() -> None:
     from desktop.watched import build_score_ring_item, score_ring_color_for_final_score
 
     item = build_score_ring_item({"tmdb_score": 7.4, "final_score": 0.74})
@@ -479,6 +484,7 @@ def test_score_ring_item_uses_tmdb_display_and_final_progress() -> None:
     assert item["display_label"] == "TMDb"
     assert item["ring_progress"] == 0.74
     assert item["footer_label"] == "Итог 74"
+    assert item["footer_stars"] == 3.5
     assert item["accent"] == score_ring_color_for_final_score(0.74)
 
 
@@ -497,7 +503,9 @@ def test_score_ring_item_accepts_percent_final_score() -> None:
 
     assert item is not None
     assert item["display_value"] == "8.9"
-    assert item["ring_progress"] == 0.48
+    assert item["ring_progress"] == 0.89
+    assert item["footer_label"] == "Итог 48"
+    assert item["footer_stars"] == 2.5
 
 
 def test_score_ring_item_handles_missing_final_score() -> None:
@@ -506,8 +514,8 @@ def test_score_ring_item_handles_missing_final_score() -> None:
     item = build_score_ring_item({"tmdb_score": 7.4})
 
     assert item is not None
-    assert item["ring_progress"] == 0.0
-    assert item["footer_label"] == "Итог —"
+    assert item["ring_progress"] == 0.74
+    assert item["footer_label"] == ""
 
 
 def test_score_ring_item_handles_missing_tmdb_score() -> None:
@@ -518,7 +526,9 @@ def test_score_ring_item_handles_missing_tmdb_score() -> None:
     assert item is not None
     assert item["display_value"] == "—"
     assert item["display_label"] == "TMDb"
-    assert item["ring_progress"] == 0.74
+    assert item["ring_progress"] == 0.0
+    assert item["footer_label"] == "Итог 74"
+    assert item["footer_stars"] == 3.5
 
 
 def test_rating_circle_indicator_accepts_tmdb_score_ring_payload(qapp) -> None:
@@ -530,12 +540,59 @@ def test_rating_circle_indicator_accepts_tmdb_score_ring_payload(qapp) -> None:
         display_label="TMDb",
         ring_progress=0.74,
         footer_label="Итог 74",
+        footer_stars=3.5,
     )
 
     assert ring._display_value == "7.4"
     assert ring._display_label == "TMDb"
     assert ring._ring_progress == 0.74
     assert ring._footer_label == "Итог 74"
+    assert ring._footer_stars == 3.5
+    assert ring.width() > 88
+    assert ring.height() > 88
+
+
+def test_rating_circle_indicator_can_reserve_footer_space_without_stars(qapp) -> None:
+    from desktop.shared.detail.rating_indicator import RatingCircleIndicator
+
+    ring = RatingCircleIndicator("моя", reserve_footer_space=True)
+    original_height = ring.height()
+
+    ring.set_score(9.0)
+
+    assert ring._footer_stars is None
+    assert ring.width() == 88
+    assert ring.height() == original_height
+    assert ring.height() > 88
+
+
+def test_meta_pill_does_not_render_final_text_under_circle(qapp) -> None:
+    from desktop.shared.detail.card_pills import make_meta_pill
+
+    ring = make_meta_pill(
+        {
+            "display_value": "7.8",
+            "display_label": "TMDb",
+            "ring_progress": 0.78,
+            "footer_label": "Итог 75",
+            "footer_stars": 4.0,
+        }
+    )
+
+    assert ring._footer_label is None
+    assert ring._footer_stars is None
+
+
+def test_star_rating_indicator_accepts_stars(qapp) -> None:
+    from desktop.shared.detail.rating_indicator import StarRatingIndicator
+
+    stars = StarRatingIndicator()
+
+    stars.set_stars(4.5, "Итог 90")
+
+    assert stars._stars == 4.5
+    assert stars.toolTip() == "Итог 90"
+    assert stars.isVisible()
 
 
 def test_build_genre_pill_labels_hides_empty() -> None:
@@ -684,6 +741,45 @@ def test_build_watched_movie_card_uses_candidate_pool_tmdb_fallback() -> None:
     assert card["tmdb_votes"] == 777
     assert card["tmdb_popularity"] == 21.0
     assert "kp_votes" not in card
+
+
+def test_build_watched_movie_card_computes_tmdb_final_score_for_low_vote_watched_title() -> None:
+    from desktop.watched import build_score_ring_item
+    from web.export import build_export_lookup_cache, build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Открытый брак", "year": 2023, "user_score": 4.0},
+        "raw_scores": {"tmdb_score": 8.5, "tmdb_votes": 8, "tmdb_popularity": 10.402},
+        "genre": {"has_drama": 1, "has_comedy": 1, "has_melodrama": 1},
+    }
+    meta = {
+        "Открытый брак": {
+            "main_info": {"country": "Россия"},
+            "origin_country": ["RU"],
+            "country_codes": ["RU"],
+            "original_language": "ru",
+            "description": "Описание",
+            "overview": "Описание",
+            "poster_path": "/poster.jpg",
+            "poster_url": "https://image.tmdb.org/t/p/original/poster.jpg",
+            "imdb_id": "tt27907967",
+        }
+    }
+
+    card = build_watched_movie_card(
+        movie,
+        poster_cache={},
+        lookup_cache=build_export_lookup_cache(meta=meta, pool_by_identity={}),
+    )
+    ring = build_score_ring_item(card)
+
+    assert card["tmdb_score"] == 8.5
+    assert card["quality_score"] == 0.4604
+    assert card["final_score"] == 0.52
+    assert ring["display_value"] == "8.5"
+    assert ring["ring_progress"] == 0.85
+    assert ring["footer_label"] == "Итог 52"
+    assert ring["footer_stars"] == 2.5
 
 
 def test_format_genre_pill_label_unknown_genre() -> None:
@@ -1057,7 +1153,25 @@ def test_watched_detail_card_renders_main_info_block() -> None:
     assert "_set_main_info_items([])" in empty_source
 
 
-def test_candidate_detail_actions_are_icon_only_before_title() -> None:
+def test_watched_detail_card_places_tmdb_ring_before_user_score() -> None:
+    import inspect
+
+    import desktop.shared.detail.card as watched_view_module
+
+    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
+
+    meta_index = init_source.index("self._metrics_row.addWidget(self._meta_pills_widget")
+    user_index = init_source.index("self._metrics_row.addWidget(self._score_indicator")
+    assert meta_index < user_index
+    assert "self._metrics_row.addWidget(self._meta_pills_widget, alignment=Qt.AlignmentFlag.AlignVCenter)" in init_source
+    assert "self._meta_pills_widget.setSizePolicy(QSizePolicy.Policy.Maximum" in init_source
+    assert "StarRatingIndicator()" in init_source
+    assert "_rating_stars_row" in init_source
+    assert "self._metrics_row.setSpacing(RATING_CIRCLES_SPACING)" in init_source
+    assert "info_column.addSpacing(STAR_TOP_GAP)" in init_source
+
+
+def test_candidate_detail_actions_are_icon_only_under_poster() -> None:
     import inspect
 
     import desktop.shared.detail.card as watched_view_module
@@ -1069,10 +1183,9 @@ def test_candidate_detail_actions_are_icon_only_before_title() -> None:
     assert 'QPushButton()' in init_source
     assert 'make_detail_action_icon("eye"' in init_source
     assert 'make_detail_action_icon("hide"' in init_source
-    assert init_source.index("title_row.addWidget(self._title_actions_widget") < init_source.index(
-        "title_row.addWidget(self._title_label"
-    )
-    assert "self._title_actions_layout.addWidget" in init_source
+    assert "self._poster_actions_layout.addWidget" in init_source
+    assert "poster_column.addWidget(self._poster_actions_widget)" in init_source
+    assert "title_row.addWidget(self._poster_actions_widget" not in init_source
     assert "self._metrics_row.addWidget(self._mark_watched_button" not in init_source
     assert "self._metrics_row.addWidget(self._hide_button" not in init_source
 

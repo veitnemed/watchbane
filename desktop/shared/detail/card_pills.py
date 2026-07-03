@@ -39,7 +39,6 @@ def make_meta_pill(item: dict, profile: DetailCardLayoutProfile = DETAIL_CARD_LA
         display_value=item.get("display_value"),
         display_label=item.get("display_label") or item.get("label", ""),
         ring_progress=item.get("ring_progress"),
-        footer_label=item.get("footer_label"),
         widget_size=profile.rating_widget_size,
         circle_diameter=profile.rating_circle_diameter,
         value_font_point=profile.rating_value_font_point,
@@ -53,7 +52,7 @@ def fill_meta_pill_row(
     profile: DetailCardLayoutProfile = DETAIL_CARD_LAYOUT_PROFILE,
 ) -> None:
     clear_layout(layout)
-    layout.setSpacing(8)
+    layout.setSpacing(1)
     for item in items:
         layout.addWidget(make_meta_pill(item, profile))
     layout.addStretch()
