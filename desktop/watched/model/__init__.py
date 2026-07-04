@@ -2,11 +2,13 @@
 
 from desktop.shared.detail import (
     build_detail_info_pill_labels,
+    build_final_score_star_item,
     build_genre_pill_labels,
     build_main_info_items,
     build_meta_pill_items,
     build_meta_pill_labels,
     build_score_ring_item,
+    final_score_to_stars,
     format_final_score,
     format_genre_pill_label,
     format_poster_path_display,
@@ -22,6 +24,7 @@ from desktop.shared.detail import (
     open_path_in_shell,
     resolve_local_poster_path,
     score_ring_color_for_final_score,
+    score_ring_color_for_tmdb_score,
 )
 from desktop.watched.model.filters import (
     GENRE_FILTER_ALL,
@@ -83,11 +86,13 @@ __all__ = [
     "YEAR_FILTER_MIN",
     "apply_view",
     "build_detail_info_pill_labels",
+    "build_final_score_star_item",
     "build_genre_pill_labels",
     "build_main_info_items",
     "build_meta_pill_items",
     "build_meta_pill_labels",
     "build_score_ring_item",
+    "final_score_to_stars",
     "build_user_score_update_payload",
     "build_watched_search_index",
     "count_active_filters",
@@ -123,6 +128,7 @@ __all__ = [
     "resolve_local_poster_path",
     "save_watched_user_score",
     "score_ring_color_for_final_score",
+    "score_ring_color_for_tmdb_score",
     "score_filter_is_active",
     "sort_entries",
     "validate_score_edit_entry",

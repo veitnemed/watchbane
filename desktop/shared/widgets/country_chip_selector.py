@@ -5,7 +5,11 @@ from __future__ import annotations
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
-from desktop.shared.widgets.collapsible_chip_helpers import ChipExpandControl
+from desktop.shared.widgets.collapsible_chip_helpers import (
+    ChipExpandControl,
+    order_keys_by_checked,
+    reorder_flow_layout,
+)
 from desktop.shared.widgets.genre_chip_selector import FlowLayout
 
 
@@ -115,7 +119,11 @@ class CountryChipSelector(QWidget):
 
     def selected_country_codes(self) -> list[str]:
         """Return selected ISO codes; empty list means all countries."""
-        return [code for code in self._codes_in_order if self._chips.get(code) and self._chips[code].isChecked()]
+        return [
+            code
+            for code in order_keys_by_checked(self._codes_in_order, self._chips)
+            if self._chips.get(code) and self._chips[code].isChecked()
+        ]
 
     def is_all_selected(self) -> bool:
         return len(self.selected_country_codes()) == 0
@@ -128,7 +136,11 @@ class CountryChipSelector(QWidget):
         self._refresh_chip_layout()
 
     def _ordered_chips(self) -> list[QPushButton]:
-        return [self._chips[code] for code in self._codes_in_order if code in self._chips]
+        return [
+            self._chips[code]
+            for code in order_keys_by_checked(self._codes_in_order, self._chips)
+            if code in self._chips
+        ]
 
     def _toggle_expanded(self) -> None:
         self._expand.toggle()
@@ -138,7 +150,9 @@ class CountryChipSelector(QWidget):
         self._refresh_chip_layout()
 
     def _refresh_chip_layout(self, *, update_count_only: bool = False) -> None:
-        self._expand.apply_visibility(self._ordered_chips())
+        ordered_chips = self._ordered_chips()
+        reorder_flow_layout(self._flow, ordered_chips)
+        self._expand.apply_visibility(ordered_chips)
         self._chips_host.adjustSize()
         self._update_count_label(emit_selection=not update_count_only)
 

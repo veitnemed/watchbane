@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from candidates.models import country_schema
 from candidates.models.keys import title_identity_key
 from config import constant
 from posters.cache import lookup_poster_cache_entry
@@ -144,14 +145,35 @@ def _resolve_poster_fields(movie: dict, poster_cache: dict | None = None) -> dic
 def _country(movie: dict) -> str | None:
     display = _first_text(movie, "country_display")
     if display is not None:
-        return display
+        codes = country_schema.normalize_country_filter_list(display)
+        return country_schema.build_country_display(codes) or display
+
+    for field_name in (
+        "country_codes",
+        "origin_country",
+        "tmdb_country_codes",
+        "tmdb_origin_countries",
+    ):
+        codes = country_schema.normalize_country_filter_list(movie.get(field_name))
+        display = country_schema.build_country_display(codes)
+        if display is not None:
+            return display
 
     for field_name in ("countries", "production_countries", "tmdb_production_countries"):
         values = _list_text_values(movie.get(field_name))
         if len(values) > 0:
-            return ", ".join(values)
+            display = country_schema.build_country_display(
+                country_schema.normalize_country_filter_list(values)
+            )
+            return display or ", ".join(values)
 
-    return _first_text(movie, "country")
+    country = _first_text(movie, "country")
+    if country is None:
+        return None
+    display = country_schema.build_country_display(
+        country_schema.normalize_country_filter_list(country)
+    )
+    return display or country
 
 
 def _object_type(movie: dict, default: str = "unknown") -> str:

@@ -65,9 +65,6 @@ def collect_search_genre_options(candidates: list) -> list[str]:
 
 def collect_search_country_options(candidates: list) -> list[dict]:
     """Returns unique saved-pool country options for runtime search filters."""
-    from candidates.sources.tmdb import country_options as tmdb_country_options
-
-    labels_by_code = tmdb_country_options.COUNTRY_NAMES_RU_BY_CODE
     seen_codes: set[str] = set()
     options: list[dict] = []
     for candidate in candidates:
@@ -80,7 +77,7 @@ def collect_search_country_options(candidates: list) -> list[dict]:
             options.append(
                 {
                     "code": iso2,
-                    "label": labels_by_code.get(iso2, iso2),
+                    "label": country_schema.build_country_display([iso2]) or iso2,
                 }
             )
     return sorted(options, key=lambda row: str(row.get("label") or "").casefold())

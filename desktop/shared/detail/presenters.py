@@ -134,23 +134,30 @@ def format_year_pill(year) -> str:
 def build_score_ring_item(card: dict) -> dict | None:
     """Build the TMDb-only score ring item for the detail card."""
     has_tmdb_score = card.get("tmdb_score") not in (None, "")
-    has_final_score = card.get("final_score") not in (None, "")
-    if has_tmdb_score is False and has_final_score is False:
+    if has_tmdb_score is False:
         return None
 
-    display_value = format_rating_score_display(card.get("tmdb_score")) if has_tmdb_score else None
+    display_value = format_rating_score_display(card.get("tmdb_score"))
     ring_progress = normalize_tmdb_score(card.get("tmdb_score"))
-    final_score = card.get("final_score")
-    footer_label = format_final_score(final_score) if final_score not in (None, "") else ""
     return {
         "kind": "score_ring",
         "source": "tmdb",
         "display_value": display_value or "—",
         "display_label": "TMDb",
         "ring_progress": ring_progress,
-        "footer_label": footer_label,
-        "footer_stars": final_score_to_stars(final_score),
         "accent": score_ring_color_for_tmdb_score(card.get("tmdb_score")),
+    }
+
+
+def build_final_score_star_item(card: dict) -> dict | None:
+    """Build separate final-score stars for the detail card."""
+    stars = final_score_to_stars(card.get("final_score"))
+    if stars is None:
+        return None
+    return {
+        "kind": "final_stars",
+        "stars": stars,
+        "tooltip": format_final_score(card.get("final_score")),
     }
 
 
@@ -161,7 +168,6 @@ def format_tmdb_pill(score: str) -> dict:
         "display_value": score,
         "display_label": "TMDb",
         "ring_progress": normalize_tmdb_score(score),
-        "footer_label": "",
         "accent": score_ring_color_for_tmdb_score(score),
     }
 

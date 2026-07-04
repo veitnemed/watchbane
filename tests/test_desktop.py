@@ -440,7 +440,8 @@ def test_build_meta_pill_items() -> None:
     assert items[0]["display_value"] == "7.4"
     assert items[0]["display_label"] == "TMDb"
     assert items[0]["ring_progress"] == 0.74
-    assert items[0]["footer_label"] == "Итог 74"
+    assert "footer_label" not in items[0]
+    assert "footer_stars" not in items[0]
     assert all(item.get("source") not in {"imdb", "kp"} for item in items)
 
 
@@ -475,7 +476,8 @@ def test_normalize_and_format_final_score() -> None:
 
 
 def test_score_ring_item_uses_tmdb_display_and_tmdb_progress() -> None:
-    from desktop.watched import build_score_ring_item, score_ring_color_for_final_score
+    from desktop.shared.detail.presenters import score_ring_color_for_tmdb_score
+    from desktop.watched import build_score_ring_item
 
     item = build_score_ring_item({"tmdb_score": 7.4, "final_score": 0.74})
 
@@ -483,9 +485,21 @@ def test_score_ring_item_uses_tmdb_display_and_tmdb_progress() -> None:
     assert item["display_value"] == "7.4"
     assert item["display_label"] == "TMDb"
     assert item["ring_progress"] == 0.74
-    assert item["footer_label"] == "Итог 74"
-    assert item["footer_stars"] == 3.5
-    assert item["accent"] == score_ring_color_for_final_score(0.74)
+    assert "footer_label" not in item
+    assert "footer_stars" not in item
+    assert item["accent"] == score_ring_color_for_tmdb_score(7.4)
+
+
+def test_final_score_star_item_uses_final_score_only() -> None:
+    from desktop.watched import build_final_score_star_item
+
+    item = build_final_score_star_item({"tmdb_score": 7.4, "final_score": 0.74})
+
+    assert item == {
+        "kind": "final_stars",
+        "stars": 3.5,
+        "tooltip": "Итог 74",
+    }
 
 
 def test_score_ring_color_uses_red_to_green_quality_scale() -> None:
@@ -504,8 +518,8 @@ def test_score_ring_item_accepts_percent_final_score() -> None:
     assert item is not None
     assert item["display_value"] == "8.9"
     assert item["ring_progress"] == 0.89
-    assert item["footer_label"] == "Итог 48"
-    assert item["footer_stars"] == 2.5
+    assert "footer_label" not in item
+    assert "footer_stars" not in item
 
 
 def test_score_ring_item_handles_missing_final_score() -> None:
@@ -515,7 +529,7 @@ def test_score_ring_item_handles_missing_final_score() -> None:
 
     assert item is not None
     assert item["ring_progress"] == 0.74
-    assert item["footer_label"] == ""
+    assert "footer_label" not in item
 
 
 def test_score_ring_item_handles_missing_tmdb_score() -> None:
@@ -523,12 +537,7 @@ def test_score_ring_item_handles_missing_tmdb_score() -> None:
 
     item = build_score_ring_item({"final_score": 0.74})
 
-    assert item is not None
-    assert item["display_value"] == "—"
-    assert item["display_label"] == "TMDb"
-    assert item["ring_progress"] == 0.0
-    assert item["footer_label"] == "Итог 74"
-    assert item["footer_stars"] == 3.5
+    assert item is None
 
 
 def test_rating_circle_indicator_accepts_tmdb_score_ring_payload(qapp) -> None:
@@ -539,31 +548,28 @@ def test_rating_circle_indicator_accepts_tmdb_score_ring_payload(qapp) -> None:
         display_value="7.4",
         display_label="TMDb",
         ring_progress=0.74,
-        footer_label="Итог 74",
-        footer_stars=3.5,
     )
 
     assert ring._display_value == "7.4"
     assert ring._display_label == "TMDb"
     assert ring._ring_progress == 0.74
-    assert ring._footer_label == "Итог 74"
-    assert ring._footer_stars == 3.5
-    assert ring.width() > 88
-    assert ring.height() > 88
+    assert not hasattr(ring, "_footer_label")
+    assert not hasattr(ring, "_footer_stars")
+    assert ring.width() == 88
+    assert ring.height() == 88
 
 
-def test_rating_circle_indicator_can_reserve_footer_space_without_stars(qapp) -> None:
+def test_rating_circle_indicator_keeps_fixed_circle_size(qapp) -> None:
     from desktop.shared.detail.rating_indicator import RatingCircleIndicator
 
-    ring = RatingCircleIndicator("моя", reserve_footer_space=True)
+    ring = RatingCircleIndicator("моя")
     original_height = ring.height()
 
     ring.set_score(9.0)
 
-    assert ring._footer_stars is None
     assert ring.width() == 88
     assert ring.height() == original_height
-    assert ring.height() > 88
+    assert ring.height() == 88
 
 
 def test_meta_pill_does_not_render_final_text_under_circle(qapp) -> None:
@@ -579,8 +585,10 @@ def test_meta_pill_does_not_render_final_text_under_circle(qapp) -> None:
         }
     )
 
-    assert ring._footer_label is None
-    assert ring._footer_stars is None
+    assert not hasattr(ring, "_footer_label")
+    assert not hasattr(ring, "_footer_stars")
+    assert ring.width() == 88
+    assert ring.height() == 88
 
 
 def test_star_rating_indicator_accepts_stars(qapp) -> None:
@@ -635,6 +643,15 @@ def test_build_main_info_items_formats_country_type_and_votes() -> None:
         {"label": "Тип", "value": "Сериал"},
         {"label": "Голоса TMDb", "value": "3 456"},
     ]
+
+
+def test_build_main_info_items_displays_normalized_country_value() -> None:
+    from desktop.watched import build_main_info_items
+
+    assert build_main_info_items({"country": "RU, Russia", "object_type": "series"})[0] == {
+        "label": "Страна",
+        "value": "Россия",
+    }
 
 
 def test_build_main_info_items_hides_empty_votes_and_defaults_type() -> None:
@@ -696,6 +713,45 @@ def test_build_watched_movie_card_uses_meta_country_fallback() -> None:
     assert card["country"] == "США"
 
 
+def test_build_watched_movie_card_normalizes_tmdb_country_codes_for_display() -> None:
+    from web.export import build_export_lookup_cache, build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Alpha", "year": 2024, "user_score": 8.0},
+        "raw_scores": {"tmdb_score": 7.5, "tmdb_votes": 60, "tmdb_popularity": 10.0},
+    }
+    lookup_cache = build_export_lookup_cache(
+        meta={
+            "Alpha": {
+                "countries": ["RU", "Russia"],
+                "country_codes": ["RU"],
+                "origin_country": ["RU"],
+            }
+        },
+        pool_by_identity={},
+    )
+
+    card = build_watched_movie_card(movie, poster_cache={}, lookup_cache=lookup_cache)
+
+    assert card["country"] == "Россия"
+    assert "RU" not in card["country"]
+    assert "Russia" not in card["country"]
+
+
+def test_build_watched_movie_card_normalizes_english_country_name_for_display() -> None:
+    from web.export import build_watched_movie_card
+
+    card = build_watched_movie_card(
+        {
+            "main_info": {"title": "Alpha", "year": 2024, "country": "Russia"},
+            "raw_scores": {"tmdb_score": 7.5, "tmdb_votes": 60, "tmdb_popularity": 10.0},
+        },
+        poster_cache={},
+    )
+
+    assert card["country"] == "Россия"
+
+
 def test_build_watched_movie_card_uses_meta_tmdb_fallback() -> None:
     from web.export import build_export_lookup_cache, build_watched_movie_card
 
@@ -744,7 +800,7 @@ def test_build_watched_movie_card_uses_candidate_pool_tmdb_fallback() -> None:
 
 
 def test_build_watched_movie_card_computes_tmdb_final_score_for_low_vote_watched_title() -> None:
-    from desktop.watched import build_score_ring_item
+    from desktop.watched import build_final_score_star_item, build_score_ring_item
     from web.export import build_export_lookup_cache, build_watched_movie_card
 
     movie = {
@@ -778,8 +834,9 @@ def test_build_watched_movie_card_computes_tmdb_final_score_for_low_vote_watched
     assert card["final_score"] == 0.52
     assert ring["display_value"] == "8.5"
     assert ring["ring_progress"] == 0.85
-    assert ring["footer_label"] == "Итог 52"
-    assert ring["footer_stars"] == 2.5
+    assert "footer_label" not in ring
+    assert "footer_stars" not in ring
+    assert build_final_score_star_item(card)["stars"] == 2.5
 
 
 def test_format_genre_pill_label_unknown_genre() -> None:
@@ -1796,6 +1853,28 @@ def test_build_candidate_readonly_card_passes_main_info_fields(monkeypatch) -> N
     assert "imdb_votes" not in card
 
 
+def test_build_candidate_readonly_card_normalizes_country_for_display(monkeypatch) -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_card
+
+    monkeypatch.setattr(
+        "desktop.candidates.presenters.resolve_local_poster_path_for_candidate",
+        lambda candidate: None,
+    )
+
+    card = build_candidate_readonly_card(
+        {
+            "title": "Test Show",
+            "year": 2020,
+            "countries": ["RU", "Russia"],
+            "country_codes": ["RU"],
+            "tmdb_score": 8.1,
+            "tmdb_votes": 12000,
+        }
+    )
+
+    assert card["country"] == "Россия"
+
+
 def test_build_candidate_readonly_card_ignores_tmdb_scripted_type(monkeypatch) -> None:
     from desktop.candidates.presenters import build_candidate_readonly_card
 
@@ -1920,6 +1999,132 @@ def test_chip_expand_control_shows_five_chips_when_collapsed(qapp) -> None:
 
     selector._toggle_expanded()
     assert all(chip.isVisible() for chip in selector._ordered_chips())
+
+
+def test_genre_chip_selector_can_collapse_with_selected_chip_outside_top_five(qapp) -> None:
+    from desktop.shared.widgets.collapsible_chip_helpers import COLLAPSED_VISIBLE_CHIP_COUNT
+    from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
+
+    genres = [f"Жанр {index}" for index in range(8)]
+    selector = GenreChipSelector()
+    selector.set_options(genres)
+    selector.show()
+
+    selector._toggle_expanded()
+    selector._chips["Жанр 7"].setChecked(True)
+    selector._toggle_expanded()
+
+    ordered_texts = [chip.text() for chip in selector._ordered_chips()]
+    visible_texts = [chip.text() for chip in selector._ordered_chips() if chip.isVisible()]
+    assert selector._expand.expanded is False
+    assert ordered_texts[:COLLAPSED_VISIBLE_CHIP_COUNT] == [
+        "Жанр 7",
+        "Жанр 0",
+        "Жанр 1",
+        "Жанр 2",
+        "Жанр 3",
+    ]
+    assert visible_texts == ordered_texts[:COLLAPSED_VISIBLE_CHIP_COUNT]
+    assert selector._expand._button.text() == "Показать ещё (3) ▼"
+
+
+def test_country_chip_selector_can_collapse_with_selected_chip_outside_top_five(qapp) -> None:
+    from desktop.shared.widgets.collapsible_chip_helpers import COLLAPSED_VISIBLE_CHIP_COUNT
+    from desktop.shared.widgets.country_chip_selector import CountryChipSelector
+
+    options = [
+        {"code": f"C{index}", "label": f"Страна {index}"}
+        for index in range(8)
+    ]
+    selector = CountryChipSelector(options)
+    selector.show()
+
+    selector._toggle_expanded()
+    selector._chips["C7"].setChecked(True)
+    selector._toggle_expanded()
+
+    ordered_texts = [chip.text() for chip in selector._ordered_chips()]
+    visible_texts = [chip.text() for chip in selector._ordered_chips() if chip.isVisible()]
+    assert selector._expand.expanded is False
+    assert ordered_texts[:COLLAPSED_VISIBLE_CHIP_COUNT] == [
+        "Страна 7",
+        "Страна 0",
+        "Страна 1",
+        "Страна 2",
+        "Страна 3",
+    ]
+    assert visible_texts == ordered_texts[:COLLAPSED_VISIBLE_CHIP_COUNT]
+    assert selector._expand._button.text() == "Показать ещё (3) ▼"
+
+
+def test_chip_selectors_sort_selected_items_by_popularity_not_click_order(qapp) -> None:
+    from desktop.shared.widgets.country_chip_selector import CountryChipSelector
+    from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
+
+    genres = [f"Жанр {index}" for index in range(8)]
+    genre_selector = GenreChipSelector()
+    genre_selector.set_options(genres)
+    genre_selector.show()
+    genre_selector._chips["Жанр 7"].setChecked(True)
+    genre_selector._chips["Жанр 5"].setChecked(True)
+
+    country_selector = CountryChipSelector(
+        [{"code": f"C{index}", "label": f"Страна {index}"} for index in range(8)]
+    )
+    country_selector.show()
+    country_selector._chips["C7"].setChecked(True)
+    country_selector._chips["C5"].setChecked(True)
+
+    assert genre_selector.selected_genres() == ["Жанр 5", "Жанр 7"]
+    assert [chip.text() for chip in genre_selector._ordered_chips()[:4]] == [
+        "Жанр 5",
+        "Жанр 7",
+        "Жанр 0",
+        "Жанр 1",
+    ]
+    assert country_selector.selected_country_codes() == ["C5", "C7"]
+    assert [chip.text() for chip in country_selector._ordered_chips()[:4]] == [
+        "Страна 5",
+        "Страна 7",
+        "Страна 0",
+        "Страна 1",
+    ]
+
+
+def test_chip_selector_collapsed_mode_never_shows_more_than_five_even_when_many_selected(qapp) -> None:
+    from desktop.shared.widgets.collapsible_chip_helpers import COLLAPSED_VISIBLE_CHIP_COUNT
+    from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
+
+    genres = [f"Жанр {index}" for index in range(8)]
+    selector = GenreChipSelector()
+    selector.set_options(genres)
+    selector.show()
+
+    selector._toggle_expanded()
+    for index in range(6):
+        selector._chips[f"Жанр {index}"].setChecked(True)
+    selector._toggle_expanded()
+
+    visible_texts = [chip.text() for chip in selector._ordered_chips() if chip.isVisible()]
+    assert len(visible_texts) == COLLAPSED_VISIBLE_CHIP_COUNT
+    assert visible_texts == ["Жанр 0", "Жанр 1", "Жанр 2", "Жанр 3", "Жанр 4"]
+    assert selector._chips["Жанр 5"].isChecked() is True
+    assert selector._chips["Жанр 5"].isVisible() is False
+
+
+def test_chip_selectors_handle_empty_options(qapp) -> None:
+    from desktop.shared.widgets.country_chip_selector import CountryChipSelector
+    from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
+
+    genre_selector = GenreChipSelector()
+    genre_selector.set_options([])
+    country_selector = CountryChipSelector([])
+
+    assert genre_selector.selected_genres() == []
+    assert country_selector.selected_country_codes() == []
+    assert genre_selector._expand._button.isVisible() is False
+    assert country_selector._expand._button.isVisible() is False
+
 
 def test_candidate_filters_view_numeric_threshold_sliders_collect_values(monkeypatch, qapp) -> None:
     from desktop.candidates.filters_view import (

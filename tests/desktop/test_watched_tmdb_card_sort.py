@@ -28,7 +28,7 @@ def test_watched_sort_entries_supports_tmdb_fields() -> None:
 
 
 def test_watched_card_uses_candidate_pool_tmdb_scores_and_final_score() -> None:
-    from desktop.watched import build_score_ring_item
+    from desktop.watched import build_final_score_star_item, build_score_ring_item
     from web.export import build_export_lookup_cache, build_watched_movie_card
 
     movie = {
@@ -62,8 +62,9 @@ def test_watched_card_uses_candidate_pool_tmdb_scores_and_final_score() -> None:
     assert ring["display_value"] == "8.1"
     assert ring["display_label"] == "TMDb"
     assert ring["ring_progress"] == 0.81
-    assert ring["footer_label"] == "Итог 74"
-    assert ring["footer_stars"] == 3.5
+    assert "footer_label" not in ring
+    assert "footer_stars" not in ring
+    assert build_final_score_star_item(card)["stars"] == 3.5
 
 
 def test_delete_preview_lines_are_tmdb_only() -> None:

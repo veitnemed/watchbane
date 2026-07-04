@@ -30,7 +30,49 @@ COUNTRY_NAME_BY_ISO2 = {
     "BE": "Бельгия",
     "IE": "Ирландия",
     "UA": "Украина",
+    "SU": "СССР",
 }
+
+ENGLISH_COUNTRY_NAME_BY_ISO2 = {
+    "RU": "Russia",
+    "US": "United States",
+    "GB": "United Kingdom",
+    "KR": "South Korea",
+    "JP": "Japan",
+    "FR": "France",
+    "DE": "Germany",
+    "ES": "Spain",
+    "IT": "Italy",
+    "TR": "Turkey",
+    "CN": "China",
+    "IN": "India",
+    "CA": "Canada",
+    "AU": "Australia",
+    "BR": "Brazil",
+    "MX": "Mexico",
+    "AR": "Argentina",
+    "SE": "Sweden",
+    "NO": "Norway",
+    "DK": "Denmark",
+    "FI": "Finland",
+    "PL": "Poland",
+    "NL": "Netherlands",
+    "BE": "Belgium",
+    "IE": "Ireland",
+    "UA": "Ukraine",
+    "SU": "Soviet Union",
+}
+
+SU_COUNTRY_ALIASES = (
+    "USSR",
+    "U.S.S.R.",
+    "Soviet Union",
+    "Union of Soviet Socialist Republics",
+    "СССР",
+    "Советский Союз",
+    "Союз Советских Социалистических Республик",
+    "SU",
+)
 
 KR_COUNTRY_ALIASES = (
     "Южная Корея",
@@ -61,8 +103,9 @@ def _register_country_aliases(canonical: str, *aliases: str) -> None:
 
 def _init_country_alias_map() -> None:
     for iso2, name in COUNTRY_NAME_BY_ISO2.items():
-        _register_country_aliases(iso2, iso2, name)
+        _register_country_aliases(iso2, iso2, name, ENGLISH_COUNTRY_NAME_BY_ISO2.get(iso2, ""))
     _register_country_aliases("KR", *KR_COUNTRY_ALIASES)
+    _register_country_aliases("SU", *SU_COUNTRY_ALIASES)
 
 
 _init_country_alias_map()

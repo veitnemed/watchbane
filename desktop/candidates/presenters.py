@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from candidates import service as candidate_service
+from candidates.models.country_schema import candidate_country_for_display
 from dataset import service
 from dataset.resolve.poster_hints import build_poster_hints_from_candidate
 
@@ -126,7 +127,7 @@ def build_candidate_readonly_card(candidate: dict) -> dict:
     title = candidate.get("title") or candidate.get("name") or "Без названия"
     overview = candidate.get("overview") or candidate.get("description")
     overview_text = str(overview).strip() if overview not in (None, "") else ""
-    country = candidate.get("country_display") or candidate.get("country")
+    country = candidate_country_for_display(candidate)
     object_type = candidate.get("media_type") or candidate.get("object_type")
     if object_type in (None, "") and (
         candidate.get("number_of_seasons") not in (None, "", 0, "0")

@@ -5,7 +5,11 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt, QSize, QRect, pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
-from desktop.shared.widgets.collapsible_chip_helpers import ChipExpandControl
+from desktop.shared.widgets.collapsible_chip_helpers import (
+    ChipExpandControl,
+    order_keys_by_checked,
+    reorder_flow_layout,
+)
 
 
 class FlowLayout(QLayout):
@@ -149,7 +153,11 @@ class GenreChipSelector(QWidget):
 
     def selected_genres(self) -> list[str]:
         """Return selected genre labels in display order."""
-        return [genre for genre in self._genres if self._chips.get(genre) and self._chips[genre].isChecked()]
+        return [
+            genre
+            for genre in order_keys_by_checked(self._genres, self._chips)
+            if self._chips.get(genre) and self._chips[genre].isChecked()
+        ]
 
     def clear_selection(self) -> None:
         for chip in self._chips.values():
@@ -159,7 +167,11 @@ class GenreChipSelector(QWidget):
         self._refresh_chip_layout()
 
     def _ordered_chips(self) -> list[QPushButton]:
-        return [self._chips[genre] for genre in self._genres if genre in self._chips]
+        return [
+            self._chips[genre]
+            for genre in order_keys_by_checked(self._genres, self._chips)
+            if genre in self._chips
+        ]
 
     def _toggle_expanded(self) -> None:
         self._expand.toggle()
@@ -169,7 +181,9 @@ class GenreChipSelector(QWidget):
         self._refresh_chip_layout()
 
     def _refresh_chip_layout(self, *, update_count_only: bool = False) -> None:
-        self._expand.apply_visibility(self._ordered_chips())
+        ordered_chips = self._ordered_chips()
+        reorder_flow_layout(self._flow, ordered_chips)
+        self._expand.apply_visibility(ordered_chips)
         self._chips_host.adjustSize()
         self._update_count_label(emit_selection=not update_count_only)
 

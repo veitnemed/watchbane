@@ -21,6 +21,7 @@ class ChipExpandControl:
         self._expand_object_name = expand_object_name
         self._button: QPushButton | None = None
         self._total = 0
+        self._hidden_count = 0
 
     def create_button(self) -> QPushButton:
         button = QPushButton()
@@ -37,25 +38,57 @@ class ChipExpandControl:
 
     def apply_visibility(self, chips: list[QPushButton]) -> None:
         self._total = len(chips)
-        if not self.expanded:
-            for index, chip in enumerate(chips):
-                if index >= self.visible_count and chip.isChecked():
-                    self.expanded = True
-                    break
-
+        hidden_count = 0
         for index, chip in enumerate(chips):
-            chip.setVisible(self.expanded or index < self.visible_count)
+            should_show = self.expanded or index < self.visible_count
+            chip.setVisible(should_show)
+            if not should_show:
+                hidden_count += 1
+        self._hidden_count = hidden_count
 
         self._update_button()
 
     def _update_button(self) -> None:
         if self._button is None:
             return
-        hidden_count = max(0, self._total - self.visible_count)
-        self._button.setVisible(hidden_count > 0)
-        if hidden_count <= 0:
+        has_collapsible_items = self._total > self.visible_count
+        self._button.setVisible(has_collapsible_items)
+        if not has_collapsible_items:
             return
         if self.expanded:
             self._button.setText("Свернуть ▲")
         else:
-            self._button.setText(f"Показать ещё ({hidden_count}) ▼")
+            self._button.setText(f"Показать ещё ({self._hidden_count}) ▼")
+
+
+def order_keys_by_checked(base_keys: list[str], chips: dict[str, QPushButton]) -> list[str]:
+    """Return selected keys first, preserving the original popularity order inside each group."""
+    selected: list[str] = []
+    unselected: list[str] = []
+    for key in base_keys:
+        chip = chips.get(key)
+        if chip is None:
+            continue
+        if chip.isChecked():
+            selected.append(key)
+        else:
+            unselected.append(key)
+    return selected + unselected
+
+
+def reorder_flow_layout(layout, widgets: list[QPushButton]) -> None:
+    """Reorder an existing FlowLayout without recreating chip widgets."""
+    items_by_widget = {}
+    while layout.count():
+        item = layout.takeAt(0)
+        widget = item.widget()
+        if widget is not None:
+            items_by_widget[widget] = item
+
+    for widget in widgets:
+        item = items_by_widget.pop(widget, None)
+        if item is not None:
+            layout.addItem(item)
+
+    for item in items_by_widget.values():
+        layout.addItem(item)

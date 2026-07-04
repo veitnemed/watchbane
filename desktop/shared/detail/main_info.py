@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from candidates.models import country_schema
+
 
 UNKNOWN_OBJECT_TYPE = "Неизвестно"
 
@@ -56,6 +58,9 @@ def build_main_info_items(card: dict) -> list[dict[str, str]]:
 
     country = _clean_text(card.get("country"))
     if country is not None:
+        country = country_schema.build_country_display(
+            country_schema.normalize_country_filter_list(country)
+        ) or country
         items.append({"label": "Страна", "value": country})
 
     items.append(

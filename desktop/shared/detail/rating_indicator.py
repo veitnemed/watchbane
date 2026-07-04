@@ -1,4 +1,4 @@
-"""Circular rating indicator widget for detail cards."""
+"""Circular rating and final-star indicators for detail cards."""
 
 from __future__ import annotations
 
@@ -24,11 +24,7 @@ STAR_MIN_SIZE = 16
 STAR_MAX_SIZE = 22
 STAR_GAP = 3
 STAR_ROW_RIGHT_OFFSET = 7
-STAR_TOP_GAP = 20
-STAR_FOOTER_HEIGHT_MIN = 62
-STAR_FOOTER_HEIGHT_FACTOR = 0.70
 STAR_EXTRA_WIDTH_PADDING = 8
-RATING_TMDB_CIRCLE_RIGHT_PADDING = 0
 
 
 def _score_progress(score) -> float:
@@ -49,6 +45,24 @@ def _display_text(value) -> str:
     return str(value)
 
 
+def _star_path(center_x: float, center_y: float, outer_radius: float):
+    from PyQt6.QtGui import QPainterPath
+
+    inner_radius = outer_radius * 0.48
+    path = QPainterPath()
+    for index in range(10):
+        angle = -math.pi / 2 + index * math.pi / 5
+        radius = outer_radius if index % 2 == 0 else inner_radius
+        x = center_x + math.cos(angle) * radius
+        y = center_y + math.sin(angle) * radius
+        if index == 0:
+            path.moveTo(x, y)
+        else:
+            path.lineTo(x, y)
+    path.closeSubpath()
+    return path
+
+
 class RatingCircleIndicator:
     """Small circular score indicator with a radial progress ring."""
 
@@ -61,9 +75,6 @@ class RatingCircleIndicator:
         display_value=None,
         display_label: str | None = None,
         ring_progress=None,
-        footer_label: str | None = None,
-        footer_stars: float | None = None,
-        reserve_footer_space: bool = False,
         widget_size: int = RATING_CIRCLE_WIDGET_SIZE,
         circle_diameter: int = RATING_CIRCLE_DIAMETER,
         value_font_point: int = FONT_RATING_VALUE_POINT,
@@ -81,9 +92,6 @@ class RatingCircleIndicator:
                 display_score_value,
                 display_label_text: str | None,
                 progress_value,
-                footer_text: str | None,
-                footer_star_value: float | None,
-                reserve_footer: bool,
             ) -> None:
                 super().__init__()
                 self._label = label_text
@@ -102,84 +110,13 @@ class RatingCircleIndicator:
                     if progress_value is None
                     else normalize_final_score(progress_value)
                 )
-                self._footer_label = footer_text
-                self._footer_stars = self._normalize_stars(footer_star_value)
-                self._reserve_footer_space = bool(reserve_footer)
-                self._footer_height = self._resolve_footer_height()
-                self._paint_width = self._resolve_paint_width()
-                self.setFixedSize(self._paint_width, self._widget_size + self._footer_height)
+                self.setFixedSize(self._widget_size, self._widget_size)
                 self.setStyleSheet(TRANSPARENT_STYLE)
-                if self._footer_label:
-                    self.setToolTip(self._footer_label)
-
-            @staticmethod
-            def _normalize_stars(value) -> float | None:
-                if value in (None, ""):
-                    return None
-                try:
-                    return max(0.0, min(5.0, float(value)))
-                except (TypeError, ValueError):
-                    return None
-
-            def _resolve_footer_height(self) -> int:
-                if self._footer_stars is not None:
-                    return max(
-                        STAR_FOOTER_HEIGHT_MIN,
-                        int(self._widget_size * STAR_FOOTER_HEIGHT_FACTOR),
-                    )
-                if self._reserve_footer_space:
-                    return max(
-                        STAR_FOOTER_HEIGHT_MIN,
-                        int(self._widget_size * STAR_FOOTER_HEIGHT_FACTOR),
-                    )
-                if self._footer_label:
-                    return 20
-                return 0
-
-            def _star_row_width(self) -> int:
-                star_size = self._star_size()
-                return 5 * star_size + 4 * self._star_gap()
-
-            def _star_size(self) -> int:
-                return max(
-                    STAR_MIN_SIZE,
-                    min(
-                        STAR_MAX_SIZE,
-                        int(self._circle_diameter * 0.15 * STAR_SCALE),
-                    ),
-                )
-
-            def _star_gap(self) -> int:
-                return STAR_GAP
-
-            def _resolve_paint_width(self) -> int:
-                if self._footer_stars is not None:
-                    return max(self._widget_size, self._star_row_width() + STAR_EXTRA_WIDTH_PADDING)
-                return self._widget_size
-
-            def _circle_left(self) -> float:
-                default_left = (self._widget_size - self._circle_diameter) / 2
-                if self._footer_stars is None:
-                    return default_left
-                right_aligned_left = self.width() - self._circle_diameter - RATING_TMDB_CIRCLE_RIGHT_PADDING
-                return max(default_left, min(right_aligned_left, self.width() - self._circle_diameter))
-
-            def _set_footer(self, footer_text: str | None, footer_star_value=None) -> None:
-                self._footer_label = footer_text
-                self._footer_stars = self._normalize_stars(footer_star_value)
-                self._footer_height = self._resolve_footer_height()
-                self._paint_width = self._resolve_paint_width()
-                self.setToolTip(self._footer_label or "")
 
             def set_score(self, score_value) -> None:
                 self._score = score_value
                 self._display_value = _score_text(score_value)
                 self._ring_progress = _score_progress(score_value)
-                self._footer_label = None
-                self._footer_stars = None
-                self._footer_height = self._resolve_footer_height()
-                self._paint_width = self._resolve_paint_width()
-                self.setFixedSize(self._paint_width, self._widget_size + self._footer_height)
                 self.update()
 
             def set_payload(
@@ -188,63 +125,11 @@ class RatingCircleIndicator:
                 display_value,
                 display_label: str,
                 ring_progress,
-                footer_label: str | None = None,
-                footer_stars: float | None = None,
             ) -> None:
                 self._display_value = _display_text(display_value)
                 self._display_label = display_label
                 self._ring_progress = normalize_final_score(ring_progress)
-                self._set_footer(footer_label, footer_stars)
-                self.setFixedSize(self._paint_width, self._widget_size + self._footer_height)
                 self.update()
-
-            def _star_path(self, center_x: float, center_y: float, outer_radius: float):
-                from PyQt6.QtGui import QPainterPath
-
-                inner_radius = outer_radius * 0.48
-                path = QPainterPath()
-                for index in range(10):
-                    angle = -math.pi / 2 + index * math.pi / 5
-                    radius = outer_radius if index % 2 == 0 else inner_radius
-                    x = center_x + math.cos(angle) * radius
-                    y = center_y + math.sin(angle) * radius
-                    if index == 0:
-                        path.moveTo(x, y)
-                    else:
-                        path.lineTo(x, y)
-                path.closeSubpath()
-                return path
-
-            def _draw_footer_stars(self, painter) -> None:
-                from PyQt6.QtCore import QRectF, Qt
-                from PyQt6.QtGui import QColor, QPen
-
-                stars = max(0.0, min(5.0, float(self._footer_stars or 0.0)))
-                star_size = self._star_size()
-                gap = self._star_gap()
-                total_width = 5 * star_size + 4 * gap
-                start_x = max(0, (self.width() - total_width) / 2 + STAR_ROW_RIGHT_OFFSET)
-                circle_area_height = self.height() - self._footer_height
-                center_y = circle_area_height + STAR_TOP_GAP + star_size / 2
-                empty_color = QColor(COLOR_BORDER)
-                fill_color = QColor(STAR_FILL)
-
-                for index in range(5):
-                    x = start_x + index * (star_size + gap)
-                    path = self._star_path(x + star_size / 2, center_y, star_size / 2)
-                    painter.setPen(QPen(empty_color, 1))
-                    painter.setBrush(empty_color)
-                    painter.drawPath(path)
-
-                    fill_fraction = max(0.0, min(1.0, stars - index))
-                    if fill_fraction <= 0:
-                        continue
-                    painter.save()
-                    painter.setClipRect(QRectF(x, center_y - star_size / 2, star_size * fill_fraction, star_size))
-                    painter.setPen(Qt.PenStyle.NoPen)
-                    painter.setBrush(fill_color)
-                    painter.drawPath(path)
-                    painter.restore()
 
             def paintEvent(self, _event) -> None:
                 from PyQt6.QtCore import QRectF, Qt
@@ -253,9 +138,8 @@ class RatingCircleIndicator:
                 painter = QPainter(self)
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-                circle_area_height = self.height() - self._footer_height
-                left = self._circle_left()
-                top = (circle_area_height - self._circle_diameter) / 2
+                left = (self.width() - self._circle_diameter) / 2
+                top = (self.height() - self._circle_diameter) / 2
                 rect = QRectF(left, top, self._circle_diameter, self._circle_diameter)
                 inner_pad = max(4, int(self._circle_diameter * 0.08))
                 inner_rect = rect.adjusted(inner_pad, inner_pad, -inner_pad, -inner_pad)
@@ -302,26 +186,6 @@ class RatingCircleIndicator:
                     self._display_label,
                 )
 
-                if self._footer_stars is not None:
-                    self._draw_footer_stars(painter)
-                elif self._footer_label:
-                    painter.setPen(QColor(COLOR_TEXT_SECONDARY))
-                    footer_font = QFont(FONT_FAMILY)
-                    footer_font.setPointSize(max(7, self._label_font_point))
-                    footer_font.setBold(True)
-                    painter.setFont(footer_font)
-                    footer_rect = QRectF(
-                        0,
-                        circle_area_height - 1,
-                        self.width(),
-                        self._footer_height,
-                    )
-                    painter.drawText(
-                        footer_rect,
-                        Qt.AlignmentFlag.AlignCenter,
-                        self._footer_label,
-                    )
-
         return _RatingCircleWidget(
             label,
             score,
@@ -329,9 +193,6 @@ class RatingCircleIndicator:
             display_score_value=display_value,
             display_label_text=display_label,
             progress_value=ring_progress,
-            footer_text=footer_label,
-            footer_star_value=footer_stars,
-            reserve_footer=reserve_footer_space,
         )
 
 
@@ -382,23 +243,6 @@ class StarRatingIndicator:
                 self.show()
                 self.update()
 
-            def _star_path(self, center_x: float, center_y: float, outer_radius: float):
-                from PyQt6.QtGui import QPainterPath
-
-                inner_radius = outer_radius * 0.48
-                path = QPainterPath()
-                for index in range(10):
-                    angle = -math.pi / 2 + index * math.pi / 5
-                    radius = outer_radius if index % 2 == 0 else inner_radius
-                    x = center_x + math.cos(angle) * radius
-                    y = center_y + math.sin(angle) * radius
-                    if index == 0:
-                        path.moveTo(x, y)
-                    else:
-                        path.lineTo(x, y)
-                path.closeSubpath()
-                return path
-
             def paintEvent(self, _event) -> None:
                 if self._stars is None:
                     return
@@ -417,7 +261,7 @@ class StarRatingIndicator:
 
                 for index in range(5):
                     x = start_x + index * (star_size + gap)
-                    path = self._star_path(x + star_size / 2, center_y, star_size / 2)
+                    path = _star_path(x + star_size / 2, center_y, star_size / 2)
                     painter.setPen(QPen(empty_color, 1))
                     painter.setBrush(empty_color)
                     painter.drawPath(path)

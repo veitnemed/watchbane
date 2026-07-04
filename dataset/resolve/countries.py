@@ -44,4 +44,7 @@ def country_value_to_iso2(value: str) -> str | None:
 
 
 def country_labels_by_code() -> dict[str, str]:
-    return tmdb_country_options.COUNTRY_NAMES_RU_BY_CODE
+    return {
+        **tmdb_country_options.COUNTRY_NAMES_RU_BY_CODE,
+        **country_reference.COUNTRY_NAME_BY_ISO2,
+    }

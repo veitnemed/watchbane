@@ -49,6 +49,31 @@ def test_build_dataset_country_popularity_maps_russia_to_ru() -> None:
     assert rows[1] == {"code": "US", "label": "США", "count": 1}
 
 
+def test_build_dataset_country_popularity_displays_soviet_union_label() -> None:
+    data = {
+        "a": _movie(country="SU"),
+        "b": _movie(country="USSR"),
+        "c": _movie(country="Soviet Union"),
+    }
+
+    rows = build_dataset_country_popularity(data)
+
+    assert rows == [{"code": "SU", "label": "СССР", "count": 3}]
+
+
+def test_collect_search_country_options_displays_soviet_union_label() -> None:
+    from candidates.pool.search_helpers import collect_search_country_options
+
+    rows = collect_search_country_options(
+        [
+            {"title": "A", "country_codes": ["SU"]},
+            {"title": "B", "countries": ["USSR"]},
+        ]
+    )
+
+    assert {"code": "SU", "label": "СССР"} in rows
+
+
 def test_get_search_filter_chip_options_view_uses_dataset_popularity(monkeypatch) -> None:
     from candidates import service as candidate_service
 
@@ -77,6 +102,32 @@ def test_get_search_filter_chip_options_view_uses_dataset_popularity(monkeypatch
     assert view["countries"][0]["code"] == "RU"
     assert view["countries"][0]["count"] == 1
     assert view["countries"][-1] == {"code": "GB", "label": "Великобритания", "count": 0}
+
+
+def test_get_search_filter_chip_options_view_does_not_show_raw_su_code(monkeypatch) -> None:
+    from candidates import service as candidate_service
+
+    dataset = {
+        "a": _movie(country="Россия"),
+        "b": _movie(country="США"),
+        "c": _movie(country="SU"),
+    }
+    monkeypatch.setattr("candidates.service.storage_data.load_dataset", lambda: dataset)
+    monkeypatch.setattr("candidates.service.get_pool_view", lambda: [])
+    monkeypatch.setattr(
+        "candidates.service.collect_search_genre_options",
+        lambda _candidates: [],
+    )
+    monkeypatch.setattr(
+        "candidates.service.collect_search_country_options",
+        lambda _candidates: [],
+    )
+
+    view = candidate_service.get_search_filter_chip_options_view()
+
+    su_row = next(row for row in view["countries"] if row["code"] == "SU")
+    assert su_row["label"] == "СССР"
+    assert su_row["label"] != "SU"
 
 
 def test_get_search_filter_chip_options_view_falls_back_when_dataset_empty(monkeypatch) -> None:

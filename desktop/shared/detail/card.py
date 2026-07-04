@@ -9,6 +9,7 @@ from desktop.shared.detail.main_info import build_main_info_items
 from desktop.shared.detail.posters import resolve_local_poster_path
 from desktop.shared.detail.presenters import (
     build_detail_info_pill_labels,
+    build_final_score_star_item,
     build_meta_pill_items,
 )
 from desktop.shared.detail.profiles import (
@@ -369,9 +370,9 @@ class WatchedDetailCard(DetailCardPosterMixin):
         meta_pills = build_meta_pill_items(card)
         fill_meta_pill_row(self._meta_pills_layout, meta_pills, self._profile)
         self._meta_pills_widget.setVisible(len(meta_pills) > 0)
-        star_item = next((item for item in meta_pills if item.get("footer_stars") is not None), None)
+        star_item = build_final_score_star_item(card)
         if star_item is not None:
-            self._rating_stars_widget.set_stars(star_item.get("footer_stars"), star_item.get("footer_label") or "")
+            self._rating_stars_widget.set_stars(star_item.get("stars"), star_item.get("tooltip") or "")
             self._rating_stars_row.show()
         else:
             self._rating_stars_widget.set_stars(None)

@@ -119,7 +119,13 @@ def candidate_country_for_display(candidate: dict) -> str:
     """Returns UI country label, preferring country_display with legacy fallback."""
     display = str(candidate.get("country_display") or "").strip()
     if display != "":
-        return display
+        codes = normalize_country_filter_list(display)
+        return build_country_display(codes) or display
+
+    codes = build_country_codes(candidate)
+    normalized_display = build_country_display(codes)
+    if normalized_display is not None:
+        return normalized_display
 
     raw_values = _iter_raw_countries(candidate.get("countries"))
     if len(raw_values) == 0:

@@ -14,10 +14,12 @@ from desktop.shared.detail.main_info import (
 )
 from desktop.shared.detail.presenters import (
     build_detail_info_pill_labels,
+    build_final_score_star_item,
     build_genre_pill_labels,
     build_meta_pill_items,
     build_meta_pill_labels,
     build_score_ring_item,
+    final_score_to_stars,
     format_final_score,
     format_genre_pill_label,
     format_rating_score_display,
@@ -27,6 +29,7 @@ from desktop.shared.detail.presenters import (
     has_overview_text,
     normalize_final_score,
     score_ring_color_for_final_score,
+    score_ring_color_for_tmdb_score,
 )
 from desktop.shared.detail.posters import (
     format_poster_path_display,
@@ -77,11 +80,13 @@ __all__ = [
     "_elide_text",
     "_load_list_thumb_pixmap",
     "build_detail_info_pill_labels",
+    "build_final_score_star_item",
     "build_genre_pill_labels",
     "build_main_info_items",
     "build_meta_pill_items",
     "build_meta_pill_labels",
     "build_score_ring_item",
+    "final_score_to_stars",
     "fit_poster_pixmap_for_display",
     "format_final_score",
     "format_genre_pill_label",
@@ -98,4 +103,5 @@ __all__ = [
     "open_path_in_shell",
     "resolve_local_poster_path",
     "score_ring_color_for_final_score",
+    "score_ring_color_for_tmdb_score",
 ]
