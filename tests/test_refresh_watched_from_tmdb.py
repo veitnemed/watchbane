@@ -31,6 +31,12 @@ def _details(tmdb_id: int = 123, title: str = "Show") -> dict:
         "popularity": 12.3,
         "overview": "TMDb overview",
         "poster_path": "/poster.jpg",
+        "status": "Ended",
+        "type": "Scripted",
+        "in_production": False,
+        "number_of_seasons": 1,
+        "number_of_episodes": 8,
+        "episode_run_time": [50],
         "external_ids": {"imdb_id": "tt123"},
         "origin_country": ["US"],
         "original_language": "en",
@@ -39,6 +45,7 @@ def _details(tmdb_id: int = 123, title: str = "Show") -> dict:
         "networks": [{"name": "HBO"}],
         "production_companies": [{"name": "Studio"}],
         "content_ratings": {"results": [{"iso_3166_1": "US", "rating": "TV-MA"}]},
+        "watch/providers": {"results": {"RU": {"flatrate": [{"provider_name": "Kinopoisk"}]}}},
         "aggregate_credits": {
             "cast": [{"id": 1, "name": "Actor", "roles": [{"character": "Lead", "episode_count": 8}]}],
             "crew": [{"id": 2, "name": "Creator", "jobs": [{"job": "Creator", "episode_count": 8}]}],
@@ -75,6 +82,12 @@ def test_refresh_watched_by_existing_tmdb_id_updates_meta_and_raw_scores() -> No
     assert meta_obj["description"] == "TMDb overview"
     assert meta_obj["poster_path"] == "/poster.jpg"
     assert meta_obj["poster_url"].endswith("/poster.jpg")
+    assert meta_obj["status"] == "Ended"
+    assert meta_obj["type"] == "Scripted"
+    assert meta_obj["in_production"] is False
+    assert meta_obj["number_of_seasons"] == 1
+    assert meta_obj["number_of_episodes"] == 8
+    assert meta_obj["episode_run_time"] == [50]
     assert meta_obj["origin_country"] == ["US"]
     assert meta_obj["country_codes"] == ["US"]
     assert meta_obj["countries"] == ["US", "United States of America"]
@@ -84,6 +97,7 @@ def test_refresh_watched_by_existing_tmdb_id_updates_meta_and_raw_scores() -> No
     assert meta_obj["networks"] == ["HBO"]
     assert meta_obj["production_companies"] == ["Studio"]
     assert meta_obj["content_rating"] == "US: TV-MA"
+    assert meta_obj["watch_providers"] == ["Kinopoisk"]
     assert meta_obj["actors_top"][0]["name"] == "Actor"
     assert meta_obj["crew_top"][0]["name"] == "Creator"
     assert meta_obj["keywords"] == ["marriage"]

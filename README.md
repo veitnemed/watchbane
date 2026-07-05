@@ -118,6 +118,15 @@ Tests:
 py -m pytest
 ```
 
+Desktop interface scale:
+
+- open `Настройки` and choose the interface scale under `Интерфейс`;
+- default scale is `100%`;
+- available scale range is `50%` to `200%`;
+- this is separate from Windows display scaling / OS DPI;
+- scale changes require restarting the desktop app;
+- `QT_SCALE_FACTOR` is a Qt testing/debug override and is not recommended for normal Watchbane use.
+
 Public setup for candidate discovery requires only `TMDB_TOKEN` in the environment, `.env.local`, or `tmdb.env`.
 
 No KP API token or local IMDb dataset is required for the public product.

@@ -15,8 +15,8 @@ GENRE_KEY_TO_DISPLAY: dict[str, str] = {
     "mystery": "Детектив",
     "thriller": "Триллер",
     "horror": "Ужасы",
-    "action_adventure": "Боевик/приключения",
-    "sci_fi_fantasy": "Фантастика/фэнтези",
+    "action_adventure": "Боевик",
+    "sci_fi_fantasy": "Фантастика",
     "animation": "Анимация",
     "family": "Семейный",
     "war": "Военный",
@@ -32,6 +32,15 @@ GENRE_KEY_TO_DISPLAY: dict[str, str] = {
     "short": "Короткометражка",
     "film_noir": "Нуар",
 }
+
+GENRE_KEY_TO_DISPLAY_LABELS: dict[str, tuple[str, ...]] = {
+    key: (label,)
+    for key, label in GENRE_KEY_TO_DISPLAY.items()
+}
+GENRE_KEY_TO_DISPLAY_LABELS.update({
+    "action_adventure": ("Боевик", "Приключения"),
+    "sci_fi_fantasy": ("Фантастика", "Фэнтези"),
+})
 
 _GENRE_ALIASES_BY_KEY: dict[str, list[str]] = {
     "drama": ["drama", "драма"],
@@ -51,6 +60,7 @@ _GENRE_ALIASES_BY_KEY: dict[str, list[str]] = {
         "боевик",
         "приключения",
         "боевик и приключения",
+        "боевик/приключения",
     ],
     "sci_fi_fantasy": [
         "fantasy",
@@ -64,6 +74,7 @@ _GENRE_ALIASES_BY_KEY: dict[str, list[str]] = {
         "фэнтези",
         "научная фантастика",
         "нф и фэнтези",
+        "фантастика/фэнтези",
     ],
     "animation": ["animation", "анимация", "мультфильм", "мультфильмы"],
     "family": ["family", "семейный"],
@@ -89,6 +100,7 @@ def _normalize_alias(value: str) -> str:
     text = text.replace("ё", "е")
     text = text.replace("-", " ")
     text = text.replace("&", " and ")
+    text = text.replace("/", " ")
     while "  " in text:
         text = text.replace("  ", " ")
     return text.strip()
@@ -174,11 +186,29 @@ def build_genres_display(genre_keys: list[str]) -> list[str]:
     labels: list[str] = []
     seen: set[str] = set()
     for genre_key in genre_keys:
-        label = GENRE_KEY_TO_DISPLAY.get(genre_key)
-        if label is None or label in seen:
-            continue
-        seen.add(label)
-        labels.append(label)
+        for label in GENRE_KEY_TO_DISPLAY_LABELS.get(genre_key, ()):
+            if label in seen:
+                continue
+            seen.add(label)
+            labels.append(label)
+    return labels
+
+
+def normalize_genre_display_labels(values: Any) -> list[str]:
+    """Returns compact UI labels, splitting long legacy combined labels."""
+    labels: list[str] = []
+    seen: set[str] = set()
+
+    for raw_value in _iter_raw_genres(values):
+        genre_key = normalize_genre_to_key(raw_value)
+        display_values = build_genres_display([genre_key]) if genre_key is not None else [raw_value]
+        for display_value in display_values:
+            text = str(display_value or "").strip()
+            if text == "" or text in seen:
+                continue
+            seen.add(text)
+            labels.append(text)
+
     return labels
 
 
@@ -186,5 +216,5 @@ def candidate_genres_for_display(candidate: dict) -> list[str]:
     """Returns UI genre labels, preferring genres_display with legacy fallback."""
     display = _iter_raw_genres(candidate.get("genres_display"))
     if len(display) > 0:
-        return display
-    return _iter_raw_genres(candidate.get("genres"))
+        return normalize_genre_display_labels(display)
+    return normalize_genre_display_labels(candidate.get("genres"))

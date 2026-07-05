@@ -11,15 +11,15 @@ def build_lists_style() -> str:
 QListWidget {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CARD}px;
-    padding: {SPACING_SMALL}px;
+    border-radius: {px(RADIUS_CARD)}px;
+    padding: {px(SPACING_SMALL)}px;
     outline: none;
 }}
 QListWidget::item {{
     padding: 0;
     border: none;
     color: {COLOR_TEXT_SOFT};
-    margin: 1px 0;
+    margin: {px(1)}px 0;
     background: transparent;
 }}
 QListWidget::item:selected {{

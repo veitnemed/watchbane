@@ -9,22 +9,22 @@ def build_watched_shell_style() -> str:
     """Return stylesheet for watched sidebar and filter panel."""
     return f"""
 QListWidget#watchedList {{
-    padding: 8px;
+    padding: {px(8)}px;
 }}
 QWidget#watchedSidebar {{
     background: transparent;
 }}
 QLineEdit#watchedSearch {{
-    font-size: {FONT_BASE}px;
+    font-size: {font_px(FONT_BASE)}px;
 }}
 QPushButton#watchedAddTitle {{
     background-color: {COLOR_ADD_BUTTON};
     border: 1px solid {COLOR_ADD_BUTTON_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
-    font-size: {FONT_BASE}px;
+    font-size: {font_px(FONT_BASE)}px;
     font-weight: 600;
-    padding: 12px 14px;
+    padding: {px(12)}px {px(14)}px;
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
         stop:0 {COLOR_ADD_BUTTON_TOP},
@@ -42,11 +42,11 @@ QPushButton#watchedAddTitle:hover {{
 QPushButton#watchedFilterToggle {{
     background-color: transparent;
     border: none;
-    border-radius: {RADIUS_BUTTON_SMALL}px;
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
     font-weight: 600;
-    padding: 6px 4px;
+    padding: {px(6)}px {px(4)}px;
     text-align: left;
 }}
 QPushButton#watchedFilterToggle:hover {{
@@ -59,16 +59,16 @@ QPushButton#watchedFilterToggle[watchedFiltersActive="true"] {{
 QFrame#watchedFiltersPanel {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_INPUT}px;
+    border-radius: {px(RADIUS_INPUT)}px;
 }}
 QPushButton#watchedFilterResetAll {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON_SMALL}px;
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
     color: {COLOR_TEXT};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
     font-weight: 600;
-    padding: 8px 10px;
+    padding: {px(8)}px {px(10)}px;
 }}
 QPushButton#watchedFilterResetAll:hover {{
     background-color: {COLOR_CONTROL_HOVER};
@@ -77,9 +77,9 @@ QPushButton#watchedFilterResetAll:hover {{
 QLabel#watchedListCounter {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
     font-weight: 600;
-    padding: 0 4px;
+    padding: 0 {px(4)}px;
 }}
 QWidget#watchedSortRow {{
     background: transparent;
@@ -87,28 +87,28 @@ QWidget#watchedSortRow {{
 QLabel#watchedSortLabel {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {FONT_BASE}px;
+    font-size: {font_px(FONT_BASE)}px;
     font-weight: 600;
 }}
 QComboBox#watchedSort {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_INPUT}px;
+    border-radius: {px(RADIUS_INPUT)}px;
     color: {COLOR_TEXT};
-    font-size: {FONT_BASE}px;
-    padding: {INPUT_PADDING_Y}px {INPUT_PADDING_X}px;
-    min-height: 20px;
+    font-size: {font_px(FONT_BASE)}px;
+    padding: {px(INPUT_PADDING_Y)}px {px(INPUT_PADDING_X)}px;
+    min-height: {px(20)}px;
 }}
 QComboBox#watchedSort:focus {{
-    border: 1px solid {COLOR_ACCENT};
+    border: 1px solid {COLOR_FOCUS_BORDER};
 }}
 QComboBox#watchedSort::drop-down {{
     border: none;
-    width: 28px;
+    width: {px(28)}px;
 }}
 QComboBox#watchedSort::down-arrow {{
-    width: 10px;
-    height: 10px;
+    width: {px(10)}px;
+    height: {px(10)}px;
 }}
 QFrame#watchedScoreFilter,
 QFrame#watchedYearFilter,
@@ -122,24 +122,24 @@ QLabel#watchedYearFilterTitle,
 QLabel#watchedGenreFilterTitle {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
     font-weight: 600;
 }}
 QComboBox#watchedGenre {{
     background-color: {COLOR_SURFACE};
-    font-size: {FONT_SMALL}px;
-    padding: 5px 8px;
+    font-size: {font_px(FONT_SMALL)}px;
+    padding: {px(5)}px {px(8)}px;
 }}
 QLabel#watchedScoreFilterLabel,
 QLabel#watchedYearFilterLabel {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
 }}
 QLabel#watchedFilterValue {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
     font-weight: 600;
 }}
 """

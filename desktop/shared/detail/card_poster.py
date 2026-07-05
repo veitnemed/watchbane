@@ -22,7 +22,28 @@ def load_detail_poster_source_pixmap(poster_path: str):
     return pixmap
 
 
-def cover_crop_poster_pixmap_for_display(pixmap, width: int, height: int):
+def rounded_poster_pixmap_for_display(pixmap, radius: int):
+    """Return a pixmap clipped to rounded corners."""
+    from PyQt6.QtCore import QRectF, Qt
+    from PyQt6.QtGui import QPainter, QPainterPath, QPixmap
+
+    if pixmap.isNull() or radius <= 0:
+        return pixmap
+
+    rounded = QPixmap(pixmap.size())
+    rounded.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(rounded)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    path = QPainterPath()
+    path.addRoundedRect(QRectF(rounded.rect()), radius, radius)
+    painter.setClipPath(path)
+    painter.drawPixmap(0, 0, pixmap)
+    painter.end()
+    return rounded
+
+
+def cover_crop_poster_pixmap_for_display(pixmap, width: int, height: int, radius: int = 0):
     """Scale and center-crop poster to fill the shell without distortion."""
     from PyQt6.QtCore import Qt
 
@@ -37,7 +58,8 @@ def cover_crop_poster_pixmap_for_display(pixmap, width: int, height: int):
     )
     crop_x = max(0, (scaled.width() - width) // 2)
     crop_y = max(0, (scaled.height() - height) // 2)
-    return scaled.copy(crop_x, crop_y, width, height)
+    cropped = scaled.copy(crop_x, crop_y, width, height)
+    return rounded_poster_pixmap_for_display(cropped, radius)
 
 
 class DetailCardPosterMixin:
@@ -46,13 +68,14 @@ class DetailCardPosterMixin:
     def _sync_poster_display(self) -> None:
         from PyQt6.QtGui import QPixmap
 
-        poster_width = self._profile.detail_poster_width
-        poster_height = self._profile.detail_poster_height
+        poster_width = self._profile.detail_poster_content_width
+        poster_height = self._profile.detail_poster_content_height
         if self._poster_source_pixmap is not None and not self._poster_source_pixmap.isNull():
             display_pixmap = cover_crop_poster_pixmap_for_display(
                 self._poster_source_pixmap,
                 poster_width,
                 poster_height,
+                self._profile.detail_poster_content_radius,
             )
             self._poster_label.setFixedSize(poster_width, poster_height)
             self._poster_label.setStyleSheet(POSTER_IMAGE_STYLE)

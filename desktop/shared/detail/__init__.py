@@ -1,6 +1,13 @@
 """Shared detail card widgets and presenters."""
 
 from desktop.shared.detail.card import WatchedDetailCard
+from desktop.shared.detail.additional_info import (
+    build_additional_info_items,
+    format_episode_runtime,
+    format_seasons_episodes,
+    format_tmdb_status,
+    format_watch_providers,
+)
 from desktop.shared.detail.list_delegate import (
     WatchedListItemDelegate,
     _elide_text,
@@ -9,6 +16,7 @@ from desktop.shared.detail.list_delegate import (
 )
 from desktop.shared.detail.main_info import (
     build_main_info_items,
+    build_title_meta_text,
     format_votes_display,
     normalize_object_type,
 )
@@ -82,6 +90,7 @@ __all__ = [
     "WatchedListItemDelegate",
     "_elide_text",
     "_load_list_thumb_pixmap",
+    "build_additional_info_items",
     "build_detail_info_pill_labels",
     "build_final_score_star_item",
     "build_genre_pill_labels",
@@ -89,6 +98,7 @@ __all__ = [
     "build_meta_pill_items",
     "build_meta_pill_labels",
     "build_score_ring_item",
+    "build_title_meta_text",
     "build_user_score_badge_item",
     "final_score_to_stars",
     "fit_poster_pixmap_for_display",
@@ -97,7 +107,11 @@ __all__ = [
     "format_genre_pill_label",
     "format_poster_path_display",
     "format_rating_score_display",
+    "format_episode_runtime",
+    "format_seasons_episodes",
+    "format_tmdb_status",
     "format_user_score_display",
+    "format_watch_providers",
     "format_year_display",
     "format_votes_display",
     "get_country_display",

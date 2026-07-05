@@ -5,6 +5,10 @@ from candidates.models.schema import (
     resolve_canonical_year,
     strip_external_rating_fields,
 )
+from candidates.models.genre_schema import (
+    build_genres_display,
+    normalize_genre_display_labels,
+)
 
 
 def test_normalize_candidate_record_preserves_unknown_fields() -> None:
@@ -26,6 +30,54 @@ def test_tmdb_candidate_is_complete_without_kp_imdb_fields() -> None:
     normalized = normalize_candidate_record(candidate)
     assert normalized["is_complete"] is True
     assert normalized["missing_fields"] == []
+
+
+def test_normalize_candidate_record_maps_known_iso_country_code_to_display() -> None:
+    candidate = {
+        "title": "Country Code",
+        "year": 2020,
+        "tmdb_id": 123,
+        "tmdb_score": 7.5,
+        "tmdb_votes": 200,
+        "genres_tmdb": ["Drama"],
+        "country_codes": ["CO"],
+    }
+
+    normalized = normalize_candidate_record(candidate)
+
+    assert normalized["country_codes"] == ["CO"]
+    assert normalized["country_display"] == "Колумбия"
+
+
+def test_normalize_candidate_record_does_not_display_unknown_iso_country_code() -> None:
+    candidate = {
+        "title": "Unknown Country Code",
+        "year": 2020,
+        "tmdb_id": 123,
+        "tmdb_score": 7.5,
+        "tmdb_votes": 200,
+        "genres_tmdb": ["Drama"],
+        "country_codes": ["ZZ"],
+    }
+
+    normalized = normalize_candidate_record(candidate)
+
+    assert normalized["country_codes"] == ["ZZ"]
+    assert normalized["country_display"] is None
+
+
+def test_build_genres_display_splits_long_combined_genres() -> None:
+    assert build_genres_display(["action_adventure"]) == ["Боевик", "Приключения"]
+    assert build_genres_display(["sci_fi_fantasy"]) == ["Фантастика", "Фэнтези"]
+
+
+def test_normalize_genre_display_labels_splits_legacy_combined_labels() -> None:
+    labels = normalize_genre_display_labels([
+        "Боевик/приключения",
+        "Фантастика/фэнтези",
+    ])
+
+    assert labels == ["Боевик", "Приключения", "Фантастика", "Фэнтези"]
 
 
 def test_tmdb_candidate_without_tmdb_id_is_incomplete() -> None:

@@ -4,11 +4,7 @@ from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
 
-from desktop.theme import COLOR_ACCENT
-
-SCORE_RING_RED = "#ef4444"
-SCORE_RING_AMBER = "#f59e0b"
-SCORE_RING_GREEN = "#22c55e"
+from desktop.theme import COLOR_ACCENT, COLOR_ACCENT_HOVER
 
 
 def _round_one_decimal(value) -> str:
@@ -123,19 +119,17 @@ def _blend_color(start: str, end: str, amount: float) -> str:
 
 
 def _score_ring_color_for_progress(progress: float) -> str:
-    """Return red-to-green ring color for normalized 0..1 progress."""
-    if progress <= 0.5:
-        return _blend_color(SCORE_RING_RED, SCORE_RING_AMBER, progress / 0.5)
-    return _blend_color(SCORE_RING_AMBER, SCORE_RING_GREEN, (progress - 0.5) / 0.5)
+    """Return a cyan-to-teal ring color for normalized 0..1 progress."""
+    return _blend_color(COLOR_ACCENT, COLOR_ACCENT_HOVER, progress)
 
 
 def score_ring_color_for_final_score(value) -> str:
-    """Return red-to-green ring color for final score quality."""
+    """Return theme ring color for final score quality."""
     return _score_ring_color_for_progress(normalize_final_score(value))
 
 
 def score_ring_color_for_tmdb_score(value) -> str:
-    """Return red-to-green ring color for TMDb rating."""
+    """Return theme ring color for TMDb rating."""
     return _score_ring_color_for_progress(normalize_tmdb_score(value))
 
 
@@ -260,12 +254,7 @@ def get_country_display(card: dict) -> str | None:
 
 def build_detail_info_pill_labels(card: dict) -> list[str]:
     """Build lower info pills shown near genres."""
-    labels: list[str] = []
-    year = card.get("year")
-    if year not in (None, ""):
-        labels.append(format_year_pill(year))
-    labels.extend(build_genre_pill_labels(card))
-    return labels
+    return build_genre_pill_labels(card)
 
 
 def has_overview_text(card: dict) -> bool:

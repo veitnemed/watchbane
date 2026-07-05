@@ -10,112 +10,127 @@ def build_detail_card_style() -> str:
 QFrame#detailCard {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CARD_LARGE}px;
+    border-radius: {px(RADIUS_CARD_LARGE)}px;
 }}
 QFrame#detailHeroCard {{
     background-color: qlineargradient(
         x1: 0, y1: 0, x2: 1, y2: 1,
         stop: 0 {COLOR_DETAIL_HERO_BG_TOP},
         stop: 0.62 {COLOR_DETAIL_HERO_BG_BOTTOM},
-        stop: 1 #070a10
+        stop: 1 {COLOR_DETAIL_HERO_BG_END}
     );
     border: 1px solid {COLOR_DETAIL_HERO_BORDER};
-    border-radius: {DETAIL_HERO_CARD_RADIUS}px;
+    border-radius: {px(DETAIL_HERO_CARD_RADIUS)}px;
+}}
+QWidget#detailContentContainer {{
+    background: transparent;
 }}
 QFrame#detailPosterShell {{
-    background-color: #0b1017;
-    border: 1px solid {COLOR_DETAIL_HERO_BORDER};
-    border-radius: {DETAIL_POSTER_RADIUS}px;
+    background-color: {COLOR_SCORE_BADGE_BG};
+    border: {px(DETAIL_POSTER_BORDER_WIDTH)}px solid {COLOR_BORDER_HOVER};
+    border-radius: {px(DETAIL_POSTER_RADIUS)}px;
 }}
 QLabel#detailUserScoreBadge {{
-    background-color: #05070b;
-    border: 1px solid {COLOR_DETAIL_GOLD};
-    border-radius: {DETAIL_USER_SCORE_BADGE_RADIUS}px;
-    color: {COLOR_DETAIL_GOLD};
-    font-size: {FONT_BASE}px;
+    background-color: {COLOR_SCORE_BADGE_BG};
+    border: 1px solid {COLOR_RATING};
+    border-radius: {px(DETAIL_USER_SCORE_BADGE_RADIUS)}px;
+    color: {COLOR_RATING};
+    font-size: {font_px(FONT_BASE)}px;
     font-weight: 700;
-    padding: 0 {DETAIL_USER_SCORE_BADGE_PADDING_X}px;
-    min-height: {DETAIL_USER_SCORE_BADGE_HEIGHT}px;
-    min-width: {DETAIL_USER_SCORE_BADGE_MIN_WIDTH}px;
+    padding: 0 {px(DETAIL_USER_SCORE_BADGE_PADDING_X)}px;
+    min-height: {px(DETAIL_USER_SCORE_BADGE_HEIGHT)}px;
+    min-width: {px(DETAIL_USER_SCORE_BADGE_MIN_WIDTH)}px;
 }}
 QLabel#detailTitle {{
     background: transparent;
-    color: {COLOR_DETAIL_WARM_TEXT};
-    font-family: "{DETAIL_TITLE_FONT_FAMILY}", "{DETAIL_TITLE_FONT_FALLBACK}";
-    font-size: {DETAIL_TITLE_FONT_SIZE - 2}px;
+    color: {COLOR_DETAIL_TITLE};
+    font-family: "{DETAIL_TITLE_FONT_FAMILY}", {DETAIL_TITLE_FONT_FALLBACK};
+    font-size: {font_px(DETAIL_TITLE_FONT_SIZE)}px;
     font-weight: 600;
-    padding: 0 0 {SPACING_SMALL}px 0;
+    padding: 0;
+}}
+QLabel#detailTitleMeta {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL + 4)}px;
+    font-weight: 500;
+    padding: 0;
 }}
 QWidget#detailPosterActions {{
     background: transparent;
 }}
 QPushButton#candidateMarkWatchedButton,
 QPushButton#candidateHideButton {{
-    background-color: rgba(12, 17, 24, 190);
+    background-color: {COLOR_DETAIL_ACTION_BG};
     border: 1px solid {COLOR_DETAIL_HERO_BORDER};
-    border-radius: 18px;
+    border-radius: {px(18)}px;
     padding: 0;
-    min-width: 36px;
-    max-width: 36px;
-    min-height: 36px;
-    max-height: 36px;
+    min-width: {px(36)}px;
+    max-width: {px(36)}px;
+    min-height: {px(36)}px;
+    max-height: {px(36)}px;
 }}
 QPushButton#candidateMarkWatchedButton:hover,
 QPushButton#candidateHideButton:hover {{
-    border-color: {COLOR_DETAIL_GOLD};
-    background-color: rgba(33, 42, 53, 210);
+    border-color: {COLOR_BORDER_ACTIVE};
+    background-color: {COLOR_DETAIL_ACTION_BG_HOVER};
 }}
 QPushButton#candidateMarkWatchedButton:disabled,
 QPushButton#candidateHideButton:disabled {{
     border-color: {COLOR_DETAIL_HERO_BORDER};
-    background-color: rgba(12, 17, 24, 150);
+    background-color: {COLOR_DETAIL_ACTION_BG_DISABLED};
 }}
 QLabel#genrePill {{
-    background-color: rgba(255, 255, 255, 0.055);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: {DETAIL_CHIP_RADIUS}px;
-    padding: 0 12px;
-    color: #d7dde6;
-    font-size: {FONT_BASE}px;
+    background-color: {COLOR_DETAIL_CHIP_BG};
+    border: 1px solid {COLOR_DETAIL_CHIP_BORDER};
+    border-radius: {px(DETAIL_CHIP_RADIUS)}px;
+    padding: 0 {px(12)}px;
+    color: {COLOR_TEXT_CHIP};
+    font-size: {font_px(FONT_BASE)}px;
 }}
 QWidget#mainInfoSection,
-QWidget#detailMainInfoSection {{
+QWidget#detailMainInfoSection,
+QWidget#detailAdditionalInfoSection {{
     background: transparent;
 }}
 QFrame#mainInfoPanel,
-QFrame#detailMainInfoPanel {{
+QFrame#detailMainInfoPanel,
+QFrame#detailAdditionalInfoPanel {{
     background-color: {COLOR_DETAIL_GLASS};
     border: 1px solid {COLOR_DETAIL_HERO_BORDER_SOFT};
-    border-radius: {DETAIL_MAIN_INFO_PANEL_RADIUS}px;
+    border-radius: {px(DETAIL_MAIN_INFO_PANEL_RADIUS)}px;
 }}
 QFrame#mainInfoDivider,
-QFrame#detailMainInfoHeaderDivider {{
-    background-color: rgba(214, 189, 141, 0.28);
-    min-height: 1px;
-    max-height: 1px;
+QFrame#detailMainInfoHeaderDivider,
+QFrame#detailAdditionalInfoHeaderDivider {{
+    background-color: {COLOR_DETAIL_SECTION_DIVIDER};
+    min-height: {px(1)}px;
+    max-height: {px(1)}px;
     border: none;
 }}
 QLabel#mainInfoTitle,
 QLabel#detailMainInfoHeader {{
     background: transparent;
-    color: {COLOR_DETAIL_GOLD_SOFT};
-    font-size: {FONT_SMALL}px;
+    color: {COLOR_DETAIL_SECTION_HEADER};
+    font-size: {font_px(FONT_DETAIL_MAIN_INFO_HEADER)}px;
     font-weight: 700;
     letter-spacing: 1px;
     padding: 0;
 }}
 QLabel#mainInfoLabel,
-QLabel#detailMainInfoLabel {{
+QLabel#detailMainInfoLabel,
+QLabel#detailAdditionalInfoLabel {{
     background: transparent;
-    color: #aab3c0;
-    font-size: {FONT_SMALL}px;
+    color: {COLOR_DETAIL_LABEL};
+    font-size: {font_px(FONT_DETAIL_MAIN_INFO_LABEL)}px;
     padding: 0;
 }}
 QLabel#mainInfoValue,
-QLabel#detailMainInfoValue {{
+QLabel#detailMainInfoValue,
+QLabel#detailAdditionalInfoValue {{
     background: transparent;
-    color: {COLOR_DETAIL_WARM_TEXT};
-    font-size: {FONT_BASE}px;
+    color: {COLOR_DETAIL_VALUE};
+    font-size: {font_px(FONT_DETAIL_MAIN_INFO_VALUE)}px;
     font-weight: 600;
     padding: 0;
 }}
@@ -126,16 +141,17 @@ QFrame#detailOverviewSection {{
 }}
 QFrame#overviewDivider,
 QFrame#detailOverviewDivider {{
-    background-color: rgba(214, 189, 141, 0.22);
-    min-height: 1px;
-    max-height: 1px;
+    background-color: {COLOR_DETAIL_SECTION_DIVIDER};
+    min-height: {px(1)}px;
+    max-height: {px(1)}px;
     border: none;
 }}
 QLabel#overviewTitle,
-QLabel#detailOverviewHeader {{
+QLabel#detailOverviewHeader,
+QLabel#detailAdditionalInfoHeader {{
     background: transparent;
-    color: {COLOR_DETAIL_GOLD_SOFT};
-    font-size: {FONT_OVERVIEW_TITLE}px;
+    color: {COLOR_DETAIL_SECTION_HEADER};
+    font-size: {font_px(FONT_OVERVIEW_TITLE)}px;
     font-weight: 700;
     letter-spacing: 1px;
     padding: 0;
@@ -143,8 +159,8 @@ QLabel#detailOverviewHeader {{
 QLabel#overviewText,
 QLabel#detailOverviewText {{
     background: transparent;
-    color: #b7bfca;
-    font-size: {FONT_OVERVIEW_TEXT}px;
+    color: {COLOR_DETAIL_OVERVIEW_TEXT};
+    font-size: {font_px(FONT_DETAIL_OVERVIEW_TEXT)}px;
     line-height: {OVERVIEW_TEXT_LINE_HEIGHT}%;
 }}
 """
@@ -153,21 +169,25 @@ QLabel#detailOverviewText {{
 def build_poster_placeholder_style() -> str:
     """Return the poster placeholder stylesheet."""
     return (
-        f"background-color: #0b1017; border: 1px solid {COLOR_DETAIL_HERO_BORDER}; "
-        f"border-radius: {DETAIL_POSTER_RADIUS}px; color: {COLOR_TEXT_MUTED};"
+        f"background-color: {COLOR_SCORE_BADGE_BG}; border: none; "
+        f"border-radius: {px(max(0, DETAIL_POSTER_RADIUS - DETAIL_POSTER_BORDER_WIDTH))}px; "
+        f"color: {COLOR_TEXT_MUTED};"
     )
 
 
 def build_poster_image_style() -> str:
     """Return the poster image stylesheet."""
-    return f"background: transparent; border-radius: {DETAIL_POSTER_RADIUS}px;"
+    return (
+        "background: transparent; "
+        f"border-radius: {px(max(0, DETAIL_POSTER_RADIUS - DETAIL_POSTER_BORDER_WIDTH))}px;"
+    )
 
 
 def build_bar_track_style() -> str:
     """Return the fallback analytics bar track stylesheet."""
-    return f"background-color: {COLOR_CARD_ALT}; border-radius: {RADIUS_BAR}px;"
+    return f"background-color: {COLOR_CARD_ALT}; border-radius: {px(RADIUS_BAR)}px;"
 
 
 def build_bar_fill_style() -> str:
     """Return the fallback analytics bar fill stylesheet."""
-    return f"background-color: {COLOR_ACCENT}; border-radius: {RADIUS_BAR}px;"
+    return f"background-color: {COLOR_ACCENT}; border-radius: {px(RADIUS_BAR)}px;"

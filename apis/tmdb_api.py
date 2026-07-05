@@ -581,6 +581,7 @@ def normalize_tmdb_tv(raw_details: dict[str, Any]) -> dict[str, Any]:
         "production_companies": names_from_items(raw_details.get("production_companies")),
         "number_of_seasons": raw_details.get("number_of_seasons"),
         "number_of_episodes": raw_details.get("number_of_episodes"),
+        "episode_run_time": raw_details.get("episode_run_time"),
         "tmdb_rating": raw_details.get("vote_average"),
         "tmdb_votes": raw_details.get("vote_count"),
         "tmdb_popularity": raw_details.get("popularity"),

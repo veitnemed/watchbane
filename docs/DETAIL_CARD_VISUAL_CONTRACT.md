@@ -21,15 +21,16 @@ The card has one fixed poster column and one flexible information column.
 ```text
 [ poster column ]   [ information column ]
 [ poster        ]   [ title                ]
-[ candidate     ]   [ year/genre pills     ]
-[ actions only  ]   [ rating circles       ]
-                  [ final stars          ]
+[ candidate     ]   [ title meta           ]
+[ actions only  ]   [ genre pills           ]
+                  [ TMDb ring + stars     ]
                   [ main information     ]
 
 [ overview full-width below both columns ]
+[ additional information below overview ]
 ```
 
-The title row must contain only the title. Candidate actions must never be placed before the title or inside the title row.
+The title row must contain only the title. Title meta (`year • seasons / episodes`) is a compact line directly below the title. Candidate actions must never be placed before the title or inside the title row.
 
 ## 3. Rating and score semantics
 
@@ -37,8 +38,8 @@ The detail card has three separate visual signals. They must not be merged.
 
 | Visual element | Source field | Meaning | Allowed display |
 | --- | --- | --- | --- |
-| TMDb circle | `tmdb_score` | External public TMDb rating, 0..10 | Number inside circle, label `TMDb`, ring progress, ring color |
-| My score circle | `user_score` | User's own rating, 0..10 | Number inside circle, label `моя`, ring progress |
+| TMDb circle | `tmdb_score` | External public TMDb rating, 0..10 | Number inside circle, label `TMDb`, ring progress, cyan/teal ring color |
+| User score badge | `user_score` | User's own rating, 0..10 | Poster overlay badge `★ 9.0` only |
 | Final stars | `final_score` | Internal recommendation/result score | 1..5 star scale only, no numeric `Итог 75` text |
 
 Hard rule: `final_score` must never control TMDb circle progress, TMDb circle color, or the number inside the TMDb circle.
@@ -56,41 +57,37 @@ Required behavior:
 - display value: formatted `tmdb_score` with one decimal, or `—` when absent;
 - label: exactly `TMDb`;
 - progress: `clamp(float(tmdb_score) / 10, 0, 1)`, or `0` when absent/invalid;
-- color: derived from `tmdb_score`, not from `final_score`;
+- color: derived from `tmdb_score`, not from `final_score`, using the current cyan/teal theme range;
+- value color: normal text color, not rating yellow;
 - footer text: none;
-- must be present before the user's own score circle in the watched view.
+- watched user score must not appear as a second ring.
 
 Regression examples:
 
 ```python
 card = {"tmdb_score": 8.0, "final_score": 0.20}
-# TMDb circle must look strong: progress 0.80, high-score color.
+# TMDb circle must look strong: progress 0.80, cyan/teal high-score color.
 # It must not look like 20%.
 
 card = {"tmdb_score": 4.0, "final_score": 0.90}
 # TMDb circle must look weak/medium by TMDb: progress 0.40.
-# It must not turn green because final_score is high.
+# It must not change because final_score is high.
 ```
 
-## 5. My score circle contract
+## 5. User score badge contract
 
-The user's score circle is the personal-rating circle.
+The user's score is a poster overlay badge, not a circle.
 
 Required behavior:
 
-- display value: formatted `user_score` with one decimal, or `—` when absent;
-- label: exactly `моя`;
-- progress: `clamp(float(user_score) / 10, 0, 1)`, or `0` when absent/invalid;
-- color: current personal/accent color unless a future task explicitly changes the personal-score palette;
-- footer text: none.
+- display value: formatted `user_score` with one decimal;
+- text format: `★ 9.0`;
+- location: top-right poster overlay;
+- missing/invalid value: hide badge;
+- badge must not affect poster size;
+- badge must not affect right-column layout.
 
-The watched card order is fixed:
-
-```text
-[ TMDb circle ] [ моя circle ]
-```
-
-The previous order `[моя] [TMDb]` is forbidden.
+Showing watched user score as a circle, title-row text, main-info row, or score-summary item is forbidden.
 
 ## 6. Final score stars contract
 
@@ -125,21 +122,19 @@ The star widget must not widen either rating circle slot. It must not move the T
 
 ## 7. Rating block layout
 
-The rating block has two rows:
+The rating block has a TMDb ring slot and final-score stars:
 
 ```text
-ratings row: [ fixed TMDb slot ][ gap ][ fixed my-score slot ]
-stars row:        [ final-score stars centered under the score group ]
+[ fixed TMDb slot ][ gap ][ final-score stars ]
 ```
 
 Required layout behavior:
 
-- TMDb and `моя` circles have equal fixed slots;
-- the gap between circles is controlled by one named constant, for example `RATING_CIRCLES_GAP`;
-- changing that constant must visibly change only the horizontal distance between circles;
-- star width must not affect circle positions;
-- missing stars must not make one circle lower/higher than the other;
-- the top edges and visual centers of both circles must align.
+- TMDb ring keeps a fixed slot;
+- final-score stars are a separate widget next to the ring;
+- star width must not affect TMDb ring value/progress;
+- missing stars must not make the ring jump vertically;
+- candidate actions never enter this score row.
 
 Forbidden implementation patterns:
 
@@ -176,8 +171,19 @@ Required behavior:
 
 Main information rows:
 
-- `Страна` from `country` when present;
 - `Тип` from normalized `object_type` or TV-shape fallback;
+- `Страна` from `country` when present.
+
+Title meta:
+
+- `Год` is shown under title, not in main information;
+- `Сезоны / серии` is shown under title, not in main information.
+
+Additional information rows:
+
+- watch providers;
+- status;
+- episode runtime;
 - `Голоса TMDb` from `tmdb_votes` when positive.
 
 ## 10. Code ownership boundaries
@@ -221,9 +227,15 @@ def test_final_score_is_stars_not_ring_footer():
     assert stars_item["kind"] == "final_stars"
 
 
-def test_score_order_contract_in_watched_card(qapp):
-    # The watched rating row must place TMDb before моя.
-    # Use object names or stable child order, not pixel screenshots.
+def test_watched_user_score_is_badge_not_ring(qapp):
+    # user_score must be rendered as detailUserScoreBadge only.
+    # It must not create a second score ring in the score summary row.
+    ...
+
+
+def test_title_meta_is_under_title_not_main_info(qapp):
+    # year and seasons/episodes must live in detailTitleMeta.
+    # Main information must not duplicate them as rows.
     ...
 
 

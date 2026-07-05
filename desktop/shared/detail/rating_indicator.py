@@ -9,6 +9,9 @@ from desktop.shared.detail.profiles import RATING_CIRCLE_DIAMETER, RATING_CIRCLE
 from desktop.theme import (
     COLOR_ACCENT,
     COLOR_BORDER,
+    COLOR_RATING,
+    COLOR_STAR_ACTIVE,
+    COLOR_STAR_INACTIVE,
     COLOR_SURFACE,
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
@@ -16,15 +19,15 @@ from desktop.theme import (
     FONT_RATING_LABEL_POINT,
     FONT_RATING_VALUE_POINT,
     TRANSPARENT_STYLE,
+    px,
 )
 
-STAR_FILL = "#fbbf24"
 STAR_SCALE = 2
-STAR_MIN_SIZE = 16
-STAR_MAX_SIZE = 22
-STAR_GAP = 3
-STAR_ROW_RIGHT_OFFSET = 7
-STAR_EXTRA_WIDTH_PADDING = 8
+STAR_MIN_SIZE = px(16)
+STAR_MAX_SIZE = px(22)
+STAR_GAP = px(3)
+STAR_ROW_RIGHT_OFFSET = px(7)
+STAR_EXTRA_WIDTH_PADDING = px(8)
 
 
 def _score_progress(score) -> float:
@@ -260,8 +263,8 @@ class StarRatingIndicator:
                 total_width = 5 * star_size + 4 * gap
                 start_x = max(0, (self.width() - total_width) / 2 + STAR_ROW_RIGHT_OFFSET)
                 center_y = self.height() / 2
-                empty_color = QColor(COLOR_BORDER)
-                fill_color = QColor(STAR_FILL)
+                empty_color = QColor(COLOR_STAR_INACTIVE)
+                fill_color = QColor(COLOR_STAR_ACTIVE)
 
                 for index in range(5):
                     x = start_x + index * (star_size + gap)

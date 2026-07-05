@@ -1,5 +1,7 @@
 """Merge watched popularity rows with candidate pool filter options."""
 
+from candidates.models import country_schema
+
 
 def merge_genre_popularity_with_pool(
     dataset_rows: list[dict],
@@ -30,8 +32,12 @@ def merge_country_popularity_with_pool(
     extras: list[dict] = []
     for row in pool_rows:
         code = str(row.get("code") or "").strip().upper()
-        label = str(row.get("label") or code).strip()
         if code == "" or code in seen:
+            continue
+        label = str(row.get("label") or "").strip()
+        if label == "" or label.upper() == code:
+            label = country_schema.build_country_display([code]) or ""
+        if label == "":
             continue
         seen.add(code)
         extras.append({"code": code, "label": label, "count": 0})

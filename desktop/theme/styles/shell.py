@@ -12,7 +12,7 @@ QMainWindow, QWidget {{
     background-color: {COLOR_BG};
     color: {COLOR_TEXT};
     font-family: {FONT_FAMILY_QSS};
-    font-size: {FONT_APP}px;
+    font-size: {font_px(FONT_APP)}px;
 }}
 QScrollArea {{
     border: none;
@@ -26,16 +26,16 @@ QStatusBar {{
 QMenu {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_INPUT}px;
-    padding: {SPACING_SMALL}px;
+    border-radius: {px(RADIUS_INPUT)}px;
+    padding: {px(SPACING_SMALL)}px;
     color: {COLOR_TEXT};
 }}
 QMenu::item {{
-    padding: {BUTTON_PADDING_Y}px {BUTTON_PADDING_X}px;
-    border-radius: {RADIUS_BUTTON_SMALL}px;
+    padding: {px(BUTTON_PADDING_Y)}px {px(BUTTON_PADDING_X)}px;
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
 }}
 QMenu::item:selected {{
-    background-color: {COLOR_ACCENT_SOFT};
+    background-color: {COLOR_SELECTED_BG};
 }}
 QSplitter::handle {{
     background-color: {COLOR_BG};
@@ -44,30 +44,30 @@ QSplitter::handle:hover {{
     background-color: {COLOR_BORDER};
 }}
 QScrollBar:vertical {{
-    background: {COLOR_BG};
-    width: 10px;
-    margin: {SPACING_XSMALL}px;
+    background: transparent;
+    width: {px(10)}px;
+    margin: {px(SPACING_XSMALL)}px;
 }}
 QScrollBar::handle:vertical {{
-    background: {COLOR_BORDER};
-    border-radius: {RADIUS_SCROLLBAR}px;
-    min-height: 28px;
+    background: {COLOR_BORDER_HOVER};
+    border-radius: {px(RADIUS_SCROLLBAR)}px;
+    min-height: {px(28)}px;
 }}
 QScrollBar::handle:vertical:hover {{
-    background: {COLOR_BORDER_HOVER};
+    background: {COLOR_ACCENT_SOFT};
 }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     height: 0;
 }}
 QScrollBar:horizontal {{
-    background: {COLOR_BG};
-    height: 10px;
-    margin: {SPACING_XSMALL}px;
+    background: transparent;
+    height: {px(10)}px;
+    margin: {px(SPACING_XSMALL)}px;
 }}
 QScrollBar::handle:horizontal {{
-    background: {COLOR_BORDER};
-    border-radius: {RADIUS_SCROLLBAR}px;
-    min-width: 28px;
+    background: {COLOR_BORDER_HOVER};
+    border-radius: {px(RADIUS_SCROLLBAR)}px;
+    min-width: {px(28)}px;
 }}
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
     width: 0;
@@ -78,15 +78,15 @@ QTabWidget::pane {{
 QTabBar::tab {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_INPUT}px;
+    border-radius: {px(RADIUS_INPUT)}px;
     color: {COLOR_TEXT_SECONDARY};
-    padding: 9px 16px;
-    margin-right: {SPACING_SMALL}px;
+    padding: {px(9)}px {px(16)}px;
+    margin-right: {px(SPACING_SMALL)}px;
 }}
 QTabBar::tab:selected {{
-    background-color: {COLOR_CARD_ALT};
-    color: {COLOR_TEXT};
-    border-color: {COLOR_ACCENT};
+    background-color: {COLOR_ACCENT_SOFT};
+    color: {COLOR_ACCENT_HOVER};
+    border-color: {COLOR_BORDER_ACTIVE};
 }}
 QTabBar::tab:hover {{
     background-color: {COLOR_HOVER};

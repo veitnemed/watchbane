@@ -21,10 +21,10 @@ from desktop.shared.detail import (
 )
 from desktop.theme import (
     COLOR_ACCENT,
-    COLOR_ACCENT_SOFT,
     COLOR_BORDER,
     COLOR_CARD,
     COLOR_CARD_ALT,
+    COLOR_SELECTED_BG,
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
     FONT_FAMILY,
@@ -55,7 +55,7 @@ def build_candidate_list_item_delegate(parent, sort_mode: str):
 
             if is_selected:
                 painter.setPen(QPen(QColor(COLOR_ACCENT), 2))
-                painter.setBrush(QColor(COLOR_ACCENT_SOFT))
+                painter.setBrush(QColor(COLOR_SELECTED_BG))
             elif is_hovered:
                 painter.setPen(QPen(QColor(COLOR_BORDER), 1))
                 painter.setBrush(QColor(COLOR_CARD_ALT))

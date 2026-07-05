@@ -71,6 +71,12 @@ def test_build_add_meta_payload_from_resolve() -> None:
             "tmdb_score": 7.8,
             "tmdb_votes": 456,
             "tmdb_popularity": 12.3,
+            "status": "Ended",
+            "in_production": False,
+            "number_of_seasons": 1,
+            "number_of_episodes": 8,
+            "episode_run_time": [50],
+            "watch_providers": ["Kinopoisk"],
             "kp_id": 999,
             "kp_score": 9.9,
             "kp_votes": 1000,
@@ -87,6 +93,12 @@ def test_build_add_meta_payload_from_resolve() -> None:
     assert payload["imdb_id"] == "tt123"
     assert payload["poster_path"] == "/poster.jpg"
     assert payload["poster_url"] == "https://image.tmdb.org/t/p/original/poster.jpg"
+    assert payload["status"] == "Ended"
+    assert payload["in_production"] is False
+    assert payload["number_of_seasons"] == 1
+    assert payload["number_of_episodes"] == 8
+    assert payload["episode_run_time"] == [50]
+    assert payload["watch_providers"] == ["Kinopoisk"]
     assert payload["source"] == "tmdb"
     assert payload["raw_scores"] == {
         "tmdb_score": 7.8,
@@ -111,6 +123,11 @@ def test_build_candidate_meta_payload_uses_overview() -> None:
             "tmdb_score": 7.1,
             "tmdb_votes": 900,
             "tmdb_popularity": 5.5,
+            "status": "Returning Series",
+            "number_of_seasons": 2,
+            "number_of_episodes": 16,
+            "episode_run_time": [48],
+            "watch_providers": ["Okko"],
             "kp_score": 9.9,
             "kp_votes": 1000,
             "imdb_score": 8.8,
@@ -120,6 +137,11 @@ def test_build_candidate_meta_payload_uses_overview() -> None:
 
     assert payload["description"] == "Overview text"
     assert payload["tmdb_id"] == 42
+    assert payload["status"] == "Returning Series"
+    assert payload["number_of_seasons"] == 2
+    assert payload["number_of_episodes"] == 16
+    assert payload["episode_run_time"] == [48]
+    assert payload["watch_providers"] == ["Okko"]
     assert payload["raw_scores"] == {
         "tmdb_score": 7.1,
         "tmdb_votes": 900,

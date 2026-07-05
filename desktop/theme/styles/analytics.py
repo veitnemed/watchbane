@@ -19,6 +19,17 @@ def build_analytics_style(
     font_fallback: int = FONT_BASE,
 ) -> str:
     """Return the analytics tab stylesheet."""
+    font_base = font_px(font_base)
+    font_page_title = font_px(font_page_title)
+    font_subtitle = font_px(font_subtitle)
+    font_section_title = font_px(font_section_title)
+    font_summary_label = font_px(font_summary_label)
+    font_summary_value = font_px(font_summary_value)
+    font_insight = font_px(font_insight)
+    font_dense_count = font_px(font_dense_count)
+    font_dense_score = font_px(font_dense_score)
+    font_same_score_titles = font_px(font_same_score_titles)
+    font_fallback = font_px(font_fallback)
     return f"""
 QWidget#analyticsRoot {{
     background-color: {COLOR_BG};
@@ -63,13 +74,13 @@ QFrame#insightCard,
 QFrame#sameScoreCard {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CARD}px;
+    border-radius: {px(RADIUS_CARD)}px;
 }}
 QFrame#chartConstructorControls {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CARD}px;
-    padding: 10px;
+    border-radius: {px(RADIUS_CARD)}px;
+    padding: {px(10)}px;
 }}
 QWidget#chartConstructorField {{
     background: transparent;
@@ -83,33 +94,33 @@ QLabel#chartConstructorLabel {{
 QComboBox#chartConstructorCombo {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
     font-size: {font_base}px;
-    padding: 8px 12px;
-    min-height: 20px;
+    padding: {px(8)}px {px(12)}px;
+    min-height: {px(20)}px;
 }}
 QComboBox#chartConstructorCombo:focus {{
-    border-color: {COLOR_ACCENT};
+    border-color: {COLOR_FOCUS_BORDER};
 }}
 QComboBox#chartConstructorCombo::drop-down {{
     border: none;
-    width: 24px;
+    width: {px(24)}px;
 }}
 QComboBox#chartConstructorCombo QAbstractItemView {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
     color: {COLOR_TEXT};
-    selection-background-color: {COLOR_ACCENT_SOFT};
+    selection-background-color: {COLOR_SELECTED_BG};
 }}
 QPushButton#chartConstructorBuildButton {{
     background-color: {COLOR_ACCENT_SOFT};
     border: 1px solid {COLOR_ACCENT};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
     font-size: {font_base}px;
     font-weight: 700;
-    padding: 9px 14px;
+    padding: {px(9)}px {px(14)}px;
 }}
 QPushButton#chartConstructorBuildButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};
@@ -118,7 +129,7 @@ QPushButton#chartConstructorBuildButton:hover {{
 QFrame#summaryCardStale {{
     background-color: {COLOR_STALE_BG};
     border: 1px solid {COLOR_STALE_BORDER};
-    border-radius: {RADIUS_CARD}px;
+    border-radius: {px(RADIUS_CARD)}px;
 }}
 QFrame#summaryCardStale QLabel#summaryValue {{
     color: {COLOR_STALE_TEXT};
@@ -126,7 +137,7 @@ QFrame#summaryCardStale QLabel#summaryValue {{
 QFrame#modelStaleBanner {{
     background-color: {COLOR_STALE_BG};
     border: 1px solid {COLOR_STALE_BORDER};
-    border-radius: {RADIUS_CARD}px;
+    border-radius: {px(RADIUS_CARD)}px;
 }}
 QLabel#modelStaleBannerText {{
     background: transparent;
@@ -137,11 +148,11 @@ QLabel#modelStaleBannerText {{
 QPushButton#modelTrainButton {{
     background-color: {COLOR_ADD_BUTTON};
     border: 1px solid {COLOR_ADD_BUTTON_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
     font-size: {font_base}px;
     font-weight: 600;
-    padding: 10px 16px;
+    padding: {px(10)}px {px(16)}px;
 }}
 QPushButton#modelTrainButton:hover:enabled {{
     background-color: {COLOR_ADD_BUTTON_HOVER};
@@ -155,11 +166,11 @@ QPushButton#modelTrainButton:disabled {{
 QPushButton#modelDetailsButton {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT_SOFT};
     font-size: {font_base}px;
     font-weight: 600;
-    padding: 10px 16px;
+    padding: {px(10)}px {px(16)}px;
 }}
 QPushButton#modelDetailsButton:hover:enabled {{
     background-color: {COLOR_CONTROL_HOVER};
@@ -169,7 +180,7 @@ QPushButton#modelDetailsButton:hover:enabled {{
 QFrame#modelWeightsPanel {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CARD}px;
+    border-radius: {px(RADIUS_CARD)}px;
 }}
 QLabel#modelWeightsText {{
     background: transparent;
@@ -190,27 +201,27 @@ QLabel#modelTrainingResult {{
 QProgressBar#modelTrainingProgress {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BAR}px;
-    height: 14px;
+    border-radius: {px(RADIUS_BAR)}px;
+    height: {px(14)}px;
     text-align: center;
     color: {COLOR_TEXT_SECONDARY};
     font-size: {font_summary_label}px;
 }}
 QProgressBar#modelTrainingProgress::chunk {{
     background-color: {COLOR_ACCENT};
-    border-radius: {RADIUS_BAR}px;
+    border-radius: {px(RADIUS_BAR)}px;
 }}
 QFrame#summaryIconBadge,
 QFrame#sectionHeaderIconBadge {{
     background-color: {COLOR_ACCENT_SOFT};
     border: 1px solid {COLOR_ACCENT};
-    border-radius: 18px;
+    border-radius: {px(18)}px;
 }}
 QLabel#summaryIcon,
 QLabel#sectionHeaderIcon {{
     background: transparent;
     color: {COLOR_ACCENT_PLOT_HOVER};
-    font-size: 15px;
+    font-size: {font_px(15)}px;
     font-weight: 700;
 }}
 QWidget#sectionHeader,
@@ -228,7 +239,7 @@ QLabel#denseTitles {{
 QLabel#insightBullet {{
     background: transparent;
     color: {COLOR_ACCENT};
-    font-size: 10px;
+    font-size: {font_px(10)}px;
 }}
 QLabel#insightText {{
     background: transparent;
@@ -250,9 +261,9 @@ QLabel#sectionTitle {{
 QLabel#sectionHeaderMenu {{
     background: transparent;
     color: {COLOR_TEXT_MUTED};
-    font-size: 18px;
+    font-size: {font_px(18)}px;
     font-weight: 700;
-    padding: 0 2px;
+    padding: 0 {px(2)}px;
 }}
 QLabel#completenessHeadline {{
     background: transparent;
@@ -267,11 +278,11 @@ QLabel#completenessSubline {{
 }}
 QFrame#barTrack {{
     background-color: {COLOR_CARD_ALT};
-    border-radius: {RADIUS_BAR}px;
+    border-radius: {px(RADIUS_BAR)}px;
 }}
 QFrame#barFill {{
     background-color: {COLOR_ACCENT};
-    border-radius: {RADIUS_BAR}px;
+    border-radius: {px(RADIUS_BAR)}px;
 }}
 QLabel#barCount,
 QLabel#denseCount {{
@@ -289,7 +300,7 @@ QLabel#denseScore {{
 QFrame#denseScoreBadge {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
 }}
 QLabel#sameScoreTitles {{
     background: transparent;
@@ -300,12 +311,12 @@ QLabel#analyticsFallback {{
     background: transparent;
     color: {COLOR_TEXT_SOFT};
     font-size: {font_fallback}px;
-    padding: 8px 2px;
+    padding: {px(8)}px {px(2)}px;
 }}
 QWebEngineView#analyticsPlotlyChart {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BAR}px;
+    border-radius: {px(RADIUS_BAR)}px;
 }}
 QPushButton#analyticsListExpand {{
     background: transparent;
@@ -313,7 +324,7 @@ QPushButton#analyticsListExpand {{
     color: {COLOR_ACCENT_PLOT_HOVER};
     font-size: {font_summary_label}px;
     font-weight: 600;
-    padding: 2px 0;
+    padding: {px(2)}px 0;
     text-align: left;
 }}
 QPushButton#analyticsListExpand:hover {{

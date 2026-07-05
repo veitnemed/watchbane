@@ -69,6 +69,22 @@ def test_start_app_entrypoint_is_guarded() -> None:
     assert callable(start_app_module.main)
 
 
+def test_desktop_app_icon_asset_loads(qapp) -> None:
+    from desktop.shell.app_icon import APP_ICON_PATH, build_app_icon
+
+    assert APP_ICON_PATH.exists()
+    assert build_app_icon().isNull() is False
+
+
+def test_apply_app_icon_sets_qapplication_icon(qapp) -> None:
+    from desktop.shell.app_icon import apply_app_icon
+
+    icon = apply_app_icon(qapp)
+
+    assert icon.isNull() is False
+    assert qapp.windowIcon().isNull() is False
+
+
 def test_score_edit_dialog_is_custom_dark_dialog() -> None:
     import desktop.watched.dialogs.score_edit as dialog_module
 
@@ -543,12 +559,12 @@ def test_watched_detail_has_no_my_score_ring_payload() -> None:
     assert all(item.get("kind") != "user_score_ring" for item in items)
 
 
-def test_score_ring_color_uses_red_to_green_quality_scale() -> None:
+def test_score_ring_color_uses_theme_cyan_quality_scale() -> None:
     from desktop.watched import score_ring_color_for_final_score
+    from desktop.theme import COLOR_ACCENT, COLOR_ACCENT_HOVER
 
-    assert score_ring_color_for_final_score(0) == "#ef4444"
-    assert score_ring_color_for_final_score(0.5) == "#f59e0b"
-    assert score_ring_color_for_final_score(1) == "#22c55e"
+    assert score_ring_color_for_final_score(0) == COLOR_ACCENT.lower()
+    assert score_ring_color_for_final_score(1) == COLOR_ACCENT_HOVER.lower()
 
 
 def test_score_ring_item_accepts_percent_final_score() -> None:
@@ -655,43 +671,55 @@ def test_build_genre_pill_labels_hides_empty() -> None:
     ]
 
 
-def test_build_detail_info_pill_labels_moves_year_to_genres() -> None:
+def test_build_detail_info_pill_labels_keeps_only_genres() -> None:
     from desktop.watched import build_detail_info_pill_labels
 
-    assert build_detail_info_pill_labels({"year": 2025, "genres": ["Драма"]}) == [
-        "2025",
-        "Драма",
-    ]
-    assert build_detail_info_pill_labels({"year": 2015.0, "genres": []}) == ["2015"]
+    assert build_detail_info_pill_labels({"year": 2025, "genres": ["Драма"]}) == ["Драма"]
+    assert build_detail_info_pill_labels({"year": 2015.0, "genres": []}) == []
     assert build_detail_info_pill_labels({"genres": ["Драма"]}) == ["Драма"]
     assert build_detail_info_pill_labels({"year": 2025, "genres": ["Драма"], "country": "Россия"}) == [
-        "2025",
         "Драма",
     ]
 
 
-def test_build_main_info_items_formats_country_type_and_votes() -> None:
+def test_build_main_info_items_formats_type_and_country_only() -> None:
     from desktop.watched import build_main_info_items
 
     assert build_main_info_items(
         {
             "country": "Россия",
+            "year": 2025,
             "object_type": "series",
+            "number_of_seasons": 2,
+            "number_of_episodes": 16,
             "tmdb_votes": 3456,
             "imdb_votes": 1200,
             "kp_votes": 128536,
         }
     ) == [
-        {"label": "Страна", "value": "Россия"},
         {"label": "Тип", "value": "Сериал"},
-        {"label": "Голоса TMDb", "value": "3 456"},
+        {"label": "Страна", "value": "Россия"},
     ]
+
+
+def test_build_title_meta_text_formats_year_and_seasons() -> None:
+    from desktop.shared.detail import build_title_meta_text
+
+    assert build_title_meta_text(
+        {
+            "year": 2025,
+            "number_of_seasons": 2,
+            "number_of_episodes": 16,
+        }
+    ) == "2025 • 2 сезона / 16 серий"
+    assert build_title_meta_text({"year": 2020}) == "2020"
+    assert build_title_meta_text({"number_of_seasons": 1, "number_of_episodes": 8}) == "1 сезон / 8 серий"
 
 
 def test_build_main_info_items_displays_normalized_country_value() -> None:
     from desktop.watched import build_main_info_items
 
-    assert build_main_info_items({"country": "RU, Russia", "object_type": "series"})[0] == {
+    assert build_main_info_items({"country": "RU, Russia", "object_type": "series"})[1] == {
         "label": "Страна",
         "value": "Россия",
     }
@@ -702,6 +730,26 @@ def test_build_main_info_items_hides_empty_votes_and_defaults_type() -> None:
 
     assert build_main_info_items({"imdb_votes": None, "kp_votes": 0}) == [
         {"label": "Тип", "value": "Неизвестно"},
+    ]
+
+
+def test_build_additional_info_items_formats_tmdb_fields() -> None:
+    from desktop.shared.detail import build_additional_info_items
+
+    assert build_additional_info_items(
+        {
+            "number_of_seasons": 2,
+            "number_of_episodes": 32,
+            "watch_providers": ["Kinopoisk", "Okko"],
+            "status": "Ended",
+            "episode_run_time": [52],
+            "tmdb_votes": 3456,
+        }
+    ) == [
+        {"label": "Где смотреть", "value": "Kinopoisk, Okko"},
+        {"label": "Статус", "value": "Завершен"},
+        {"label": "Длительность серии", "value": "52 мин"},
+        {"label": "Голоса TMDb", "value": "3 456"},
     ]
 
 
@@ -740,6 +788,20 @@ def test_build_watched_movie_card_includes_main_info_type() -> None:
     assert "kp_votes" not in card
     assert "imdb_score" not in card
     assert "imdb_votes" not in card
+
+
+def test_build_watched_movie_card_splits_legacy_combined_genres() -> None:
+    from web.export import build_watched_movie_card
+
+    card = build_watched_movie_card(
+        {
+            "main_info": {"title": "Alpha", "year": 2024, "user_score": 8.0},
+            "genres_display": ["Боевик/приключения", "Фантастика/фэнтези"],
+        },
+        poster_cache={},
+    )
+
+    assert card["genres"] == ["Боевик", "Приключения", "Фантастика", "Фэнтези"]
 
 
 def test_build_watched_movie_card_uses_meta_country_fallback() -> None:
@@ -818,6 +880,37 @@ def test_build_watched_movie_card_uses_meta_tmdb_fallback() -> None:
     assert card["tmdb_votes"] == 321
     assert card["tmdb_popularity"] == 14.5
     assert "kp_votes" not in card
+
+
+def test_build_watched_movie_card_uses_meta_additional_info_fallback() -> None:
+    from web.export import build_export_lookup_cache, build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Alpha", "year": 2024, "user_score": 8.0},
+        "raw_scores": {},
+    }
+    lookup_cache = build_export_lookup_cache(
+        meta={
+            "Alpha": {
+                "number_of_seasons": 2,
+                "number_of_episodes": 16,
+                "episode_run_time": [48],
+                "watch_providers": ["Kinopoisk"],
+                "status": "Returning Series",
+                "in_production": True,
+            }
+        },
+        pool_by_identity={},
+    )
+
+    card = build_watched_movie_card(movie, poster_cache={}, lookup_cache=lookup_cache)
+
+    assert card["number_of_seasons"] == 2
+    assert card["number_of_episodes"] == 16
+    assert card["episode_run_time"] == [48]
+    assert card["watch_providers"] == ["Kinopoisk"]
+    assert card["status"] == "Returning Series"
+    assert card["in_production"] is True
 
 
 def test_build_watched_movie_card_uses_candidate_pool_tmdb_fallback() -> None:
@@ -1225,7 +1318,8 @@ def test_watched_detail_card_layout_contract() -> None:
     init_source = source.split("def _info_column_content_width", 1)[0]
 
     assert "info_column.addStretch" not in init_source
-    assert "root.addStretch(1)" in init_source
+    assert "content_layout.addStretch(1)" in init_source
+    assert "root.addStretch(1)" not in init_source
     assert "QSizePolicy.Policy.Minimum" in init_source
     assert "setWordWrap(True)" in init_source
     assert "maximumHeight" not in init_source
@@ -1399,6 +1493,31 @@ def test_detail_chips_do_not_elide_common_short_labels(qapp) -> None:
     assert all(chip.toolTip() == "" for chip in chips)
 
 
+def test_detail_chips_center_text(qapp) -> None:
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
+
+    from desktop.shared.detail.card_pills import fill_detail_chip_rows
+    from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE
+
+    container = QWidget()
+    layout = QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    fill_detail_chip_rows(
+        layout,
+        ["2020", "Драма"],
+        260,
+        "genrePill",
+        DETAIL_CARD_LAYOUT_PROFILE,
+    )
+
+    chips = container.findChildren(QLabel, "genrePill")
+
+    assert len(chips) == 2
+    assert all(chip.alignment() == Qt.AlignmentFlag.AlignCenter for chip in chips)
+
+
 def test_detail_chips_container_stays_above_score_row(qapp) -> None:
     from PyQt6.QtWidgets import QWidget
 
@@ -1429,7 +1548,7 @@ def test_detail_chips_container_stays_above_score_row(qapp) -> None:
     assert info_layout.indexOf(chips) < info_layout.indexOf(score_row)
 
 
-def test_detail_chips_container_height_matches_two_rows(qapp) -> None:
+def test_detail_chips_container_height_matches_visible_rows(qapp) -> None:
     from PyQt6.QtWidgets import QWidget
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
@@ -1453,12 +1572,9 @@ def test_detail_chips_container_height_matches_two_rows(qapp) -> None:
     qapp.processEvents()
 
     chips = detail.widget.findChild(QWidget, "detailChipsContainer")
-    expected_height = (
-        DETAIL_CARD_LAYOUT_PROFILE.detail_chip_height * 2
-        + DETAIL_CARD_LAYOUT_PROFILE.detail_chip_row_gap
-    )
+    expected_height = DETAIL_CARD_LAYOUT_PROFILE.detail_chip_height
 
-    assert chips.layout().count() == 2
+    assert chips.layout().count() == 1
     assert chips.height() == expected_height
 
 
@@ -1554,12 +1670,34 @@ def test_detail_overview_section_is_below_top_row(qapp) -> None:
     qapp.processEvents()
 
     top_row = detail.widget.findChild(QWidget, "detailTopRow")
+    content = detail.widget.findChild(QWidget, "detailContentContainer")
     section = detail.widget.findChild(QFrame, "detailOverviewSection")
-    root_layout = detail.widget.layout()
 
     assert top_row is not None
+    assert content is not None
     assert section is not None
-    assert root_layout.indexOf(top_row) < root_layout.indexOf(section)
+    content_layout = content.layout()
+    assert content_layout.indexOf(top_row) < content_layout.indexOf(section)
+
+
+def test_detail_card_uses_profile_composition_widths(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame, QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+
+    content = detail.widget.findChild(QWidget, "detailContentContainer")
+    info_column = detail.widget.findChild(QWidget, "detailInfoColumn")
+    overview = detail.widget.findChild(QFrame, "detailOverviewSection")
+    main_info = detail.widget.findChild(QWidget, "detailMainInfoSection")
+    additional_info = detail.widget.findChild(QWidget, "detailAdditionalInfoSection")
+
+    assert content.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width
+    assert info_column.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_info_column_max_width
+    assert overview.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_overview_max_width
+    assert main_info.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
+    assert additional_info.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
 
 
 def test_detail_overview_uses_profile_left_inset(qapp) -> None:
@@ -1623,6 +1761,9 @@ def test_detail_main_info_panel_renders_known_rows(qapp) -> None:
                 "final_score": 0.74,
                 "country": "US",
                 "object_type": "series",
+                "year": 2025,
+                "number_of_seasons": 2,
+                "number_of_episodes": 16,
                 "tmdb_votes": 12850,
             },
         )
@@ -1640,12 +1781,95 @@ def test_detail_main_info_panel_renders_known_rows(qapp) -> None:
     assert header is not None
     assert header.text() == "ОСНОВНАЯ ИНФОРМАЦИЯ"
     assert panel is not None
-    assert "Страна" in labels
-    assert "Тип" in labels
-    assert "Голоса TMDb" in labels
-    assert "США" in values
+    assert labels == ["Тип", "Страна"]
     assert "Сериал" in values
-    assert "12 850" in values
+    assert "США" in values
+
+
+def test_detail_title_meta_renders_year_and_seasons_under_title(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "year": 2025,
+                "number_of_seasons": 2,
+                "number_of_episodes": 16,
+            },
+        )
+    )
+    qapp.processEvents()
+
+    title = detail.widget.findChild(QLabel, "detailTitle")
+    meta = detail.widget.findChild(QLabel, "detailTitleMeta")
+    info_column = detail.widget.findChild(QWidget, "detailInfoColumn")
+    title_block = detail.widget.findChild(QWidget, "detailTitleBlock")
+
+    assert title is not None
+    assert meta is not None
+    assert info_column is not None
+    assert title_block is not None
+    assert meta.text() == "2025 • 2 сезона / 16 серий"
+    assert meta.isHidden() is False
+    assert info_column.layout().indexOf(title_block) >= 0
+    assert title_block.layout().spacing() == DETAIL_CARD_LAYOUT_PROFILE.detail_title_meta_gap
+    assert title_block.layout().indexOf(detail._title_row_widget) < title_block.layout().indexOf(meta)
+
+
+def test_detail_additional_info_panel_renders_known_rows(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QFrame, QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "number_of_seasons": 2,
+                "number_of_episodes": 32,
+                "watch_providers": ["Kinopoisk"],
+                "status": "Ended",
+                "episode_run_time": [52],
+                "tmdb_votes": 12850,
+            },
+        )
+    )
+    qapp.processEvents()
+
+    section = detail.widget.findChild(QWidget, "detailAdditionalInfoSection")
+    header = detail.widget.findChild(QLabel, "detailAdditionalInfoHeader")
+    panel = detail.widget.findChild(QFrame, "detailAdditionalInfoPanel")
+    labels = [item.text() for item in panel.findChildren(QLabel, "detailAdditionalInfoLabel")]
+    values = [item.text() for item in panel.findChildren(QLabel, "detailAdditionalInfoValue")]
+
+    assert section is not None
+    assert section.isHidden() is False
+    assert header is not None
+    assert header.text() == "ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ"
+    assert labels == ["Где смотреть", "Статус", "Длительность серии", "Голоса TMDb"]
+    assert values == ["Kinopoisk", "Завершен", "52 мин", "12 850"]
+
+
+def test_detail_additional_info_section_has_top_gap(qapp) -> None:
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    section = detail.widget.findChild(QWidget, "detailAdditionalInfoSection")
+    margins = section.layout().contentsMargins()
+
+    assert margins.top() == DETAIL_CARD_LAYOUT_PROFILE.detail_additional_info_top_gap
 
 
 def test_detail_main_info_section_hides_when_empty(qapp) -> None:
@@ -1799,17 +2023,21 @@ def test_score_summary_area_has_no_raw_final_score_text(qapp) -> None:
 
 
 def test_detail_card_poster_shell_exists(qapp) -> None:
-    from PyQt6.QtWidgets import QFrame
+    from PyQt6.QtWidgets import QFrame, QLabel
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
     detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
     shell = detail.widget.findChild(QFrame, "detailPosterShell")
+    poster = detail.widget.findChild(QLabel, "detailPoster")
 
     assert shell is not None
+    assert poster is not None
     assert shell.parent() is detail._poster_column_widget
     assert shell.width() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
     assert shell.height() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_height
+    assert poster.width() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_content_width
+    assert poster.height() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_content_height
 
 
 def test_watched_user_score_badge_is_poster_shell_overlay(qapp) -> None:
@@ -1849,18 +2077,18 @@ def test_watched_user_score_badge_has_readable_background() -> None:
     import inspect
 
     import desktop.shared.detail.card as detail_card_module
+    from desktop.theme import COLOR_RATING, COLOR_SCORE_BADGE_BG
     from desktop.theme.styles.detail_card import build_detail_card_style
 
     style = build_detail_card_style()
     init_source = inspect.getsource(detail_card_module.WatchedDetailCard.__init__)
 
     assert "QLabel#detailUserScoreBadge" in style
-    assert "background-color: #05070b" in style
-    assert "border: 1px solid {COLOR_DETAIL_GOLD}" not in style
-    assert "border: 1px solid #f5c451" in style
+    assert f"background-color: {COLOR_SCORE_BADGE_BG}" in style
+    assert f"border: 1px solid {COLOR_RATING}" in style
     assert "class UserScoreBadgeLabel(QLabel)" in init_source
     assert "drawRoundedRect" in init_source
-    assert 'QColor("#05070b")' in init_source
+    assert "QColor(COLOR_SCORE_BADGE_BG)" in init_source
 
 
 def test_watched_user_score_badge_hides_without_user_score(qapp) -> None:
@@ -2241,56 +2469,92 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "DETAIL_HERO_CARD_PADDING": 28,
         "DETAIL_HERO_MIN_WIDTH": 980,
         "DETAIL_HERO_PREFERRED_MIN_WIDTH": 1200,
-        "DETAIL_POSTER_WIDTH": 328,
-        "DETAIL_POSTER_HEIGHT": 482,
-        "DETAIL_POSTER_RADIUS": 20,
-        "DETAIL_POSTER_RIGHT_GAP": 36,
-        "DETAIL_INFO_MIN_WIDTH": 560,
+        "DETAIL_CONTENT_MAX_WIDTH": 1120,
+        "DETAIL_POSTER_WIDTH": 360,
+        "DETAIL_POSTER_HEIGHT": 530,
+        "DETAIL_POSTER_RADIUS": 16,
+        "DETAIL_POSTER_BORDER_WIDTH": 1,
+        "DETAIL_POSTER_RIGHT_GAP": 42,
+        "DETAIL_INFO_MIN_WIDTH": 440,
         "DETAIL_INFO_MAX_WIDTH": 760,
-        "DETAIL_TITLE_FONT_FAMILY": "Georgia",
-        "DETAIL_TITLE_FONT_FALLBACK": "Times New Roman",
-        "DETAIL_TITLE_FONT_SIZE": 34,
-        "DETAIL_TITLE_LINE_HEIGHT": 42,
+        "DETAIL_INFO_COLUMN_MAX_WIDTH": 700,
+        "DETAIL_TITLE_FONT_FAMILY": "Segoe UI",
+        "DETAIL_TITLE_FONT_FALLBACK": "Arial, sans-serif",
+        "DETAIL_TITLE_FONT_SIZE": 38,
+        "FONT_DETAIL_MAIN_INFO_HEADER": 17,
+        "FONT_DETAIL_MAIN_INFO_LABEL": 17,
+        "FONT_DETAIL_MAIN_INFO_VALUE": 18,
+        "FONT_DETAIL_OVERVIEW_TEXT": 19,
+        "DETAIL_TITLE_LINE_HEIGHT": 48,
         "DETAIL_TITLE_MAX_LINES": 2,
-        "DETAIL_CHIP_HEIGHT": 32,
-        "DETAIL_CHIP_RADIUS": 16,
-        "DETAIL_CHIP_H_PADDING": 18,
-        "DETAIL_CHIP_ROW_GAP": 8,
-        "DETAIL_CHIP_COL_GAP": 12,
+        "DETAIL_CHIP_HEIGHT": 36,
+        "DETAIL_CHIP_RADIUS": 18,
+        "DETAIL_CHIP_H_PADDING": 20,
+        "DETAIL_CHIP_ROW_GAP": 10,
+        "DETAIL_CHIP_COL_GAP": 14,
         "DETAIL_CHIP_MAX_ROWS": 2,
-        "DETAIL_CHIP_MAX_WIDTH": 150,
-        "DETAIL_SCORE_ROW_TOP_GAP": 30,
-        "DETAIL_RATING_WIDGET_SIZE": 124,
-        "DETAIL_RATING_CIRCLE_DIAMETER": 112,
-        "DETAIL_STARS_LEFT_GAP": 44,
-        "DETAIL_STAR_SIZE": 32,
-        "DETAIL_STAR_GAP": 8,
-        "DETAIL_USER_SCORE_BADGE_MIN_WIDTH": 72,
-        "DETAIL_USER_SCORE_BADGE_HEIGHT": 36,
-        "DETAIL_USER_SCORE_BADGE_RADIUS": 18,
-        "DETAIL_USER_SCORE_BADGE_TOP": 14,
-        "DETAIL_USER_SCORE_BADGE_RIGHT": 14,
-        "DETAIL_USER_SCORE_BADGE_PADDING_X": 12,
-        "DETAIL_MAIN_INFO_TOP_GAP": 34,
-        "DETAIL_MAIN_INFO_PANEL_RADIUS": 14,
-        "DETAIL_MAIN_INFO_PANEL_PADDING_X": 24,
-        "DETAIL_MAIN_INFO_PANEL_PADDING_Y": 16,
-        "DETAIL_MAIN_INFO_ROW_HEIGHT": 48,
-        "DETAIL_MAIN_INFO_LABEL_WIDTH": 210,
-        "DETAIL_OVERVIEW_TOP_GAP": 34,
+        "DETAIL_CHIP_MAX_WIDTH": 170,
+        "DETAIL_SCORE_ROW_TOP_GAP": 34,
+        "DETAIL_RATING_WIDGET_SIZE": 136,
+        "DETAIL_RATING_CIRCLE_DIAMETER": 122,
+        "DETAIL_STARS_LEFT_GAP": 52,
+        "DETAIL_STAR_SIZE": 36,
+        "DETAIL_STAR_GAP": 9,
+        "DETAIL_USER_SCORE_BADGE_MIN_WIDTH": 80,
+        "DETAIL_USER_SCORE_BADGE_HEIGHT": 40,
+        "DETAIL_USER_SCORE_BADGE_RADIUS": 20,
+        "DETAIL_USER_SCORE_BADGE_TOP": 16,
+        "DETAIL_USER_SCORE_BADGE_RIGHT": 16,
+        "DETAIL_USER_SCORE_BADGE_PADDING_X": 14,
+        "DETAIL_MAIN_INFO_TOP_GAP": 38,
+        "DETAIL_MAIN_INFO_PANEL_RADIUS": 16,
+        "DETAIL_MAIN_INFO_PANEL_PADDING_X": 28,
+        "DETAIL_MAIN_INFO_PANEL_PADDING_Y": 18,
+        "DETAIL_MAIN_INFO_ROW_HEIGHT": 54,
+        "DETAIL_MAIN_INFO_LABEL_WIDTH": 230,
+        "DETAIL_OVERVIEW_TOP_GAP": 28,
         "DETAIL_OVERVIEW_LEFT_INSET": 0,
-        "DETAIL_OVERVIEW_TITLE_TOP_GAP": 24,
-        "DETAIL_OVERVIEW_TEXT_TOP_GAP": 18,
+        "DETAIL_OVERVIEW_TITLE_TOP_GAP": 28,
+        "DETAIL_OVERVIEW_TEXT_TOP_GAP": 20,
         "DETAIL_OVERVIEW_MAX_LINES_COLLAPSED": 4,
+        "DETAIL_OVERVIEW_MAX_WIDTH": 920,
+        "DETAIL_SECTION_MAX_WIDTH": 920,
     }
 
     for token_name, expected_value in expected_tokens.items():
         assert getattr(theme, token_name) == expected_value
 
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width == theme.DETAIL_POSTER_WIDTH
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_poster_border_width == theme.DETAIL_POSTER_BORDER_WIDTH
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_poster_content_width == theme.DETAIL_POSTER_WIDTH - 2
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_poster_content_radius == theme.DETAIL_POSTER_RADIUS - 1
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_rating_widget_size == theme.DETAIL_RATING_WIDGET_SIZE
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_user_score_badge_height == theme.DETAIL_USER_SCORE_BADGE_HEIGHT
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_overview_left_inset == theme.DETAIL_OVERVIEW_LEFT_INSET
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width == theme.DETAIL_CONTENT_MAX_WIDTH
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_info_column_max_width == theme.DETAIL_INFO_COLUMN_MAX_WIDTH
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_overview_max_width == theme.DETAIL_OVERVIEW_MAX_WIDTH
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width == theme.DETAIL_SECTION_MAX_WIDTH
+
+
+def test_detail_card_style_uses_requested_font_sizes() -> None:
+    from desktop.theme.scaling import set_ui_scale
+    from desktop.theme.styles.detail_card import build_detail_card_style
+
+    set_ui_scale(1.0)
+    style = build_detail_card_style()
+
+    assert "QLabel#detailTitle" in style
+    assert "font-size: 38px;" in style
+    assert "QLabel#detailTitleMeta" in style
+    assert "font-size: 17px;" in style
+    assert "QLabel#detailMainInfoHeader" in style
+    assert "font-size: 17px;" in style
+    assert "font-size: 18px;" in style
+    assert "QLabel#detailOverviewText" in style
+    assert "font-size: 19px;" in style
+    assert "QLabel#detailAdditionalInfoHeader" in style
+    assert "font-size: 20px;" in style
 
 
 def test_fit_poster_pixmap_for_display_avoids_upscale(qapp) -> None:
@@ -2331,6 +2595,47 @@ def test_watched_detail_card_uses_cover_crop_poster_helper() -> None:
     assert "KeepAspectRatioByExpanding" in poster_source
     assert ".copy(" in poster_source
     assert "_target_poster_height" not in source
+
+
+def test_cover_crop_poster_pixmap_rounds_corners(qapp) -> None:
+    from PyQt6.QtGui import QColor, QImage, QPixmap
+
+    from desktop.shared.detail.card_poster import cover_crop_poster_pixmap_for_display
+
+    source_image = QImage(40, 60, QImage.Format.Format_ARGB32)
+    source_image.fill(QColor("#ff0000"))
+
+    result = cover_crop_poster_pixmap_for_display(
+        QPixmap.fromImage(source_image),
+        40,
+        60,
+        radius=12,
+    )
+    result_image = result.toImage()
+
+    assert result.width() == 40
+    assert result.height() == 60
+    assert result_image.pixelColor(0, 0).alpha() == 0
+    assert result_image.pixelColor(20, 30).alpha() == 255
+
+
+def test_detail_poster_styles_keep_border_on_shell_only() -> None:
+    from desktop.theme.styles.detail_card import (
+        build_detail_card_style,
+        build_poster_image_style,
+        build_poster_placeholder_style,
+    )
+    from desktop.theme import COLOR_BORDER_HOVER
+
+    detail_style = build_detail_card_style()
+    placeholder_style = build_poster_placeholder_style()
+    image_style = build_poster_image_style()
+
+    assert "QFrame#detailPosterShell" in detail_style
+    assert f"border: 1px solid {COLOR_BORDER_HOVER};" in detail_style
+    assert "border: none" in placeholder_style
+    assert "border-radius: 15px" in placeholder_style
+    assert "border-radius: 15px" in image_style
 
 
 def test_format_poster_path_display() -> None:
@@ -3089,6 +3394,12 @@ def test_build_candidate_readonly_detail_entry_maps_fields() -> None:
         "imdb_id": "tt123",
         "overview": "Test overview",
         "genres_display": ["Драма", "Комедия"],
+        "number_of_seasons": 1,
+        "number_of_episodes": 8,
+        "episode_run_time": [45],
+        "watch_providers": ["Kinopoisk"],
+        "status": "Ended",
+        "in_production": False,
         "poster_url": "https://example.com/poster.jpg",
     }
 
@@ -3103,12 +3414,31 @@ def test_build_candidate_readonly_detail_entry_maps_fields() -> None:
     assert card["tmdb_votes"] == 1200
     assert card["final_score"] == 0.74
     assert card["imdb_id"] == "tt123"
+    assert card["number_of_seasons"] == 1
+    assert card["number_of_episodes"] == 8
+    assert card["episode_run_time"] == [45]
+    assert card["watch_providers"] == ["Kinopoisk"]
+    assert card["status"] == "Ended"
+    assert card["in_production"] is False
     assert "kp_score" not in card
     assert "imdb_score" not in card
     assert card["overview"] == "Test overview"
     assert card["genres"] == ["Драма", "Комедия"]
     assert "poster_path" not in card
     assert "poster_src" not in card
+
+
+def test_build_candidate_readonly_detail_entry_splits_legacy_combined_genres() -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_detail_entry
+
+    _, _, card = build_candidate_readonly_detail_entry(
+        {
+            "title": "Pool Show",
+            "genres_display": ["Боевик/приключения", "Фантастика/фэнтези"],
+        }
+    )
+
+    assert card["genres"] == ["Боевик", "Приключения", "Фантастика", "Фэнтези"]
 
 
 def test_build_candidate_readonly_detail_entry_does_not_download_poster(monkeypatch) -> None:
@@ -3242,6 +3572,7 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
     assert CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_height == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_height
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_user_score is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_mark_watched_button is True
+    assert CANDIDATE_DETAIL_CARD_PROFILE.include_bottom_stretch is False
 
 
 def test_candidate_list_view_wires_mark_watched_transfer() -> None:

@@ -14,43 +14,43 @@ QDialog#scoreEditDialog {{
 QFrame#scoreEditCard {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CARD_LARGE}px;
+    border-radius: {px(RADIUS_CARD_LARGE)}px;
 }}
 QLabel#scoreEditTitle {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {FONT_DIALOG_TITLE}px;
+    font-size: {font_px(FONT_DIALOG_TITLE)}px;
     font-weight: 700;
 }}
 QLabel#scoreEditMovieTitle {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {FONT_BASE}px;
+    font-size: {font_px(FONT_BASE)}px;
     font-weight: 600;
 }}
 QLabel#scoreEditCurrent,
 QLabel#scoreEditFieldLabel {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_TINY}px;
+    font-size: {font_px(FONT_TINY)}px;
 }}
 QDoubleSpinBox#scoreEditSpin {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
-    font-size: {FONT_DIALOG_TITLE}px;
+    font-size: {font_px(FONT_DIALOG_TITLE)}px;
     font-weight: 600;
-    padding: 7px {SPACING_MEDIUM}px;
+    padding: {px(7)}px {px(SPACING_MEDIUM)}px;
 }}
 QDoubleSpinBox#scoreEditSpin:focus {{
-    border: 1px solid {COLOR_ACCENT};
+    border: 1px solid {COLOR_FOCUS_BORDER};
 }}
 QDoubleSpinBox#scoreEditSpin::up-button,
 QDoubleSpinBox#scoreEditSpin::down-button {{
     background-color: {COLOR_CARD_ALT};
     border: none;
-    width: 22px;
+    width: {px(22)}px;
 }}
 QDoubleSpinBox#scoreEditSpin::up-button:hover,
 QDoubleSpinBox#scoreEditSpin::down-button:hover {{
@@ -62,12 +62,12 @@ QDialogButtonBox {{
 QPushButton {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
     font-weight: 600;
-    padding: {BUTTON_PADDING_Y}px {BUTTON_PADDING_X}px;
-    min-width: 92px;
+    padding: {px(BUTTON_PADDING_Y)}px {px(BUTTON_PADDING_X)}px;
+    min-width: {px(92)}px;
 }}
 QPushButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};
@@ -95,37 +95,37 @@ QDialog#deleteRecordDialog {{
 QFrame#deleteRecordCard {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CARD_LARGE}px;
+    border-radius: {px(RADIUS_CARD_LARGE)}px;
 }}
 QLabel#deleteRecordTitle {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {FONT_DIALOG_TITLE}px;
+    font-size: {font_px(FONT_DIALOG_TITLE)}px;
     font-weight: 700;
 }}
 QLabel#deleteRecordWarning {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
 }}
 QLabel#deleteRecordPreviewLine {{
     background: transparent;
     color: {COLOR_TEXT_SOFT};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
 }}
 QLabel#deleteRecordFieldLabel {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_TINY}px;
+    font-size: {font_px(FONT_TINY)}px;
 }}
 QLineEdit#deleteRecordConfirmInput {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
-    font-size: {FONT_BASE}px;
+    font-size: {font_px(FONT_BASE)}px;
     font-weight: 600;
-    padding: 7px {SPACING_MEDIUM}px;
+    padding: {px(7)}px {px(SPACING_MEDIUM)}px;
 }}
 QLineEdit#deleteRecordConfirmInput:focus {{
     border: 1px solid {COLOR_DELETE_BUTTON};
@@ -136,12 +136,12 @@ QDialogButtonBox {{
 QPushButton {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
     font-weight: 600;
-    padding: {BUTTON_PADDING_Y}px {BUTTON_PADDING_X}px;
-    min-width: 92px;
+    padding: {px(BUTTON_PADDING_Y)}px {px(BUTTON_PADDING_X)}px;
+    min-width: {px(92)}px;
 }}
 QPushButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};
@@ -174,40 +174,40 @@ QDialog#addTitleDialog, QDialog#addTitleSearchDialog, QDialog#addTitlePreviewDia
 QLabel#addTitleHeader {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {FONT_DIALOG_TITLE}px;
+    font-size: {font_px(FONT_DIALOG_TITLE)}px;
     font-weight: 700;
 }}
 QLabel#addTitleSubtitle {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
 }}
 QFrame#addTitleSearchPanel {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CARD_LARGE}px;
+    border-radius: {px(RADIUS_CARD_LARGE)}px;
 }}
 QLineEdit#addTitleSearchInput, QComboBox#addTitleCountryCombo {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
-    font-size: {FONT_BASE}px;
-    padding: 7px {SPACING_MEDIUM}px;
-    min-height: 18px;
+    font-size: {font_px(FONT_BASE)}px;
+    padding: {px(7)}px {px(SPACING_MEDIUM)}px;
+    min-height: {px(18)}px;
 }}
 QLineEdit#addTitleSearchInput:focus, QComboBox#addTitleCountryCombo:focus {{
-    border: 1px solid {COLOR_ACCENT};
+    border: 1px solid {COLOR_FOCUS_BORDER};
 }}
 QPushButton#addTitleSearchButton {{
     background-color: {COLOR_ADD_BUTTON};
     border: 1px solid {COLOR_ADD_BUTTON_BORDER};
     border-top-color: {COLOR_ADD_BUTTON_TOP};
     color: {COLOR_TEXT};
-    font-size: {FONT_BASE}px;
+    font-size: {font_px(FONT_BASE)}px;
     font-weight: 600;
-    padding: 8px 16px;
-    border-radius: {RADIUS_BUTTON}px;
+    padding: {px(8)}px {px(16)}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
 }}
 QPushButton#addTitleSearchButton:hover {{
     background-color: {COLOR_ADD_BUTTON_HOVER};
@@ -222,36 +222,36 @@ QPushButton#addTitleSearchButton:disabled {{
 QProgressBar#addTitleProgress {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT_SOFT};
-    font-size: {FONT_TINY}px;
+    font-size: {font_px(FONT_TINY)}px;
     text-align: center;
-    min-height: 18px;
+    min-height: {px(18)}px;
 }}
 QProgressBar#addTitleProgress::chunk {{
     background-color: {COLOR_ACCENT};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
 }}
 QLabel#addTitleStatus {{
     background: transparent;
     color: {COLOR_TEXT_SOFT};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
 }}
 QLabel#addTitleWarning {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT_SOFT};
-    font-size: {FONT_SMALL}px;
-    padding: 8px 10px;
+    font-size: {font_px(FONT_SMALL)}px;
+    padding: {px(8)}px {px(10)}px;
 }}
 QFrame#addTitlePreviewCard {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CARD_LARGE}px;
+    border-radius: {px(RADIUS_CARD_LARGE)}px;
 }}
 QFrame#addTitlePreviewCard QLabel#detailTitle {{
-    font-size: 18px;
+    font-size: {font_px(18)}px;
 }}
 QScrollArea#addTitlePreviewScroll {{
     background: transparent;
@@ -260,29 +260,29 @@ QScrollArea#addTitlePreviewScroll {{
 QLabel#addTitleConfirmHint {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
 }}
 QLabel#addTitleFieldLabel {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
 }}
 QSpinBox#addTitleYearSpin, QDoubleSpinBox#addTitleScoreSpin {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_BUTTON}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
-    font-size: {FONT_BASE}px;
-    padding: 4px 8px;
+    font-size: {font_px(FONT_BASE)}px;
+    padding: {px(4)}px {px(8)}px;
 }}
 QPushButton#addTitleConfirmButton {{
     background-color: {COLOR_ACCENT};
     border: 1px solid {COLOR_ACCENT};
     color: {COLOR_TEXT};
-    font-size: {FONT_BASE}px;
+    font-size: {font_px(FONT_BASE)}px;
     font-weight: 700;
-    padding: 9px 18px;
-    border-radius: {RADIUS_BUTTON}px;
+    padding: {px(9)}px {px(18)}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
 }}
 QPushButton#addTitleConfirmButton:hover {{
     background-color: {COLOR_ACCENT_HOVER};
@@ -297,9 +297,9 @@ QPushButton#addTitleSecondaryButton {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
     color: {COLOR_TEXT_SOFT};
-    font-size: {FONT_BASE}px;
-    padding: 8px 14px;
-    border-radius: {RADIUS_BUTTON}px;
+    font-size: {font_px(FONT_BASE)}px;
+    padding: {px(8)}px {px(14)}px;
+    border-radius: {px(RADIUS_BUTTON)}px;
 }}
 QPushButton#addTitleSecondaryButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};

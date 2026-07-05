@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE, GENRES_PER_ROW, DetailCardLayoutProfile
 from desktop.shared.detail.rating_indicator import RatingCircleIndicator
-from desktop.theme import COLOR_ACCENT, FONT_BASE
+from desktop.theme import COLOR_ACCENT, FONT_BASE, font_px, px
 
-CHIP_WIDTH_SAFETY = 18
-CHIP_ELIDE_PADDING = 8
+CHIP_WIDTH_SAFETY = px(18)
+CHIP_ELIDE_PADDING = px(8)
 
 def clear_layout(layout) -> None:
     while layout.count():
@@ -27,6 +27,7 @@ def make_pill_label(text: str, object_name: str, rich: bool = False):
 
     pill = QLabel()
     pill.setObjectName(object_name)
+    pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
     if rich:
         pill.setTextFormat(Qt.TextFormat.RichText)
     pill.setText(text)
@@ -92,7 +93,7 @@ def build_detail_chip_rows(
         if app is None:
             return [clean_labels[: profile.detail_chip_max_rows]]
         font = QFont(app.font())
-        font.setPointSize(FONT_BASE)
+        font.setPointSize(font_px(FONT_BASE))
         font_metrics = QFontMetrics(font)
 
     safe_width = max(1, int(available_width))
@@ -200,7 +201,7 @@ def fill_detail_chip_rows(
     app = QApplication.instance()
     if app is not None:
         font = QFont(app.font())
-        font.setPointSize(FONT_BASE)
+        font.setPointSize(font_px(FONT_BASE))
         font_metrics = QFontMetrics(font)
     else:
         font_metrics = None

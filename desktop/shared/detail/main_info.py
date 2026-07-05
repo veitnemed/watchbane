@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from candidates.models import country_schema
+from desktop.shared.detail.additional_info import format_seasons_episodes
+from desktop.shared.detail.presenters import format_year_display
 
 
 UNKNOWN_OBJECT_TYPE = "Неизвестно"
@@ -56,13 +58,6 @@ def build_main_info_items(card: dict) -> list[dict[str, str]]:
     """Build compact label/value rows for the title main-info block."""
     items: list[dict[str, str]] = []
 
-    country = _clean_text(card.get("country"))
-    if country is not None:
-        country = country_schema.build_country_display(
-            country_schema.normalize_country_filter_list(country)
-        ) or country
-        items.append({"label": "Страна", "value": country})
-
     items.append(
         {
             "label": "Тип",
@@ -70,8 +65,29 @@ def build_main_info_items(card: dict) -> list[dict[str, str]]:
         }
     )
 
-    tmdb_votes = format_votes_display(card.get("tmdb_votes"))
-    if tmdb_votes is not None:
-        items.append({"label": "Голоса TMDb", "value": tmdb_votes})
+    country = _clean_text(card.get("country"))
+    if country is not None:
+        country = country_schema.build_country_display(
+            country_schema.normalize_country_filter_list(country)
+        ) or country
+        items.append({"label": "Страна", "value": country})
 
     return items
+
+
+def build_title_meta_text(card: dict) -> str:
+    """Build title subtitle text like '2020 • 2 сезона / 20 серий'."""
+    parts = []
+
+    year = format_year_display(card.get("year"))
+    if year:
+        parts.append(year)
+
+    seasons_episodes = format_seasons_episodes(
+        card.get("number_of_seasons"),
+        card.get("number_of_episodes"),
+    )
+    if seasons_episodes is not None:
+        parts.append(seasons_episodes)
+
+    return " • ".join(parts)

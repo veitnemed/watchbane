@@ -55,11 +55,8 @@ def collect_search_genre_options(candidates: list) -> list[str]:
         for genre_key in normalized.get("genre_keys") or []:
             if genre_key in seen_keys:
                 continue
-            label = genre_schema.GENRE_KEY_TO_DISPLAY.get(genre_key)
-            if label is None:
-                continue
             seen_keys.add(genre_key)
-            options.append(label)
+            options.extend(genre_schema.build_genres_display([genre_key]))
     return sorted(options, key=lambda value: str(value).casefold())
 
 
@@ -73,11 +70,14 @@ def collect_search_country_options(candidates: list) -> list[dict]:
             iso2 = str(code or "").strip().upper()
             if iso2 == "" or iso2 in seen_codes:
                 continue
+            label = country_schema.build_country_display([iso2])
+            if label is None:
+                continue
             seen_codes.add(iso2)
             options.append(
                 {
                     "code": iso2,
-                    "label": country_schema.build_country_display([iso2]) or iso2,
+                    "label": label,
                 }
             )
     return sorted(options, key=lambda row: str(row.get("label") or "").casefold())

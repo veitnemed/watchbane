@@ -13,6 +13,7 @@
 ## Theme Tokens
 
 Основные значения живут в `desktop/theme/tokens.py`; QSS builders — в `desktop/theme/styles/`.
+Правила пользовательского масштаба UI описаны в [UI_SCALE_CONTRACT.md](UI_SCALE_CONTRACT.md).
 
 Правила:
 
@@ -25,18 +26,21 @@
 
 | Назначение | Значение |
 | --- | --- |
-| App background | `#0f0f10` / `#111113` |
-| Surface | `#171719` |
-| Elevated surface | `#1c1c1f` |
-| Border | `#2a2a2e` |
-| Text | `#f4f4f5` |
-| Secondary text | `#a1a1aa` |
-| Muted text | `#71717a` |
-| Accent | `#10a37f` |
+| App background | `#050B16` |
+| Surface | `#07101D` |
+| Card | `#0D1726` |
+| Elevated surface | `#111D2E` / `#142238` |
+| Border | `#1D2B40` |
+| Text | `#F5F7FB` |
+| Secondary text | `#B8C2D3` |
+| Muted text | `#78879B` |
+| Accent | `#0EA5D8` |
+| Accent hover / teal | `#22D3C5` |
+| Rating / stars | `#F5B82E` |
 
 Detail-card правила зафиксированы в отдельном строгом контракте: [DETAIL_CARD_HERO_CONTRACT.md](DETAIL_CARD_HERO_CONTRACT.md). Если правила ниже конфликтуют с hero-contract, главным считается hero-contract.
 
-Score ring в карточке использует TMDb-only contract: число внутри круга - `tmdb_score`, подпись - `TMDb`, прогресс и цвет обводки - `tmdb_score`. `final_score` не влияет на круг и показывается только отдельной строкой звезд. Цветовая шкала идет от красного к янтарному и зеленому.
+Score ring в карточке использует TMDb-only contract: число внутри круга - `tmdb_score`, подпись - `TMDb`, прогресс - `tmdb_score / 10`. Цвет обводки находится в cyan/teal палитре темы. `final_score` не влияет на круг и показывается только отдельной строкой звезд. Жёлтый используется только для рейтинговых звёзд и score badge, не для section headers.
 
 ## Typography
 
@@ -59,11 +63,14 @@ Score ring в карточке использует TMDb-only contract: числ
 Правила:
 
 - poster имеет стабильный размер и не растягивается от текста;
-- title переносится и не перекрывает chips/ratings;
+- title переносится и не перекрывает title meta/chips/ratings;
+- под title отображается компактная meta-строка вида `2020 • 2 сезона / 20 серий`;
+- genre chips показывают только жанры, год не должен попадать в chips;
 - ratings остаются read-only и не показывают legacy IMDb/KP поля;
 - watched user score показывается только как poster overlay badge, не как ring;
 - candidate actions находятся под poster и никогда не появляются перед title;
-- блок "Основная информация" показывает `Голоса TMDb`, если они есть в watched/meta/candidate fallback;
+- блок "Основная информация" показывает тип и страну; год и сезоны/серии находятся под title;
+- блок "Дополнительная информация" показывает providers/status/runtime/TMDb votes, если эти поля есть;
 - overview идет отдельным full-width блоком ниже верхней строки;
 - если overview пустой, блок скрывается;
 - card root не должен прыгать по высоте при hover/action states.

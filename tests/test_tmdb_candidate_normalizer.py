@@ -10,6 +10,12 @@ def _raw_details(**overrides) -> dict:
         "original_name": "Metod",
         "first_air_date": "2015-10-18",
         "last_air_date": "2021-02-28",
+        "status": "Ended",
+        "type": "Scripted",
+        "in_production": False,
+        "number_of_seasons": 2,
+        "number_of_episodes": 32,
+        "episode_run_time": [52],
         "overview": "Русское описание",
         "genres": [
             {"id": 18, "name": "Drama"},
@@ -160,6 +166,12 @@ def test_media_people_keywords_and_providers_are_mapped() -> None:
     assert candidate["backdrop_url"].endswith("/backdrop.jpg")
     assert candidate["content_rating"] == "18+"
     assert candidate["watch_providers"] == ["Kinopoisk"]
+    assert candidate["status"] == "Ended"
+    assert candidate["type"] == "Scripted"
+    assert candidate["in_production"] is False
+    assert candidate["number_of_seasons"] == 2
+    assert candidate["number_of_episodes"] == 32
+    assert candidate["episode_run_time"] == [52]
     assert candidate["actors_top"][0]["name"] == "Константин Хабенский"
     assert candidate["crew_top"][0]["role"] == "Director"
     assert candidate["keywords"] == ["detective"]

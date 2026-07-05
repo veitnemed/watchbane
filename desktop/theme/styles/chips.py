@@ -11,12 +11,12 @@ def build_chip_selector_style() -> str:
 QPushButton#genreFilterChip {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CHIP}px;
+    border-radius: {px(RADIUS_CHIP)}px;
     color: {COLOR_TEXT_CHIP};
-    font-size: {FONT_BASE}px;
+    font-size: {font_px(FONT_BASE)}px;
     font-weight: 500;
-    padding: 8px 14px;
-    min-height: 36px;
+    padding: {px(8)}px {px(14)}px;
+    min-height: {px(36)}px;
 }}
 QPushButton#genreFilterChip:hover {{
     background-color: {COLOR_HOVER};
@@ -25,15 +25,15 @@ QPushButton#genreFilterChip:hover {{
 QPushButton#genreFilterChip:checked {{
     background-color: {COLOR_ACCENT_SOFT};
     border-color: {COLOR_ACCENT};
-    color: {COLOR_TEXT};
+    color: {COLOR_ACCENT_HOVER};
 }}
 QPushButton#genreChipClear {{
     background: transparent;
     border: none;
     color: {COLOR_TEXT_MUTED};
-    font-size: {FONT_BASE}px;
-    padding: 4px 6px;
-    min-height: 28px;
+    font-size: {font_px(FONT_BASE)}px;
+    padding: {px(4)}px {px(6)}px;
+    min-height: {px(28)}px;
 }}
 QPushButton#genreChipClear:hover {{
     color: {COLOR_TEXT_SECONDARY};
@@ -41,21 +41,21 @@ QPushButton#genreChipClear:hover {{
 QLabel#genreChipCount {{
     background: transparent;
     color: {COLOR_TEXT_MUTED};
-    font-size: {FONT_BASE}px;
+    font-size: {font_px(FONT_BASE)}px;
 }}
 QWidget#genreChipHost {{
     background: transparent;
-    padding-top: 2px;
+    padding-top: {px(2)}px;
 }}
 QPushButton#countryFilterChip {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CHIP}px;
+    border-radius: {px(RADIUS_CHIP)}px;
     color: {COLOR_TEXT_CHIP};
-    font-size: {FONT_BASE}px;
+    font-size: {font_px(FONT_BASE)}px;
     font-weight: 500;
-    padding: 8px 14px;
-    min-height: 36px;
+    padding: {px(8)}px {px(14)}px;
+    min-height: {px(36)}px;
 }}
 QPushButton#countryFilterChip:hover {{
     background-color: {COLOR_HOVER};
@@ -64,32 +64,32 @@ QPushButton#countryFilterChip:hover {{
 QPushButton#countryFilterChip:checked {{
     background-color: {COLOR_ACCENT_SOFT};
     border-color: {COLOR_ACCENT};
-    color: {COLOR_TEXT};
+    color: {COLOR_ACCENT_HOVER};
 }}
 QPushButton#countryChipClear {{
     background: transparent;
     border: none;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_SMALL}px;
-    padding: 0 4px;
+    font-size: {font_px(FONT_SMALL)}px;
+    padding: 0 {px(4)}px;
 }}
 QPushButton#countryChipClear:hover {{
     color: {COLOR_TEXT};
 }}
 QLabel#countryChipCount {{
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_SMALL}px;
+    font-size: {font_px(FONT_SMALL)}px;
 }}
 QWidget#countryChipHost {{
     background: transparent;
-    padding-top: 2px;
+    padding-top: {px(2)}px;
 }}
 QPushButton#chipExpandToggle {{
     background: transparent;
     border: none;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_SMALL}px;
-    padding: 0 4px;
+    font-size: {font_px(FONT_SMALL)}px;
+    padding: 0 {px(4)}px;
     text-align: left;
 }}
 QPushButton#chipExpandToggle:hover {{

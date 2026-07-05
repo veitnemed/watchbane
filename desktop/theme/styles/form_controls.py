@@ -11,13 +11,13 @@ def build_form_controls_style() -> str:
 QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_INPUT}px;
-    padding: {INPUT_PADDING_Y}px {INPUT_PADDING_X}px;
+    border-radius: {px(RADIUS_INPUT)}px;
+    padding: {px(INPUT_PADDING_Y)}px {px(INPUT_PADDING_X)}px;
     color: {COLOR_TEXT};
-    selection-background-color: {COLOR_ACCENT};
+    selection-background-color: {COLOR_SELECTED_BG};
 }}
 QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus {{
-    border: 1px solid {COLOR_ACCENT};
+    border: 1px solid {COLOR_FOCUS_BORDER};
 }}
 QDoubleSpinBox::up-button,
 QDoubleSpinBox::down-button,
@@ -25,7 +25,7 @@ QSpinBox::up-button,
 QSpinBox::down-button {{
     background-color: {COLOR_CARD_ALT};
     border: none;
-    width: 16px;
+    width: {px(16)}px;
 }}
 QDoubleSpinBox::up-button:hover,
 QDoubleSpinBox::down-button:hover,
@@ -35,13 +35,13 @@ QSpinBox::down-button:hover {{
 }}
 QComboBox::drop-down {{
     border: none;
-    width: 24px;
+    width: {px(24)}px;
 }}
 QComboBox QAbstractItemView {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
     color: {COLOR_TEXT};
-    selection-background-color: {COLOR_ACCENT_SOFT};
+    selection-background-color: {COLOR_SELECTED_BG};
 }}
 QWidget#watchedScoreRange,
 QWidget#watchedYearRange,
@@ -56,7 +56,7 @@ QLabel#candidateSearchYearRangeLabel,
 QLabel#candidateSearchFilterValue {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {FONT_BASE}px;
+    font-size: {font_px(FONT_BASE)}px;
     font-weight: 600;
 }}
 QComboBox#candidateSearchCriteria,
@@ -65,24 +65,30 @@ QSpinBox#candidateSearchYearMax,
 QSpinBox#candidateSearchTopN {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_INPUT}px;
+    border-radius: {px(RADIUS_INPUT)}px;
     color: {COLOR_TEXT};
-    font-size: {FONT_BASE}px;
-    padding: 6px 10px;
-    min-height: 34px;
+    font-size: {font_px(FONT_BASE)}px;
+    padding: {px(6)}px {px(10)}px;
+    min-height: {px(34)}px;
+}}
+QComboBox#candidateSearchCriteria:focus,
+QSpinBox#candidateSearchYearMin:focus,
+QSpinBox#candidateSearchYearMax:focus,
+QSpinBox#candidateSearchTopN:focus {{
+    border: 1px solid {COLOR_FOCUS_BORDER};
 }}
 QCheckBox#candidateSearchOnlyComplete,
 QCheckBox#candidateSearchOnlyUnwatched,
 QCheckBox#candidateSearchHideHidden {{
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {FONT_BASE}px;
-    spacing: 8px;
-    min-height: 28px;
+    font-size: {font_px(FONT_BASE)}px;
+    spacing: {px(8)}px;
+    min-height: {px(28)}px;
 }}
 QCheckBox#candidateSearchOnlyComplete::indicator,
 QCheckBox#candidateSearchOnlyUnwatched::indicator,
 QCheckBox#candidateSearchHideHidden::indicator {{
-    width: 18px;
-    height: 18px;
+    width: {px(18)}px;
+    height: {px(18)}px;
 }}
 """

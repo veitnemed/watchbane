@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from candidates.models import genre_schema
 from candidates.models import country_schema
 from candidates.models.keys import title_identity_key
 from config import constant
@@ -314,14 +315,14 @@ def _genres(movie: dict) -> list[str]:
     for field_name in ("genres_display", "genre_display"):
         values = _list_text_values(movie.get(field_name))
         if len(values) > 0:
-            return values
+            return genre_schema.normalize_genre_display_labels(values)
 
     for field_name in ("genres", "imdb_genres", "genres_tmdb", "tmdb_genres"):
         values = _list_text_values(movie.get(field_name))
         if len(values) > 0:
-            return values
+            return genre_schema.normalize_genre_display_labels(values)
 
-    return _genres_from_flags(movie)
+    return genre_schema.normalize_genre_display_labels(_genres_from_flags(movie))
 
 
 def _meta_obj_for_title(title: str, lookup_cache: dict | None, meta_obj=None) -> dict | None:
@@ -412,5 +413,12 @@ def build_watched_movie_card(
         "poster_path": poster_fields["poster_path"],
         "poster_src": poster_fields["poster_src"],
         "poster_source": poster_fields["poster_source"],
+        "number_of_seasons": _first_number("number_of_seasons", tmdb_sections, _to_int),
+        "number_of_episodes": _first_number("number_of_episodes", tmdb_sections, _to_int),
+        "episode_run_time": _first_existing("episode_run_time", tmdb_sections),
+        "watch_providers": _first_existing("watch_providers", tmdb_sections)
+        or _first_existing("watch_providers_ru", tmdb_sections),
+        "status": _first_existing("status", tmdb_sections),
+        "in_production": _first_existing("in_production", tmdb_sections),
         "runtime_status": "watched",
     }

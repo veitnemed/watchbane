@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from candidates import service as candidate_service
 from candidates.models.country_schema import candidate_country_for_display
+from candidates.models.genre_schema import normalize_genre_display_labels
 from dataset import service
 from dataset.resolve.poster_hints import build_poster_hints_from_candidate
 
@@ -142,6 +143,10 @@ def build_candidate_readonly_card(candidate: dict) -> dict:
         "object_type": object_type or "unknown",
         "number_of_seasons": candidate.get("number_of_seasons"),
         "number_of_episodes": candidate.get("number_of_episodes"),
+        "episode_run_time": candidate.get("episode_run_time"),
+        "watch_providers": candidate.get("watch_providers") or candidate.get("watch_providers_ru"),
+        "status": candidate.get("status"),
+        "in_production": candidate.get("in_production"),
     }
     if overview_text:
         card["overview"] = overview_text
@@ -153,9 +158,11 @@ def build_candidate_readonly_card(candidate: dict) -> dict:
     if candidate.get("imdb_id") not in (None, ""):
         card["imdb_id"] = candidate.get("imdb_id")
 
-    genres_display = candidate.get("genres_display") or candidate.get("genres") or []
-    if isinstance(genres_display, list) and len(genres_display) > 0:
-        card["genres"] = [str(item).strip() for item in genres_display if str(item).strip()]
+    genres_display = normalize_genre_display_labels(
+        candidate.get("genres_display") or candidate.get("genres") or []
+    )
+    if len(genres_display) > 0:
+        card["genres"] = genres_display
 
     local_poster = resolve_local_poster_path_for_candidate(candidate)
     if local_poster not in (None, ""):

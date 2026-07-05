@@ -74,6 +74,73 @@ def test_collect_search_country_options_displays_soviet_union_label() -> None:
     assert {"code": "SU", "label": "СССР"} in rows
 
 
+def test_collect_search_genre_options_splits_long_combined_labels() -> None:
+    from candidates.pool.search_helpers import collect_search_genre_options
+
+    rows = collect_search_genre_options(
+        [
+            {"title": "A", "genre_keys": ["action_adventure"]},
+            {"title": "B", "genres_tmdb": ["Sci-Fi & Fantasy"]},
+        ]
+    )
+
+    assert "Боевик" in rows
+    assert "Приключения" in rows
+    assert "Фантастика" in rows
+    assert "Фэнтези" in rows
+    assert "Боевик/приключения" not in rows
+
+
+def test_collect_search_country_options_displays_known_iso_codes() -> None:
+    from candidates.pool.search_helpers import collect_search_country_options
+
+    rows = collect_search_country_options(
+        [
+            {"title": "A", "country_codes": ["CO", "ID", "IL", "IS", "KE", "LU", "ZA"]},
+            {"title": "B", "country_codes": ["NZ"]},
+        ]
+    )
+
+    labels_by_code = {row["code"]: row["label"] for row in rows}
+
+    assert labels_by_code["CO"] == "Колумбия"
+    assert labels_by_code["ID"] == "Индонезия"
+    assert labels_by_code["IL"] == "Израиль"
+    assert labels_by_code["IS"] == "Исландия"
+    assert labels_by_code["KE"] == "Кения"
+    assert labels_by_code["LU"] == "Люксембург"
+    assert labels_by_code["ZA"] == "Южная Африка"
+    assert labels_by_code["NZ"] == "Новая Зеландия"
+    assert not any(row["label"] == row["code"] for row in rows)
+
+
+def test_collect_search_country_options_skips_unknown_iso_code() -> None:
+    from candidates.pool.search_helpers import collect_search_country_options
+
+    rows = collect_search_country_options(
+        [
+            {"title": "A", "country_codes": ["ZZ"]},
+            {"title": "B", "country_codes": ["RU"]},
+        ]
+    )
+
+    assert rows == [{"code": "RU", "label": "Россия"}]
+
+
+def test_merge_country_popularity_normalizes_pool_code_labels() -> None:
+    from candidates.views.filter_popularity import merge_country_popularity_with_pool
+
+    rows = merge_country_popularity_with_pool(
+        [],
+        [
+            {"code": "CO", "label": "CO"},
+            {"code": "ZZ", "label": "ZZ"},
+        ],
+    )
+
+    assert rows == [{"code": "CO", "label": "Колумбия", "count": 0}]
+
+
 def test_get_search_filter_chip_options_view_uses_dataset_popularity(monkeypatch) -> None:
     from candidates import service as candidate_service
 
