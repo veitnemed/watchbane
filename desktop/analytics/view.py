@@ -20,6 +20,8 @@ from desktop.analytics.constants import (
     ANALYTICS_STYLE,
     SECTION_ICONS,
 )
+from desktop.analytics.charts import CHART_BASE_HEIGHT
+from desktop.theme.scaling import layout_px
 from desktop.analytics.sections.charts_host import AnalyticsChartsMixin
 from desktop.analytics.sections.common import AnalyticsSectionUIMixin, clear_layout
 from desktop.analytics.sections.fallback_bars import AnalyticsFallbackMixin
@@ -180,7 +182,7 @@ class AnalyticsView(
 
         self._chart_constructor_layout.addWidget(controls_panel)
         self._chart_builder_result_layout = QVBoxLayout()
-        self._chart_builder_result_layout.setContentsMargins(0, 6, 0, 0)
+        self._chart_builder_result_layout.setContentsMargins(0, layout_px(6), 0, 0)
         self._chart_constructor_layout.addLayout(self._chart_builder_result_layout)
 
     def _add_labeled_combo(self, layout, row: int, column: int, label_text: str, combo) -> None:
@@ -190,7 +192,7 @@ class AnalyticsView(
         box.setObjectName("chartConstructorField")
         box_layout = QVBoxLayout(box)
         box_layout.setContentsMargins(0, 0, 0, 0)
-        box_layout.setSpacing(4)
+        box_layout.setSpacing(layout_px(4))
         label = QLabel(label_text)
         label.setObjectName("chartConstructorLabel")
         box_layout.addWidget(label)
@@ -225,7 +227,7 @@ class AnalyticsView(
             self._chart_builder_result_layout,
             result,
             build_html=build_constructor_chart_html,
-            chart_height=280,
+            chart_height=CHART_BASE_HEIGHT,
             fallback=self._fill_chart_constructor_fallback,
         )
 

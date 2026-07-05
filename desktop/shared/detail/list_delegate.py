@@ -2,16 +2,9 @@
 
 from __future__ import annotations
 
+from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.posters import resolve_local_poster_path
 from desktop.shared.detail.presenters import format_user_score_display, format_year_display
-from desktop.shared.detail.profiles import (
-    LIST_ITEM_HEIGHT,
-    LIST_ITEM_H_PADDING,
-    LIST_ITEM_V_PADDING,
-    LIST_TEXT_GAP,
-    LIST_THUMB_HEIGHT,
-    LIST_THUMB_WIDTH,
-)
 from desktop.theme import (
     COLOR_ACCENT,
     COLOR_BORDER,
@@ -22,6 +15,7 @@ from desktop.theme import (
     COLOR_TEXT_SECONDARY,
     FONT_FAMILY,
 )
+from desktop.theme.scaling import list_px
 
 _thumb_pixmap_cache: dict[str, object] = {}
 
@@ -67,8 +61,8 @@ def _load_list_thumb_pixmap(poster_path: str | None):
         _thumb_pixmap_cache[poster_path] = False
         return None
     scaled = pixmap.scaled(
-        LIST_THUMB_WIDTH,
-        LIST_THUMB_HEIGHT,
+        detail_profiles.LIST_THUMB_WIDTH,
+        detail_profiles.LIST_THUMB_HEIGHT,
         Qt.AspectRatioMode.KeepAspectRatioByExpanding,
         Qt.TransformationMode.SmoothTransformation,
     )
@@ -80,7 +74,7 @@ def _elide_text(painter, text: str, max_width: int) -> str:
     from PyQt6.QtCore import Qt
 
     metrics = painter.fontMetrics()
-    return metrics.elidedText(text, Qt.TextElideMode.ElideRight, max(20, max_width))
+    return metrics.elidedText(text, Qt.TextElideMode.ElideRight, max(list_px(20), max_width))
 
 
 class WatchedListItemDelegate:
@@ -93,8 +87,12 @@ class WatchedListItemDelegate:
 
         class _WatchedListItemDelegate(QStyledItemDelegate):
             def sizeHint(self, option, index):
-                width = option.rect.width() if option.rect.width() > 0 else 280
-                return QSize(width, LIST_ITEM_HEIGHT)
+                width = (
+                    option.rect.width()
+                    if option.rect.width() > 0
+                    else detail_profiles.LIST_FALLBACK_WIDTH
+                )
+                return QSize(width, detail_profiles.LIST_ITEM_HEIGHT)
 
             def paint(self, painter, option, index) -> None:
                 entry = index.data(Qt.ItemDataRole.UserRole)
@@ -103,7 +101,12 @@ class WatchedListItemDelegate:
                     return
 
                 _key, movie, card = entry
-                rect = option.rect.adjusted(2, 1, -2, -1)
+                rect = option.rect.adjusted(
+                    detail_profiles.LIST_ROW_INSET_X,
+                    detail_profiles.LIST_ROW_INSET_Y,
+                    -detail_profiles.LIST_ROW_INSET_X,
+                    -detail_profiles.LIST_ROW_INSET_Y,
+                )
                 is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
                 is_hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
 
@@ -121,11 +124,20 @@ class WatchedListItemDelegate:
                     painter.setBrush(Qt.BrushStyle.NoBrush)
 
                 if is_selected or is_hovered:
-                    painter.drawRoundedRect(rect, 10, 10)
+                    painter.drawRoundedRect(
+                        rect,
+                        detail_profiles.LIST_CARD_CORNER_RADIUS,
+                        detail_profiles.LIST_CARD_CORNER_RADIUS,
+                    )
 
-                thumb_left = rect.left() + LIST_ITEM_H_PADDING
-                thumb_top = rect.top() + (rect.height() - LIST_THUMB_HEIGHT) // 2
-                thumb_rect = QRect(thumb_left, thumb_top, LIST_THUMB_WIDTH, LIST_THUMB_HEIGHT)
+                thumb_left = rect.left() + detail_profiles.LIST_ITEM_H_PADDING
+                thumb_top = rect.top() + (rect.height() - detail_profiles.LIST_THUMB_HEIGHT) // 2
+                thumb_rect = QRect(
+                    thumb_left,
+                    thumb_top,
+                    detail_profiles.LIST_THUMB_WIDTH,
+                    detail_profiles.LIST_THUMB_HEIGHT,
+                )
 
                 poster_path = resolve_local_poster_path(movie, card)
                 thumb = _load_list_thumb_pixmap(poster_path)
@@ -133,20 +145,28 @@ class WatchedListItemDelegate:
                     clip = thumb_rect.adjusted(1, 1, -1, -1)
                     painter.setPen(Qt.PenStyle.NoPen)
                     painter.setBrush(QColor(COLOR_CARD))
-                    painter.drawRoundedRect(clip, 6, 6)
+                    painter.drawRoundedRect(
+                        clip,
+                        detail_profiles.LIST_THUMB_CORNER_RADIUS,
+                        detail_profiles.LIST_THUMB_CORNER_RADIUS,
+                    )
                     painter.drawPixmap(clip, thumb)
                 else:
                     painter.setPen(QPen(QColor(COLOR_BORDER), 1))
                     painter.setBrush(QColor(COLOR_CARD))
-                    painter.drawRoundedRect(thumb_rect, 6, 6)
-                    placeholder_font = QFont(FONT_FAMILY, 8)
+                    painter.drawRoundedRect(
+                        thumb_rect,
+                        detail_profiles.LIST_THUMB_CORNER_RADIUS,
+                        detail_profiles.LIST_THUMB_CORNER_RADIUS,
+                    )
+                    placeholder_font = QFont(FONT_FAMILY, detail_profiles.LIST_PLACEHOLDER_FONT_POINT)
                     painter.setFont(placeholder_font)
                     painter.setPen(QColor(COLOR_TEXT_SECONDARY))
                     painter.drawText(thumb_rect, Qt.AlignmentFlag.AlignCenter, "—")
 
-                text_left = thumb_rect.right() + LIST_TEXT_GAP
-                text_right = rect.right() - LIST_ITEM_H_PADDING
-                text_width = max(40, text_right - text_left)
+                text_left = thumb_rect.right() + detail_profiles.LIST_TEXT_GAP
+                text_right = rect.right() - detail_profiles.LIST_ITEM_H_PADDING
+                text_width = max(detail_profiles.LIST_MIN_TEXT_WIDTH, text_right - text_left)
 
                 title = str(card.get("title") or _key or "Без названия")
                 year = card.get("year")
@@ -155,14 +175,22 @@ class WatchedListItemDelegate:
                 meta_parts = [part for part in (year_text, score_text if score_text != "—" else "") if part]
                 meta_text = " · ".join(meta_parts)
 
-                title_font = QFont(FONT_FAMILY)
-                title_font.setPointSize(10)
+                title_font = QFont(FONT_FAMILY, detail_profiles.LIST_TITLE_FONT_POINT)
                 title_font.setBold(True)
-                meta_font = QFont(FONT_FAMILY)
-                meta_font.setPointSize(9)
+                meta_font = QFont(FONT_FAMILY, detail_profiles.LIST_META_FONT_POINT)
 
-                title_rect = QRect(text_left, rect.top() + LIST_ITEM_V_PADDING, text_width, 28)
-                meta_rect = QRect(text_left, title_rect.bottom(), text_width, 20)
+                title_rect = QRect(
+                    text_left,
+                    rect.top() + detail_profiles.LIST_ITEM_V_PADDING,
+                    text_width,
+                    detail_profiles.LIST_TITLE_BAND_HEIGHT,
+                )
+                meta_rect = QRect(
+                    text_left,
+                    title_rect.bottom(),
+                    text_width,
+                    detail_profiles.LIST_META_BAND_HEIGHT,
+                )
 
                 painter.setFont(title_font)
                 painter.setPen(QColor(COLOR_TEXT if is_selected else COLOR_TEXT))

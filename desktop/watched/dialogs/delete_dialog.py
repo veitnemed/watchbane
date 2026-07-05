@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.theme import build_delete_dialog_style
+from desktop.theme.scaling import layout_px
 from desktop.watched.delete import (
     DELETE_CONFIRMATION_TEXT,
     format_delete_preview_lines,
@@ -30,11 +31,16 @@ class WatchedDeleteDialog(QDialog):
         self.setObjectName("deleteRecordDialog")
         self.setWindowTitle("Удалить запись")
         self.setModal(True)
-        self.setFixedWidth(430)
+        self.setFixedWidth(layout_px(430))
         self.setStyleSheet(DELETE_DIALOG_STYLE)
 
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(14, 14, 14, 14)
+        root_layout.setContentsMargins(
+            layout_px(14),
+            layout_px(14),
+            layout_px(14),
+            layout_px(14),
+        )
         root_layout.setSpacing(0)
 
         card_frame = QFrame()
@@ -42,8 +48,13 @@ class WatchedDeleteDialog(QDialog):
         root_layout.addWidget(card_frame)
 
         card_layout = QVBoxLayout(card_frame)
-        card_layout.setContentsMargins(18, 18, 18, 18)
-        card_layout.setSpacing(12)
+        card_layout.setContentsMargins(
+            layout_px(18),
+            layout_px(18),
+            layout_px(18),
+            layout_px(18),
+        )
+        card_layout.setSpacing(layout_px(12))
 
         header = QLabel("Удалить запись")
         header.setObjectName("deleteRecordTitle")

@@ -15,6 +15,8 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.settings.app_settings import APP_UI_SCALE_PRESETS, AppSettings, load_app_settings, save_app_settings
+from desktop.theme.scaling import layout_px
+from desktop.theme.shell_layout import SETTINGS_DIALOG_MIN_WIDTH_PX
 
 UI_SCALE_RESTART_MESSAGE = "Масштаб интерфейса применится после перезапуска приложения."
 UI_SCALE_OPTIONS = tuple((f"{round(value * 100):g}%", value) for value in APP_UI_SCALE_PRESETS)
@@ -34,14 +36,19 @@ class SettingsDialog(QDialog):
         settings = load_app_settings()
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 18, 18, 18)
-        root.setSpacing(12)
+        root.setContentsMargins(
+            layout_px(18),
+            layout_px(18),
+            layout_px(18),
+            layout_px(18),
+        )
+        root.setSpacing(layout_px(12))
 
         section = QFrame()
         section.setObjectName("settingsInterfaceSection")
         section_layout = QVBoxLayout(section)
         section_layout.setContentsMargins(0, 0, 0, 0)
-        section_layout.setSpacing(10)
+        section_layout.setSpacing(layout_px(10))
 
         title = QLabel("Интерфейс")
         title.setObjectName("settingsSectionTitle")
@@ -49,7 +56,7 @@ class SettingsDialog(QDialog):
 
         scale_row = QHBoxLayout()
         scale_row.setContentsMargins(0, 0, 0, 0)
-        scale_row.setSpacing(10)
+        scale_row.setSpacing(layout_px(10))
 
         scale_label = QLabel("Масштаб интерфейса")
         scale_label.setObjectName("uiScaleLabel")
@@ -87,7 +94,7 @@ class SettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
 
-        self.setMinimumWidth(360)
+        self.setMinimumWidth(SETTINGS_DIALOG_MIN_WIDTH_PX)
 
     @property
     def restart_message(self) -> str:

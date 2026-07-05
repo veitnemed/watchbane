@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.theme import build_score_edit_dialog_style
+from desktop.theme.scaling import layout_px
 from desktop.shared.detail.presenters import format_user_score_display
 from desktop.watched.model import (
     USER_SCORE_MAX,
@@ -39,11 +40,16 @@ class ScoreEditDialog(QDialog):
         self.setObjectName("scoreEditDialog")
         self.setWindowTitle("Изменить оценку")
         self.setModal(True)
-        self.setFixedWidth(390)
+        self.setFixedWidth(layout_px(390))
         self.setStyleSheet(SCORE_EDIT_DIALOG_STYLE)
 
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(14, 14, 14, 14)
+        root_layout.setContentsMargins(
+            layout_px(14),
+            layout_px(14),
+            layout_px(14),
+            layout_px(14),
+        )
         root_layout.setSpacing(0)
 
         card_frame = QFrame()
@@ -51,8 +57,13 @@ class ScoreEditDialog(QDialog):
         root_layout.addWidget(card_frame)
 
         card_layout = QVBoxLayout(card_frame)
-        card_layout.setContentsMargins(18, 18, 18, 18)
-        card_layout.setSpacing(12)
+        card_layout.setContentsMargins(
+            layout_px(18),
+            layout_px(18),
+            layout_px(18),
+            layout_px(18),
+        )
+        card_layout.setSpacing(layout_px(12))
 
         header = QLabel("Изменить оценку")
         header.setObjectName("scoreEditTitle")
@@ -68,8 +79,8 @@ class ScoreEditDialog(QDialog):
         card_layout.addWidget(current_label)
 
         form = QFormLayout()
-        form.setContentsMargins(0, 4, 0, 0)
-        form.setSpacing(8)
+        form.setContentsMargins(0, layout_px(4), 0, 0)
+        form.setSpacing(layout_px(8))
         field_label = QLabel("Новая оценка")
         field_label.setObjectName("scoreEditFieldLabel")
         self._score_input = QDoubleSpinBox()

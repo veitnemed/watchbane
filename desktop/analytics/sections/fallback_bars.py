@@ -6,6 +6,7 @@ import sys
 
 from desktop.analytics.constants import BAR_FILL_STYLE, BAR_HEIGHT, BAR_TRACK_STYLE, BAR_TRACK_WIDTH
 from desktop.analytics.sections.common import clear_layout
+from desktop.theme.scaling import layout_px
 
 
 class AnalyticsFallbackMixin:
@@ -133,14 +134,14 @@ class AnalyticsFallbackMixin:
 
         row = QWidget()
         row.setObjectName("analyticsBarRow")
-        row.setFixedHeight(24)
+        row.setFixedHeight(layout_px(24))
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(layout_px(8))
 
         label = QLabel(item["label"])
         label.setObjectName("barLabel")
-        label.setFixedWidth(76)
+        label.setFixedWidth(layout_px(76))
         layout.addWidget(label)
 
         track = QFrame()

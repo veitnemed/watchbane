@@ -7,6 +7,7 @@ from dataset import service
 from desktop.analytics.constants import (
     ANALYTICS_SUMMARY_CARD_PADDING,
     ANALYTICS_SUMMARY_CARD_SPACING,
+    ANALYTICS_SUMMARY_SPACING,
     SUMMARY_CARD_HEIGHT,
     SUMMARY_CARD_ICONS,
     SUMMARY_ICON_BADGE_SIZE,
@@ -46,7 +47,7 @@ class AnalyticsSummaryMixin:
             ANALYTICS_SUMMARY_CARD_PADDING,
             ANALYTICS_SUMMARY_CARD_PADDING,
         )
-        layout.setSpacing(10)
+        layout.setSpacing(ANALYTICS_SUMMARY_SPACING)
 
         icon_badge = QFrame()
         icon_badge.setObjectName("summaryIconBadge")

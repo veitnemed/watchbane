@@ -7,6 +7,7 @@ from desktop.analytics.constants import (
     ANALYTICS_SECTION_SPACING,
     SECTION_HEADER_ICON_BADGE_SIZE,
 )
+from desktop.theme.scaling import layout_px
 
 
 def format_metric(value) -> str:
@@ -75,7 +76,7 @@ class AnalyticsSectionUIMixin:
         header.setObjectName("sectionHeader")
         row = QHBoxLayout(header)
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(8)
+        row.setSpacing(layout_px(8))
 
         icon_badge = QFrame()
         icon_badge.setObjectName("sectionHeaderIconBadge")
@@ -110,11 +111,11 @@ class AnalyticsSectionUIMixin:
         row.setObjectName("insightRow")
         layout = QHBoxLayout(row)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setSpacing(layout_px(8))
 
         bullet = QLabel("●")
         bullet.setObjectName("insightBullet")
-        bullet.setFixedWidth(12)
+        bullet.setFixedWidth(layout_px(12))
         bullet.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
         label = QLabel(text)

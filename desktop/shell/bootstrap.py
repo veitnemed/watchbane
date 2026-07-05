@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import QApplication
 
 from desktop.settings import APP_UI_SCALE_ENV, AppSettings, get_persisted_ui_scale, load_app_settings
 from desktop.shell.app_icon import apply_app_icon
-from desktop.theme import FONT_FAMILY
+from desktop.theme import FONT_APP, FONT_FAMILY
 from desktop.theme.scaling import (
     font_px,
     get_channel_scale,
@@ -94,12 +94,15 @@ def main() -> None:
     persisted_settings = load_app_settings()
     active_ui_scale = get_persisted_ui_scale()
     set_ui_scale(active_ui_scale)
+    from desktop.theme.ui_modules import ensure_scaled_ui_modules
+
+    ensure_scaled_ui_modules()
     log_path = start_gui_event_log_if_enabled()
     if log_path is not None:
         log_event("app.bootstrap.runtime_ready", log_path=str(log_path))
     app = QApplication(sys.argv)
     apply_app_icon(app)
-    app.setFont(QFont(FONT_FAMILY, font_px(10)))
+    app.setFont(QFont(FONT_FAMILY, font_px(FONT_APP)))
     try:
         from desktop.shell.main_window import WatchedMoviesWindow, scaled_main_window_size
 

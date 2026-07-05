@@ -29,6 +29,7 @@ from desktop.watched.add_title.constants import (
     SEARCH_DIALOG_WIDTH,
 )
 from desktop.watched.add_title.worker import AddTitleResolveWorker
+from desktop.theme.scaling import layout_px
 
 
 class AddTitleSearchDialog(QDialog):
@@ -59,8 +60,13 @@ class AddTitleSearchDialog(QDialog):
         self.setStyleSheet(ADD_TITLE_DIALOG_STYLE)
 
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(14, 12, 14, 12)
-        root_layout.setSpacing(8)
+        root_layout.setContentsMargins(
+            layout_px(14),
+            layout_px(12),
+            layout_px(14),
+            layout_px(12),
+        )
+        root_layout.setSpacing(layout_px(8))
 
         header = QLabel("Добавить тайтл")
         header.setObjectName("addTitleHeader")
@@ -74,8 +80,13 @@ class AddTitleSearchDialog(QDialog):
         search_frame = QFrame()
         search_frame.setObjectName("addTitleSearchPanel")
         search_layout = QHBoxLayout(search_frame)
-        search_layout.setContentsMargins(12, 10, 12, 10)
-        search_layout.setSpacing(8)
+        search_layout.setContentsMargins(
+            layout_px(12),
+            layout_px(10),
+            layout_px(12),
+            layout_px(10),
+        )
+        search_layout.setSpacing(layout_px(8))
 
         self._title_input = QLineEdit()
         self._title_input.setObjectName("addTitleSearchInput")
@@ -113,7 +124,7 @@ class AddTitleSearchDialog(QDialog):
         root_layout.addWidget(self._status_label)
 
         footer = QHBoxLayout()
-        footer.setContentsMargins(0, 4, 0, 0)
+        footer.setContentsMargins(0, layout_px(4), 0, 0)
         footer.addStretch()
         self._cancel_button = QPushButton("Отмена")
         self._cancel_button.setObjectName("addTitleSecondaryButton")

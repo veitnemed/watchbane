@@ -11,6 +11,7 @@ from desktop.shared.widgets.collapsible_chip_helpers import (
     reorder_flow_layout,
 )
 from desktop.shared.widgets.genre_chip_selector import FlowLayout
+from desktop.theme.scaling import layout_px
 
 
 def _normalize_selected_codes(codes) -> list[str]:
@@ -47,11 +48,11 @@ class CountryChipSelector(QWidget):
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(8)
+        root.setSpacing(layout_px(8))
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
-        header.setSpacing(10)
+        header.setSpacing(layout_px(10))
         self._count_label = QLabel("Все страны")
         self._count_label.setObjectName("countryChipCount")
         self._clear_button = QPushButton("Все страны")

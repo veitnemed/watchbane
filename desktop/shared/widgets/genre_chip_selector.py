@@ -10,6 +10,7 @@ from desktop.shared.widgets.collapsible_chip_helpers import (
     order_keys_by_checked,
     reorder_flow_layout,
 )
+from desktop.theme.scaling import layout_px
 
 
 class FlowLayout(QLayout):
@@ -105,11 +106,11 @@ class GenreChipSelector(QWidget):
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(8)
+        root.setSpacing(layout_px(8))
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
-        header.setSpacing(10)
+        header.setSpacing(layout_px(10))
         self._count_label = QLabel("Выбрано: 0")
         self._count_label.setObjectName("genreChipCount")
         self._clear_button = QPushButton("Сбросить")

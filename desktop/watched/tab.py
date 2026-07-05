@@ -9,6 +9,12 @@ from PyQt6.QtWidgets import QHBoxLayout, QScrollArea, QSplitter, QWidget
 
 from desktop.shared.detail import WatchedDetailCard
 from desktop.shared.widgets.list_search import resolve_selection_row
+from desktop.theme.shell_layout import (
+    SPLITTER_DETAIL_DEFAULT_PX,
+    SPLITTER_SIDEBAR_DEFAULT_PX,
+    WATCHED_TAB_MARGIN_PX,
+    WATCHED_TAB_SPACING_PX,
+)
 from desktop.watched.model import (
     SORT_OPTIONS,
     WatchedEntry,
@@ -47,8 +53,13 @@ class WatchedTabView(WatchedTabActionsMixin):
 
         tab = QWidget()
         layout = QHBoxLayout(tab)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(16)
+        layout.setContentsMargins(
+            WATCHED_TAB_MARGIN_PX,
+            WATCHED_TAB_MARGIN_PX,
+            WATCHED_TAB_MARGIN_PX,
+            WATCHED_TAB_MARGIN_PX,
+        )
+        layout.setSpacing(WATCHED_TAB_SPACING_PX)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         layout.addWidget(splitter)
@@ -73,7 +84,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         splitter.addWidget(right_panel)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([340, 840])
+        splitter.setSizes([SPLITTER_SIDEBAR_DEFAULT_PX, SPLITTER_DETAIL_DEFAULT_PX])
 
         self._widget = tab
 

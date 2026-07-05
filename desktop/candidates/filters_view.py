@@ -24,9 +24,11 @@ from desktop.candidates.filters_controls import (
 from desktop.candidates.filters_form import CANDIDATE_YEAR_MIN, FiltersFormWidgets, build_filters_form
 from desktop.candidates.filters_intro import build_intro_copy
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.theme.scaling import control_px, layout_px
+from desktop.theme.shell_layout import CANDIDATE_ROOT_MARGIN_PX, CANDIDATE_ROOT_SPACING_PX
 
 APPLY_BUTTON_WIDTH_RATIO = 0.25
-APPLY_BUTTON_HEIGHT = 32
+APPLY_BUTTON_HEIGHT = control_px(32)
 
 
 class CandidateFiltersView:
@@ -55,8 +57,13 @@ class CandidateFiltersView:
         self._widget = CandidateFiltersRootWidget()
         self._widget.setObjectName("candidateFiltersRoot")
         root_layout = QVBoxLayout(self._widget)
-        root_layout.setContentsMargins(16, 16, 16, 16)
-        root_layout.setSpacing(12)
+        root_layout.setContentsMargins(
+            CANDIDATE_ROOT_MARGIN_PX,
+            CANDIDATE_ROOT_MARGIN_PX,
+            CANDIDATE_ROOT_MARGIN_PX,
+            CANDIDATE_ROOT_MARGIN_PX,
+        )
+        root_layout.setSpacing(CANDIDATE_ROOT_SPACING_PX)
 
         self._apply_button = QPushButton("Применить фильтры")
         self._apply_button.setObjectName("candidateSearchApplyTopButton")
@@ -69,7 +76,7 @@ class CandidateFiltersView:
 
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(0, 0, 0, 0)
-        top_bar.setSpacing(12)
+        top_bar.setSpacing(CANDIDATE_ROOT_SPACING_PX)
 
         header = QLabel("Фильтры")
         header.setObjectName("candidateSearchHeader")
@@ -84,8 +91,13 @@ class CandidateFiltersView:
         self._intro_card = QFrame()
         self._intro_card.setObjectName("candidateFiltersIntro")
         intro_layout = QVBoxLayout(self._intro_card)
-        intro_layout.setContentsMargins(14, 12, 14, 12)
-        intro_layout.setSpacing(6)
+        intro_layout.setContentsMargins(
+            layout_px(14),
+            layout_px(12),
+            layout_px(14),
+            layout_px(12),
+        )
+        intro_layout.setSpacing(layout_px(6))
 
         self._intro_lead = QLabel(
             "Настройте условия ниже и нажмите «Применить фильтры». "

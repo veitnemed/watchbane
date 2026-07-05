@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
-from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE, GENRES_PER_ROW, DetailCardLayoutProfile
+from desktop.shared.detail import profiles as detail_profiles
+from desktop.shared.detail.profiles import GENRES_PER_ROW, DetailCardLayoutProfile
 from desktop.shared.detail.rating_indicator import RatingCircleIndicator
-from desktop.theme import COLOR_ACCENT, FONT_BASE, font_px, px
+from desktop.theme import COLOR_ACCENT, FONT_BASE, font_px, layout_px, px
+from desktop.theme.tokens import (
+    DETAIL_RATING_RING_LABEL_FONT_MIN,
+    DETAIL_RATING_RING_VALUE_FONT_MIN,
+)
 
 CHIP_WIDTH_SAFETY = px(18)
 CHIP_ELIDE_PADDING = px(8)
+
+
+def _resolve_profile(profile: DetailCardLayoutProfile | None) -> DetailCardLayoutProfile:
+    return profile or detail_profiles.DETAIL_CARD_LAYOUT_PROFILE
+
 
 def clear_layout(layout) -> None:
     while layout.count():
@@ -78,10 +88,11 @@ def _append_chip_to_rows(
 def build_detail_chip_rows(
     labels: list[str],
     available_width: int,
-    profile: DetailCardLayoutProfile = DETAIL_CARD_LAYOUT_PROFILE,
+    profile: DetailCardLayoutProfile | None = None,
     font_metrics=None,
 ) -> list[list[str]]:
     """Build width-aware detail chips with a strict max row count."""
+    profile = _resolve_profile(profile)
     clean_labels = [str(label).strip() for label in labels if str(label).strip()]
     if not clean_labels:
         return []
@@ -138,7 +149,8 @@ def build_detail_chip_rows(
     return [[f"+{len(clean_labels)}"]]
 
 
-def make_meta_pill(item: dict, profile: DetailCardLayoutProfile = DETAIL_CARD_LAYOUT_PROFILE):
+def make_meta_pill(item: dict, profile: DetailCardLayoutProfile | None = None):
+    profile = _resolve_profile(profile)
     widget = RatingCircleIndicator(
         item.get("display_label") or item.get("label", ""),
         item.get("score"),
@@ -148,8 +160,14 @@ def make_meta_pill(item: dict, profile: DetailCardLayoutProfile = DETAIL_CARD_LA
         ring_progress=item.get("ring_progress"),
         widget_size=profile.detail_rating_widget_size,
         circle_diameter=profile.detail_rating_circle_diameter,
-        value_font_point=max(profile.rating_value_font_point, 24),
-        label_font_point=max(profile.rating_label_font_point, 10),
+        value_font_point=max(
+            profile.rating_value_font_point,
+            font_px(DETAIL_RATING_RING_VALUE_FONT_MIN),
+        ),
+        label_font_point=max(
+            profile.rating_label_font_point,
+            font_px(DETAIL_RATING_RING_LABEL_FONT_MIN),
+        ),
     )
     widget.setObjectName("detailTmdbScoreRing" if item.get("source") == "tmdb" else "detailScoreRing")
     return widget
@@ -158,10 +176,11 @@ def make_meta_pill(item: dict, profile: DetailCardLayoutProfile = DETAIL_CARD_LA
 def fill_meta_pill_row(
     layout,
     items: list[dict],
-    profile: DetailCardLayoutProfile = DETAIL_CARD_LAYOUT_PROFILE,
+    profile: DetailCardLayoutProfile | None = None,
 ) -> None:
+    profile = _resolve_profile(profile)
     clear_layout(layout)
-    layout.setSpacing(1)
+    layout.setSpacing(layout_px(1))
     for item in items:
         layout.addWidget(make_meta_pill(item, profile))
     layout.addStretch()
@@ -169,14 +188,14 @@ def fill_meta_pill_row(
 
 def fill_pill_rows(container_layout, labels: list[str], object_name: str) -> None:
     clear_layout(container_layout)
-    container_layout.setSpacing(8)
+    container_layout.setSpacing(layout_px(8))
     if len(labels) == 0:
         return
     from PyQt6.QtWidgets import QHBoxLayout
 
     for index in range(0, len(labels), GENRES_PER_ROW):
         row = QHBoxLayout()
-        row.setSpacing(8)
+        row.setSpacing(layout_px(8))
         for text in labels[index : index + GENRES_PER_ROW]:
             row.addWidget(make_pill_label(text, object_name))
         row.addStretch()
@@ -188,8 +207,9 @@ def fill_detail_chip_rows(
     labels: list[str],
     available_width: int,
     object_name: str,
-    profile: DetailCardLayoutProfile = DETAIL_CARD_LAYOUT_PROFILE,
+    profile: DetailCardLayoutProfile | None = None,
 ) -> None:
+    profile = _resolve_profile(profile)
     clear_layout(container_layout)
     container_layout.setSpacing(profile.detail_chip_row_gap)
     if len(labels) == 0:

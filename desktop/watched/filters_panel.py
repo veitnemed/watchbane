@@ -7,6 +7,7 @@ from collections.abc import Callable
 from PyQt6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from desktop.shared.widgets.range_slider import RangeSlider
+from desktop.theme.scaling import layout_px
 from desktop.watched.model import (
     GENRE_FILTER_ALL,
     USER_SCORE_MAX,
@@ -129,8 +130,13 @@ class WatchedFiltersPanel:
         frame = QFrame()
         frame.setObjectName("watchedFiltersPanel")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(
+            layout_px(10),
+            layout_px(10),
+            layout_px(10),
+            layout_px(10),
+        )
+        layout.setSpacing(layout_px(8))
 
         layout.addWidget(self._build_score_filter_panel())
         layout.addWidget(self._build_year_filter_panel())
@@ -146,8 +152,13 @@ class WatchedFiltersPanel:
         frame = QFrame()
         frame.setObjectName("watchedScoreFilter")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 8, 10, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(
+            layout_px(10),
+            layout_px(8),
+            layout_px(10),
+            layout_px(10),
+        )
+        layout.setSpacing(layout_px(8))
 
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
@@ -177,8 +188,13 @@ class WatchedFiltersPanel:
         frame = QFrame()
         frame.setObjectName("watchedYearFilter")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 8, 10, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(
+            layout_px(10),
+            layout_px(8),
+            layout_px(10),
+            layout_px(10),
+        )
+        layout.setSpacing(layout_px(8))
 
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
@@ -208,8 +224,13 @@ class WatchedFiltersPanel:
         frame = QFrame()
         frame.setObjectName("watchedGenreFilter")
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 8, 10, 10)
-        layout.setSpacing(8)
+        layout.setContentsMargins(
+            layout_px(10),
+            layout_px(8),
+            layout_px(10),
+            layout_px(10),
+        )
+        layout.setSpacing(layout_px(8))
 
         title = QLabel("Жанр")
         title.setObjectName("watchedGenreFilterTitle")

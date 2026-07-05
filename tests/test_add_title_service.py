@@ -114,19 +114,30 @@ def test_build_preview_card_downloads_poster_for_preview(monkeypatch) -> None:
 
 
 def test_add_title_preview_card_profile_is_compact() -> None:
-    from desktop.shared.detail.profiles import (
-        ADD_TITLE_PREVIEW_CARD_PROFILE,
-        DETAIL_CARD_LAYOUT_PROFILE,
-        POSTER_HEIGHT,
-        POSTER_WIDTH,
-    )
+    import importlib
 
-    profile = ADD_TITLE_PREVIEW_CARD_PROFILE
-    assert profile.poster_width == POSTER_WIDTH // 2
-    assert profile.poster_height == POSTER_HEIGHT // 2
+    import desktop.settings.app_settings  # noqa: F401
+    import desktop.theme.scaling as scaling
+
+    scaling.set_ui_scale(1.0)
+    scaling._scale_tuning = {
+        "ui": 1.0,
+        "font": 1.0,
+        "layout": 1.0,
+        "control": 1.0,
+        "list": 1.0,
+        "detail": 1.0,
+        "poster": 1.0,
+    }
+    profiles_module = importlib.reload(importlib.import_module("desktop.shared.detail.profiles"))
+    profile = profiles_module.ADD_TITLE_PREVIEW_CARD_PROFILE
+    detail_profile = profiles_module.DETAIL_CARD_LAYOUT_PROFILE
+
+    assert profile.poster_width == profiles_module.POSTER_WIDTH // 2
+    assert profile.poster_height == profiles_module.POSTER_HEIGHT // 2
     assert profile.show_user_score is False
     assert profile.include_bottom_stretch is False
-    assert profile.rating_widget_size < DETAIL_CARD_LAYOUT_PROFILE.rating_widget_size
+    assert profile.rating_widget_size < detail_profile.rating_widget_size
 
 
 def test_add_title_country_combo_has_any_default() -> None:

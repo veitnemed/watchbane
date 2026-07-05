@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from desktop.shared.detail.action_icons import make_detail_action_icon
+from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.card_pills import clear_layout, fill_detail_chip_rows, make_meta_pill
 from desktop.shared.detail.card_poster import DetailCardPosterMixin
 from desktop.shared.detail.additional_info import build_additional_info_items
@@ -14,12 +15,7 @@ from desktop.shared.detail.presenters import (
     build_meta_pill_items,
     build_user_score_badge_item,
 )
-from desktop.shared.detail.profiles import (
-    DETAIL_CARD_LAYOUT_PROFILE,
-    DETAIL_CARD_STYLE,
-    DetailCardLayoutProfile,
-    POSTER_PLACEHOLDER_STYLE,
-)
+from desktop.shared.detail.profiles import DetailCardLayoutProfile
 from desktop.shared.detail.rating_indicator import StarRatingIndicator
 from desktop.shared.detail.types import DetailEntry
 from desktop.theme import (
@@ -28,6 +24,9 @@ from desktop.theme import (
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
     TRANSPARENT_STYLE,
+    build_detail_card_style,
+    build_poster_image_style,
+    build_poster_placeholder_style,
 )
 
 RATING_META_PILLS_SPACING = 1
@@ -49,7 +48,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
             QWidget,
         )
 
-        self._profile = profile or DETAIL_CARD_LAYOUT_PROFILE
+        self._profile = profile or detail_profiles.DETAIL_CARD_LAYOUT_PROFILE
         self._poster_source_pixmap = None
         self._local_poster_path: str | None = None
         self._mark_watched_handler = None
@@ -82,7 +81,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
 
         self._frame = DetailCardFrame(parent)
         self._frame.setObjectName("detailHeroCard")
-        self._frame.setStyleSheet(DETAIL_CARD_STYLE)
+        self._frame.setStyleSheet(build_detail_card_style())
         self._frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         root = QVBoxLayout(self._frame)
@@ -135,7 +134,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
             self._profile.detail_poster_content_height,
         )
         self._poster_label.setScaledContents(False)
-        self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
+        self._poster_label.setStyleSheet(build_poster_placeholder_style())
         self._poster_label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._poster_label.customContextMenuRequested.connect(self._show_poster_context_menu)
 
@@ -486,9 +485,20 @@ class WatchedDetailCard(DetailCardPosterMixin):
         if self._profile.include_bottom_stretch:
             content_layout.addStretch(1)
 
+        self._content_center_row = QWidget()
+        self._content_center_row.setObjectName("detailContentCenterRow")
+        self._content_center_row.setStyleSheet(TRANSPARENT_STYLE)
+        self._content_center_row.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        content_center_layout = QHBoxLayout(self._content_center_row)
+        content_center_layout.setContentsMargins(0, 0, 0, 0)
+        content_center_layout.setSpacing(0)
+        content_center_layout.addStretch(1)
+        content_center_layout.addWidget(self._content_container)
+        content_center_layout.addStretch(1)
+
         root.addWidget(
-            self._content_container,
-            alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+            self._content_center_row,
+            alignment=Qt.AlignmentFlag.AlignTop,
         )
 
     @property

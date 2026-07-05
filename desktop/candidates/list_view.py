@@ -32,17 +32,27 @@ from desktop.candidates.presenters import (
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 from desktop.candidates.workers.poster_worker import CandidatePosterDownloadWorker
 from desktop.shared.widgets.list_search import DebouncedLineEditSearch, resolve_selection_row
-from desktop.shared.detail import (
-    CANDIDATE_DETAIL_CARD_PROFILE,
-    WatchedDetailCard,
+from desktop.shared.detail import WatchedDetailCard
+from desktop.shared.detail import profiles as detail_profiles
+from desktop.theme.shell_layout import (
+    CANDIDATE_LIST_MAX_WIDTH_PX,
+    CANDIDATE_LIST_MIN_WIDTH_PX,
+    CANDIDATE_LIST_SPACING_PX,
+    CANDIDATE_ROOT_MARGIN_PX,
+    CANDIDATE_ROOT_SPACING_PX,
+    CANDIDATE_SORT_COMBO_MAX_WIDTH_PX,
+    CANDIDATE_SORT_ROW_SPACING_PX,
+    CANDIDATE_SPLITTER_DETAIL_DEFAULT_PX,
+    CANDIDATE_SPLITTER_LIST_DEFAULT_PX,
 )
+from desktop.theme.scaling import list_px
+from desktop.theme.tokens import CANDIDATE_LIST_MAX_WIDTH, CANDIDATE_LIST_MIN_WIDTH
 
 logger = logging.getLogger(__name__)
 
-CANDIDATE_LIST_MIN_WIDTH = 280
-CANDIDATE_LIST_MAX_WIDTH = 380
 CANDIDATE_LIST_STRETCH = 3
 CANDIDATE_DETAIL_STRETCH = 7
+CANDIDATE_LIST_ITEM_SPACING = list_px(2)
 
 
 class CandidateListView:
@@ -73,8 +83,13 @@ class CandidateListView:
         self._widget = QWidget()
         self._widget.setObjectName("candidateListRoot")
         root_layout = QVBoxLayout(self._widget)
-        root_layout.setContentsMargins(16, 16, 16, 16)
-        root_layout.setSpacing(12)
+        root_layout.setContentsMargins(
+            CANDIDATE_ROOT_MARGIN_PX,
+            CANDIDATE_ROOT_MARGIN_PX,
+            CANDIDATE_ROOT_MARGIN_PX,
+            CANDIDATE_ROOT_MARGIN_PX,
+        )
+        root_layout.setSpacing(CANDIDATE_ROOT_SPACING_PX)
 
         sort_label = QLabel("Сортировка")
         sort_label.setObjectName("candidateSortLabel")
@@ -86,7 +101,7 @@ class CandidateListView:
                 mode,
             )
         self._sort_combo.setCurrentIndex(0)
-        self._sort_combo.setMaximumWidth(160)
+        self._sort_combo.setMaximumWidth(CANDIDATE_SORT_COMBO_MAX_WIDTH_PX)
         self._sort_combo.currentIndexChanged.connect(self._on_sort_changed)
 
         self._counter_label = QLabel("")
@@ -97,11 +112,11 @@ class CandidateListView:
 
         list_panel = QWidget()
         list_panel.setObjectName("candidateSearchResultsPanel")
-        list_panel.setMinimumWidth(CANDIDATE_LIST_MIN_WIDTH)
-        list_panel.setMaximumWidth(CANDIDATE_LIST_MAX_WIDTH)
+        list_panel.setMinimumWidth(CANDIDATE_LIST_MIN_WIDTH_PX)
+        list_panel.setMaximumWidth(CANDIDATE_LIST_MAX_WIDTH_PX)
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
-        list_layout.setSpacing(14)
+        list_layout.setSpacing(CANDIDATE_LIST_SPACING_PX)
 
         self._search_input = QLineEdit()
         self._search_input.setObjectName("candidateListSearch")
@@ -118,7 +133,7 @@ class CandidateListView:
         sort_row.setObjectName("candidateSortRow")
         sort_row_layout = QHBoxLayout(sort_row)
         sort_row_layout.setContentsMargins(0, 0, 0, 0)
-        sort_row_layout.setSpacing(10)
+        sort_row_layout.setSpacing(CANDIDATE_SORT_ROW_SPACING_PX)
         sort_row_layout.addWidget(sort_label)
         sort_row_layout.addWidget(self._sort_combo)
         sort_row_layout.addStretch(1)
@@ -126,7 +141,7 @@ class CandidateListView:
 
         self._results_list = QListView()
         self._results_list.setObjectName("candidateListWidget")
-        self._results_list.setSpacing(2)
+        self._results_list.setSpacing(CANDIDATE_LIST_ITEM_SPACING)
         self._results_list.setUniformItemSizes(True)
         self._results_list.setModel(self._model)
         self._delegate = build_candidate_list_item_delegate(self._results_list, session.sort_mode)
@@ -159,7 +174,7 @@ class CandidateListView:
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
-        self._detail_card = WatchedDetailCard(profile=CANDIDATE_DETAIL_CARD_PROFILE)
+        self._detail_card = WatchedDetailCard(profile=detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE)
         self._detail_card.set_mark_watched_handler(self._transfer_selected_to_watched)
         self._detail_card.set_hide_handler(self._hide_selected_candidate)
         scroll.setWidget(self._detail_card.widget)
@@ -170,7 +185,7 @@ class CandidateListView:
         splitter.addWidget(detail_panel)
         splitter.setStretchFactor(0, CANDIDATE_LIST_STRETCH)
         splitter.setStretchFactor(1, CANDIDATE_DETAIL_STRETCH)
-        splitter.setSizes([CANDIDATE_LIST_MAX_WIDTH, 800])
+        splitter.setSizes([CANDIDATE_SPLITTER_LIST_DEFAULT_PX, CANDIDATE_SPLITTER_DETAIL_DEFAULT_PX])
 
         session.add_listener(self.refresh)
         session.add_loading_listener(self._on_loading_changed)

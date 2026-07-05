@@ -89,7 +89,7 @@ Score ring в карточке использует TMDb-only contract: числ
 
 Правила:
 
-- sidebar width примерно 300-400px;
+- sidebar width примерно 260-340px;
 - filters collapsible;
 - counter показывает `N из M`;
 - list item содержит thumbnail, title, year, score;

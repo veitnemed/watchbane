@@ -92,7 +92,7 @@ def test_score_edit_dialog_is_custom_dark_dialog() -> None:
 
     assert "class ScoreEditDialog(QDialog)" in source
     assert "QInputDialog" not in source
-    assert "setFixedWidth(390)" in source
+    assert "layout_px(390)" in source
     assert "scoreEditCard" in source
     assert "scoreEditSaveButton" in source
 
@@ -1700,6 +1700,42 @@ def test_detail_card_uses_profile_composition_widths(qapp) -> None:
     assert additional_info.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
 
 
+def test_detail_content_container_is_horizontally_centered(qapp) -> None:
+    import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
+    import desktop.theme.scaling as scaling
+
+    scaling.set_ui_scale(1.0)
+
+    from PyQt6.QtCore import QPoint
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    frame = detail.widget
+    content = frame.findChild(QWidget, "detailContentContainer")
+    assert content is not None
+    frame.show()
+    qapp.processEvents()
+
+    padding = DETAIL_CARD_LAYOUT_PROFILE.detail_hero_card_padding
+    frame.resize(1400, 900)
+    qapp.processEvents()
+
+    available_width = frame.width() - (2 * padding)
+    content_left = content.mapTo(frame, QPoint(0, 0)).x()
+    expected_x = padding + (available_width - content.width()) // 2
+    assert abs(content_left - expected_x) <= 1
+
+    frame.resize(800, 900)
+    qapp.processEvents()
+
+    content_left = content.mapTo(frame, QPoint(0, 0)).x()
+    content_right = content.mapTo(frame, QPoint(content.width(), 0)).x()
+    assert content_left >= padding
+    assert content_right <= frame.width() - padding
+
+
 def test_detail_overview_uses_profile_left_inset(qapp) -> None:
     from PyQt6.QtWidgets import QFrame
 
@@ -2446,13 +2482,27 @@ def test_sort_entries_by_title() -> None:
 
 
 def test_poster_display_dimensions_are_scaled() -> None:
-    from desktop.shared.detail import (
-        POSTER_BASE_HEIGHT,
-        POSTER_BASE_WIDTH,
-        POSTER_DISPLAY_SCALE,
-        POSTER_HEIGHT,
-        POSTER_WIDTH,
-    )
+    import importlib
+
+    import desktop.settings.app_settings  # noqa: F401
+    import desktop.theme.scaling as scaling
+
+    scaling.set_ui_scale(1.0)
+    scaling._scale_tuning = {
+        "ui": 1.0,
+        "font": 1.0,
+        "layout": 1.0,
+        "control": 1.0,
+        "list": 1.0,
+        "detail": 1.0,
+        "poster": 1.0,
+    }
+    profiles_module = importlib.reload(importlib.import_module("desktop.shared.detail.profiles"))
+    POSTER_BASE_HEIGHT = profiles_module.POSTER_BASE_HEIGHT
+    POSTER_BASE_WIDTH = profiles_module.POSTER_BASE_WIDTH
+    POSTER_DISPLAY_SCALE = profiles_module.POSTER_DISPLAY_SCALE
+    POSTER_HEIGHT = profiles_module.POSTER_HEIGHT
+    POSTER_WIDTH = profiles_module.POSTER_WIDTH
 
     assert POSTER_WIDTH == int(POSTER_BASE_WIDTH * POSTER_DISPLAY_SCALE)
     assert POSTER_HEIGHT == int(POSTER_BASE_HEIGHT * POSTER_DISPLAY_SCALE)
@@ -2461,8 +2511,24 @@ def test_poster_display_dimensions_are_scaled() -> None:
 
 
 def test_detail_hero_contract_tokens_are_available() -> None:
+    import importlib
+
+    import desktop.settings.app_settings  # noqa: F401
+    import desktop.theme.scaling as scaling
     from desktop import theme
-    from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE
+
+    scaling.set_ui_scale(1.0)
+    scaling._scale_tuning = {
+        "ui": 1.0,
+        "font": 1.0,
+        "layout": 1.0,
+        "control": 1.0,
+        "list": 1.0,
+        "detail": 1.0,
+        "poster": 1.0,
+    }
+    profiles_module = importlib.reload(importlib.import_module("desktop.shared.detail.profiles"))
+    DETAIL_CARD_LAYOUT_PROFILE = profiles_module.DETAIL_CARD_LAYOUT_PROFILE
 
     expected_tokens = {
         "DETAIL_HERO_CARD_RADIUS": 24,
@@ -2480,12 +2546,12 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "DETAIL_INFO_COLUMN_MAX_WIDTH": 700,
         "DETAIL_TITLE_FONT_FAMILY": "Segoe UI",
         "DETAIL_TITLE_FONT_FALLBACK": "Arial, sans-serif",
-        "DETAIL_TITLE_FONT_SIZE": 38,
+        "DETAIL_TITLE_FONT_SIZE": 34,
         "FONT_DETAIL_MAIN_INFO_HEADER": 17,
         "FONT_DETAIL_MAIN_INFO_LABEL": 17,
         "FONT_DETAIL_MAIN_INFO_VALUE": 18,
         "FONT_DETAIL_OVERVIEW_TEXT": 19,
-        "DETAIL_TITLE_LINE_HEIGHT": 48,
+        "DETAIL_TITLE_LINE_HEIGHT": 42,
         "DETAIL_TITLE_MAX_LINES": 2,
         "DETAIL_CHIP_HEIGHT": 36,
         "DETAIL_CHIP_RADIUS": 18,
@@ -2545,7 +2611,7 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     style = build_detail_card_style()
 
     assert "QLabel#detailTitle" in style
-    assert "font-size: 38px;" in style
+    assert "font-size: 34px;" in style
     assert "QLabel#detailTitleMeta" in style
     assert "font-size: 17px;" in style
     assert "QLabel#detailMainInfoHeader" in style
@@ -2620,6 +2686,8 @@ def test_cover_crop_poster_pixmap_rounds_corners(qapp) -> None:
 
 
 def test_detail_poster_styles_keep_border_on_shell_only() -> None:
+    import desktop.settings.app_settings  # noqa: F401
+    import desktop.theme.scaling as scaling
     from desktop.theme.styles.detail_card import (
         build_detail_card_style,
         build_poster_image_style,
@@ -2627,6 +2695,16 @@ def test_detail_poster_styles_keep_border_on_shell_only() -> None:
     )
     from desktop.theme import COLOR_BORDER_HOVER
 
+    scaling.set_ui_scale(1.0)
+    scaling._scale_tuning = {
+        "ui": 1.0,
+        "font": 1.0,
+        "layout": 1.0,
+        "control": 1.0,
+        "list": 1.0,
+        "detail": 1.0,
+        "poster": 1.0,
+    }
     detail_style = build_detail_card_style()
     placeholder_style = build_poster_placeholder_style()
     image_style = build_poster_image_style()
@@ -3568,6 +3646,7 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
     assert "build_candidate_search_index" in source
     assert "build_candidate_detail_entry" not in source
     assert "CANDIDATE_DETAIL_CARD_PROFILE" in source
+    assert "detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE" in source
     assert CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
     assert CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_height == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_height
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_user_score is False

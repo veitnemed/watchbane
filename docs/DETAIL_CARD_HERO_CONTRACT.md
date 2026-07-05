@@ -14,6 +14,9 @@ This document defines the strict visual and layout contract for the cinematic de
   3. score summary;
   4. main info panel.
 - The overview and additional-info blocks start below the full top row.
+- The hero frame may occupy the full width of the detail panel.
+- The `detailContentContainer` block is centered horizontally inside the hero frame.
+- Title, chips, score summary, main info, overview, and additional info remain left-aligned relative to the content block edges.
 - Absolute positioning is forbidden.
 - Negative margins are forbidden.
 - Fixed right-column height that can clip the main info panel is forbidden.

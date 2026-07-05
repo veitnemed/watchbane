@@ -6,6 +6,8 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QVBoxLayout, QWidget
 
 from desktop.shared.detail import WatchedListItemDelegate
+from desktop.theme.scaling import layout_px, list_px
+from desktop.theme.shell_layout import SIDEBAR_MAX_WIDTH_PX, SIDEBAR_MIN_WIDTH_PX
 from desktop.shared.widgets.list_search import DebouncedLineEditSearch
 from desktop.watched.filters_panel import WatchedFiltersPanel
 from desktop.watched.model import SORT_OPTIONS, WatchedEntry
@@ -22,11 +24,11 @@ def build_watched_sidebar(
     """Build left sidebar widgets; returns panel and named widget handles."""
     panel = QWidget()
     panel.setObjectName("watchedSidebar")
-    panel.setMinimumWidth(300)
-    panel.setMaximumWidth(400)
+    panel.setMinimumWidth(SIDEBAR_MIN_WIDTH_PX)
+    panel.setMaximumWidth(SIDEBAR_MAX_WIDTH_PX)
     layout = QVBoxLayout(panel)
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(14)
+    layout.setSpacing(layout_px(14))
 
     add_title_button = QPushButton("+ Добавить тайтл")
     add_title_button.setObjectName("watchedAddTitle")
@@ -48,7 +50,7 @@ def build_watched_sidebar(
     sort_row.setObjectName("watchedSortRow")
     sort_layout = QHBoxLayout(sort_row)
     sort_layout.setContentsMargins(0, 0, 0, 0)
-    sort_layout.setSpacing(10)
+    sort_layout.setSpacing(layout_px(10))
 
     sort_label = QLabel("Сортировка")
     sort_label.setObjectName("watchedSortLabel")
@@ -73,7 +75,7 @@ def build_watched_sidebar(
 
     list_widget = QListWidget()
     list_widget.setObjectName("watchedList")
-    list_widget.setSpacing(2)
+    list_widget.setSpacing(list_px(2))
     list_widget.setUniformItemSizes(True)
     list_widget.setItemDelegate(WatchedListItemDelegate(list_widget))
     list_widget.currentRowChanged.connect(on_selection_changed)

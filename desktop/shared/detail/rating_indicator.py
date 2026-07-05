@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import math
 
+from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.presenters import format_user_score_display, normalize_final_score
-from desktop.shared.detail.profiles import RATING_CIRCLE_DIAMETER, RATING_CIRCLE_WIDGET_SIZE
 from desktop.theme import (
     COLOR_ACCENT,
     COLOR_BORDER,
@@ -19,6 +19,8 @@ from desktop.theme import (
     FONT_RATING_LABEL_POINT,
     FONT_RATING_VALUE_POINT,
     TRANSPARENT_STYLE,
+    detail_px,
+    font_px,
     px,
 )
 
@@ -78,12 +80,25 @@ class RatingCircleIndicator:
         display_value=None,
         display_label: str | None = None,
         ring_progress=None,
-        widget_size: int = RATING_CIRCLE_WIDGET_SIZE,
-        circle_diameter: int = RATING_CIRCLE_DIAMETER,
-        value_font_point: int = FONT_RATING_VALUE_POINT,
-        label_font_point: int = FONT_RATING_LABEL_POINT,
+        widget_size: int | None = None,
+        circle_diameter: int | None = None,
+        value_font_point: int | None = None,
+        label_font_point: int | None = None,
     ):
         from PyQt6.QtWidgets import QWidget
+
+        resolved_widget_size = (
+            detail_profiles.RATING_CIRCLE_WIDGET_SIZE if widget_size is None else widget_size
+        )
+        resolved_circle_diameter = (
+            detail_profiles.RATING_CIRCLE_DIAMETER if circle_diameter is None else circle_diameter
+        )
+        resolved_value_font_point = (
+            font_px(FONT_RATING_VALUE_POINT) if value_font_point is None else value_font_point
+        )
+        resolved_label_font_point = (
+            font_px(FONT_RATING_LABEL_POINT) if label_font_point is None else label_font_point
+        )
 
         class _RatingCircleWidget(QWidget):
             def __init__(
@@ -100,10 +115,10 @@ class RatingCircleIndicator:
                 self._label = label_text
                 self._score = score_value
                 self._accent = accent_color
-                self._widget_size = widget_size
-                self._circle_diameter = circle_diameter
-                self._value_font_point = value_font_point
-                self._label_font_point = label_font_point
+                self._widget_size = resolved_widget_size
+                self._circle_diameter = resolved_circle_diameter
+                self._value_font_point = resolved_value_font_point
+                self._label_font_point = resolved_label_font_point
                 self._display_value = _display_text(
                     score_value if display_score_value is None else display_score_value
                 )
@@ -144,9 +159,9 @@ class RatingCircleIndicator:
                 left = (self.width() - self._circle_diameter) / 2
                 top = (self.height() - self._circle_diameter) / 2
                 rect = QRectF(left, top, self._circle_diameter, self._circle_diameter)
-                inner_pad = max(4, int(self._circle_diameter * 0.08))
+                inner_pad = max(detail_px(4), int(self._circle_diameter * 0.08))
                 inner_rect = rect.adjusted(inner_pad, inner_pad, -inner_pad, -inner_pad)
-                ring_pen_width = max(3, int(self._circle_diameter * 0.06))
+                ring_pen_width = max(detail_px(3), int(self._circle_diameter * 0.06))
 
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QColor(COLOR_SURFACE))
@@ -170,7 +185,7 @@ class RatingCircleIndicator:
                 value_font.setPointSize(self._value_font_point)
                 value_font.setBold(True)
                 painter.setFont(value_font)
-                value_offset = max(4, int(self._circle_diameter * 0.1))
+                value_offset = max(detail_px(4), int(self._circle_diameter * 0.1))
                 painter.drawText(
                     inner_rect.adjusted(0, -value_offset, 0, 0),
                     Qt.AlignmentFlag.AlignCenter,
@@ -182,9 +197,9 @@ class RatingCircleIndicator:
                 label_font.setPointSize(self._label_font_point)
                 label_font.setBold(True)
                 painter.setFont(label_font)
-                label_offset = max(18, int(self._circle_diameter * 0.48))
+                label_offset = max(detail_px(18), int(self._circle_diameter * 0.48))
                 painter.drawText(
-                    inner_rect.adjusted(0, label_offset, 0, -4),
+                    inner_rect.adjusted(0, label_offset, 0, -detail_px(4)),
                     Qt.AlignmentFlag.AlignCenter,
                     self._display_label,
                 )
@@ -221,7 +236,7 @@ class StarRatingIndicator:
                     return max(1, int(self._custom_star_size))
                 return max(
                     STAR_MIN_SIZE,
-                    min(STAR_MAX_SIZE, int(RATING_CIRCLE_DIAMETER * 0.15 * STAR_SCALE)),
+                    min(STAR_MAX_SIZE, int(detail_profiles.RATING_CIRCLE_DIAMETER * 0.15 * STAR_SCALE)),
                 )
 
             def _star_gap(self) -> int:
@@ -234,7 +249,7 @@ class StarRatingIndicator:
                 return 5 * star_size + 4 * self._star_gap() + STAR_EXTRA_WIDTH_PADDING
 
             def _resolve_height(self) -> int:
-                return max(self._star_size() + 4, 24)
+                return max(self._star_size() + detail_px(4), detail_px(24))
 
             def set_stars(self, stars, label: str = "") -> None:
                 if stars in (None, ""):

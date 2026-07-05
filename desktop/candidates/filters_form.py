@@ -21,6 +21,8 @@ from desktop.candidates.session import DEFAULT_BROWSE_FILTERS
 from desktop.shared.widgets.country_chip_selector import CountryChipSelector
 from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
 from desktop.shared.widgets.range_slider import RangeSlider
+from desktop.theme.scaling import layout_px
+from desktop.theme.shell_layout import CANDIDATE_ROOT_SPACING_PX
 
 CANDIDATE_YEAR_MIN = 2000
 
@@ -60,7 +62,7 @@ def build_filters_form(
     form_host.setObjectName("candidateSearchFiltersHost")
     form = QVBoxLayout(form_host)
     form.setContentsMargins(0, 0, 0, 0)
-    form.setSpacing(12)
+    form.setSpacing(CANDIDATE_ROOT_SPACING_PX)
 
     country_selector = CountryChipSelector([])
     form.addWidget(field_label("Страна"))

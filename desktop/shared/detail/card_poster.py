@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from desktop.shared.detail.posters import get_poster_cache_directory, open_path_in_shell
-from desktop.shared.detail.profiles import POSTER_IMAGE_STYLE, POSTER_PLACEHOLDER_STYLE
+from desktop.theme import build_poster_image_style, build_poster_placeholder_style
 
 _detail_poster_source_cache: dict[str, object] = {}
 
@@ -78,7 +78,7 @@ class DetailCardPosterMixin:
                 self._profile.detail_poster_content_radius,
             )
             self._poster_label.setFixedSize(poster_width, poster_height)
-            self._poster_label.setStyleSheet(POSTER_IMAGE_STYLE)
+            self._poster_label.setStyleSheet(build_poster_image_style())
             self._poster_label.setText("")
             self._poster_label.setPixmap(display_pixmap)
             return
@@ -88,7 +88,7 @@ class DetailCardPosterMixin:
             self._poster_label.setPixmap(QPixmap())
             if self._poster_label.text() == "":
                 self._poster_label.setText("Нет постера")
-            self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
+            self._poster_label.setStyleSheet(build_poster_placeholder_style())
 
     def _schedule_poster_height_sync(self) -> None:
         from PyQt6.QtCore import QTimer
@@ -101,7 +101,7 @@ class DetailCardPosterMixin:
         self._poster_source_pixmap = None
         self._poster_label.setPixmap(QPixmap())
         self._poster_label.setText("Нет постера")
-        self._poster_label.setStyleSheet(POSTER_PLACEHOLDER_STYLE)
+        self._poster_label.setStyleSheet(build_poster_placeholder_style())
 
     def _set_poster_image(self, poster_path: str) -> bool:
         pixmap = load_detail_poster_source_pixmap(poster_path)

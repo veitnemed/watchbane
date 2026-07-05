@@ -213,7 +213,7 @@ def test_default_tuning_profile_values_match_base_tokens() -> None:
     set_ui_scale(1.0)
     profiles = importlib.reload(profiles)
 
-    assert profiles.LIST_ITEM_HEIGHT == 72
+    assert profiles.LIST_ITEM_HEIGHT == 84
     assert profiles.DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width == tokens.DETAIL_POSTER_WIDTH
     assert profiles.DETAIL_CARD_LAYOUT_PROFILE.detail_poster_height == tokens.DETAIL_POSTER_HEIGHT
     assert profiles.DETAIL_CARD_LAYOUT_PROFILE.detail_rating_widget_size == tokens.DETAIL_RATING_WIDGET_SIZE
@@ -226,6 +226,24 @@ def test_local_ui_tuning_is_gitignored() -> None:
     assert "desktop/theme/local_ui_tuning.py" in Path(".gitignore").read_text(encoding="utf-8")
 
 
+def test_ensure_scaled_ui_modules_reloads_early_imported_profiles() -> None:
+    import importlib
+
+    import desktop.shared.detail.profiles as profiles
+    import desktop.theme.scaling as scaling
+    from desktop.theme.ui_modules import ensure_scaled_ui_modules
+
+    scaling.set_ui_scale(1.0)
+    scaling._scale_tuning = dict(DEFAULT_TUNING)
+    importlib.import_module("desktop.shared.detail.profiles")
+    assert profiles.LIST_ITEM_HEIGHT == 84
+
+    scaling.set_ui_scale(0.75)
+    ensure_scaled_ui_modules()
+
+    assert profiles.LIST_ITEM_HEIGHT == 63
+
+
 def test_bootstrap_uses_app_scale_without_qt_scale_factor() -> None:
     import inspect
 
@@ -236,7 +254,60 @@ def test_bootstrap_uses_app_scale_without_qt_scale_factor() -> None:
     assert "QT_SCALE_FACTOR" not in source
     assert "get_persisted_ui_scale" in source
     assert "set_ui_scale(" in source
-    assert "font_px(10)" in source
+    assert "font_px(FONT_APP)" in source
+    assert "ensure_scaled_ui_modules" in inspect.getsource(bootstrap.main)
+
+
+def test_tmdb_ring_value_font_scales_with_ui_scale(qapp) -> None:
+    import desktop.theme.scaling as scaling
+    from desktop.shared.detail.card_pills import make_meta_pill
+    from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE
+
+    scaling.set_ui_scale(1.0)
+    scaling._scale_tuning = dict(DEFAULT_TUNING)
+    ring_100 = make_meta_pill(
+        {
+            "display_value": "7.4",
+            "display_label": "TMDb",
+            "ring_progress": 0.74,
+            "source": "tmdb",
+        },
+        DETAIL_CARD_LAYOUT_PROFILE,
+    )
+
+    scaling.set_ui_scale(0.75)
+    ring_75 = make_meta_pill(
+        {
+            "display_value": "7.4",
+            "display_label": "TMDb",
+            "ring_progress": 0.74,
+            "source": "tmdb",
+        },
+        DETAIL_CARD_LAYOUT_PROFILE,
+    )
+
+    assert ring_100._value_font_point == 24
+    assert ring_75._value_font_point == 18
+    assert ring_75._value_font_point < ring_100._value_font_point
+
+
+def test_candidate_detail_card_profile_scales_with_ui_scale(qapp) -> None:
+    import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
+    import desktop.theme.scaling as scaling
+    from desktop.shared.detail import profiles as detail_profiles
+    from desktop.theme.ui_modules import ensure_scaled_ui_modules
+
+    scaling.set_ui_scale(1.0)
+    scaling._scale_tuning = dict(DEFAULT_TUNING)
+    ensure_scaled_ui_modules()
+    width_100 = detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width
+
+    scaling.set_ui_scale(0.75)
+    ensure_scaled_ui_modules()
+    width_75 = detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width
+
+    assert width_75 < width_100
+    assert width_75 == scaling.poster_px(360)
 
 
 def test_settings_dialog_displays_current_scale(monkeypatch, tmp_path, qapp) -> None:
@@ -338,3 +409,52 @@ def test_startup_scale_diagnostics_handles_missing_screen(monkeypatch) -> None:
     assert events[0][1]["primary_screen_device_pixel_ratio"] is None
     assert events[0][1]["primary_screen_available_geometry"] is None
     assert events[0][1]["requested_initial_window_size"] == {"width": 1475, "height": 900}
+
+
+@pytest.mark.parametrize(
+    ("ui_scale", "base", "channel", "expected"),
+    [
+        (0.5, 100, "layout", 50),
+        (1.0, 100, "layout", 100),
+        (1.25, 100, "layout", 125),
+        (2.0, 100, "layout", 200),
+    ],
+)
+def test_layout_px_scales_with_ui_scale(ui_scale, base, channel, expected) -> None:
+    import desktop.theme.scaling as scaling
+
+    scaling.set_ui_scale(ui_scale)
+    scaling._scale_tuning = dict(DEFAULT_TUNING)
+
+    assert scaling.scale_px(base, channel=channel) == expected
+
+
+def test_ui_scale_125_updates_shell_and_list_constants() -> None:
+    import importlib
+
+    import desktop.shared.detail.profiles as profiles
+    import desktop.theme.scaling as scaling
+    import desktop.theme.shell_layout as shell_layout
+
+    scaling.set_ui_scale(1.25)
+    scaling._scale_tuning = dict(DEFAULT_TUNING)
+    shell_layout = importlib.reload(shell_layout)
+    profiles = importlib.reload(profiles)
+
+    assert shell_layout.SIDEBAR_MIN_WIDTH_PX == 325
+    assert shell_layout.SPLITTER_SIDEBAR_DEFAULT_PX == 375
+    assert profiles.LIST_ITEM_HEIGHT == 105
+    assert profiles.LIST_TITLE_FONT_POINT == 18
+
+
+def test_ui_scale_125_updates_analytics_chart_height() -> None:
+    import importlib
+
+    import desktop.analytics.charts as charts
+    import desktop.theme.scaling as scaling
+
+    scaling.set_ui_scale(1.25)
+    scaling._scale_tuning = dict(DEFAULT_TUNING)
+    charts = importlib.reload(charts)
+
+    assert charts.CHART_BASE_HEIGHT == 350

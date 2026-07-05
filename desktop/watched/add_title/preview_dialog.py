@@ -35,6 +35,7 @@ from desktop.watched.model import (
     YEAR_FILTER_MIN,
     normalize_user_score_value,
 )
+from desktop.theme.scaling import layout_px
 
 
 class AddTitlePreviewDialog(QDialog):
@@ -62,8 +63,13 @@ class AddTitlePreviewDialog(QDialog):
         self.setStyleSheet(ADD_TITLE_DIALOG_STYLE)
 
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(16, 16, 16, 16)
-        root_layout.setSpacing(10)
+        root_layout.setContentsMargins(
+            layout_px(16),
+            layout_px(16),
+            layout_px(16),
+            layout_px(16),
+        )
+        root_layout.setSpacing(layout_px(10))
 
         self._preview_header = QLabel(self._format_preview_header(bundle.preview_card))
         self._preview_header.setObjectName("addTitleHeader")
@@ -85,7 +91,12 @@ class AddTitlePreviewDialog(QDialog):
         card_shell = QFrame()
         card_shell.setObjectName("addTitlePreviewCard")
         card_shell_layout = QVBoxLayout(card_shell)
-        card_shell_layout.setContentsMargins(10, 10, 10, 10)
+        card_shell_layout.setContentsMargins(
+            layout_px(10),
+            layout_px(10),
+            layout_px(10),
+            layout_px(10),
+        )
         card_shell_layout.setSpacing(0)
 
         self._detail_card = WatchedDetailCard(card_shell, profile=ADD_TITLE_PREVIEW_CARD_PROFILE)
@@ -104,7 +115,7 @@ class AddTitlePreviewDialog(QDialog):
 
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
-        form.setSpacing(8)
+        form.setSpacing(layout_px(8))
 
         year_label = QLabel("Год")
         year_label.setObjectName("addTitleFieldLabel")
@@ -126,7 +137,7 @@ class AddTitlePreviewDialog(QDialog):
         root_layout.addLayout(form)
 
         actions = QHBoxLayout()
-        actions.setSpacing(10)
+        actions.setSpacing(layout_px(10))
         self._back_button = QPushButton("Искать другой")
         self._back_button.setObjectName("addTitleSecondaryButton")
         self._back_button.clicked.connect(self._go_search_again)
