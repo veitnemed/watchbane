@@ -199,7 +199,7 @@ class RatingCircleIndicator:
 class StarRatingIndicator:
     """Compact 5-star final score indicator drawn outside rating circles."""
 
-    def __new__(cls):
+    def __new__(cls, *, star_size: int | None = None, star_gap: int | None = None):
         from PyQt6.QtWidgets import QWidget
 
         class _StarRatingWidget(QWidget):
@@ -207,19 +207,23 @@ class StarRatingIndicator:
                 super().__init__()
                 self._stars: float | None = None
                 self._label: str = ""
+                self._custom_star_size = star_size
+                self._custom_star_gap = star_gap
                 self.setFixedSize(self._resolve_width(), self._resolve_height())
                 self.setStyleSheet(TRANSPARENT_STYLE)
                 self.hide()
 
-            @staticmethod
-            def _star_size() -> int:
+            def _star_size(self) -> int:
+                if self._custom_star_size is not None:
+                    return max(1, int(self._custom_star_size))
                 return max(
                     STAR_MIN_SIZE,
                     min(STAR_MAX_SIZE, int(RATING_CIRCLE_DIAMETER * 0.15 * STAR_SCALE)),
                 )
 
-            @staticmethod
-            def _star_gap() -> int:
+            def _star_gap(self) -> int:
+                if self._custom_star_gap is not None:
+                    return max(0, int(self._custom_star_gap))
                 return STAR_GAP
 
             def _resolve_width(self) -> int:

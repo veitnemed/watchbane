@@ -5,6 +5,51 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from desktop.theme import (
+    DETAIL_CHIP_COL_GAP,
+    DETAIL_CHIP_H_PADDING,
+    DETAIL_CHIP_HEIGHT,
+    DETAIL_CHIP_MAX_ROWS,
+    DETAIL_CHIP_MAX_WIDTH,
+    DETAIL_CHIP_RADIUS,
+    DETAIL_CHIP_ROW_GAP,
+    DETAIL_HERO_CARD_PADDING,
+    DETAIL_HERO_CARD_RADIUS,
+    DETAIL_HERO_MIN_WIDTH,
+    DETAIL_HERO_PREFERRED_MIN_WIDTH,
+    DETAIL_INFO_MAX_WIDTH,
+    DETAIL_INFO_MIN_WIDTH,
+    DETAIL_MAIN_INFO_LABEL_WIDTH,
+    DETAIL_MAIN_INFO_PANEL_PADDING_X,
+    DETAIL_MAIN_INFO_PANEL_PADDING_Y,
+    DETAIL_MAIN_INFO_PANEL_RADIUS,
+    DETAIL_MAIN_INFO_ROW_HEIGHT,
+    DETAIL_MAIN_INFO_TOP_GAP,
+    DETAIL_OVERVIEW_LEFT_INSET,
+    DETAIL_OVERVIEW_MAX_LINES_COLLAPSED,
+    DETAIL_OVERVIEW_TEXT_TOP_GAP,
+    DETAIL_OVERVIEW_TITLE_TOP_GAP,
+    DETAIL_OVERVIEW_TOP_GAP,
+    DETAIL_POSTER_HEIGHT,
+    DETAIL_POSTER_RADIUS,
+    DETAIL_POSTER_RIGHT_GAP,
+    DETAIL_POSTER_WIDTH,
+    DETAIL_RATING_CIRCLE_DIAMETER,
+    DETAIL_RATING_WIDGET_SIZE,
+    DETAIL_SCORE_ROW_TOP_GAP,
+    DETAIL_STAR_GAP,
+    DETAIL_STAR_SIZE,
+    DETAIL_STARS_LEFT_GAP,
+    DETAIL_TITLE_FONT_FALLBACK,
+    DETAIL_TITLE_FONT_FAMILY,
+    DETAIL_TITLE_FONT_SIZE,
+    DETAIL_TITLE_LINE_HEIGHT,
+    DETAIL_TITLE_MAX_LINES,
+    DETAIL_USER_SCORE_BADGE_HEIGHT,
+    DETAIL_USER_SCORE_BADGE_MIN_WIDTH,
+    DETAIL_USER_SCORE_BADGE_PADDING_X,
+    DETAIL_USER_SCORE_BADGE_RADIUS,
+    DETAIL_USER_SCORE_BADGE_RIGHT,
+    DETAIL_USER_SCORE_BADGE_TOP,
     FONT_RATING_LABEL_POINT,
     FONT_RATING_VALUE_POINT,
     build_detail_card_style,
@@ -50,6 +95,51 @@ class DetailCardLayoutProfile:
     show_mark_watched_button: bool = False
     show_hide_candidate_button: bool = False
     include_bottom_stretch: bool = True
+    detail_hero_card_radius: int = DETAIL_HERO_CARD_RADIUS
+    detail_hero_card_padding: int = DETAIL_HERO_CARD_PADDING
+    detail_hero_min_width: int = DETAIL_HERO_MIN_WIDTH
+    detail_hero_preferred_min_width: int = DETAIL_HERO_PREFERRED_MIN_WIDTH
+    detail_poster_width: int = DETAIL_POSTER_WIDTH
+    detail_poster_height: int = DETAIL_POSTER_HEIGHT
+    detail_poster_radius: int = DETAIL_POSTER_RADIUS
+    detail_poster_right_gap: int = DETAIL_POSTER_RIGHT_GAP
+    detail_info_min_width: int = DETAIL_INFO_MIN_WIDTH
+    detail_info_max_width: int = DETAIL_INFO_MAX_WIDTH
+    detail_title_font_family: str = DETAIL_TITLE_FONT_FAMILY
+    detail_title_font_fallback: str = DETAIL_TITLE_FONT_FALLBACK
+    detail_title_font_size: int = DETAIL_TITLE_FONT_SIZE
+    detail_title_line_height: int = DETAIL_TITLE_LINE_HEIGHT
+    detail_title_max_lines: int = DETAIL_TITLE_MAX_LINES
+    detail_chip_height: int = DETAIL_CHIP_HEIGHT
+    detail_chip_radius: int = DETAIL_CHIP_RADIUS
+    detail_chip_h_padding: int = DETAIL_CHIP_H_PADDING
+    detail_chip_row_gap: int = DETAIL_CHIP_ROW_GAP
+    detail_chip_col_gap: int = DETAIL_CHIP_COL_GAP
+    detail_chip_max_rows: int = DETAIL_CHIP_MAX_ROWS
+    detail_chip_max_width: int = DETAIL_CHIP_MAX_WIDTH
+    detail_score_row_top_gap: int = DETAIL_SCORE_ROW_TOP_GAP
+    detail_rating_widget_size: int = DETAIL_RATING_WIDGET_SIZE
+    detail_rating_circle_diameter: int = DETAIL_RATING_CIRCLE_DIAMETER
+    detail_stars_left_gap: int = DETAIL_STARS_LEFT_GAP
+    detail_star_size: int = DETAIL_STAR_SIZE
+    detail_star_gap: int = DETAIL_STAR_GAP
+    detail_user_score_badge_min_width: int = DETAIL_USER_SCORE_BADGE_MIN_WIDTH
+    detail_user_score_badge_height: int = DETAIL_USER_SCORE_BADGE_HEIGHT
+    detail_user_score_badge_radius: int = DETAIL_USER_SCORE_BADGE_RADIUS
+    detail_user_score_badge_top: int = DETAIL_USER_SCORE_BADGE_TOP
+    detail_user_score_badge_right: int = DETAIL_USER_SCORE_BADGE_RIGHT
+    detail_user_score_badge_padding_x: int = DETAIL_USER_SCORE_BADGE_PADDING_X
+    detail_main_info_top_gap: int = DETAIL_MAIN_INFO_TOP_GAP
+    detail_main_info_panel_radius: int = DETAIL_MAIN_INFO_PANEL_RADIUS
+    detail_main_info_panel_padding_x: int = DETAIL_MAIN_INFO_PANEL_PADDING_X
+    detail_main_info_panel_padding_y: int = DETAIL_MAIN_INFO_PANEL_PADDING_Y
+    detail_main_info_row_height: int = DETAIL_MAIN_INFO_ROW_HEIGHT
+    detail_main_info_label_width: int = DETAIL_MAIN_INFO_LABEL_WIDTH
+    detail_overview_top_gap: int = DETAIL_OVERVIEW_TOP_GAP
+    detail_overview_left_inset: int = DETAIL_OVERVIEW_LEFT_INSET
+    detail_overview_title_top_gap: int = DETAIL_OVERVIEW_TITLE_TOP_GAP
+    detail_overview_text_top_gap: int = DETAIL_OVERVIEW_TEXT_TOP_GAP
+    detail_overview_max_lines_collapsed: int = DETAIL_OVERVIEW_MAX_LINES_COLLAPSED
 
 
 DETAIL_CARD_LAYOUT_PROFILE = DetailCardLayoutProfile(
@@ -75,6 +165,8 @@ ADD_TITLE_PREVIEW_CARD_PROFILE = DetailCardLayoutProfile(
     rating_label_font_point=7,
     show_user_score=False,
     include_bottom_stretch=False,
+    detail_poster_width=POSTER_WIDTH // 2,
+    detail_poster_height=POSTER_HEIGHT // 2,
 )
 
 CANDIDATE_DETAIL_CARD_PROFILE = replace(

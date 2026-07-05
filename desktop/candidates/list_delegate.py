@@ -17,6 +17,7 @@ from desktop.shared.detail import (
     LIST_THUMB_WIDTH,
     _elide_text,
     _load_list_thumb_pixmap,
+    format_year_display,
 )
 from desktop.theme import (
     COLOR_ACCENT,
@@ -92,7 +93,7 @@ def build_candidate_list_item_delegate(parent, sort_mode: str):
 
             title = str(candidate.get("title") or candidate.get("name") or "Без названия")
             year = candidate.get("year")
-            year_text = str(year) if year not in (None, "") else ""
+            year_text = format_year_display(year)
             metric_text = format_candidate_metric_value(candidate, mode)
             meta_parts = [part for part in (year_text, metric_text if metric_text != "—" else "") if part]
             meta_text = " · ".join(meta_parts)

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from desktop.shared.detail.list_delegate import fit_poster_pixmap_for_display
 from desktop.shared.detail.posters import get_poster_cache_directory, open_path_in_shell
 from desktop.shared.detail.profiles import POSTER_IMAGE_STYLE, POSTER_PLACEHOLDER_STYLE
 
@@ -23,23 +22,39 @@ def load_detail_poster_source_pixmap(poster_path: str):
     return pixmap
 
 
+def cover_crop_poster_pixmap_for_display(pixmap, width: int, height: int):
+    """Scale and center-crop poster to fill the shell without distortion."""
+    from PyQt6.QtCore import Qt
+
+    if pixmap.isNull() or width <= 0 or height <= 0:
+        return pixmap
+
+    scaled = pixmap.scaled(
+        width,
+        height,
+        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    crop_x = max(0, (scaled.width() - width) // 2)
+    crop_y = max(0, (scaled.height() - height) // 2)
+    return scaled.copy(crop_x, crop_y, width, height)
+
+
 class DetailCardPosterMixin:
     """Poster sync, placeholder and shell-open actions for detail cards."""
 
     def _sync_poster_display(self) -> None:
         from PyQt6.QtGui import QPixmap
 
-        poster_width = self._profile.poster_width
-        poster_height = self._profile.poster_height
+        poster_width = self._profile.detail_poster_width
+        poster_height = self._profile.detail_poster_height
         if self._poster_source_pixmap is not None and not self._poster_source_pixmap.isNull():
-            display_pixmap = fit_poster_pixmap_for_display(
+            display_pixmap = cover_crop_poster_pixmap_for_display(
                 self._poster_source_pixmap,
                 poster_width,
                 poster_height,
             )
-            width = max(display_pixmap.width(), 1)
-            height = max(display_pixmap.height(), 1)
-            self._poster_label.setFixedSize(width, height)
+            self._poster_label.setFixedSize(poster_width, poster_height)
             self._poster_label.setStyleSheet(POSTER_IMAGE_STYLE)
             self._poster_label.setText("")
             self._poster_label.setPixmap(display_pixmap)

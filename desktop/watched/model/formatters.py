@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from desktop.shared.detail.presenters import format_user_score_display
+from desktop.shared.detail.presenters import format_user_score_display, format_year_display
 from desktop.watched.model.filters import watched_filters_are_active
 
 
@@ -12,8 +12,9 @@ def format_list_label(card: dict) -> str:
     year = card.get("year")
     score_label = format_user_score_display(card.get("user_score"))
     parts = [title]
-    if year is not None:
-        parts.append(f"({year})")
+    year_label = format_year_display(year)
+    if year_label:
+        parts.append(f"({year_label})")
     label = " ".join(parts)
     if score_label != "—":
         label = f"{label}  ·  {score_label}"

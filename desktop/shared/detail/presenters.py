@@ -73,6 +73,18 @@ def format_final_score(value) -> str:
     return f"Итог {int(rounded)}"
 
 
+def format_final_score_quality_label(value) -> str | None:
+    """Format final score as a qualitative detail-card label, not as a raw number."""
+    if value in (None, ""):
+        return None
+    normalized = normalize_final_score(value)
+    if normalized >= 0.75:
+        return "Отличный рейтинг"
+    if normalized >= 0.5:
+        return "Хороший рейтинг"
+    return "Слабый рейтинг"
+
+
 def final_score_to_stars(value) -> float | None:
     """Convert final score to a compact 0..5 star value in 0.5 steps."""
     if value in (None, ""):
@@ -128,7 +140,20 @@ def score_ring_color_for_tmdb_score(value) -> str:
 
 
 def format_year_pill(year) -> str:
-    return str(year)
+    return format_year_display(year)
+
+
+def format_year_display(year) -> str:
+    """Format UI year without leaking float artifacts like 2015.0."""
+    if year in (None, "") or isinstance(year, bool):
+        return ""
+    try:
+        value = float(year)
+    except (TypeError, ValueError):
+        return str(year).strip()
+    if value.is_integer():
+        return str(int(value))
+    return str(year).strip()
 
 
 def build_score_ring_item(card: dict) -> dict | None:
@@ -154,10 +179,26 @@ def build_final_score_star_item(card: dict) -> dict | None:
     stars = final_score_to_stars(card.get("final_score"))
     if stars is None:
         return None
+    quality_label = format_final_score_quality_label(card.get("final_score"))
     return {
         "kind": "final_stars",
         "stars": stars,
-        "tooltip": format_final_score(card.get("final_score")),
+        "label": quality_label,
+        "tooltip": quality_label or "",
+    }
+
+
+def build_user_score_badge_item(card: dict) -> dict | None:
+    """Build watched-only user score badge payload for the poster overlay."""
+    if card.get("runtime_status") != "watched":
+        return None
+    display_value = format_user_score_display(card.get("user_score"))
+    if display_value == "—":
+        return None
+    return {
+        "kind": "user_score_badge",
+        "value": display_value,
+        "text": f"★ {display_value}",
     }
 
 
@@ -186,7 +227,7 @@ def build_meta_pill_labels(card: dict) -> list[str]:
     labels: list[str] = []
     year = card.get("year")
     if year not in (None, ""):
-        labels.append(str(year))
+        labels.append(format_year_display(year))
 
     tmdb = format_rating_score_display(card.get("tmdb_score"))
     if tmdb is not None:

@@ -490,6 +490,21 @@ def test_score_ring_item_uses_tmdb_display_and_tmdb_progress() -> None:
     assert item["accent"] == score_ring_color_for_tmdb_score(7.4)
 
 
+def test_score_ring_item_ignores_final_score_for_progress_and_color() -> None:
+    from desktop.watched import build_score_ring_item
+
+    low_final = build_score_ring_item({"tmdb_score": 7.4, "final_score": 0.1})
+    high_final = build_score_ring_item({"tmdb_score": 7.4, "final_score": 0.99})
+
+    assert low_final is not None
+    assert high_final is not None
+    assert low_final["ring_progress"] == 0.74
+    assert high_final["ring_progress"] == 0.74
+    assert low_final["accent"] == high_final["accent"]
+    assert "Итог" not in str(low_final)
+    assert "Итог" not in str(high_final)
+
+
 def test_final_score_star_item_uses_final_score_only() -> None:
     from desktop.watched import build_final_score_star_item
 
@@ -498,8 +513,34 @@ def test_final_score_star_item_uses_final_score_only() -> None:
     assert item == {
         "kind": "final_stars",
         "stars": 3.5,
-        "tooltip": "Итог 74",
+        "label": "Хороший рейтинг",
+        "tooltip": "Хороший рейтинг",
     }
+    assert "Итог" not in str(item)
+
+
+def test_user_score_badge_is_watched_only() -> None:
+    from desktop.watched import build_user_score_badge_item
+
+    assert build_user_score_badge_item({"runtime_status": "watched", "user_score": 9}) == {
+        "kind": "user_score_badge",
+        "value": "9.0",
+        "text": "★ 9.0",
+    }
+    assert build_user_score_badge_item({"runtime_status": "watched", "user_score": None}) is None
+    assert build_user_score_badge_item({"runtime_status": "candidate", "user_score": 9}) is None
+    assert build_user_score_badge_item({"user_score": 9}) is None
+
+
+def test_watched_detail_has_no_my_score_ring_payload() -> None:
+    from desktop.watched import build_meta_pill_items
+
+    items = build_meta_pill_items({"runtime_status": "watched", "user_score": 9, "tmdb_score": 7.4})
+
+    assert len(items) == 1
+    assert items[0]["source"] == "tmdb"
+    assert all(item.get("display_label") != "моя" for item in items)
+    assert all(item.get("kind") != "user_score_ring" for item in items)
 
 
 def test_score_ring_color_uses_red_to_green_quality_scale() -> None:
@@ -574,6 +615,7 @@ def test_rating_circle_indicator_keeps_fixed_circle_size(qapp) -> None:
 
 def test_meta_pill_does_not_render_final_text_under_circle(qapp) -> None:
     from desktop.shared.detail.card_pills import make_meta_pill
+    from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE
 
     ring = make_meta_pill(
         {
@@ -587,8 +629,8 @@ def test_meta_pill_does_not_render_final_text_under_circle(qapp) -> None:
 
     assert not hasattr(ring, "_footer_label")
     assert not hasattr(ring, "_footer_stars")
-    assert ring.width() == 88
-    assert ring.height() == 88
+    assert ring.width() == DETAIL_CARD_LAYOUT_PROFILE.detail_rating_widget_size
+    assert ring.height() == DETAIL_CARD_LAYOUT_PROFILE.detail_rating_widget_size
 
 
 def test_star_rating_indicator_accepts_stars(qapp) -> None:
@@ -620,6 +662,7 @@ def test_build_detail_info_pill_labels_moves_year_to_genres() -> None:
         "2025",
         "Драма",
     ]
+    assert build_detail_info_pill_labels({"year": 2015.0, "genres": []}) == ["2015"]
     assert build_detail_info_pill_labels({"genres": ["Драма"]}) == ["Драма"]
     assert build_detail_info_pill_labels({"year": 2025, "genres": ["Драма"], "country": "Россия"}) == [
         "2025",
@@ -800,7 +843,7 @@ def test_build_watched_movie_card_uses_candidate_pool_tmdb_fallback() -> None:
 
 
 def test_build_watched_movie_card_computes_tmdb_final_score_for_low_vote_watched_title() -> None:
-    from desktop.watched import build_final_score_star_item, build_score_ring_item
+    from desktop.watched import build_final_score_star_item, build_score_ring_item, build_user_score_badge_item
     from web.export import build_export_lookup_cache, build_watched_movie_card
 
     movie = {
@@ -832,6 +875,11 @@ def test_build_watched_movie_card_computes_tmdb_final_score_for_low_vote_watched
     assert card["tmdb_score"] == 8.5
     assert card["quality_score"] == 0.4604
     assert card["final_score"] == 0.52
+    assert build_user_score_badge_item(card) == {
+        "kind": "user_score_badge",
+        "value": "4.0",
+        "text": "★ 4.0",
+    }
     assert ring["display_value"] == "8.5"
     assert ring["ring_progress"] == 0.85
     assert "footer_label" not in ring
@@ -1183,6 +1231,237 @@ def test_watched_detail_card_layout_contract() -> None:
     assert "maximumHeight" not in init_source
 
 
+def test_detail_hero_layout_skeleton(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QFrame, QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    def is_descendant(child, parent) -> bool:
+        current = child
+        while current is not None:
+            if current is parent:
+                return True
+            current = current.parent()
+        return False
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "tmdb_score": 7.4,
+                "final_score": 0.74,
+                "genres": ["Драма"],
+                "year": 2024,
+            },
+        )
+    )
+    qapp.processEvents()
+
+    hero = detail.widget
+    poster_column = hero.findChild(QWidget, "detailPosterColumn")
+    info_column = hero.findChild(QWidget, "detailInfoColumn")
+    poster_shell = hero.findChild(QFrame, "detailPosterShell")
+    title = hero.findChild(QLabel, "detailTitle")
+    chips = hero.findChild(QWidget, "detailChipsContainer")
+    score_row = hero.findChild(QWidget, "detailScoreSummaryRow")
+
+    assert hero.objectName() == "detailHeroCard"
+    assert poster_column is not None
+    assert info_column is not None
+    assert poster_shell is not None
+    assert title is not None
+    assert chips is not None
+    assert score_row is not None
+    assert poster_column.width() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
+    assert poster_shell.width() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
+    assert poster_shell.height() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_height
+    assert info_column.minimumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_info_min_width
+    assert is_descendant(title, info_column)
+    assert is_descendant(chips, info_column)
+    assert is_descendant(score_row, info_column)
+    assert is_descendant(poster_shell, poster_column)
+
+
+def test_detail_chip_rows_fit_short_labels_in_one_row(qapp) -> None:
+    from PyQt6.QtGui import QFontMetrics
+
+    from desktop.shared.detail.card_pills import build_detail_chip_rows
+    from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE
+
+    rows = build_detail_chip_rows(
+        ["2024", "Драма", "Комедия"],
+        600,
+        DETAIL_CARD_LAYOUT_PROFILE,
+        QFontMetrics(qapp.font()),
+    )
+
+    assert rows == [["2024", "Драма", "Комедия"]]
+
+
+def test_detail_chip_rows_use_two_rows_and_overflow(qapp) -> None:
+    from PyQt6.QtGui import QFontMetrics
+
+    from desktop.shared.detail.card_pills import build_detail_chip_rows
+    from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE
+
+    rows = build_detail_chip_rows(
+        [
+            "2024",
+            "Криминал",
+            "Драма",
+            "Детектив",
+            "Триллер",
+            "Фантастика",
+            "Боевик",
+        ],
+        300,
+        DETAIL_CARD_LAYOUT_PROFILE,
+        QFontMetrics(qapp.font()),
+    )
+
+    assert len(rows) == 2
+    assert rows[0][0] == "2024"
+    assert any(label.startswith("+") for row in rows for label in row)
+    assert all(len(row) > 0 for row in rows)
+
+
+def test_detail_chip_rows_never_create_third_row(qapp) -> None:
+    from PyQt6.QtGui import QFontMetrics
+
+    from desktop.shared.detail.card_pills import build_detail_chip_rows
+    from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE
+
+    rows = build_detail_chip_rows(
+        ["2024"] + [f"Жанр {index}" for index in range(20)],
+        170,
+        DETAIL_CARD_LAYOUT_PROFILE,
+        QFontMetrics(qapp.font()),
+    )
+
+    assert len(rows) <= 2
+    assert rows[0][0] == "2024"
+    assert rows[-1][-1].startswith("+")
+
+
+def test_detail_chip_rows_elide_long_text(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
+
+    from desktop.shared.detail.card_pills import fill_detail_chip_rows
+    from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE
+
+    container = QWidget()
+    layout = QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+    long_label = "Очень длинный жанр который точно не помещается"
+
+    fill_detail_chip_rows(
+        layout,
+        ["2024", long_label],
+        240,
+        "genrePill",
+        DETAIL_CARD_LAYOUT_PROFILE,
+    )
+
+    chips = container.findChildren(QLabel, "genrePill")
+
+    assert len(chips) >= 2
+    assert chips[0].text() == "2024"
+    assert chips[1].text() != long_label
+    assert chips[1].toolTip() == long_label
+    assert chips[1].width() <= DETAIL_CARD_LAYOUT_PROFILE.detail_chip_max_width
+
+
+def test_detail_chips_do_not_elide_common_short_labels(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
+
+    from desktop.shared.detail.card_pills import fill_detail_chip_rows
+    from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE
+
+    container = QWidget()
+    layout = QVBoxLayout(container)
+    layout.setContentsMargins(0, 0, 0, 0)
+
+    fill_detail_chip_rows(
+        layout,
+        ["2020", "Драма", "Триллер", "Боевик"],
+        520,
+        "genrePill",
+        DETAIL_CARD_LAYOUT_PROFILE,
+    )
+
+    chips = container.findChildren(QLabel, "genrePill")
+
+    assert [chip.text() for chip in chips] == ["2020", "Драма", "Триллер", "Боевик"]
+    assert all(chip.toolTip() == "" for chip in chips)
+
+
+def test_detail_chips_container_stays_above_score_row(qapp) -> None:
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "tmdb_score": 7.4,
+                "final_score": 0.74,
+                "genres": ["Криминал", "Драма", "Детектив", "Триллер", "Фантастика"],
+                "year": 2024,
+            },
+        )
+    )
+    qapp.processEvents()
+
+    info_column = detail.widget.findChild(QWidget, "detailInfoColumn")
+    chips = detail.widget.findChild(QWidget, "detailChipsContainer")
+    score_row = detail.widget.findChild(QWidget, "detailScoreSummaryRow")
+    info_layout = info_column.layout()
+
+    assert info_layout.indexOf(chips) < info_layout.indexOf(score_row)
+
+
+def test_detail_chips_container_height_matches_two_rows(qapp) -> None:
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail._info_column_widget.setFixedWidth(300)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "tmdb_score": 7.4,
+                "final_score": 0.74,
+                "genres": ["Криминал", "Драма", "Детектив", "Триллер", "Фантастика", "Боевик"],
+                "year": 2024,
+            },
+        )
+    )
+    qapp.processEvents()
+
+    chips = detail.widget.findChild(QWidget, "detailChipsContainer")
+    expected_height = (
+        DETAIL_CARD_LAYOUT_PROFILE.detail_chip_height * 2
+        + DETAIL_CARD_LAYOUT_PROFILE.detail_chip_row_gap
+    )
+
+    assert chips.layout().count() == 2
+    assert chips.height() == expected_height
+
+
 def test_watched_detail_card_hides_overview_without_text() -> None:
     import inspect
 
@@ -1192,8 +1471,122 @@ def test_watched_detail_card_hides_overview_without_text() -> None:
     init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
     assert "has_overview_text(card)" in source
     assert "_overview_frame.setVisible(False)" in source
-    assert "overviewDivider" in init_source
-    assert "OVERVIEW_SECTION_TOP_SPACING" in init_source
+    assert "detailOverviewDivider" in init_source
+    assert "detail_overview_top_gap" in init_source
+
+
+def test_detail_overview_section_renders_description(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QFrame
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "overview": "Короткое описание тайтла.",
+            },
+        )
+    )
+    qapp.processEvents()
+
+    section = detail.widget.findChild(QFrame, "detailOverviewSection")
+    divider = detail.widget.findChild(QFrame, "detailOverviewDivider")
+    header = detail.widget.findChild(QLabel, "detailOverviewHeader")
+    text = detail.widget.findChild(QLabel, "detailOverviewText")
+
+    assert section is not None
+    assert section.isHidden() is False
+    assert divider is not None
+    assert header is not None
+    assert header.text() == "ОПИСАНИЕ"
+    assert text is not None
+    assert text.text() == "Короткое описание тайтла."
+    assert text.wordWrap() is True
+
+
+def test_detail_overview_section_hides_without_description(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "overview": "   ",
+            },
+        )
+    )
+    qapp.processEvents()
+
+    section = detail.widget.findChild(QFrame, "detailOverviewSection")
+
+    assert section is not None
+    assert section.isHidden() is True
+
+
+def test_detail_overview_section_is_below_top_row(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame, QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "overview": "Описание",
+            },
+        )
+    )
+    qapp.processEvents()
+
+    top_row = detail.widget.findChild(QWidget, "detailTopRow")
+    section = detail.widget.findChild(QFrame, "detailOverviewSection")
+    root_layout = detail.widget.layout()
+
+    assert top_row is not None
+    assert section is not None
+    assert root_layout.indexOf(top_row) < root_layout.indexOf(section)
+
+
+def test_detail_overview_uses_profile_left_inset(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    section = detail.widget.findChild(QFrame, "detailOverviewSection")
+    margins = section.layout().contentsMargins()
+
+    assert margins.left() == DETAIL_CARD_LAYOUT_PROFILE.detail_overview_left_inset
+
+
+def test_detail_overview_has_no_absolute_positioning() -> None:
+    import inspect
+
+    import desktop.shared.detail.card as watched_view_module
+
+    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
+    overview_source = init_source[
+        init_source.index('setObjectName("detailOverviewSection")') :
+        init_source.index("info_column.addWidget")
+    ]
+
+    assert ".move(" not in overview_source
+    assert "setGeometry(" not in overview_source
 
 
 def test_watched_detail_card_renders_main_info_block() -> None:
@@ -1205,27 +1598,304 @@ def test_watched_detail_card_renders_main_info_block() -> None:
     show_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
     empty_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_empty)
 
-    assert "Основная информация" in init_source
+    assert "ОСНОВНАЯ ИНФОРМАЦИЯ" in init_source
+    assert 'setObjectName("detailMainInfoSection")' in init_source
+    assert 'setObjectName("detailMainInfoPanel")' in init_source
+    assert 'setObjectName("detailMainInfoHeader")' in init_source
     assert "build_main_info_items(card)" in show_source
     assert "_set_main_info_items([])" in empty_source
 
 
-def test_watched_detail_card_places_tmdb_ring_before_user_score() -> None:
+def test_detail_main_info_panel_renders_known_rows(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QFrame, QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "tmdb_score": 7.4,
+                "final_score": 0.74,
+                "country": "US",
+                "object_type": "series",
+                "tmdb_votes": 12850,
+            },
+        )
+    )
+    qapp.processEvents()
+
+    section = detail.widget.findChild(QWidget, "detailMainInfoSection")
+    header = detail.widget.findChild(QLabel, "detailMainInfoHeader")
+    panel = detail.widget.findChild(QFrame, "detailMainInfoPanel")
+    labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
+    values = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoValue")]
+
+    assert section is not None
+    assert section.isHidden() is False
+    assert header is not None
+    assert header.text() == "ОСНОВНАЯ ИНФОРМАЦИЯ"
+    assert panel is not None
+    assert "Страна" in labels
+    assert "Тип" in labels
+    assert "Голоса TMDb" in labels
+    assert "США" in values
+    assert "Сериал" in values
+    assert "12 850" in values
+
+
+def test_detail_main_info_section_hides_when_empty(qapp) -> None:
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail._set_main_info_items([])
+    qapp.processEvents()
+
+    section = detail.widget.findChild(QWidget, "detailMainInfoSection")
+
+    assert section is not None
+    assert section.isHidden() is True
+
+
+def test_detail_main_info_panel_is_below_score_row(qapp) -> None:
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "tmdb_score": 7.4,
+                "final_score": 0.74,
+                "country": "US",
+                "object_type": "series",
+            },
+        )
+    )
+    qapp.processEvents()
+
+    info_column = detail.widget.findChild(QWidget, "detailInfoColumn")
+    score_row = detail.widget.findChild(QWidget, "detailScoreSummaryRow")
+    main_info = detail.widget.findChild(QWidget, "detailMainInfoSection")
+    info_layout = info_column.layout()
+
+    assert info_layout.indexOf(score_row) < info_layout.indexOf(main_info)
+
+
+def test_watched_detail_card_does_not_render_my_score_ring() -> None:
     import inspect
 
     import desktop.shared.detail.card as watched_view_module
 
     init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
 
-    meta_index = init_source.index("self._metrics_row.addWidget(self._meta_pills_widget")
-    user_index = init_source.index("self._metrics_row.addWidget(self._score_indicator")
-    assert meta_index < user_index
-    assert "self._metrics_row.addWidget(self._meta_pills_widget, alignment=Qt.AlignmentFlag.AlignVCenter)" in init_source
-    assert "self._meta_pills_widget.setSizePolicy(QSizePolicy.Policy.Maximum" in init_source
-    assert "StarRatingIndicator()" in init_source
-    assert "_rating_stars_row" in init_source
-    assert "self._metrics_row.setSpacing(RATING_CIRCLES_SPACING)" in init_source
-    assert "info_column.addSpacing(STAR_TOP_GAP)" in init_source
+    assert 'score_summary_widget.setObjectName("detailScoreSummaryRow")' in init_source
+    assert 'self._final_score_stars_block.setObjectName("detailFinalScoreStars")' in init_source
+    assert 'RatingCircleIndicator("моя"' not in init_source
+    assert "self._metrics_row.addWidget(self._score_indicator" not in init_source
+    assert "StarRatingIndicator(" in init_source
+    assert "star_size=self._profile.detail_star_size" in init_source
+    assert "star_gap=self._profile.detail_star_gap" in init_source
+    assert "_rating_stars_row" not in init_source
+    assert "_tmdb_ring_slot.setFixedSize(" in init_source
+    assert "self._profile.detail_rating_widget_size," in init_source
+    assert "self._score_summary_row.addWidget" in init_source
+
+
+def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "user_score": 9,
+                "tmdb_score": 7.4,
+                "final_score": 0.74,
+            },
+        )
+    )
+    qapp.processEvents()
+
+    score_row = detail.widget.findChild(QWidget, "detailScoreSummaryRow")
+    tmdb_ring = detail.widget.findChild(QWidget, "detailTmdbScoreRing")
+    stars_block = detail.widget.findChild(QWidget, "detailFinalScoreStars")
+
+    assert score_row is not None
+    assert tmdb_ring is not None
+    assert stars_block is not None
+    assert tmdb_ring.parent() is not stars_block
+    assert stars_block.isHidden() is False
+    assert getattr(tmdb_ring, "_display_label") == "TMDb"
+    assert getattr(tmdb_ring, "_display_value") == "7.4"
+    assert getattr(tmdb_ring, "_ring_progress") == 0.74
+    assert not any(getattr(child, "_display_label", "") == "моя" for child in score_row.findChildren(QWidget))
+
+
+def test_candidate_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.shared.detail import CANDIDATE_DETAIL_CARD_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=CANDIDATE_DETAIL_CARD_PROFILE)
+    detail.show_entry(("Candidate", {}, {"title": "Candidate", "tmdb_score": 8.1, "final_score": 0.82}))
+    qapp.processEvents()
+
+    score_row = detail.widget.findChild(QWidget, "detailScoreSummaryRow")
+    tmdb_ring = detail.widget.findChild(QWidget, "detailTmdbScoreRing")
+    stars_block = detail.widget.findChild(QWidget, "detailFinalScoreStars")
+
+    assert score_row is not None
+    assert tmdb_ring is not None
+    assert stars_block is not None
+    assert stars_block.isHidden() is False
+    assert getattr(tmdb_ring, "_display_label") == "TMDb"
+    assert getattr(tmdb_ring, "_ring_progress") == 0.81
+
+
+def test_score_summary_area_has_no_raw_final_score_text(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "user_score": 9,
+                "tmdb_score": 7.4,
+                "final_score": 0.74,
+            },
+        )
+    )
+    qapp.processEvents()
+
+    score_row = detail.widget.findChild(QWidget, "detailScoreSummaryRow")
+
+    assert score_row is not None
+    assert "Итог" not in score_row.objectName()
+    assert all("Итог" not in label.text() for label in score_row.findChildren(QLabel))
+
+
+def test_detail_card_poster_shell_exists(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    shell = detail.widget.findChild(QFrame, "detailPosterShell")
+
+    assert shell is not None
+    assert shell.parent() is detail._poster_column_widget
+    assert shell.width() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
+    assert shell.height() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_height
+
+
+def test_watched_user_score_badge_is_poster_shell_overlay(qapp) -> None:
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QLabel, QFrame
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "user_score": 9,
+            },
+        )
+    )
+    qapp.processEvents()
+
+    shell = detail.widget.findChild(QFrame, "detailPosterShell")
+    badge = detail.widget.findChild(QLabel, "detailUserScoreBadge")
+
+    assert shell is not None
+    assert badge is not None
+    assert badge.parent() is shell
+    assert badge.text() == "★ 9.0"
+    assert badge.isHidden() is False
+    assert badge.testAttribute(Qt.WidgetAttribute.WA_StyledBackground) is True
+    assert badge.x() >= shell.width() - badge.width() - DETAIL_CARD_LAYOUT_PROFILE.detail_user_score_badge_right - 1
+    assert badge.y() == DETAIL_CARD_LAYOUT_PROFILE.detail_user_score_badge_top
+
+
+def test_watched_user_score_badge_has_readable_background() -> None:
+    import inspect
+
+    import desktop.shared.detail.card as detail_card_module
+    from desktop.theme.styles.detail_card import build_detail_card_style
+
+    style = build_detail_card_style()
+    init_source = inspect.getsource(detail_card_module.WatchedDetailCard.__init__)
+
+    assert "QLabel#detailUserScoreBadge" in style
+    assert "background-color: #05070b" in style
+    assert "border: 1px solid {COLOR_DETAIL_GOLD}" not in style
+    assert "border: 1px solid #f5c451" in style
+    assert "class UserScoreBadgeLabel(QLabel)" in init_source
+    assert "drawRoundedRect" in init_source
+    assert 'QColor("#05070b")' in init_source
+
+
+def test_watched_user_score_badge_hides_without_user_score(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(("Alpha", {}, {"title": "Alpha", "runtime_status": "watched"}))
+    qapp.processEvents()
+
+    badge = detail.widget.findChild(QLabel, "detailUserScoreBadge")
+
+    assert badge is not None
+    assert badge.text() == ""
+    assert badge.isHidden() is True
+
+
+def test_candidate_detail_card_never_shows_user_score_badge(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QFrame
+
+    from desktop.shared.detail import CANDIDATE_DETAIL_CARD_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=CANDIDATE_DETAIL_CARD_PROFILE)
+    detail.show_entry(("Candidate", {}, {"title": "Candidate", "user_score": 9, "tmdb_score": 7.2}))
+    qapp.processEvents()
+
+    shell = detail.widget.findChild(QFrame, "detailPosterShell")
+    badge = detail.widget.findChild(QLabel, "detailUserScoreBadge")
+
+    assert shell is not None
+    assert badge is not None
+    assert badge.parent() is shell
+    assert badge.text() == ""
+    assert badge.isHidden() is True
 
 
 def test_candidate_detail_actions_are_icon_only_under_poster() -> None:
@@ -1245,6 +1915,67 @@ def test_candidate_detail_actions_are_icon_only_under_poster() -> None:
     assert "title_row.addWidget(self._poster_actions_widget" not in init_source
     assert "self._metrics_row.addWidget(self._mark_watched_button" not in init_source
     assert "self._metrics_row.addWidget(self._hide_button" not in init_source
+
+
+def test_candidate_detail_actions_are_poster_descendants(qapp) -> None:
+    from PyQt6.QtWidgets import QPushButton, QWidget
+
+    from desktop.shared.detail import CANDIDATE_DETAIL_CARD_PROFILE, WatchedDetailCard
+
+    def is_descendant(child, parent) -> bool:
+        current = child
+        while current is not None:
+            if current is parent:
+                return True
+            current = current.parent()
+        return False
+
+    detail = WatchedDetailCard(profile=CANDIDATE_DETAIL_CARD_PROFILE)
+    detail.show_entry(("Candidate", {}, {"title": "Candidate", "tmdb_score": 7.2, "final_score": 0.62}))
+    qapp.processEvents()
+
+    poster_actions = detail.widget.findChild(QWidget, "detailPosterActions")
+    title_actions = detail.widget.findChild(QWidget, "detailTitleActions")
+    mark_button = detail.widget.findChild(QPushButton, "candidateMarkWatchedButton")
+    hide_button = detail.widget.findChild(QPushButton, "candidateHideButton")
+
+    assert poster_actions is not None
+    assert poster_actions.parent() is detail._poster_column_widget
+    assert mark_button is not None
+    assert hide_button is not None
+    assert is_descendant(mark_button, poster_actions)
+    assert is_descendant(hide_button, poster_actions)
+    assert is_descendant(mark_button, detail._poster_column_widget)
+    assert is_descendant(hide_button, detail._poster_column_widget)
+    if title_actions is not None:
+        assert not is_descendant(mark_button, title_actions)
+        assert not is_descendant(hide_button, title_actions)
+
+
+def test_candidate_detail_action_click_handlers_still_work(qapp) -> None:
+    from PyQt6.QtWidgets import QPushButton
+
+    from desktop.shared.detail import CANDIDATE_DETAIL_CARD_PROFILE, WatchedDetailCard
+
+    calls: list[str] = []
+    detail = WatchedDetailCard(profile=CANDIDATE_DETAIL_CARD_PROFILE)
+    detail.set_mark_watched_handler(lambda: calls.append("watched"))
+    detail.set_hide_handler(lambda: calls.append("hide"))
+    detail.show_entry(("Candidate", {}, {"title": "Candidate", "tmdb_score": 7.2, "final_score": 0.62}))
+    qapp.processEvents()
+
+    mark_button = detail.widget.findChild(QPushButton, "candidateMarkWatchedButton")
+    hide_button = detail.widget.findChild(QPushButton, "candidateHideButton")
+
+    assert mark_button is not None
+    assert hide_button is not None
+    assert mark_button.isEnabled()
+    assert hide_button.isEnabled()
+
+    mark_button.click()
+    hide_button.click()
+
+    assert calls == ["watched", "hide"]
 
 
 def test_build_score_count_html_smoke() -> None:
@@ -1450,11 +2181,17 @@ def test_analytics_section_headers_use_icons() -> None:
 
 
 def test_format_list_label() -> None:
-    from desktop.watched import format_list_label
+    from desktop.watched import format_list_label, format_year_display
 
     assert format_list_label({"title": "Alpha", "year": 2020, "user_score": 8.0}) == "Alpha (2020)  ·  8.0"
+    assert format_list_label({"title": "Float Year", "year": 2015.0, "user_score": 8.0}) == (
+        "Float Year (2015)  ·  8.0"
+    )
     assert format_list_label({"title": "No Year", "user_score": None}) == "No Year"
     assert format_list_label({"year": 2019, "user_score": 7.5}) == "Без названия (2019)  ·  7.5"
+    assert format_year_display(2015.0) == "2015"
+    assert format_year_display("2015.0") == "2015"
+    assert format_year_display("2015") == "2015"
 
 
 def test_format_rating_score_display() -> None:
@@ -1495,6 +2232,67 @@ def test_poster_display_dimensions_are_scaled() -> None:
     assert POSTER_HEIGHT == 412
 
 
+def test_detail_hero_contract_tokens_are_available() -> None:
+    from desktop import theme
+    from desktop.shared.detail.profiles import DETAIL_CARD_LAYOUT_PROFILE
+
+    expected_tokens = {
+        "DETAIL_HERO_CARD_RADIUS": 24,
+        "DETAIL_HERO_CARD_PADDING": 28,
+        "DETAIL_HERO_MIN_WIDTH": 980,
+        "DETAIL_HERO_PREFERRED_MIN_WIDTH": 1200,
+        "DETAIL_POSTER_WIDTH": 328,
+        "DETAIL_POSTER_HEIGHT": 482,
+        "DETAIL_POSTER_RADIUS": 20,
+        "DETAIL_POSTER_RIGHT_GAP": 36,
+        "DETAIL_INFO_MIN_WIDTH": 560,
+        "DETAIL_INFO_MAX_WIDTH": 760,
+        "DETAIL_TITLE_FONT_FAMILY": "Georgia",
+        "DETAIL_TITLE_FONT_FALLBACK": "Times New Roman",
+        "DETAIL_TITLE_FONT_SIZE": 34,
+        "DETAIL_TITLE_LINE_HEIGHT": 42,
+        "DETAIL_TITLE_MAX_LINES": 2,
+        "DETAIL_CHIP_HEIGHT": 32,
+        "DETAIL_CHIP_RADIUS": 16,
+        "DETAIL_CHIP_H_PADDING": 18,
+        "DETAIL_CHIP_ROW_GAP": 8,
+        "DETAIL_CHIP_COL_GAP": 12,
+        "DETAIL_CHIP_MAX_ROWS": 2,
+        "DETAIL_CHIP_MAX_WIDTH": 150,
+        "DETAIL_SCORE_ROW_TOP_GAP": 30,
+        "DETAIL_RATING_WIDGET_SIZE": 124,
+        "DETAIL_RATING_CIRCLE_DIAMETER": 112,
+        "DETAIL_STARS_LEFT_GAP": 44,
+        "DETAIL_STAR_SIZE": 32,
+        "DETAIL_STAR_GAP": 8,
+        "DETAIL_USER_SCORE_BADGE_MIN_WIDTH": 72,
+        "DETAIL_USER_SCORE_BADGE_HEIGHT": 36,
+        "DETAIL_USER_SCORE_BADGE_RADIUS": 18,
+        "DETAIL_USER_SCORE_BADGE_TOP": 14,
+        "DETAIL_USER_SCORE_BADGE_RIGHT": 14,
+        "DETAIL_USER_SCORE_BADGE_PADDING_X": 12,
+        "DETAIL_MAIN_INFO_TOP_GAP": 34,
+        "DETAIL_MAIN_INFO_PANEL_RADIUS": 14,
+        "DETAIL_MAIN_INFO_PANEL_PADDING_X": 24,
+        "DETAIL_MAIN_INFO_PANEL_PADDING_Y": 16,
+        "DETAIL_MAIN_INFO_ROW_HEIGHT": 48,
+        "DETAIL_MAIN_INFO_LABEL_WIDTH": 210,
+        "DETAIL_OVERVIEW_TOP_GAP": 34,
+        "DETAIL_OVERVIEW_LEFT_INSET": 0,
+        "DETAIL_OVERVIEW_TITLE_TOP_GAP": 24,
+        "DETAIL_OVERVIEW_TEXT_TOP_GAP": 18,
+        "DETAIL_OVERVIEW_MAX_LINES_COLLAPSED": 4,
+    }
+
+    for token_name, expected_value in expected_tokens.items():
+        assert getattr(theme, token_name) == expected_value
+
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width == theme.DETAIL_POSTER_WIDTH
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_rating_widget_size == theme.DETAIL_RATING_WIDGET_SIZE
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_user_score_badge_height == theme.DETAIL_USER_SCORE_BADGE_HEIGHT
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_overview_left_inset == theme.DETAIL_OVERVIEW_LEFT_INSET
+
+
 def test_fit_poster_pixmap_for_display_avoids_upscale(qapp) -> None:
     from PyQt6.QtGui import QImage, QPixmap
 
@@ -1521,13 +2319,17 @@ def test_fit_poster_pixmap_for_display_downscales_large_image(qapp) -> None:
     assert result.height() < 1200
 
 
-def test_watched_detail_card_uses_sharp_poster_fit_helper() -> None:
+def test_watched_detail_card_uses_cover_crop_poster_helper() -> None:
     import inspect
 
     import desktop.shared.detail.card as watched_view_module
+    import desktop.shared.detail.card_poster as poster_module
 
     source = inspect.getsource(watched_view_module.WatchedDetailCard._sync_poster_display)
-    assert "fit_poster_pixmap_for_display" in source
+    poster_source = inspect.getsource(poster_module.cover_crop_poster_pixmap_for_display)
+    assert "cover_crop_poster_pixmap_for_display" in source
+    assert "KeepAspectRatioByExpanding" in poster_source
+    assert ".copy(" in poster_source
     assert "_target_poster_height" not in source
 
 
@@ -1826,6 +2628,7 @@ def test_format_candidate_list_label_shows_sort_metric() -> None:
 
 
 def test_build_candidate_readonly_card_passes_main_info_fields(monkeypatch) -> None:
+    from desktop.watched import build_user_score_badge_item
     from desktop.candidates.presenters import build_candidate_readonly_card
 
     monkeypatch.setattr(
@@ -1841,6 +2644,7 @@ def test_build_candidate_readonly_card_passes_main_info_fields(monkeypatch) -> N
             "tmdb_score": 8.1,
             "tmdb_votes": 12000,
             "imdb_id": "tt123",
+            "user_score": 9.0,
         }
     )
 
@@ -1850,6 +2654,8 @@ def test_build_candidate_readonly_card_passes_main_info_fields(monkeypatch) -> N
     assert card["tmdb_votes"] == 12000
     assert card["imdb_id"] == "tt123"
     assert "kp_votes" not in card
+    assert build_user_score_badge_item(card) is None
+    assert "user_score_badge" not in card
     assert "imdb_votes" not in card
 
 
@@ -2432,8 +3238,8 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
     assert "build_candidate_search_index" in source
     assert "build_candidate_detail_entry" not in source
     assert "CANDIDATE_DETAIL_CARD_PROFILE" in source
-    assert CANDIDATE_DETAIL_CARD_PROFILE.poster_width == DETAIL_CARD_LAYOUT_PROFILE.poster_width
-    assert CANDIDATE_DETAIL_CARD_PROFILE.poster_height == DETAIL_CARD_LAYOUT_PROFILE.poster_height
+    assert CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
+    assert CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_height == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_height
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_user_score is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_mark_watched_button is True
 

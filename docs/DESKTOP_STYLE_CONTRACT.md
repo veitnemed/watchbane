@@ -34,6 +34,8 @@
 | Muted text | `#71717a` |
 | Accent | `#10a37f` |
 
+Detail-card правила зафиксированы в отдельном строгом контракте: [DETAIL_CARD_HERO_CONTRACT.md](DETAIL_CARD_HERO_CONTRACT.md). Если правила ниже конфликтуют с hero-contract, главным считается hero-contract.
+
 Score ring в карточке использует TMDb-only contract: число внутри круга - `tmdb_score`, подпись - `TMDb`, прогресс и цвет обводки - `tmdb_score`. `final_score` не влияет на круг и показывается только отдельной строкой звезд. Цветовая шкала идет от красного к янтарному и зеленому.
 
 ## Typography
@@ -47,10 +49,10 @@ Score ring в карточке использует TMDb-only contract: числ
 
 ## Watched Layout
 
-Основная карточка watched:
+Основная карточка watched/candidate должна следовать [DETAIL_CARD_HERO_CONTRACT.md](DETAIL_CARD_HERO_CONTRACT.md). Краткая схема:
 
 ```text
-[ poster ] [ title / chips / ratings / actions ]
+[ poster ] [ title / chips / score summary / main info ]
 [ overview full width                      ]
 ```
 
@@ -59,6 +61,8 @@ Score ring в карточке использует TMDb-only contract: числ
 - poster имеет стабильный размер и не растягивается от текста;
 - title переносится и не перекрывает chips/ratings;
 - ratings остаются read-only и не показывают legacy IMDb/KP поля;
+- watched user score показывается только как poster overlay badge, не как ring;
+- candidate actions находятся под poster и никогда не появляются перед title;
 - блок "Основная информация" показывает `Голоса TMDb`, если они есть в watched/meta/candidate fallback;
 - overview идет отдельным full-width блоком ниже верхней строки;
 - если overview пустой, блок скрывается;

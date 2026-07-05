@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from desktop.shared.detail.posters import resolve_local_poster_path
-from desktop.shared.detail.presenters import format_user_score_display
+from desktop.shared.detail.presenters import format_user_score_display, format_year_display
 from desktop.shared.detail.profiles import (
     LIST_ITEM_HEIGHT,
     LIST_ITEM_H_PADDING,
@@ -150,7 +150,7 @@ class WatchedListItemDelegate:
 
                 title = str(card.get("title") or _key or "Без названия")
                 year = card.get("year")
-                year_text = str(year) if year not in (None, "") else ""
+                year_text = format_year_display(year)
                 score_text = format_user_score_display(card.get("user_score"))
                 meta_parts = [part for part in (year_text, score_text if score_text != "—" else "") if part]
                 meta_text = " · ".join(meta_parts)
