@@ -172,7 +172,9 @@ Required behavior:
 Main information rows:
 
 - `Тип` from normalized `object_type` or TV-shape fallback;
-- `Страна` from `country` when present.
+- `Страна` from `country` when present;
+- `Где смотреть` from watch providers, or `нет данных` when absent;
+- `Голоса TMDb` from `tmdb_votes` when positive.
 
 Title meta:
 
@@ -181,10 +183,8 @@ Title meta:
 
 Additional information rows:
 
-- watch providers;
 - status;
-- episode runtime;
-- `Голоса TMDb` from `tmdb_votes` when positive.
+- episode runtime.
 
 ## 10. Code ownership boundaries
 

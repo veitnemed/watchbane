@@ -28,7 +28,6 @@ STAR_SCALE = 2
 STAR_MIN_SIZE = px(16)
 STAR_MAX_SIZE = px(22)
 STAR_GAP = px(3)
-STAR_ROW_RIGHT_OFFSET = px(7)
 STAR_EXTRA_WIDTH_PADDING = px(8)
 
 
@@ -246,7 +245,10 @@ class StarRatingIndicator:
 
             def _resolve_width(self) -> int:
                 star_size = self._star_size()
-                return 5 * star_size + 4 * self._star_gap() + STAR_EXTRA_WIDTH_PADDING
+                base = 5 * star_size + 4 * self._star_gap()
+                if self._custom_star_size is not None:
+                    return base
+                return base + STAR_EXTRA_WIDTH_PADDING
 
             def _resolve_height(self) -> int:
                 return max(self._star_size() + detail_px(4), detail_px(24))
@@ -276,7 +278,7 @@ class StarRatingIndicator:
                 star_size = self._star_size()
                 gap = self._star_gap()
                 total_width = 5 * star_size + 4 * gap
-                start_x = max(0, (self.width() - total_width) / 2 + STAR_ROW_RIGHT_OFFSET)
+                start_x = 0.0
                 center_y = self.height() / 2
                 empty_color = QColor(COLOR_STAR_INACTIVE)
                 fill_color = QColor(COLOR_STAR_ACTIVE)

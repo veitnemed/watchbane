@@ -114,25 +114,9 @@ def format_tmdb_status(status: Any, in_production: Any = None) -> str | None:
     return None
 
 
-def _format_votes_display(value: Any) -> str | None:
-    if value in (None, "") or isinstance(value, bool):
-        return None
-    try:
-        votes = int(value)
-    except (TypeError, ValueError):
-        return None
-    if votes <= 0:
-        return None
-    return f"{votes:,}".replace(",", " ")
-
-
 def build_additional_info_items(card: dict) -> list[dict[str, str]]:
     """Build compact rows for the title additional-info block."""
     items: list[dict[str, str]] = []
-
-    providers = format_watch_providers(card.get("watch_providers") or card.get("watch_providers_ru"))
-    if providers is not None:
-        items.append({"label": "Где смотреть", "value": providers})
 
     status = format_tmdb_status(card.get("status") or card.get("tmdb_status"), card.get("in_production"))
     if status is not None:
@@ -141,9 +125,5 @@ def build_additional_info_items(card: dict) -> list[dict[str, str]]:
     runtime = format_episode_runtime(card.get("episode_run_time") or card.get("runtime_minutes"))
     if runtime is not None:
         items.append({"label": "Длительность серии", "value": runtime})
-
-    tmdb_votes = _format_votes_display(card.get("tmdb_votes"))
-    if tmdb_votes is not None:
-        items.append({"label": "Голоса TMDb", "value": tmdb_votes})
 
     return [item for item in items if _has_value(item.get("value"))]

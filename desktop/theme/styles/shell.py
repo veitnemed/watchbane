@@ -78,9 +78,12 @@ QTabWidget::pane {{
 QTabBar::tab {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {px(RADIUS_INPUT)}px;
+    border-radius: {control_px(RADIUS_INPUT)}px;
     color: {COLOR_TEXT_SECONDARY};
-    padding: {px(9)}px {px(16)}px;
+    font-size: {font_px(FONT_BASE)}px;
+    font-weight: 600;
+    padding: {control_px(BUTTON_PADDING_Y)}px {control_px(BUTTON_PADDING_X)}px;
+    min-height: {control_px(34)}px;
     margin-right: {px(SPACING_SMALL)}px;
 }}
 QTabBar::tab:selected {{

@@ -7,11 +7,10 @@ from dataclasses import dataclass
 
 from PyQt6.QtWidgets import QTabWidget, QWidget
 
-from desktop.analytics.view import AnalyticsView
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.list_view import CandidateListView
 from desktop.candidates.session import CandidateSearchSession
-from desktop.watched.model import WatchedEntry
+from desktop.settings.tab_view import SettingsTabView
 from desktop.watched.tab import WatchedTabView
 
 
@@ -29,7 +28,7 @@ class AppTabsContext:
     """Feature views and shared session for cross-tab callbacks."""
 
     watched_tab_view: WatchedTabView
-    analytics_view: AnalyticsView
+    settings_tab_view: SettingsTabView
     candidate_session: CandidateSearchSession
 
 
@@ -73,19 +72,10 @@ def build_main_tabs(
 ) -> tuple[MainTabRegistry, AppTabsContext]:
     """Create main-window tabs, register them and wire cross-tab callbacks."""
     registry = MainTabRegistry(tabs)
-    analytics_view: AnalyticsView
-
-    def on_watched_entries_changed(entries: list[WatchedEntry]) -> None:
-        analytics_view.update_entries(entries)
 
     watched_tab_view = WatchedTabView(
         parent=parent,
         on_status_message=on_status_message,
-        on_entries_changed=on_watched_entries_changed,
-    )
-    analytics_view = AnalyticsView(
-        watched_tab_view.entries,
-        entries_provider=lambda: watched_tab_view.entries,
     )
     registry.register(ShellTabSpec("watched", "Моё", watched_tab_view))
 
@@ -107,13 +97,18 @@ def build_main_tabs(
     )
     registry.register(ShellTabSpec("filters", "Фильтры", candidate_filters_view))
     registry.register(ShellTabSpec("candidates", "Кандидаты", candidate_list_view))
-    registry.register(ShellTabSpec("analytics", "Информация", analytics_view))
+
+    settings_tab_view = SettingsTabView(
+        parent=parent,
+        on_status_message=on_status_message,
+    )
+    registry.register(ShellTabSpec("settings", "Настройки", settings_tab_view))
 
     tabs.currentChanged.connect(registry.on_current_changed)
 
     context = AppTabsContext(
         watched_tab_view=watched_tab_view,
-        analytics_view=analytics_view,
+        settings_tab_view=settings_tab_view,
         candidate_session=candidate_session,
     )
     return registry, context

@@ -683,7 +683,8 @@ def test_build_detail_info_pill_labels_keeps_only_genres() -> None:
 
 
 def test_build_main_info_items_formats_type_and_country_only() -> None:
-    from desktop.watched import build_main_info_items
+    import desktop.settings.app_settings  # noqa: F401
+    from desktop.shared.detail.main_info import build_main_info_items
 
     assert build_main_info_items(
         {
@@ -699,6 +700,8 @@ def test_build_main_info_items_formats_type_and_country_only() -> None:
     ) == [
         {"label": "Тип", "value": "Сериал"},
         {"label": "Страна", "value": "Россия"},
+        {"label": "Где смотреть", "value": "нет данных"},
+        {"label": "Голоса TMDb", "value": "3 456"},
     ]
 
 
@@ -730,6 +733,7 @@ def test_build_main_info_items_hides_empty_votes_and_defaults_type() -> None:
 
     assert build_main_info_items({"imdb_votes": None, "kp_votes": 0}) == [
         {"label": "Тип", "value": "Неизвестно"},
+        {"label": "Где смотреть", "value": "нет данных"},
     ]
 
 
@@ -746,10 +750,8 @@ def test_build_additional_info_items_formats_tmdb_fields() -> None:
             "tmdb_votes": 3456,
         }
     ) == [
-        {"label": "Где смотреть", "value": "Kinopoisk, Okko"},
         {"label": "Статус", "value": "Завершен"},
         {"label": "Длительность серии", "value": "52 мин"},
-        {"label": "Голоса TMDb", "value": "3 456"},
     ]
 
 
@@ -1817,9 +1819,10 @@ def test_detail_main_info_panel_renders_known_rows(qapp) -> None:
     assert header is not None
     assert header.text() == "ОСНОВНАЯ ИНФОРМАЦИЯ"
     assert panel is not None
-    assert labels == ["Тип", "Страна"]
+    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
     assert "Сериал" in values
     assert "США" in values
+    assert "12 850" in values
 
 
 def test_detail_title_meta_renders_year_and_seasons_under_title(qapp) -> None:
@@ -1892,8 +1895,8 @@ def test_detail_additional_info_panel_renders_known_rows(qapp) -> None:
     assert section.isHidden() is False
     assert header is not None
     assert header.text() == "ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ"
-    assert labels == ["Где смотреть", "Статус", "Длительность серии", "Голоса TMDb"]
-    assert values == ["Kinopoisk", "Завершен", "52 мин", "12 850"]
+    assert labels == ["Статус", "Длительность серии"]
+    assert values == ["Завершен", "52 мин"]
 
 
 def test_detail_additional_info_section_has_top_gap(qapp) -> None:
@@ -1962,6 +1965,7 @@ def test_watched_detail_card_does_not_render_my_score_ring() -> None:
 
     assert 'score_summary_widget.setObjectName("detailScoreSummaryRow")' in init_source
     assert 'self._final_score_stars_block.setObjectName("detailFinalScoreStars")' in init_source
+    assert 'self._final_score_stars_lane.setObjectName("detailFinalScoreStarsLane")' in init_source
     assert 'RatingCircleIndicator("моя"' not in init_source
     assert "self._metrics_row.addWidget(self._score_indicator" not in init_source
     assert "StarRatingIndicator(" in init_source
@@ -2007,6 +2011,62 @@ def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
     assert getattr(tmdb_ring, "_display_value") == "7.4"
     assert getattr(tmdb_ring, "_ring_progress") == 0.74
     assert not any(getattr(child, "_display_label", "") == "моя" for child in score_row.findChildren(QWidget))
+
+
+def test_final_score_stars_are_centered_between_tmdb_ring_and_main_info(qapp) -> None:
+    import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
+    from PyQt6.QtCore import QPoint
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    frame = detail.widget
+    frame.show()
+    frame.resize(1200, 800)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "tmdb_score": 7.8,
+                "final_score": 0.78,
+                "country": "RU",
+                "object_type": "series",
+                "genres": ["Thriller"],
+            },
+        )
+    )
+    qapp.processEvents()
+
+    hero = detail.widget
+    ring = hero.findChild(QWidget, "detailTmdbRingSlot")
+    stars = hero.findChild(QWidget, "detailFinalScoreStars")
+    main_info = hero.findChild(QWidget, "detailMainInfoSection")
+
+    assert ring is not None
+    assert stars is not None
+    assert main_info is not None
+
+    def right_edge(widget: QWidget) -> int:
+        top_right = widget.mapTo(hero, QPoint(widget.width(), 0))
+        return top_right.x()
+
+    def left_edge(widget: QWidget) -> int:
+        return widget.mapTo(hero, QPoint(0, 0)).x()
+
+    ring_right = right_edge(ring)
+    main_right = right_edge(main_info)
+    stars_left = left_edge(stars)
+    stars_right = right_edge(stars)
+    corridor = main_right - ring_right
+    stars_center = (stars_left + stars_right) / 2
+    target_center = ring_right + corridor / 2
+
+    assert corridor > stars.width()
+    assert abs(stars_center - target_center) <= 2.0
 
 
 def test_candidate_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
@@ -3083,6 +3143,7 @@ def test_build_candidate_readonly_card_ignores_tmdb_scripted_type(monkeypatch) -
 
 
 def test_candidate_filters_view_empty_pool_summary(monkeypatch, qapp) -> None:
+    import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
     from desktop.candidates.filters_view import CandidateFiltersView
     from desktop.candidates.session import CandidateSearchSession
 
@@ -3114,6 +3175,7 @@ def test_format_pool_stats_user_uses_plain_language() -> None:
 
 
 def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch, qapp) -> None:
+    import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
     from config import constant
     from desktop.candidates.filters_view import CANDIDATE_YEAR_MIN, CandidateFiltersView
     from desktop.candidates.session import CandidateSearchSession
@@ -3316,6 +3378,7 @@ def test_chip_selectors_handle_empty_options(qapp) -> None:
 
 
 def test_candidate_filters_view_numeric_threshold_sliders_collect_values(monkeypatch, qapp) -> None:
+    import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
     from desktop.candidates.filters_view import (
         SCORE_SLIDER_MAX,
         VOTES_SLIDER_MAX_INDEX,
@@ -3387,11 +3450,12 @@ def test_watched_window_includes_candidate_tabs() -> None:
     assert "WatchedTabView" in factory_source
     assert "CandidateFiltersView" in factory_source
     assert "CandidateListView" in factory_source
-    assert "AnalyticsView" in factory_source
+    assert "SettingsTabView" in factory_source
     assert '"Фильтры"' in factory_source
     assert '"Кандидаты"' in factory_source
     assert '"Моё"' in factory_source
-    assert '"Информация"' in factory_source
+    assert '"Настройки"' in factory_source
+    assert '"Информация"' not in factory_source
     assert '"Watched"' not in factory_source
     assert '"Analytics"' not in factory_source
     assert '"Search"' not in factory_source
@@ -3400,7 +3464,6 @@ def test_watched_window_includes_candidate_tabs() -> None:
     assert "_tab_registry.register" not in init_source
     assert "registry.register" in factory_source
     assert "registry.focus" in factory_source
-    assert "on_watched_entries_changed" in factory_source
 
 
 def test_analytics_view_hides_removed_imdb_sections() -> None:

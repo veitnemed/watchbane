@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from candidates.models import country_schema
-from desktop.shared.detail.additional_info import format_seasons_episodes
+from desktop.shared.detail.additional_info import format_seasons_episodes, format_watch_providers
 from desktop.shared.detail.presenters import format_year_display
 
 
 UNKNOWN_OBJECT_TYPE = "Неизвестно"
+NO_DATA_LABEL = "нет данных"
 
 
 def _clean_text(value) -> str | None:
@@ -71,6 +72,13 @@ def build_main_info_items(card: dict) -> list[dict[str, str]]:
             country_schema.normalize_country_filter_list(country)
         ) or country
         items.append({"label": "Страна", "value": country})
+
+    providers = format_watch_providers(card.get("watch_providers") or card.get("watch_providers_ru"))
+    items.append({"label": "Где смотреть", "value": providers or NO_DATA_LABEL})
+
+    tmdb_votes = format_votes_display(card.get("tmdb_votes"))
+    if tmdb_votes is not None:
+        items.append({"label": "Голоса TMDb", "value": tmdb_votes})
 
     return items
 

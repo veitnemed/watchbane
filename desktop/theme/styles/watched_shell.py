@@ -20,11 +20,12 @@ QLineEdit#watchedSearch {{
 QPushButton#watchedAddTitle {{
     background-color: {COLOR_ADD_BUTTON};
     border: 1px solid {COLOR_ADD_BUTTON_BORDER};
-    border-radius: {px(RADIUS_BUTTON)}px;
+    border-radius: {control_px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_BASE)}px;
+    font-size: {font_px(FONT_SECTION)}px;
     font-weight: 600;
-    padding: {px(12)}px {px(14)}px;
+    padding: {control_px(BUTTON_PADDING_Y)}px {control_px(BUTTON_PADDING_X)}px;
+    min-height: {control_px(40)}px;
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
         stop:0 {COLOR_ADD_BUTTON_TOP},

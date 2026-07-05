@@ -105,9 +105,10 @@ This document defines the strict visual and layout contract for the cinematic de
 - Main info header text is `ОСНОВНАЯ ИНФОРМАЦИЯ`.
 - Main info is rendered as a rounded glass panel.
 - Rows use `label/value` structure.
-- Main info contains type and country.
+- Main info contains type, country, watch providers, and TMDb votes.
 - Year and seasons/episodes are title meta, not main-info rows.
-- TMDb votes live in additional info, not main info.
+- Watch providers always render in main info; use `нет данных` when absent.
+- TMDb votes render in main info when positive.
 - Main info must not be clipped after title wraps.
 - Main info must not be clipped after chips wrap.
 - Main info must not depend on poster height.
@@ -126,7 +127,7 @@ This document defines the strict visual and layout contract for the cinematic de
 
 - Additional info header text is `ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ`.
 - Additional info uses the same panel/grid system as main info.
-- Rows may include watch providers, status, episode runtime and TMDb votes.
+- Rows may include status and episode runtime.
 - Empty optional values should not create blank rows.
 - Additional info must have a visible top gap from overview content.
 

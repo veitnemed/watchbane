@@ -311,7 +311,7 @@ def test_candidate_detail_card_profile_scales_with_ui_scale(qapp) -> None:
 
 
 def test_settings_dialog_displays_current_scale(monkeypatch, tmp_path, qapp) -> None:
-    from PyQt6.QtWidgets import QComboBox
+    from PyQt6.QtWidgets import QLabel, QSlider
 
     from desktop.settings.dialog import SettingsDialog
 
@@ -319,26 +319,29 @@ def test_settings_dialog_displays_current_scale(monkeypatch, tmp_path, qapp) -> 
     save_app_settings(AppSettings(ui_scale=1.25))
 
     dialog = SettingsDialog()
-    combo = dialog.findChild(QComboBox, "uiScaleComboBox")
+    slider = dialog.findChild(QSlider, "uiScaleSlider")
+    value_label = dialog.findChild(QLabel, "uiScaleValueLabel")
 
-    assert combo is not None
-    assert combo.currentText() == "125%"
+    assert slider is not None
+    assert slider.value() == 125
+    assert value_label is not None
+    assert value_label.text() == "125%"
 
 
 def test_settings_dialog_selecting_125_saves_ui_scale(monkeypatch, tmp_path, qapp) -> None:
-    from PyQt6.QtWidgets import QComboBox, QLabel, QPushButton
+    from PyQt6.QtWidgets import QLabel, QPushButton, QSlider
 
     from desktop.settings.dialog import SettingsDialog, UI_SCALE_RESTART_MESSAGE
 
     _use_settings_path(monkeypatch, tmp_path)
     dialog = SettingsDialog()
-    combo = dialog.findChild(QComboBox, "uiScaleComboBox")
+    slider = dialog.findChild(QSlider, "uiScaleSlider")
     save_button = dialog.findChild(QPushButton, "saveSettingsButton")
     message_label = dialog.findChild(QLabel, "settingsRestartMessage")
     messages = []
     dialog.settingsSaved.connect(messages.append)
 
-    combo.setCurrentText("125%")
+    slider.setValue(125)
     save_button.click()
 
     assert load_app_settings().ui_scale == 1.25
@@ -348,24 +351,42 @@ def test_settings_dialog_selecting_125_saves_ui_scale(monkeypatch, tmp_path, qap
 
 
 def test_settings_dialog_reset_prepares_and_saves_default_scale(monkeypatch, tmp_path, qapp) -> None:
-    from PyQt6.QtWidgets import QComboBox, QPushButton
+    from PyQt6.QtWidgets import QPushButton, QSlider
 
     from desktop.settings.dialog import SettingsDialog
 
     _use_settings_path(monkeypatch, tmp_path)
     save_app_settings(AppSettings(ui_scale=1.35))
     dialog = SettingsDialog()
-    combo = dialog.findChild(QComboBox, "uiScaleComboBox")
+    slider = dialog.findChild(QSlider, "uiScaleSlider")
     reset_button = dialog.findChild(QPushButton, "resetUiScaleButton")
     save_button = dialog.findChild(QPushButton, "saveSettingsButton")
 
     reset_button.click()
 
-    assert combo.currentText() == "100%"
+    assert slider.value() == 100
 
     save_button.click()
 
     assert load_app_settings().ui_scale == 1.0
+
+
+def test_settings_tab_uses_slider_scale_control() -> None:
+    import inspect
+
+    import desktop.settings.tab_view as tab_module
+    import desktop.shell.tabs as tabs_module
+
+    tab_source = inspect.getsource(tab_module.SettingsTabView)
+    factory_source = inspect.getsource(tabs_module.build_main_tabs)
+
+    assert "UiScaleControlPanel" in tab_source
+    assert "uiScaleSlider" not in tab_source
+    assert '"Настройки"' in factory_source
+    assert "SettingsTabView" in factory_source
+    assert '"Информация"' not in factory_source
+    assert "AnalyticsView" not in factory_source
+    assert "on_watched_entries_changed" not in factory_source
 
 
 def test_startup_scale_diagnostics_handles_missing_screen(monkeypatch) -> None:
@@ -458,3 +479,19 @@ def test_ui_scale_125_updates_analytics_chart_height() -> None:
     charts = importlib.reload(charts)
 
     assert charts.CHART_BASE_HEIGHT == 350
+
+
+def test_shell_tabs_and_add_title_use_control_scaled_typography() -> None:
+    import desktop.theme.scaling as scaling
+    from desktop.theme.styles.shell import build_shell_style
+    from desktop.theme.styles.watched_shell import build_watched_shell_style
+    from desktop.theme.tokens import FONT_BASE, FONT_SECTION
+
+    scaling.set_ui_scale(0.83)
+    shell_style = build_shell_style()
+    watched_style = build_watched_shell_style()
+
+    assert f"font-size: {scaling.font_px(FONT_BASE)}px" in shell_style
+    assert f"min-height: {scaling.control_px(34)}px" in shell_style
+    assert f"font-size: {scaling.font_px(FONT_SECTION)}px" in watched_style
+    assert f"min-height: {scaling.control_px(40)}px" in watched_style

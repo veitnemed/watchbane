@@ -225,7 +225,8 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._score_summary_widget = score_summary_widget
         self._score_summary_row = QHBoxLayout(score_summary_widget)
         self._score_summary_row.setContentsMargins(0, 0, 0, 0)
-        self._score_summary_row.setSpacing(self._profile.detail_stars_left_gap)
+        self._score_summary_row.setSpacing(0)
+        score_summary_widget.setMaximumWidth(self._profile.detail_section_max_width)
 
         self._score_indicator = None
 
@@ -241,11 +242,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._tmdb_ring_layout.setContentsMargins(0, 0, 0, 0)
         self._tmdb_ring_layout.setSpacing(RATING_META_PILLS_SPACING)
 
-        final_stars_width = (
-            5 * self._profile.detail_star_size
-            + 4 * self._profile.detail_star_gap
-            + self._profile.detail_small_spacing
-        )
+        final_stars_width = 5 * self._profile.detail_star_size + 4 * self._profile.detail_star_gap
         self._final_score_stars_block = QWidget()
         self._final_score_stars_block.setObjectName("detailFinalScoreStars")
         self._final_score_stars_block.setStyleSheet(TRANSPARENT_STYLE)
@@ -268,15 +265,32 @@ class WatchedDetailCard(DetailCardPosterMixin):
             alignment=Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
         )
 
+        self._final_score_stars_lane = QWidget()
+        self._final_score_stars_lane.setObjectName("detailFinalScoreStarsLane")
+        self._final_score_stars_lane.setStyleSheet(TRANSPARENT_STYLE)
+        self._final_score_stars_lane.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Minimum,
+        )
+        self._final_score_stars_lane_layout = QHBoxLayout(self._final_score_stars_lane)
+        self._final_score_stars_lane_layout.setContentsMargins(0, 0, 0, 0)
+        self._final_score_stars_lane_layout.setSpacing(0)
+        self._final_score_stars_lane_layout.addStretch(1)
+        self._final_score_stars_lane_layout.addWidget(
+            self._final_score_stars_block,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
+        )
+        self._final_score_stars_lane_layout.addStretch(1)
+
         self._score_summary_row.addWidget(
             self._tmdb_ring_slot,
             alignment=Qt.AlignmentFlag.AlignVCenter,
         )
         self._score_summary_row.addWidget(
-            self._final_score_stars_block,
+            self._final_score_stars_lane,
+            stretch=1,
             alignment=Qt.AlignmentFlag.AlignVCenter,
         )
-        self._score_summary_row.addStretch(1)
         if self._profile.show_mark_watched_button:
             self._mark_watched_button = QPushButton()
             self._mark_watched_button.setObjectName("candidateMarkWatchedButton")
@@ -659,6 +673,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
         else:
             self._rating_stars_widget.set_stars(None)
         self._final_score_stars_block.setVisible(has_final_stars)
+        self._final_score_stars_lane.setVisible(has_final_stars)
         self._score_summary_widget.setVisible(self._score_summary_should_show(has_tmdb_ring, has_final_stars))
 
     def _set_user_score_badge(self, badge: dict | None) -> None:
