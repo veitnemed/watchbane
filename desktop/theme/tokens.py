@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from desktop.theme.scaling import scale_font, scale_px
+from desktop.theme.scaling import (
+    control_px as _control_px,
+    detail_px as _detail_px,
+    font_px as _font_px,
+    layout_px as _layout_px,
+    list_px as _list_px,
+    poster_px as _poster_px,
+)
 
 
 # Colors
@@ -204,12 +211,37 @@ TRANSPARENT_STYLE = "background: transparent;"
 
 def px(value: int | float) -> int:
     """Scale a visual geometry token for QSS or widget layout."""
-    return scale_px(value)
+    return layout_px(value)
+
+
+def layout_px(value: int | float) -> int:
+    """Scale app layout geometry."""
+    return _layout_px(value)
+
+
+def control_px(value: int | float) -> int:
+    """Scale interactive controls, inputs, tabs and chips."""
+    return _control_px(value)
+
+
+def list_px(value: int | float) -> int:
+    """Scale list geometry."""
+    return _list_px(value)
+
+
+def detail_px(value: int | float) -> int:
+    """Scale detail-card geometry."""
+    return _detail_px(value)
+
+
+def poster_px(value: int | float) -> int:
+    """Scale poster geometry."""
+    return _poster_px(value)
 
 
 def font_px(value: int | float) -> int:
     """Scale a visual font token for QSS or QFont."""
-    return scale_font(value)
+    return _font_px(value)
 
 __all__ = [
     "COLOR_BG",
@@ -373,5 +405,10 @@ __all__ = [
     "DETAIL_SECTION_MAX_WIDTH",
     "TRANSPARENT_STYLE",
     "px",
+    "layout_px",
+    "control_px",
+    "list_px",
+    "detail_px",
+    "poster_px",
     "font_px",
 ]

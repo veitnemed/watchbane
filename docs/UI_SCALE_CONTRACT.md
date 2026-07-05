@@ -60,6 +60,7 @@ Presets:
 ## Architecture
 
 - All scaling goes through `desktop/theme/scaling.py`.
+- Local channel tuning lives in `desktop/theme/ui_tuning.py`; see [ui-scaling.md](ui-scaling.md).
 - Visual constants stay in `desktop/theme/tokens.py` and layout profiles.
 - Runtime widgets must not apply their own random multipliers.
 - The persisted setting is stored as Watchbane application state, not as a Qt global DPR override.

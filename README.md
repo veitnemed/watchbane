@@ -125,6 +125,7 @@ Desktop interface scale:
 - available scale range is `50%` to `200%`;
 - this is separate from Windows display scaling / OS DPI;
 - scale changes require restarting the desktop app;
+- local component tuning is documented in [UI scaling](docs/ui-scaling.md);
 - `QT_SCALE_FACTOR` is a Qt testing/debug override and is not recommended for normal Watchbane use.
 
 Public setup for candidate discovery requires only `TMDB_TOKEN` in the environment, `.env.local`, or `tmdb.env`.

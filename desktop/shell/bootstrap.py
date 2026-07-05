@@ -2,16 +2,24 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+import os
 import sys
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication
 
-from desktop.settings import load_app_settings
+from desktop.settings import APP_UI_SCALE_ENV, AppSettings, get_persisted_ui_scale, load_app_settings
 from desktop.shell.app_icon import apply_app_icon
 from desktop.theme import FONT_FAMILY
-from desktop.theme.scaling import get_ui_scale, scale_font, set_ui_scale
+from desktop.theme.scaling import (
+    font_px,
+    get_channel_scale,
+    get_ui_scale,
+    set_ui_scale,
+)
+from desktop.theme.ui_tuning import get_scale_tuning
 from diagnostics.gui_event_log import log_event, log_exception, start_gui_event_log_if_enabled
 from storage.runtime import ensure_runtime_data_layout
 
@@ -39,7 +47,8 @@ def _geometry_diagnostics(geometry) -> dict[str, int] | None:
 def log_startup_scale_diagnostics(
     app: QApplication,
     *,
-    persisted_ui_scale: float,
+    persisted_settings: AppSettings,
+    active_ui_scale: float,
     requested_initial_size: tuple[int, int],
 ) -> None:
     """Log lightweight scale/DPI diagnostics for GUI sessions."""
@@ -55,8 +64,18 @@ def log_startup_scale_diagnostics(
 
     log_event(
         "app.ui_scale.diagnostics",
-        persisted_ui_scale=persisted_ui_scale,
+        persisted_ui_scale=persisted_settings.ui_scale,
+        persisted_scale_settings=asdict(persisted_settings),
+        active_process_ui_scale=active_ui_scale,
         active_ui_scale=get_ui_scale(),
+        scale_tuning=get_scale_tuning(),
+        effective_scales={
+            channel: get_channel_scale(channel)
+            for channel in ("ui", "font", "layout", "control", "list", "detail", "poster")
+        },
+        scale_env_overrides={"ui_scale": APP_UI_SCALE_ENV}
+        if os.environ.get(APP_UI_SCALE_ENV) not in (None, "")
+        else {},
         app_font_family=font.family(),
         app_font_point_size=font.pointSize(),
         primary_screen_logical_dpi=logical_dpi,
@@ -72,21 +91,23 @@ def log_startup_scale_diagnostics(
 def main() -> None:
     _prepare_webengine()
     ensure_runtime_data_layout()
-    settings = load_app_settings()
-    set_ui_scale(settings.ui_scale)
+    persisted_settings = load_app_settings()
+    active_ui_scale = get_persisted_ui_scale()
+    set_ui_scale(active_ui_scale)
     log_path = start_gui_event_log_if_enabled()
     if log_path is not None:
         log_event("app.bootstrap.runtime_ready", log_path=str(log_path))
     app = QApplication(sys.argv)
     apply_app_icon(app)
-    app.setFont(QFont(FONT_FAMILY, scale_font(10)))
+    app.setFont(QFont(FONT_FAMILY, font_px(10)))
     try:
         from desktop.shell.main_window import WatchedMoviesWindow, scaled_main_window_size
 
         requested_initial_size = scaled_main_window_size()
         log_startup_scale_diagnostics(
             app,
-            persisted_ui_scale=settings.ui_scale,
+            persisted_settings=persisted_settings,
+            active_ui_scale=active_ui_scale,
             requested_initial_size=requested_initial_size,
         )
         window = WatchedMoviesWindow(initial_size=requested_initial_size)

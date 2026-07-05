@@ -10,7 +10,7 @@ def build_detail_card_style() -> str:
 QFrame#detailCard {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {px(RADIUS_CARD_LARGE)}px;
+    border-radius: {detail_px(RADIUS_CARD_LARGE)}px;
 }}
 QFrame#detailHeroCard {{
     background-color: qlineargradient(
@@ -20,26 +20,26 @@ QFrame#detailHeroCard {{
         stop: 1 {COLOR_DETAIL_HERO_BG_END}
     );
     border: 1px solid {COLOR_DETAIL_HERO_BORDER};
-    border-radius: {px(DETAIL_HERO_CARD_RADIUS)}px;
+    border-radius: {detail_px(DETAIL_HERO_CARD_RADIUS)}px;
 }}
 QWidget#detailContentContainer {{
     background: transparent;
 }}
 QFrame#detailPosterShell {{
     background-color: {COLOR_SCORE_BADGE_BG};
-    border: {px(DETAIL_POSTER_BORDER_WIDTH)}px solid {COLOR_BORDER_HOVER};
-    border-radius: {px(DETAIL_POSTER_RADIUS)}px;
+    border: {poster_px(DETAIL_POSTER_BORDER_WIDTH)}px solid {COLOR_BORDER_HOVER};
+    border-radius: {poster_px(DETAIL_POSTER_RADIUS)}px;
 }}
 QLabel#detailUserScoreBadge {{
     background-color: {COLOR_SCORE_BADGE_BG};
     border: 1px solid {COLOR_RATING};
-    border-radius: {px(DETAIL_USER_SCORE_BADGE_RADIUS)}px;
+    border-radius: {detail_px(DETAIL_USER_SCORE_BADGE_RADIUS)}px;
     color: {COLOR_RATING};
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 700;
-    padding: 0 {px(DETAIL_USER_SCORE_BADGE_PADDING_X)}px;
-    min-height: {px(DETAIL_USER_SCORE_BADGE_HEIGHT)}px;
-    min-width: {px(DETAIL_USER_SCORE_BADGE_MIN_WIDTH)}px;
+    padding: 0 {detail_px(DETAIL_USER_SCORE_BADGE_PADDING_X)}px;
+    min-height: {detail_px(DETAIL_USER_SCORE_BADGE_HEIGHT)}px;
+    min-width: {detail_px(DETAIL_USER_SCORE_BADGE_MIN_WIDTH)}px;
 }}
 QLabel#detailTitle {{
     background: transparent;
@@ -63,12 +63,12 @@ QPushButton#candidateMarkWatchedButton,
 QPushButton#candidateHideButton {{
     background-color: {COLOR_DETAIL_ACTION_BG};
     border: 1px solid {COLOR_DETAIL_HERO_BORDER};
-    border-radius: {px(18)}px;
+    border-radius: {detail_px(18)}px;
     padding: 0;
-    min-width: {px(36)}px;
-    max-width: {px(36)}px;
-    min-height: {px(36)}px;
-    max-height: {px(36)}px;
+    min-width: {detail_px(36)}px;
+    max-width: {detail_px(36)}px;
+    min-height: {detail_px(36)}px;
+    max-height: {detail_px(36)}px;
 }}
 QPushButton#candidateMarkWatchedButton:hover,
 QPushButton#candidateHideButton:hover {{
@@ -83,8 +83,8 @@ QPushButton#candidateHideButton:disabled {{
 QLabel#genrePill {{
     background-color: {COLOR_DETAIL_CHIP_BG};
     border: 1px solid {COLOR_DETAIL_CHIP_BORDER};
-    border-radius: {px(DETAIL_CHIP_RADIUS)}px;
-    padding: 0 {px(12)}px;
+    border-radius: {detail_px(DETAIL_CHIP_RADIUS)}px;
+    padding: 0 {detail_px(12)}px;
     color: {COLOR_TEXT_CHIP};
     font-size: {font_px(FONT_BASE)}px;
 }}
@@ -98,14 +98,14 @@ QFrame#detailMainInfoPanel,
 QFrame#detailAdditionalInfoPanel {{
     background-color: {COLOR_DETAIL_GLASS};
     border: 1px solid {COLOR_DETAIL_HERO_BORDER_SOFT};
-    border-radius: {px(DETAIL_MAIN_INFO_PANEL_RADIUS)}px;
+    border-radius: {detail_px(DETAIL_MAIN_INFO_PANEL_RADIUS)}px;
 }}
 QFrame#mainInfoDivider,
 QFrame#detailMainInfoHeaderDivider,
 QFrame#detailAdditionalInfoHeaderDivider {{
     background-color: {COLOR_DETAIL_SECTION_DIVIDER};
-    min-height: {px(1)}px;
-    max-height: {px(1)}px;
+    min-height: {detail_px(1)}px;
+    max-height: {detail_px(1)}px;
     border: none;
 }}
 QLabel#mainInfoTitle,
@@ -142,8 +142,8 @@ QFrame#detailOverviewSection {{
 QFrame#overviewDivider,
 QFrame#detailOverviewDivider {{
     background-color: {COLOR_DETAIL_SECTION_DIVIDER};
-    min-height: {px(1)}px;
-    max-height: {px(1)}px;
+    min-height: {detail_px(1)}px;
+    max-height: {detail_px(1)}px;
     border: none;
 }}
 QLabel#overviewTitle,
@@ -170,7 +170,7 @@ def build_poster_placeholder_style() -> str:
     """Return the poster placeholder stylesheet."""
     return (
         f"background-color: {COLOR_SCORE_BADGE_BG}; border: none; "
-        f"border-radius: {px(max(0, DETAIL_POSTER_RADIUS - DETAIL_POSTER_BORDER_WIDTH))}px; "
+        f"border-radius: {poster_px(max(0, DETAIL_POSTER_RADIUS - DETAIL_POSTER_BORDER_WIDTH))}px; "
         f"color: {COLOR_TEXT_MUTED};"
     )
 
@@ -179,15 +179,15 @@ def build_poster_image_style() -> str:
     """Return the poster image stylesheet."""
     return (
         "background: transparent; "
-        f"border-radius: {px(max(0, DETAIL_POSTER_RADIUS - DETAIL_POSTER_BORDER_WIDTH))}px;"
+        f"border-radius: {poster_px(max(0, DETAIL_POSTER_RADIUS - DETAIL_POSTER_BORDER_WIDTH))}px;"
     )
 
 
 def build_bar_track_style() -> str:
     """Return the fallback analytics bar track stylesheet."""
-    return f"background-color: {COLOR_CARD_ALT}; border-radius: {px(RADIUS_BAR)}px;"
+    return f"background-color: {COLOR_CARD_ALT}; border-radius: {detail_px(RADIUS_BAR)}px;"
 
 
 def build_bar_fill_style() -> str:
     """Return the fallback analytics bar fill stylesheet."""
-    return f"background-color: {COLOR_ACCENT}; border-radius: {px(RADIUS_BAR)}px;"
+    return f"background-color: {COLOR_ACCENT}; border-radius: {detail_px(RADIUS_BAR)}px;"

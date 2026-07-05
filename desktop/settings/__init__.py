@@ -2,6 +2,7 @@
 
 from desktop.settings.app_settings import (
     APP_UI_SCALE_DEFAULT,
+    APP_UI_SCALE_ENV,
     APP_UI_SCALE_MAX,
     APP_UI_SCALE_MIN,
     APP_UI_SCALE_PRESETS,
@@ -15,6 +16,7 @@ from desktop.settings.dialog import SettingsDialog, UI_SCALE_OPTIONS, UI_SCALE_R
 
 __all__ = [
     "APP_UI_SCALE_DEFAULT",
+    "APP_UI_SCALE_ENV",
     "APP_UI_SCALE_MAX",
     "APP_UI_SCALE_MIN",
     "APP_UI_SCALE_PRESETS",

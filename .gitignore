@@ -21,6 +21,7 @@ tmdb.env
 recovered_edit_dataset.csv
 *.xlsx
 api_token.py
+desktop/theme/local_ui_tuning.py
 .browser_profiles/
 data/cache/
 data/watched/*.json*

@@ -1,0 +1,8 @@
+SCALE_TUNING_OVERRIDES = {
+    "font": 1.00,
+    "layout": 1.00,
+    "control": 1.00,
+    "list": 1.00,
+    "detail": 1.00,
+    "poster": 1.00,
+}
