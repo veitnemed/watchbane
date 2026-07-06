@@ -6,7 +6,6 @@ from desktop.shared.detail.action_icons import make_detail_action_icon
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.card_pills import clear_layout, fill_detail_chip_rows, make_meta_pill
 from desktop.shared.detail.card_poster import DetailCardPosterMixin
-from desktop.shared.detail.additional_info import build_additional_info_items
 from desktop.shared.detail.main_info import build_main_info_items, build_title_meta_text
 from desktop.shared.detail.posters import resolve_local_poster_path
 from desktop.shared.detail.presenters import (
@@ -87,7 +86,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
         root = QVBoxLayout(self._frame)
         root.setContentsMargins(
             self._profile.detail_hero_card_padding,
-            self._profile.detail_hero_card_padding,
+            self._profile.detail_hero_card_padding_top,
             self._profile.detail_hero_card_padding,
             self._profile.detail_hero_card_padding,
         )
@@ -343,7 +342,6 @@ class WatchedDetailCard(DetailCardPosterMixin):
         )
         title_row.addWidget(self._title_label, stretch=1)
         poster_column.addWidget(self._poster_actions_widget)
-        poster_column.addStretch(1)
 
         self._genre_section = QWidget()
         self._genre_section.setObjectName("detailChipsContainer")
@@ -359,7 +357,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._main_info_section.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
         main_info_layout = QVBoxLayout(self._main_info_section)
         main_info_layout.setContentsMargins(0, 0, 0, 0)
-        main_info_layout.setSpacing(self._profile.detail_column_spacing)
+        main_info_layout.setSpacing(self._profile.detail_main_info_header_panel_gap)
 
         self._main_info_header_widget = QWidget()
         self._main_info_header_widget.setStyleSheet(TRANSPARENT_STYLE)
@@ -396,7 +394,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
             main_info_padding_y,
         )
         self._main_info_grid.setHorizontalSpacing(self._profile.detail_chip_col_gap)
-        self._main_info_grid.setVerticalSpacing(0)
+        self._main_info_grid.setVerticalSpacing(self._profile.detail_main_info_row_gap)
         self._main_info_grid.setColumnStretch(0, 0)
         self._main_info_grid.setColumnStretch(1, 1)
 
@@ -433,54 +431,17 @@ class WatchedDetailCard(DetailCardPosterMixin):
         overview_layout.addWidget(self._overview_title_label)
         overview_layout.addSpacing(self._profile.detail_overview_text_top_gap)
         overview_layout.addWidget(self._overview_label)
+        self._overview_frame.hide()
 
-        self._additional_info_section = QWidget()
-        self._additional_info_section.setObjectName("detailAdditionalInfoSection")
-        self._additional_info_section.setStyleSheet(TRANSPARENT_STYLE)
-        self._additional_info_section.setMaximumWidth(self._profile.detail_section_max_width)
-        self._additional_info_section.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        additional_info_layout = QVBoxLayout(self._additional_info_section)
-        additional_info_layout.setContentsMargins(0, self._profile.detail_additional_info_top_gap, 0, 0)
-        additional_info_layout.setSpacing(self._profile.detail_column_spacing)
-
-        self._additional_info_header_widget = QWidget()
-        self._additional_info_header_widget.setStyleSheet(TRANSPARENT_STYLE)
-        additional_info_header_layout = QHBoxLayout(self._additional_info_header_widget)
-        additional_info_header_layout.setContentsMargins(0, 0, 0, 0)
-        additional_info_header_layout.setSpacing(self._profile.detail_column_spacing)
-
-        self._additional_info_divider = QFrame()
-        self._additional_info_divider.setObjectName("detailAdditionalInfoHeaderDivider")
-        self._additional_info_divider.setFrameShape(QFrame.Shape.HLine)
-        self._additional_info_divider.setFixedHeight(self._profile.detail_divider_height)
-        self._additional_info_divider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-
-        self._additional_info_title_label = QLabel("ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ")
-        self._additional_info_title_label.setObjectName("detailAdditionalInfoHeader")
-        self._additional_info_title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-
-        additional_info_header_layout.addWidget(self._additional_info_title_label)
-        additional_info_header_layout.addWidget(self._additional_info_divider, stretch=1)
-
-        self._additional_info_panel = QFrame()
-        self._additional_info_panel.setObjectName("detailAdditionalInfoPanel")
-        self._additional_info_panel.setFrameShape(QFrame.Shape.NoFrame)
-        self._additional_info_panel.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        self._additional_info_grid = QGridLayout(self._additional_info_panel)
-        self._additional_info_grid.setContentsMargins(
-            self._profile.detail_main_info_panel_padding_x,
-            main_info_padding_y,
-            self._profile.detail_main_info_panel_padding_x,
-            main_info_padding_y,
-        )
-        self._additional_info_grid.setHorizontalSpacing(self._profile.detail_chip_col_gap)
-        self._additional_info_grid.setVerticalSpacing(0)
-        self._additional_info_grid.setColumnStretch(0, 0)
-        self._additional_info_grid.setColumnStretch(1, 1)
-
-        additional_info_layout.addWidget(self._additional_info_header_widget)
-        additional_info_layout.addWidget(self._additional_info_panel)
-        self._additional_info_section.hide()
+        self._overview_gap_widget = QWidget()
+        self._overview_gap_widget.setObjectName("detailOverviewTopGap")
+        self._overview_gap_widget.setStyleSheet(TRANSPARENT_STYLE)
+        self._overview_gap_widget.setFixedHeight(self._profile.detail_overview_top_gap)
+        self._overview_gap_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self._overview_gap_widget.hide()
+        poster_column.addWidget(self._overview_gap_widget)
+        poster_column.addWidget(self._overview_frame, alignment=Qt.AlignmentFlag.AlignLeft)
+        poster_column.addStretch(1)
 
         info_column.addWidget(self._title_block_widget)
         info_column.addSpacing(self._profile.detail_title_chips_gap)
@@ -493,9 +454,6 @@ class WatchedDetailCard(DetailCardPosterMixin):
         top_row.addWidget(self._poster_column_widget, alignment=Qt.AlignmentFlag.AlignTop)
         top_row.addWidget(self._info_column_widget, stretch=1, alignment=Qt.AlignmentFlag.AlignTop)
         content_layout.addWidget(self._top_row_widget)
-        content_layout.addSpacing(self._profile.detail_overview_top_gap)
-        content_layout.addWidget(self._overview_frame, alignment=Qt.AlignmentFlag.AlignLeft)
-        content_layout.addWidget(self._additional_info_section, alignment=Qt.AlignmentFlag.AlignLeft)
         if self._profile.include_bottom_stretch:
             content_layout.addStretch(1)
 
@@ -602,8 +560,8 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._refresh_detail_chips()
         self._overview_label.setText("")
         self._overview_frame.setVisible(False)
+        self._overview_gap_widget.setVisible(False)
         self._set_main_info_items([])
-        self._set_additional_info_items([])
         if self._mark_watched_button is not None:
             self._mark_watched_button.setEnabled(self._mark_watched_handler is not None)
         if self._hide_button is not None:
@@ -634,12 +592,12 @@ class WatchedDetailCard(DetailCardPosterMixin):
 
         if has_overview_text(card):
             self._overview_label.setText(get_overview_display(card))
+            self._overview_gap_widget.setVisible(True)
             self._overview_frame.setVisible(True)
         else:
             self._overview_label.setText("")
+            self._overview_gap_widget.setVisible(False)
             self._overview_frame.setVisible(False)
-
-        self._set_additional_info_items(build_additional_info_items(card))
 
         poster_path = resolve_local_poster_path(movie, card)
         if poster_path is None or self._set_poster_image(poster_path) is False:
@@ -749,13 +707,4 @@ class WatchedDetailCard(DetailCardPosterMixin):
             items,
             label_object_name="detailMainInfoLabel",
             value_object_name="detailMainInfoValue",
-        )
-
-    def _set_additional_info_items(self, items: list[dict[str, str]]) -> None:
-        self._set_info_grid_items(
-            self._additional_info_grid,
-            self._additional_info_section,
-            items,
-            label_object_name="detailAdditionalInfoLabel",
-            value_object_name="detailAdditionalInfoValue",
         )

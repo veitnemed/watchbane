@@ -41,6 +41,7 @@ class WatchedMoviesWindow(QMainWindow):
         self.statusBar().showMessage("")
 
         tabs = QTabWidget()
+        tabs.setObjectName("mainTabs")
         self.setCentralWidget(tabs)
         self._main_tabs = tabs
         self._tab_registry, self._tabs_context = build_main_tabs(

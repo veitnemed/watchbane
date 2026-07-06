@@ -8,7 +8,11 @@ from PyQt6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from desktop.settings.ui_scale_control import UiScaleControlPanel
 from desktop.theme.scaling import layout_px
-from desktop.theme.shell_layout import WATCHED_TAB_MARGIN_PX, WATCHED_TAB_SPACING_PX
+from desktop.theme.shell_layout import (
+    LEFT_PANEL_TOP_COMPENSATION_PX,
+    WATCHED_TAB_MARGIN_PX,
+    WATCHED_TAB_SPACING_PX,
+)
 
 StatusCallback = Callable[[str, int], None]
 
@@ -34,7 +38,7 @@ class SettingsTabView:
         layout = QVBoxLayout(content)
         layout.setContentsMargins(
             WATCHED_TAB_MARGIN_PX,
-            WATCHED_TAB_MARGIN_PX,
+            WATCHED_TAB_MARGIN_PX + LEFT_PANEL_TOP_COMPENSATION_PX,
             WATCHED_TAB_MARGIN_PX,
             WATCHED_TAB_MARGIN_PX,
         )

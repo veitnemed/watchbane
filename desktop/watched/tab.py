@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QHBoxLayout, QScrollArea, QSplitter, QWidget
 from desktop.shared.detail import WatchedDetailCard
 from desktop.shared.widgets.list_search import resolve_selection_row
 from desktop.theme.shell_layout import (
+    DETAIL_TAB_TOP_MARGIN_PX,
     SPLITTER_DETAIL_DEFAULT_PX,
     SPLITTER_SIDEBAR_DEFAULT_PX,
     WATCHED_TAB_MARGIN_PX,
@@ -55,7 +56,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         layout = QHBoxLayout(tab)
         layout.setContentsMargins(
             WATCHED_TAB_MARGIN_PX,
-            WATCHED_TAB_MARGIN_PX,
+            DETAIL_TAB_TOP_MARGIN_PX,
             WATCHED_TAB_MARGIN_PX,
             WATCHED_TAB_MARGIN_PX,
         )

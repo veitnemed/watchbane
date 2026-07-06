@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 
 from desktop.theme import (
     DETAIL_CHIP_COL_GAP,
+    DETAIL_CHIP_FONT_SIZE,
     DETAIL_CHIP_H_PADDING,
     DETAIL_CHIP_HEIGHT,
     DETAIL_CHIP_MAX_ROWS,
@@ -13,6 +14,7 @@ from desktop.theme import (
     DETAIL_CHIP_RADIUS,
     DETAIL_CHIP_ROW_GAP,
     DETAIL_HERO_CARD_PADDING,
+    DETAIL_HERO_CARD_PADDING_TOP,
     DETAIL_HERO_CARD_RADIUS,
     DETAIL_CONTENT_MAX_WIDTH,
     DETAIL_HERO_MIN_WIDTH,
@@ -24,6 +26,8 @@ from desktop.theme import (
     DETAIL_MAIN_INFO_PANEL_PADDING_X,
     DETAIL_MAIN_INFO_PANEL_PADDING_Y,
     DETAIL_MAIN_INFO_PANEL_RADIUS,
+    DETAIL_MAIN_INFO_HEADER_PANEL_GAP,
+    DETAIL_MAIN_INFO_ROW_GAP,
     DETAIL_MAIN_INFO_ROW_HEIGHT,
     DETAIL_MAIN_INFO_TOP_GAP,
     DETAIL_OVERVIEW_LEFT_INSET,
@@ -134,6 +138,7 @@ class DetailCardLayoutProfile:
     include_bottom_stretch: bool = True
     detail_hero_card_radius: int = detail_px(DETAIL_HERO_CARD_RADIUS)
     detail_hero_card_padding: int = detail_px(DETAIL_HERO_CARD_PADDING)
+    detail_hero_card_padding_top: int = detail_px(DETAIL_HERO_CARD_PADDING_TOP)
     detail_hero_min_width: int = detail_px(DETAIL_HERO_MIN_WIDTH)
     detail_hero_preferred_min_width: int = detail_px(DETAIL_HERO_PREFERRED_MIN_WIDTH)
     detail_content_max_width: int = detail_px(DETAIL_CONTENT_MAX_WIDTH)
@@ -153,6 +158,7 @@ class DetailCardLayoutProfile:
     detail_chip_height: int = detail_px(DETAIL_CHIP_HEIGHT)
     detail_chip_radius: int = detail_px(DETAIL_CHIP_RADIUS)
     detail_chip_h_padding: int = detail_px(DETAIL_CHIP_H_PADDING)
+    detail_chip_font_size: int = font_px(DETAIL_CHIP_FONT_SIZE)
     detail_chip_row_gap: int = detail_px(DETAIL_CHIP_ROW_GAP)
     detail_chip_col_gap: int = detail_px(DETAIL_CHIP_COL_GAP)
     detail_chip_max_rows: int = DETAIL_CHIP_MAX_ROWS
@@ -174,6 +180,8 @@ class DetailCardLayoutProfile:
     detail_main_info_panel_padding_x: int = detail_px(DETAIL_MAIN_INFO_PANEL_PADDING_X)
     detail_main_info_panel_padding_y: int = detail_px(DETAIL_MAIN_INFO_PANEL_PADDING_Y)
     detail_main_info_row_height: int = detail_px(DETAIL_MAIN_INFO_ROW_HEIGHT)
+    detail_main_info_row_gap: int = detail_px(DETAIL_MAIN_INFO_ROW_GAP)
+    detail_main_info_header_panel_gap: int = detail_px(DETAIL_MAIN_INFO_HEADER_PANEL_GAP)
     detail_main_info_label_width: int = detail_px(DETAIL_MAIN_INFO_LABEL_WIDTH)
     detail_overview_top_gap: int = detail_px(DETAIL_OVERVIEW_TOP_GAP)
     detail_overview_left_inset: int = detail_px(DETAIL_OVERVIEW_LEFT_INSET)

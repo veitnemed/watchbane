@@ -598,6 +598,7 @@ def test_score_ring_item_handles_missing_tmdb_score() -> None:
 
 
 def test_rating_circle_indicator_accepts_tmdb_score_ring_payload(qapp) -> None:
+    from desktop.shared.detail import profiles as detail_profiles
     from desktop.shared.detail.rating_indicator import RatingCircleIndicator
 
     ring = RatingCircleIndicator(
@@ -612,11 +613,12 @@ def test_rating_circle_indicator_accepts_tmdb_score_ring_payload(qapp) -> None:
     assert ring._ring_progress == 0.74
     assert not hasattr(ring, "_footer_label")
     assert not hasattr(ring, "_footer_stars")
-    assert ring.width() == 88
-    assert ring.height() == 88
+    assert ring.width() == detail_profiles.RATING_CIRCLE_WIDGET_SIZE
+    assert ring.height() == detail_profiles.RATING_CIRCLE_WIDGET_SIZE
 
 
 def test_rating_circle_indicator_keeps_fixed_circle_size(qapp) -> None:
+    from desktop.shared.detail import profiles as detail_profiles
     from desktop.shared.detail.rating_indicator import RatingCircleIndicator
 
     ring = RatingCircleIndicator("моя")
@@ -624,9 +626,9 @@ def test_rating_circle_indicator_keeps_fixed_circle_size(qapp) -> None:
 
     ring.set_score(9.0)
 
-    assert ring.width() == 88
+    assert ring.width() == detail_profiles.RATING_CIRCLE_WIDGET_SIZE
     assert ring.height() == original_height
-    assert ring.height() == 88
+    assert ring.height() == detail_profiles.RATING_CIRCLE_WIDGET_SIZE
 
 
 def test_meta_pill_does_not_render_final_text_under_circle(qapp) -> None:
@@ -753,6 +755,21 @@ def test_build_additional_info_items_formats_tmdb_fields() -> None:
         {"label": "Статус", "value": "Завершен"},
         {"label": "Длительность серии", "value": "52 мин"},
     ]
+
+
+def test_build_main_info_items_includes_former_additional_fields() -> None:
+    from desktop.watched import build_main_info_items
+
+    items = build_main_info_items(
+        {
+            "object_type": "series",
+            "status": "Ended",
+            "episode_run_time": [52],
+        }
+    )
+
+    assert {"label": "Статус", "value": "Завершен"} in items
+    assert {"label": "Длительность серии", "value": "52 мин"} in items
 
 
 def test_normalize_object_type_detects_tmdb_tv_shape() -> None:
@@ -1574,9 +1591,13 @@ def test_detail_chips_container_height_matches_visible_rows(qapp) -> None:
     qapp.processEvents()
 
     chips = detail.widget.findChild(QWidget, "detailChipsContainer")
-    expected_height = DETAIL_CARD_LAYOUT_PROFILE.detail_chip_height
+    row_count = chips.layout().count()
+    expected_height = (
+        row_count * DETAIL_CARD_LAYOUT_PROFILE.detail_chip_height
+        + max(0, row_count - 1) * DETAIL_CARD_LAYOUT_PROFILE.detail_chip_row_gap
+    )
 
-    assert chips.layout().count() == 1
+    assert 1 <= row_count <= DETAIL_CARD_LAYOUT_PROFILE.detail_chip_max_rows
     assert chips.height() == expected_height
 
 
@@ -1628,7 +1649,7 @@ def test_detail_overview_section_renders_description(qapp) -> None:
 
 
 def test_detail_overview_section_hides_without_description(qapp) -> None:
-    from PyQt6.QtWidgets import QFrame
+    from PyQt6.QtWidgets import QFrame, QWidget
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
@@ -1647,12 +1668,15 @@ def test_detail_overview_section_hides_without_description(qapp) -> None:
     qapp.processEvents()
 
     section = detail.widget.findChild(QFrame, "detailOverviewSection")
+    gap = detail.widget.findChild(QWidget, "detailOverviewTopGap")
 
     assert section is not None
     assert section.isHidden() is True
+    assert gap is not None
+    assert gap.isHidden() is True
 
 
-def test_detail_overview_section_is_below_top_row(qapp) -> None:
+def test_detail_overview_section_uses_space_below_poster(qapp) -> None:
     from PyQt6.QtWidgets import QFrame, QWidget
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
@@ -1671,15 +1695,18 @@ def test_detail_overview_section_is_below_top_row(qapp) -> None:
     )
     qapp.processEvents()
 
-    top_row = detail.widget.findChild(QWidget, "detailTopRow")
-    content = detail.widget.findChild(QWidget, "detailContentContainer")
+    poster_column = detail.widget.findChild(QWidget, "detailPosterColumn")
+    poster = detail.widget.findChild(QFrame, "detailPosterShell")
     section = detail.widget.findChild(QFrame, "detailOverviewSection")
+    gap = detail.widget.findChild(QWidget, "detailOverviewTopGap")
 
-    assert top_row is not None
-    assert content is not None
+    assert poster_column is not None
+    assert poster is not None
     assert section is not None
-    content_layout = content.layout()
-    assert content_layout.indexOf(top_row) < content_layout.indexOf(section)
+    assert gap is not None
+    poster_layout = poster_column.layout()
+    assert poster_layout.indexOf(poster) < poster_layout.indexOf(gap) < poster_layout.indexOf(section)
+    assert gap.height() == DETAIL_CARD_LAYOUT_PROFILE.detail_overview_top_gap
 
 
 def test_detail_card_uses_profile_composition_widths(qapp) -> None:
@@ -1693,13 +1720,11 @@ def test_detail_card_uses_profile_composition_widths(qapp) -> None:
     info_column = detail.widget.findChild(QWidget, "detailInfoColumn")
     overview = detail.widget.findChild(QFrame, "detailOverviewSection")
     main_info = detail.widget.findChild(QWidget, "detailMainInfoSection")
-    additional_info = detail.widget.findChild(QWidget, "detailAdditionalInfoSection")
 
     assert content.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width
     assert info_column.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_info_column_max_width
     assert overview.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_overview_max_width
     assert main_info.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
-    assert additional_info.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
 
 
 def test_detail_content_container_is_horizontally_centered(qapp) -> None:
@@ -1818,7 +1843,9 @@ def test_detail_main_info_panel_renders_known_rows(qapp) -> None:
     assert section.isHidden() is False
     assert header is not None
     assert header.text() == "ОСНОВНАЯ ИНФОРМАЦИЯ"
+    assert section.layout().spacing() == DETAIL_CARD_LAYOUT_PROFILE.detail_main_info_header_panel_gap
     assert panel is not None
+    assert panel.layout().verticalSpacing() == DETAIL_CARD_LAYOUT_PROFILE.detail_main_info_row_gap
     assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
     assert "Сериал" in values
     assert "США" in values
@@ -1861,8 +1888,8 @@ def test_detail_title_meta_renders_year_and_seasons_under_title(qapp) -> None:
     assert title_block.layout().indexOf(detail._title_row_widget) < title_block.layout().indexOf(meta)
 
 
-def test_detail_additional_info_panel_renders_known_rows(qapp) -> None:
-    from PyQt6.QtWidgets import QLabel, QFrame, QWidget
+def test_detail_main_info_panel_renders_former_additional_rows(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QFrame
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
@@ -1885,30 +1912,25 @@ def test_detail_additional_info_panel_renders_known_rows(qapp) -> None:
     )
     qapp.processEvents()
 
-    section = detail.widget.findChild(QWidget, "detailAdditionalInfoSection")
-    header = detail.widget.findChild(QLabel, "detailAdditionalInfoHeader")
-    panel = detail.widget.findChild(QFrame, "detailAdditionalInfoPanel")
-    labels = [item.text() for item in panel.findChildren(QLabel, "detailAdditionalInfoLabel")]
-    values = [item.text() for item in panel.findChildren(QLabel, "detailAdditionalInfoValue")]
+    panel = detail.widget.findChild(QFrame, "detailMainInfoPanel")
+    labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
+    values = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoValue")]
 
-    assert section is not None
-    assert section.isHidden() is False
-    assert header is not None
-    assert header.text() == "ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ"
-    assert labels == ["Статус", "Длительность серии"]
-    assert values == ["Завершен", "52 мин"]
+    assert "Статус" in labels
+    assert "Длительность серии" in labels
+    assert "Завершен" in values
+    assert "52 мин" in values
 
 
-def test_detail_additional_info_section_has_top_gap(qapp) -> None:
+def test_detail_card_does_not_create_additional_info_section(qapp) -> None:
     from PyQt6.QtWidgets import QWidget
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
     detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
     section = detail.widget.findChild(QWidget, "detailAdditionalInfoSection")
-    margins = section.layout().contentsMargins()
 
-    assert margins.top() == DETAIL_CARD_LAYOUT_PROFILE.detail_additional_info_top_gap
+    assert section is None
 
 
 def test_detail_main_info_section_hides_when_empty(qapp) -> None:
@@ -2593,6 +2615,7 @@ def test_detail_hero_contract_tokens_are_available() -> None:
     expected_tokens = {
         "DETAIL_HERO_CARD_RADIUS": 24,
         "DETAIL_HERO_CARD_PADDING": 28,
+        "DETAIL_HERO_CARD_PADDING_TOP": 12,
         "DETAIL_HERO_MIN_WIDTH": 980,
         "DETAIL_HERO_PREFERRED_MIN_WIDTH": 1200,
         "DETAIL_CONTENT_MAX_WIDTH": 1120,
@@ -2613,37 +2636,41 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "FONT_DETAIL_OVERVIEW_TEXT": 19,
         "DETAIL_TITLE_LINE_HEIGHT": 42,
         "DETAIL_TITLE_MAX_LINES": 2,
-        "DETAIL_CHIP_HEIGHT": 36,
-        "DETAIL_CHIP_RADIUS": 18,
-        "DETAIL_CHIP_H_PADDING": 20,
+        "DETAIL_CHIP_HEIGHT": 42,
+        "DETAIL_CHIP_RADIUS": 21,
+        "DETAIL_CHIP_H_PADDING": 24,
+        "DETAIL_CHIP_FONT_SIZE": 16,
         "DETAIL_CHIP_ROW_GAP": 10,
         "DETAIL_CHIP_COL_GAP": 14,
         "DETAIL_CHIP_MAX_ROWS": 2,
-        "DETAIL_CHIP_MAX_WIDTH": 170,
+        "DETAIL_CHIP_MAX_WIDTH": 190,
         "DETAIL_SCORE_ROW_TOP_GAP": 34,
         "DETAIL_RATING_WIDGET_SIZE": 136,
         "DETAIL_RATING_CIRCLE_DIAMETER": 122,
         "DETAIL_STARS_LEFT_GAP": 52,
         "DETAIL_STAR_SIZE": 36,
         "DETAIL_STAR_GAP": 9,
-        "DETAIL_USER_SCORE_BADGE_MIN_WIDTH": 80,
+        "DETAIL_USER_SCORE_BADGE_MIN_WIDTH": 72,
         "DETAIL_USER_SCORE_BADGE_HEIGHT": 40,
         "DETAIL_USER_SCORE_BADGE_RADIUS": 20,
+        "DETAIL_USER_SCORE_BADGE_FONT_SIZE": 16,
         "DETAIL_USER_SCORE_BADGE_TOP": 16,
         "DETAIL_USER_SCORE_BADGE_RIGHT": 16,
-        "DETAIL_USER_SCORE_BADGE_PADDING_X": 14,
+        "DETAIL_USER_SCORE_BADGE_PADDING_X": 10,
         "DETAIL_MAIN_INFO_TOP_GAP": 38,
         "DETAIL_MAIN_INFO_PANEL_RADIUS": 16,
         "DETAIL_MAIN_INFO_PANEL_PADDING_X": 28,
         "DETAIL_MAIN_INFO_PANEL_PADDING_Y": 18,
         "DETAIL_MAIN_INFO_ROW_HEIGHT": 54,
+        "DETAIL_MAIN_INFO_ROW_GAP": 10,
+        "DETAIL_MAIN_INFO_HEADER_PANEL_GAP": 24,
         "DETAIL_MAIN_INFO_LABEL_WIDTH": 230,
-        "DETAIL_OVERVIEW_TOP_GAP": 28,
+        "DETAIL_OVERVIEW_TOP_GAP": 14,
         "DETAIL_OVERVIEW_LEFT_INSET": 0,
-        "DETAIL_OVERVIEW_TITLE_TOP_GAP": 28,
+        "DETAIL_OVERVIEW_TITLE_TOP_GAP": 14,
         "DETAIL_OVERVIEW_TEXT_TOP_GAP": 20,
         "DETAIL_OVERVIEW_MAX_LINES_COLLAPSED": 4,
-        "DETAIL_OVERVIEW_MAX_WIDTH": 920,
+        "DETAIL_OVERVIEW_MAX_WIDTH": 360,
         "DETAIL_SECTION_MAX_WIDTH": 920,
     }
 
@@ -2654,9 +2681,11 @@ def test_detail_hero_contract_tokens_are_available() -> None:
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_poster_border_width == theme.DETAIL_POSTER_BORDER_WIDTH
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_poster_content_width == theme.DETAIL_POSTER_WIDTH - 2
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_poster_content_radius == theme.DETAIL_POSTER_RADIUS - 1
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_hero_card_padding_top == theme.DETAIL_HERO_CARD_PADDING_TOP
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_rating_widget_size == theme.DETAIL_RATING_WIDGET_SIZE
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_user_score_badge_height == theme.DETAIL_USER_SCORE_BADGE_HEIGHT
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_overview_left_inset == theme.DETAIL_OVERVIEW_LEFT_INSET
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_overview_max_width == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width == theme.DETAIL_CONTENT_MAX_WIDTH
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_info_column_max_width == theme.DETAIL_INFO_COLUMN_MAX_WIDTH
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_overview_max_width == theme.DETAIL_OVERVIEW_MAX_WIDTH
@@ -2664,23 +2693,30 @@ def test_detail_hero_contract_tokens_are_available() -> None:
 
 
 def test_detail_card_style_uses_requested_font_sizes() -> None:
-    from desktop.theme.scaling import set_ui_scale
+    from desktop.theme import tokens
+    from desktop.theme.scaling import detail_px, font_px, set_ui_scale
     from desktop.theme.styles.detail_card import build_detail_card_style
 
     set_ui_scale(1.0)
     style = build_detail_card_style()
 
     assert "QLabel#detailTitle" in style
-    assert "font-size: 34px;" in style
+    assert f"font-size: {font_px(tokens.DETAIL_TITLE_FONT_SIZE)}px;" in style
     assert "QLabel#detailTitleMeta" in style
-    assert "font-size: 17px;" in style
+    assert f"font-size: {font_px(tokens.FONT_SMALL + 4)}px;" in style
     assert "QLabel#detailMainInfoHeader" in style
-    assert "font-size: 17px;" in style
-    assert "font-size: 18px;" in style
+    assert f"font-size: {font_px(tokens.FONT_DETAIL_MAIN_INFO_HEADER)}px;" in style
+    assert f"font-size: {font_px(tokens.FONT_DETAIL_MAIN_INFO_VALUE)}px;" in style
     assert "QLabel#detailOverviewText" in style
-    assert "font-size: 19px;" in style
-    assert "QLabel#detailAdditionalInfoHeader" in style
-    assert "font-size: 20px;" in style
+    assert f"font-size: {font_px(tokens.FONT_DETAIL_OVERVIEW_TEXT)}px;" in style
+    assert f"font-size: {font_px(tokens.FONT_OVERVIEW_TITLE)}px;" in style
+    assert "detailAdditionalInfo" not in style
+    assert "QLabel#detailUserScoreBadge" in style
+    assert f"font-size: {font_px(tokens.DETAIL_USER_SCORE_BADGE_FONT_SIZE)}px;" in style
+    assert f"min-width: {detail_px(tokens.DETAIL_USER_SCORE_BADGE_MIN_WIDTH)}px;" in style
+    assert "QLabel#genrePill" in style
+    assert f"font-size: {font_px(tokens.DETAIL_CHIP_FONT_SIZE)}px;" in style
+    assert f"padding: 0 {detail_px(tokens.DETAIL_CHIP_H_PADDING)}px;" in style
 
 
 def test_fit_poster_pixmap_for_display_avoids_upscale(qapp) -> None:
@@ -3223,6 +3259,31 @@ def test_country_chip_selector_clear_means_all_countries(qapp) -> None:
 
     assert selector.is_all_selected() is True
     assert selector.selected_country_codes() == []
+
+
+def test_filter_chip_selectors_do_not_show_local_reset_buttons(qapp) -> None:
+    from PyQt6.QtWidgets import QPushButton
+
+    from desktop.shared.widgets.country_chip_selector import CountryChipSelector
+    from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
+
+    country_selector = CountryChipSelector([{"code": "RU", "label": "Россия"}])
+    genre_selector = GenreChipSelector()
+
+    assert country_selector.findChild(QPushButton, "countryChipClear") is None
+    assert genre_selector.findChild(QPushButton, "genreChipClear") is None
+
+
+def test_candidate_filter_field_labels_look_like_section_headers() -> None:
+    from desktop.theme.scaling import font_px
+    from desktop.theme.styles.candidates_shell import build_candidates_shell_style
+    from desktop.theme.tokens import FONT_SECTION
+
+    style = build_candidates_shell_style()
+
+    assert "QLabel#candidateSearchFieldLabel" in style
+    assert f"font-size: {font_px(FONT_SECTION)}px;" in style
+    assert "font-weight: 700;" in style
 
 
 def test_country_chip_selector_toggle_country_updates_selection(qapp) -> None:

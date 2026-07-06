@@ -215,6 +215,35 @@ def test_filter_change_updates_candidate_list(qtbot) -> None:
     assert _listed_titles(list_widget) == ["Predict Ready"]
 
 
+def test_filter_reset_button_clears_and_applies_all_filters(qtbot) -> None:
+    service, _session, filters_view, list_view = _build_views(qtbot)
+    list_widget = _candidate_list(list_view)
+    apply_button = filters_view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
+    reset_button = filters_view.widget.findChild(QPushButton, "candidateSearchResetTopButton")
+    only_complete = filters_view.widget.findChild(QCheckBox, "candidateSearchOnlyComplete")
+    only_unwatched = filters_view.widget.findChild(QCheckBox, "candidateSearchOnlyUnwatched")
+    assert apply_button is not None
+    assert reset_button is not None
+    assert only_complete is not None
+    assert only_unwatched is not None
+
+    only_complete.setChecked(True)
+    only_unwatched.setChecked(True)
+    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 1)
+
+    qtbot.mouseClick(reset_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 2)
+
+    assert only_complete.isChecked() is False
+    assert only_unwatched.isChecked() is False
+    assert service.applied_filters[-1] == {
+        **DEFAULT_BROWSE_FILTERS,
+        "only_unwatched": False,
+    }
+    assert _listed_titles(list_widget) == ["Predict Ready", "Searchable Only"]
+
+
 def test_candidate_list_model_roles_and_poster_cache(monkeypatch, qtbot) -> None:
     calls: list[str] = []
 

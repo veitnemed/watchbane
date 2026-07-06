@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, QSize, QRect, pyqtSignal
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QLabel, QLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from desktop.shared.widgets.collapsible_chip_helpers import (
     ChipExpandControl,
@@ -108,19 +108,9 @@ class GenreChipSelector(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(layout_px(8))
 
-        header = QHBoxLayout()
-        header.setContentsMargins(0, 0, 0, 0)
-        header.setSpacing(layout_px(10))
         self._count_label = QLabel("Выбрано: 0")
         self._count_label.setObjectName("genreChipCount")
-        self._clear_button = QPushButton("Сбросить")
-        self._clear_button.setObjectName("genreChipClear")
-        self._clear_button.setFlat(True)
-        self._clear_button.clicked.connect(self.clear_selection)
-        header.addWidget(self._count_label)
-        header.addStretch()
-        header.addWidget(self._clear_button)
-        root.addLayout(header)
+        root.addWidget(self._count_label)
 
         self._chips_host = QWidget()
         self._chips_host.setObjectName("genreChipHost")

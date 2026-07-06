@@ -35,7 +35,7 @@ QLabel#detailUserScoreBadge {{
     border: 1px solid {COLOR_RATING};
     border-radius: {detail_px(DETAIL_USER_SCORE_BADGE_RADIUS)}px;
     color: {COLOR_RATING};
-    font-size: {font_px(FONT_BASE)}px;
+    font-size: {font_px(DETAIL_USER_SCORE_BADGE_FONT_SIZE)}px;
     font-weight: 700;
     padding: 0 {detail_px(DETAIL_USER_SCORE_BADGE_PADDING_X)}px;
     min-height: {detail_px(DETAIL_USER_SCORE_BADGE_HEIGHT)}px;
@@ -84,25 +84,22 @@ QLabel#genrePill {{
     background-color: {COLOR_DETAIL_CHIP_BG};
     border: 1px solid {COLOR_DETAIL_CHIP_BORDER};
     border-radius: {detail_px(DETAIL_CHIP_RADIUS)}px;
-    padding: 0 {detail_px(12)}px;
+    padding: 0 {detail_px(DETAIL_CHIP_H_PADDING)}px;
     color: {COLOR_TEXT_CHIP};
-    font-size: {font_px(FONT_BASE)}px;
+    font-size: {font_px(DETAIL_CHIP_FONT_SIZE)}px;
 }}
 QWidget#mainInfoSection,
-QWidget#detailMainInfoSection,
-QWidget#detailAdditionalInfoSection {{
+QWidget#detailMainInfoSection {{
     background: transparent;
 }}
 QFrame#mainInfoPanel,
-QFrame#detailMainInfoPanel,
-QFrame#detailAdditionalInfoPanel {{
+QFrame#detailMainInfoPanel {{
     background-color: {COLOR_DETAIL_GLASS};
     border: 1px solid {COLOR_DETAIL_HERO_BORDER_SOFT};
     border-radius: {detail_px(DETAIL_MAIN_INFO_PANEL_RADIUS)}px;
 }}
 QFrame#mainInfoDivider,
-QFrame#detailMainInfoHeaderDivider,
-QFrame#detailAdditionalInfoHeaderDivider {{
+QFrame#detailMainInfoHeaderDivider {{
     background-color: {COLOR_DETAIL_SECTION_DIVIDER};
     min-height: {detail_px(1)}px;
     max-height: {detail_px(1)}px;
@@ -118,16 +115,14 @@ QLabel#detailMainInfoHeader {{
     padding: 0;
 }}
 QLabel#mainInfoLabel,
-QLabel#detailMainInfoLabel,
-QLabel#detailAdditionalInfoLabel {{
+QLabel#detailMainInfoLabel {{
     background: transparent;
     color: {COLOR_DETAIL_LABEL};
     font-size: {font_px(FONT_DETAIL_MAIN_INFO_LABEL)}px;
     padding: 0;
 }}
 QLabel#mainInfoValue,
-QLabel#detailMainInfoValue,
-QLabel#detailAdditionalInfoValue {{
+QLabel#detailMainInfoValue {{
     background: transparent;
     color: {COLOR_DETAIL_VALUE};
     font-size: {font_px(FONT_DETAIL_MAIN_INFO_VALUE)}px;
@@ -147,8 +142,7 @@ QFrame#detailOverviewDivider {{
     border: none;
 }}
 QLabel#overviewTitle,
-QLabel#detailOverviewHeader,
-QLabel#detailAdditionalInfoHeader {{
+QLabel#detailOverviewHeader {{
     background: transparent;
     color: {COLOR_DETAIL_SECTION_HEADER};
     font-size: {font_px(FONT_OVERVIEW_TITLE)}px;

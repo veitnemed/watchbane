@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from candidates.models import country_schema
-from desktop.shared.detail.additional_info import format_seasons_episodes, format_watch_providers
+from desktop.shared.detail.additional_info import (
+    build_additional_info_items,
+    format_seasons_episodes,
+    format_watch_providers,
+)
 from desktop.shared.detail.presenters import format_year_display
 
 
@@ -79,6 +83,8 @@ def build_main_info_items(card: dict) -> list[dict[str, str]]:
     tmdb_votes = format_votes_display(card.get("tmdb_votes"))
     if tmdb_votes is not None:
         items.append({"label": "Голоса TMDb", "value": tmdb_votes})
+
+    items.extend(build_additional_info_items(card))
 
     return items
 

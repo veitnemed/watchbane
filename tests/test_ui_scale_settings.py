@@ -161,6 +161,12 @@ def test_scaling_default_ui_scale_is_one() -> None:
     assert scaling.get_channel_scale("layout") == 1.0
 
 
+def test_scaling_module_import_does_not_eager_load_settings_ui() -> None:
+    import desktop.theme.scaling as scaling
+
+    assert scaling.get_ui_scale() == 1.0
+
+
 def test_scale_px_keeps_old_layout_channel_compatibility() -> None:
     import desktop.theme.scaling as scaling
 
@@ -462,8 +468,11 @@ def test_ui_scale_125_updates_shell_and_list_constants() -> None:
     shell_layout = importlib.reload(shell_layout)
     profiles = importlib.reload(profiles)
 
-    assert shell_layout.SIDEBAR_MIN_WIDTH_PX == 325
-    assert shell_layout.SPLITTER_SIDEBAR_DEFAULT_PX == 375
+    assert shell_layout.SIDEBAR_MIN_WIDTH_PX == 375
+    assert shell_layout.SIDEBAR_MAX_WIDTH_PX == shell_layout.CANDIDATE_LIST_MAX_WIDTH_PX
+    assert shell_layout.SPLITTER_SIDEBAR_DEFAULT_PX == shell_layout.CANDIDATE_LIST_MAX_WIDTH_PX
+    assert shell_layout.DETAIL_TAB_TOP_MARGIN_PX == 0
+    assert shell_layout.LEFT_PANEL_TOP_COMPENSATION_PX > shell_layout.MAIN_TAB_PANE_TOP_LIFT_PX
     assert profiles.LIST_ITEM_HEIGHT == 105
     assert profiles.LIST_TITLE_FONT_POINT == 18
 
@@ -485,7 +494,12 @@ def test_shell_tabs_and_add_title_use_control_scaled_typography() -> None:
     import desktop.theme.scaling as scaling
     from desktop.theme.styles.shell import build_shell_style
     from desktop.theme.styles.watched_shell import build_watched_shell_style
-    from desktop.theme.tokens import FONT_BASE, FONT_SECTION
+    from desktop.theme.tokens import (
+        FONT_BASE,
+        FONT_SECTION,
+        WATCHED_ADD_TITLE_MIN_HEIGHT,
+        WATCHED_SIDEBAR_LABEL_FONT,
+    )
 
     scaling.set_ui_scale(0.83)
     shell_style = build_shell_style()
@@ -494,4 +508,5 @@ def test_shell_tabs_and_add_title_use_control_scaled_typography() -> None:
     assert f"font-size: {scaling.font_px(FONT_BASE)}px" in shell_style
     assert f"min-height: {scaling.control_px(34)}px" in shell_style
     assert f"font-size: {scaling.font_px(FONT_SECTION)}px" in watched_style
-    assert f"min-height: {scaling.control_px(40)}px" in watched_style
+    assert f"min-height: {scaling.control_px(WATCHED_ADD_TITLE_MIN_HEIGHT)}px" in watched_style
+    assert f"font-size: {scaling.font_px(WATCHED_SIDEBAR_LABEL_FONT)}px" in watched_style

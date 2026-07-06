@@ -6,9 +6,14 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QVBoxLayout, QWidget
 
 from desktop.shared.detail import WatchedListItemDelegate
-from desktop.theme.scaling import control_px, layout_px, list_px
-from desktop.theme.shell_layout import SIDEBAR_MAX_WIDTH_PX, SIDEBAR_MIN_WIDTH_PX
 from desktop.shared.widgets.list_search import DebouncedLineEditSearch
+from desktop.theme.scaling import control_px, layout_px, list_px
+from desktop.theme.shell_layout import (
+    LEFT_PANEL_TOP_COMPENSATION_PX,
+    SIDEBAR_MAX_WIDTH_PX,
+    SIDEBAR_MIN_WIDTH_PX,
+)
+from desktop.theme.tokens import WATCHED_ADD_TITLE_MIN_HEIGHT
 from desktop.watched.filters_panel import WatchedFiltersPanel
 from desktop.watched.model import SORT_OPTIONS, WatchedEntry
 
@@ -27,12 +32,12 @@ def build_watched_sidebar(
     panel.setMinimumWidth(SIDEBAR_MIN_WIDTH_PX)
     panel.setMaximumWidth(SIDEBAR_MAX_WIDTH_PX)
     layout = QVBoxLayout(panel)
-    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setContentsMargins(0, LEFT_PANEL_TOP_COMPENSATION_PX, 0, 0)
     layout.setSpacing(layout_px(14))
 
     add_title_button = QPushButton("+ Добавить тайтл")
     add_title_button.setObjectName("watchedAddTitle")
-    add_title_button.setMinimumHeight(control_px(40))
+    add_title_button.setMinimumHeight(control_px(WATCHED_ADD_TITLE_MIN_HEIGHT))
     add_title_button.clicked.connect(on_add_title)
     layout.addWidget(add_title_button)
 

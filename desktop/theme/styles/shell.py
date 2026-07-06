@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from desktop.theme.shell_layout import MAIN_TAB_PANE_TOP_LIFT_PX
 from desktop.theme.tokens import *  # noqa: F403
 
 
@@ -74,6 +75,9 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
 }}
 QTabWidget::pane {{
     border: none;
+}}
+QTabWidget#mainTabs::pane {{
+    top: -{MAIN_TAB_PANE_TOP_LIFT_PX}px;
 }}
 QTabBar::tab {{
     background-color: {COLOR_CARD};

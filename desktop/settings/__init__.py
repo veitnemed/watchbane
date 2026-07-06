@@ -12,9 +12,22 @@ from desktop.settings.app_settings import (
     normalize_ui_scale,
     save_app_settings,
 )
-from desktop.settings.dialog import SettingsDialog
-from desktop.settings.tab_view import SettingsTabView
-from desktop.settings.ui_scale_control import UI_SCALE_RESTART_MESSAGE
+
+
+def __getattr__(name: str):
+    if name == "SettingsDialog":
+        from desktop.settings.dialog import SettingsDialog
+
+        return SettingsDialog
+    if name == "SettingsTabView":
+        from desktop.settings.tab_view import SettingsTabView
+
+        return SettingsTabView
+    if name == "UI_SCALE_RESTART_MESSAGE":
+        from desktop.settings.ui_scale_control import UI_SCALE_RESTART_MESSAGE
+
+        return UI_SCALE_RESTART_MESSAGE
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     "APP_UI_SCALE_DEFAULT",

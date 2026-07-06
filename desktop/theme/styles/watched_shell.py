@@ -24,8 +24,8 @@ QPushButton#watchedAddTitle {{
     color: {COLOR_TEXT};
     font-size: {font_px(FONT_SECTION)}px;
     font-weight: 600;
-    padding: {control_px(BUTTON_PADDING_Y)}px {control_px(BUTTON_PADDING_X)}px;
-    min-height: {control_px(40)}px;
+    padding: {control_px(WATCHED_ADD_TITLE_PADDING_Y)}px {control_px(BUTTON_PADDING_X)}px;
+    min-height: {control_px(WATCHED_ADD_TITLE_MIN_HEIGHT)}px;
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
         stop:0 {COLOR_ADD_BUTTON_TOP},
@@ -45,7 +45,7 @@ QPushButton#watchedFilterToggle {{
     border: none;
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {font_px(FONT_SMALL)}px;
+    font-size: {font_px(WATCHED_SIDEBAR_LABEL_FONT)}px;
     font-weight: 600;
     padding: {px(6)}px {px(4)}px;
     text-align: left;
@@ -78,7 +78,7 @@ QPushButton#watchedFilterResetAll:hover {{
 QLabel#watchedListCounter {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {font_px(FONT_SMALL)}px;
+    font-size: {font_px(WATCHED_SIDEBAR_LABEL_FONT)}px;
     font-weight: 600;
     padding: 0 {px(4)}px;
 }}
@@ -88,7 +88,7 @@ QWidget#watchedSortRow {{
 QLabel#watchedSortLabel {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_BASE)}px;
+    font-size: {font_px(WATCHED_SIDEBAR_LABEL_FONT)}px;
     font-weight: 600;
 }}
 QComboBox#watchedSort {{

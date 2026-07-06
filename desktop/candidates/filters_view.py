@@ -25,7 +25,11 @@ from desktop.candidates.filters_form import CANDIDATE_YEAR_MIN, FiltersFormWidge
 from desktop.candidates.filters_intro import build_intro_copy
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 from desktop.theme.scaling import control_px, layout_px
-from desktop.theme.shell_layout import CANDIDATE_ROOT_MARGIN_PX, CANDIDATE_ROOT_SPACING_PX
+from desktop.theme.shell_layout import (
+    CANDIDATE_ROOT_MARGIN_PX,
+    CANDIDATE_ROOT_SPACING_PX,
+    LEFT_PANEL_TOP_COMPENSATION_PX,
+)
 
 APPLY_BUTTON_WIDTH_RATIO = 0.25
 APPLY_BUTTON_HEIGHT = control_px(32)
@@ -59,7 +63,7 @@ class CandidateFiltersView:
         root_layout = QVBoxLayout(self._widget)
         root_layout.setContentsMargins(
             CANDIDATE_ROOT_MARGIN_PX,
-            CANDIDATE_ROOT_MARGIN_PX,
+            CANDIDATE_ROOT_MARGIN_PX + LEFT_PANEL_TOP_COMPENSATION_PX,
             CANDIDATE_ROOT_MARGIN_PX,
             CANDIDATE_ROOT_MARGIN_PX,
         )
@@ -74,6 +78,15 @@ class CandidateFiltersView:
         )
         self._apply_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
 
+        self._reset_button = QPushButton("Сброс")
+        self._reset_button.setObjectName("candidateSearchResetTopButton")
+        self._reset_button.clicked.connect(self._reset_filters)
+        self._reset_button.setSizePolicy(
+            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Fixed,
+        )
+        self._reset_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
+
         top_bar = QHBoxLayout()
         top_bar.setContentsMargins(0, 0, 0, 0)
         top_bar.setSpacing(CANDIDATE_ROOT_SPACING_PX)
@@ -82,6 +95,10 @@ class CandidateFiltersView:
         header.setObjectName("candidateSearchHeader")
         header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         top_bar.addWidget(header, stretch=1)
+        top_bar.addWidget(
+            self._reset_button,
+            alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
+        )
         top_bar.addWidget(
             self._apply_button,
             alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
@@ -191,10 +208,12 @@ class CandidateFiltersView:
         self._intro_lead.setText(lead)
         self._intro_stats.setText(stats)
         self._apply_button.setEnabled(apply_enabled and self._session.is_loading is False)
+        self._reset_button.setEnabled(apply_enabled and self._session.is_loading is False)
 
     def _on_loading_changed(self) -> None:
         if self._session.is_loading:
             self._apply_button.setEnabled(False)
+            self._reset_button.setEnabled(False)
             self._intro_lead.setText("Применяю фильтры...")
             self._intro_stats.setText("Окно можно не трогать, результат появится на вкладке «Кандидаты».")
 
@@ -205,6 +224,7 @@ class CandidateFiltersView:
             self._intro_lead.setText("Не удалось применить фильтры.")
             self._intro_stats.setText(self._session.last_error)
             self._apply_button.setEnabled(True)
+            self._reset_button.setEnabled(True)
             return
         if self._session.has_results:
             self._update_intro(
@@ -221,6 +241,7 @@ class CandidateFiltersView:
         target = min(max_width, content_width)
         self._apply_button.setFixedWidth(target)
         self._apply_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
+        self._reset_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
 
     def _on_year_range_changed(self, _lower: int, _upper: int) -> None:
         self._update_year_range_label()
@@ -307,6 +328,22 @@ class CandidateFiltersView:
             "only_unwatched": self._only_unwatched_check.isChecked(),
             "hide_hidden": self._hide_hidden_check.isChecked(),
         }
+
+    def _clear_filter_controls(self) -> None:
+        self._country_selector.clear_selection()
+        self._include_genre_selector.clear_selection()
+        self._exclude_genre_selector.clear_selection()
+        self._set_year_slider_from_defaults(None, None)
+        set_score_slider_from_default(self._tmdb_score_slider, None)
+        set_votes_slider_from_default(self._tmdb_votes_slider, None)
+        self._refresh_threshold_labels()
+        self._only_complete_check.setChecked(False)
+        self._only_unwatched_check.setChecked(False)
+        self._hide_hidden_check.setChecked(False)
+
+    def _reset_filters(self) -> None:
+        self._clear_filter_controls()
+        self._apply_filters()
 
     def _apply_filters(self) -> None:
         self._session.apply_filters_async(self._collect_filters(), parent=self._widget)

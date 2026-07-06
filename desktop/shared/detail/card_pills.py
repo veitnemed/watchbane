@@ -5,7 +5,7 @@ from __future__ import annotations
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.profiles import GENRES_PER_ROW, DetailCardLayoutProfile
 from desktop.shared.detail.rating_indicator import RatingCircleIndicator
-from desktop.theme import COLOR_ACCENT, FONT_BASE, font_px, layout_px, px
+from desktop.theme import COLOR_ACCENT, font_px, layout_px, px
 from desktop.theme.tokens import (
     DETAIL_RATING_RING_LABEL_FONT_MIN,
     DETAIL_RATING_RING_VALUE_FONT_MIN,
@@ -104,7 +104,7 @@ def build_detail_chip_rows(
         if app is None:
             return [clean_labels[: profile.detail_chip_max_rows]]
         font = QFont(app.font())
-        font.setPointSize(font_px(FONT_BASE))
+        font.setPointSize(profile.detail_chip_font_size)
         font_metrics = QFontMetrics(font)
 
     safe_width = max(1, int(available_width))
@@ -221,7 +221,7 @@ def fill_detail_chip_rows(
     app = QApplication.instance()
     if app is not None:
         font = QFont(app.font())
-        font.setPointSize(font_px(FONT_BASE))
+        font.setPointSize(profile.detail_chip_font_size)
         font_metrics = QFontMetrics(font)
     else:
         font_metrics = None

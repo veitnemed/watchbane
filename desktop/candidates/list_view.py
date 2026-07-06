@@ -44,6 +44,8 @@ from desktop.theme.shell_layout import (
     CANDIDATE_SORT_ROW_SPACING_PX,
     CANDIDATE_SPLITTER_DETAIL_DEFAULT_PX,
     CANDIDATE_SPLITTER_LIST_DEFAULT_PX,
+    DETAIL_TAB_TOP_MARGIN_PX,
+    LEFT_PANEL_TOP_COMPENSATION_PX,
 )
 from desktop.theme.scaling import list_px
 from desktop.theme.tokens import CANDIDATE_LIST_MAX_WIDTH, CANDIDATE_LIST_MIN_WIDTH
@@ -85,7 +87,7 @@ class CandidateListView:
         root_layout = QVBoxLayout(self._widget)
         root_layout.setContentsMargins(
             CANDIDATE_ROOT_MARGIN_PX,
-            CANDIDATE_ROOT_MARGIN_PX,
+            DETAIL_TAB_TOP_MARGIN_PX,
             CANDIDATE_ROOT_MARGIN_PX,
             CANDIDATE_ROOT_MARGIN_PX,
         )
@@ -115,7 +117,7 @@ class CandidateListView:
         list_panel.setMinimumWidth(CANDIDATE_LIST_MIN_WIDTH_PX)
         list_panel.setMaximumWidth(CANDIDATE_LIST_MAX_WIDTH_PX)
         list_layout = QVBoxLayout(list_panel)
-        list_layout.setContentsMargins(0, 0, 0, 0)
+        list_layout.setContentsMargins(0, LEFT_PANEL_TOP_COMPENSATION_PX, 0, 0)
         list_layout.setSpacing(CANDIDATE_LIST_SPACING_PX)
 
         self._search_input = QLineEdit()

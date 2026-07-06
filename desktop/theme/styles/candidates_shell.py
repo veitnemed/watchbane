@@ -46,10 +46,10 @@ QLabel#candidateSearchExplanation {{
     font-size: {font_px(FONT_BASE)}px;
 }}
 QLabel#candidateSearchFieldLabel {{
-    color: {COLOR_TEXT_MUTED};
-    font-size: {font_px(FONT_BASE)}px;
-    font-weight: 600;
-    padding-top: {px(2)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SECTION)}px;
+    font-weight: 700;
+    padding: {px(8)}px 0 {px(2)}px 0;
 }}
 QListWidget#candidateListWidget {{
     background-color: {COLOR_CARD};
@@ -126,6 +126,21 @@ QPushButton#candidateSearchApplyTopButton {{
 }}
 QPushButton#candidateSearchApplyTopButton:hover {{
     background-color: {COLOR_ADD_BUTTON_HOVER};
+}}
+QPushButton#candidateSearchResetTopButton {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 600;
+    padding: {px(4)}px {px(12)}px;
+    min-height: {px(28)}px;
+    max-height: {px(32)}px;
+}}
+QPushButton#candidateSearchResetTopButton:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
 }}
 QPushButton#candidateSearchButton,
 QPushButton#candidateSearchAddWatched {{
