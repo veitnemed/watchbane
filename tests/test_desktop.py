@@ -623,6 +623,28 @@ def test_candidate_filter_genre_labels_localize_to_data_language() -> None:
     assert normalize_genre_filter_list(labels) == ["action_adventure", "sci_fi_fantasy", "drama"]
 
 
+def test_chip_expand_control_uses_interface_language(qapp) -> None:
+    from PyQt6.QtWidgets import QPushButton
+
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.shared.widgets.collapsible_chip_helpers import ChipExpandControl
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    control = ChipExpandControl(visible_count=1)
+    button = control.create_button()
+    chips = [QPushButton("A"), QPushButton("B"), QPushButton("C")]
+
+    control.apply_visibility(chips)
+
+    assert button.text() == "Show more (2) ▼"
+
+    control.toggle()
+    control.apply_visibility(chips)
+
+    assert button.text() == "Collapse ▲"
+
+
 def test_apply_app_icon_sets_qapplication_icon(qapp) -> None:
     from desktop.shell.app_icon import apply_app_icon
 
@@ -736,6 +758,21 @@ def test_add_title_preview_dialog_uses_compact_preview_card(qapp) -> None:
     dialog.close()
 
 
+def test_add_title_preview_status_uses_interface_language(qapp) -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    dialog = AddTitlePreviewDialog(_make_add_title_preview_bundle())
+    dialog.show()
+    qapp.processEvents()
+
+    assert dialog._warning_label.text() == "TMDb API: found"
+
+    dialog.close()
+
+
 def test_add_title_preview_score_input_uses_english_locale(qapp) -> None:
     from desktop.settings.app_settings import AppSettings, save_app_settings
     from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
@@ -803,6 +840,22 @@ def test_add_title_compact_preview_dialog_centers_card_shell(qapp) -> None:
 
     assert abs(shell_center_x - dialog_center_x) <= 2
     assert shell.width() < dialog.width() - 20
+
+    dialog.close()
+
+
+def test_add_title_search_progress_uses_interface_language(qapp) -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.watched.add_title.search_dialog import AddTitleSearchDialog
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    dialog = AddTitleSearchDialog(initial_title="Naruto")
+    dialog._active_request_id = 1
+    dialog._set_search_active(True)
+    dialog._on_progress(1, 1, 4, "TMDb Search: Поиск")
+
+    assert dialog._status_label.text() == "TMDb Search: searching"
 
     dialog.close()
 

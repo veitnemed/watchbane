@@ -31,6 +31,7 @@ from desktop.watched.add_title.constants import (
     SEARCH_DIALOG_HEIGHT_ACTIVE,
     SEARCH_DIALOG_WIDTH,
 )
+from desktop.watched.add_title.status_i18n import translate_resolve_progress_message
 from desktop.watched.add_title.worker import AddTitleResolveWorker
 from desktop.theme.scaling import layout_px
 
@@ -263,7 +264,7 @@ class AddTitleSearchDialog(QDialog):
         if self._cancel_after_worker:
             self._status_label.setText(tr("add_title.search.cancel_after_step"))
         else:
-            self._status_label.setText(message)
+            self._status_label.setText(translate_resolve_progress_message(message))
 
     def _on_resolve_failed(self, request_id: int, message: str) -> None:
         if self._is_current_request(request_id) is False:

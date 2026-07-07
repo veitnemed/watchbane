@@ -29,6 +29,7 @@ from desktop.watched.add_title.constants import (
     PREVIEW_DIALOG_WIDTH,
 )
 from desktop.watched.add_title.compact_preview_card import AddTitleCompactPreviewCard
+from desktop.watched.add_title.status_i18n import format_resolve_status_lines_for_ui
 from desktop.watched.model import (
     USER_SCORE_MAX,
     USER_SCORE_MIN,
@@ -205,7 +206,7 @@ class AddTitlePreviewDialog(QDialog):
                 self._warning_label.show()
                 return
 
-        status_lines = service.format_resolve_status_lines(self._bundle.statuses)
+        status_lines = format_resolve_status_lines_for_ui(self._bundle.statuses)
         if self._bundle.found is False:
             self._warning_label.setText(
                 tr("add_title.preview.no_auto_data")
