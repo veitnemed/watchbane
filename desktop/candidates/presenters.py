@@ -122,7 +122,7 @@ def candidate_poster_url_for_download(candidate: dict) -> str | None:
 
 
 def build_candidate_readonly_card(candidate: dict) -> dict:
-    """Build a WatchedDetailCard dict from pool fields without transfer/network IO."""
+    """Build a DetailCard dict from pool fields without transfer/network IO."""
     from candidates.models.schema import coerce_candidate_number
 
     title = candidate.get("title") or candidate.get("name") or "Без названия"
@@ -173,7 +173,7 @@ def build_candidate_readonly_card(candidate: dict) -> dict:
 
 
 def build_candidate_readonly_detail_entry(candidate: dict) -> tuple:
-    """Build WatchedDetailCard entry tuple for read-only Candidates tab preview."""
+    """Build DetailCard entry tuple for read-only Candidates tab preview."""
     identity = candidate_detail_identity(candidate)
     card = build_candidate_readonly_card(candidate)
     movie_stub = {
@@ -186,7 +186,7 @@ def build_candidate_readonly_detail_entry(candidate: dict) -> tuple:
 
 
 def build_candidate_detail_entry(candidate: dict) -> tuple:
-    """Build WatchedDetailCard entry tuple from pool candidate (transfer flow)."""
+    """Build DetailCard entry tuple from pool candidate (transfer flow)."""
     bundle = service.build_candidate_transfer_bundle(candidate)
     identity = candidate_detail_identity(candidate)
     return (f"__candidate__{identity}", bundle.preview_movie, bundle.preview_card)

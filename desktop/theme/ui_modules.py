@@ -6,6 +6,7 @@ import importlib
 import sys
 
 _SCALED_UI_MODULE_NAMES = (
+    "desktop.theme.layout",
     "desktop.shared.detail.profiles",
     "desktop.theme.shell_layout",
     "desktop.watched.add_title.constants",

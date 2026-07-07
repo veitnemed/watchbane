@@ -28,7 +28,7 @@ Things that cannot be fully configured from files in the repository.
   - watched list + detail card;
   - candidate filters;
   - candidate detail card;
-  - analytics/information tab.
+  - settings tab.
 
 ## First Public Release
 

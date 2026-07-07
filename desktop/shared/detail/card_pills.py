@@ -1,4 +1,4 @@
-"""Pill row helpers for WatchedDetailCard."""
+"""Pill row helpers for DetailCard."""
 
 from __future__ import annotations
 

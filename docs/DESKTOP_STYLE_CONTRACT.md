@@ -1,6 +1,6 @@
 ﻿# Desktop Style Contract
 
-Документ фиксирует визуальные и layout-правила PyQt desktop GUI для `Watchbane`. Он относится к watched/search/analytics интерфейсу и не описывает legacy-сценарии из `archive/legacy/`.
+Документ фиксирует визуальные и layout-правила PyQt desktop GUI для `Watchbane`. Он относится к watched/search/settings интерфейсу и не описывает legacy-сценарии из `archive/legacy/`.
 
 ## Принципы
 
@@ -12,12 +12,15 @@
 
 ## Theme Tokens
 
-Основные значения живут в `desktop/theme/tokens.py`; QSS builders — в `desktop/theme/styles/`.
+Цвета, шрифты, радиусы и семантические visual names живут в `desktop/theme/tokens.py`.
+Spacing, margins, min/max sizes и scaled layout constants живут в `desktop/theme/layout.py`.
+QSS builders — в `desktop/theme/styles/`.
 Правила пользовательского масштаба UI описаны в [UI_SCALE_CONTRACT.md](UI_SCALE_CONTRACT.md).
 
 Правила:
 
-- новые цвета, spacing, radius и font-size добавляются через theme tokens;
+- новые цвета, radius и font-size добавляются через theme tokens;
+- новые spacing/margins/min/max/fixed dimensions добавляются через `theme/layout.py` и scaling helpers;
 - hardcoded visual values в widgets не добавляются без причины;
 - layout-правки не смешиваются с feature-wiring;
 - geometry-значения допустимы рядом с layout-кодом, если это не visual token.
@@ -103,27 +106,16 @@ Read-only actions:
 - показать missing/local/remote state;
 - не менять poster-cache без отдельного write-сценария.
 
-## Analytics Layout
+## Removed Information Layout
 
-Analytics read-only.
-
-Порядок секций:
-
-Active Information/Analytics sections:
-
-1. watched genre distribution;
-2. candidate pool genre distribution;
-3. chart constructor.
+Вкладка `Информация` / `Information` удалена из активного desktop shell.
 
 Правила:
 
-- `QScrollArea` с `widgetResizable=True`;
-- текстовые секции имеют vertical policy `Minimum`;
-- Plotly chart живет в отдельном контейнере;
-- fallback должен быть полноценным, а не пустым placeholder;
-- analytics не пишет dataset/pool/cache.
-- chart constructor controls stay compact and use dedicated object names/styles;
-- chart constructor supports bar/function rendering and local-only aggregation.
+- не добавлять `Information`/analytics tab в `build_main_tabs()` без уточненного нового требования;
+- не добавлять watched-entry cross-tab wiring для removed analytics tab;
+- если задача упоминает `Информация`, `Information`, `Analytics tab` или analytics как вкладку главного окна, сначала уточнить сценарий;
+- внутренние analytics helpers не считаются активным экраном desktop GUI.
 
 ## Search Layout
 
@@ -168,12 +160,12 @@ GUI-polish не должен менять:
 
 Перед merge desktop-правок проверить:
 
-| Watched | Search/Analytics |
+| Watched | Search/Settings |
 | --- | --- |
 | long title wraps | filters do not resize layout |
 | missing poster state | empty results are explicit |
 | missing metadata values | incomplete candidates are visible |
-| overview hidden when empty | Plotly fallback works |
+| overview hidden when empty | settings controls stay readable |
 | sidebar counter stable | text blocks do not overflow |
 
 Минимальные проверки:

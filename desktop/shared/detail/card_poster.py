@@ -1,4 +1,4 @@
-"""Poster display and context menu helpers for WatchedDetailCard."""
+"""Poster display and context menu helpers for DetailCard."""
 
 from __future__ import annotations
 

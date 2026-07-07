@@ -1,8 +1,11 @@
 import copy
+import ast
 import inspect
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from config import constant
 from config import scheme
@@ -307,6 +310,103 @@ def test_prepare_card_for_display_does_not_mutate_movie() -> None:
 
     assert movie == original
     assert card["title"] == "Mutation Check"
+
+
+def test_watched_load_model_uses_dataset_read_facade_only() -> None:
+    import inspect
+
+    import desktop.watched.model.load as watched_load_module
+
+    source = inspect.getsource(watched_load_module)
+    assert "dataset.read_models.watched" in source
+    assert "from storage" not in source
+    assert "import storage" not in source
+    assert "from web" not in source
+    assert "import web" not in source
+
+
+def test_watched_model_does_not_reexport_shared_detail_presenters() -> None:
+    import desktop.watched.model as watched_model
+
+    shared_detail_symbols = {
+        "build_main_info_items",
+        "build_meta_pill_items",
+        "build_score_ring_item",
+        "format_user_score_display",
+        "normalize_final_score",
+        "resolve_local_poster_path",
+    }
+
+    assert shared_detail_symbols.isdisjoint(watched_model.__all__)
+    for symbol in shared_detail_symbols:
+        assert hasattr(watched_model, symbol) is False
+
+
+def test_desktop_storage_web_import_boundary_uses_documented_whitelist() -> None:
+    # TODO: replace the remaining storage adapters with dataset/platform facades.
+    documented_whitelist = {
+        (
+            "desktop/shell/bootstrap.py",
+            "from storage.runtime import ensure_runtime_data_layout",
+        ),
+        (
+            "desktop/shared/detail/posters.py",
+            "from storage.files import open_file",
+        ),
+    }
+    findings = set()
+
+    for path in Path("desktop").rglob("*.py"):
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        normalized_path = path.as_posix()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if alias.name.split(".", 1)[0] in {"storage", "web"}:
+                        findings.add((normalized_path, f"import {alias.name}"))
+            elif isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+                if module.split(".", 1)[0] in {"storage", "web"}:
+                    imported = ", ".join(alias.name for alias in node.names)
+                    findings.add((normalized_path, f"from {module} import {imported}"))
+
+    assert findings == documented_whitelist
+
+
+def test_watched_read_facade_returns_desktop_entry_shape(monkeypatch) -> None:
+    from dataset.read_models import watched as watched_read_model
+
+    movie = _make_movie("Facade Shape", 7.7, 2021)
+    poster_cache = {"Facade Shape": "poster.jpg"}
+    lookup_cache = {"meta_by_title": {}, "pool_by_identity": {}}
+
+    def fake_build_card(movie_obj, *, poster_cache=None, lookup_cache=None):
+        assert movie_obj is movie
+        assert poster_cache is poster_cache_value
+        assert lookup_cache is lookup_cache_value
+        return {"title": movie_obj["main_info"]["title"], "year": 2021}
+
+    poster_cache_value = poster_cache
+    lookup_cache_value = lookup_cache
+    monkeypatch.setattr(watched_read_model.storage_data, "load_dataset", lambda: {"Facade Shape": movie})
+    monkeypatch.setattr(watched_read_model, "reload_poster_cache", lambda: poster_cache_value)
+    monkeypatch.setattr(watched_read_model, "_get_lookup_cache", lambda: lookup_cache_value)
+    monkeypatch.setattr(watched_read_model, "build_watched_movie_card", fake_build_card)
+
+    entries = watched_read_model.load_watched_entries()
+
+    assert entries == [("Facade Shape", movie, {"title": "Facade Shape", "year": 2021})]
+
+
+def test_shared_poster_helper_has_no_web_export_dependency() -> None:
+    import inspect
+
+    import desktop.shared.detail.posters as posters_module
+
+    source = inspect.getsource(posters_module)
+    assert "web.export" not in source
+    assert "build_watched_movie_card" not in source
 
 
 def test_filter_by_title() -> None:
@@ -1487,17 +1587,66 @@ def test_watched_delete_entry_uses_service_helper() -> None:
 def test_watched_detail_card_layout_contract() -> None:
     import inspect
 
-    import desktop.shared.detail.card as watched_view_module
+    import desktop.shared.detail.card_layout as card_layout_module
 
-    source = inspect.getsource(watched_view_module.WatchedDetailCard)
-    init_source = source.split("def _info_column_content_width", 1)[0]
+    layout_source = inspect.getsource(card_layout_module.build_detail_card_layout)
 
-    assert "info_column.addStretch" not in init_source
-    assert "content_layout.addStretch(1)" in init_source
-    assert "root.addStretch(1)" not in init_source
-    assert "QSizePolicy.Policy.Minimum" in init_source
-    assert "setWordWrap(True)" in init_source
-    assert "maximumHeight" not in init_source
+    assert "info_column.addStretch" not in layout_source
+    assert "content_layout.addStretch(1)" in layout_source
+    assert "root.addStretch(1)" not in layout_source
+    assert "QSizePolicy.Policy.Minimum" in layout_source
+    assert "setWordWrap(True)" in layout_source
+    assert "maximumHeight" not in layout_source
+
+
+def test_detail_card_rename_keeps_backward_compatibility() -> None:
+    from desktop.shared.detail import DetailCard, WatchedDetailCard
+
+    assert DetailCard is WatchedDetailCard
+
+
+@pytest.mark.parametrize(
+    "profile_name",
+    [
+        "DETAIL_CARD_LAYOUT_PROFILE",
+        "CANDIDATE_DETAIL_CARD_PROFILE",
+        "ADD_TITLE_PREVIEW_CARD_PROFILE",
+    ],
+)
+def test_detail_card_builds_layout_for_supported_profiles(qapp, profile_name) -> None:
+    from PyQt6.QtWidgets import QLabel, QFrame, QPushButton, QWidget
+
+    from desktop.shared.detail import DetailCard
+    from desktop.shared.detail import profiles as detail_profiles
+
+    profile = getattr(detail_profiles, profile_name)
+    detail = DetailCard(profile=profile)
+    hero = detail.widget
+    poster = hero.findChild(QFrame, "detailPosterShell")
+    title = hero.findChild(QLabel, "detailTitle")
+    overview = hero.findChild(QLabel, "detailOverviewText")
+    main_info = hero.findChild(QWidget, "detailMainInfoSection")
+    toggle = hero.findChild(QPushButton, "detailMainInfoToggleButton")
+
+    assert hero.objectName() == "detailHeroCard"
+    assert poster is not None
+    assert poster.minimumWidth() == profile.detail_poster_width
+    assert poster.minimumHeight() == profile.detail_poster_height
+    assert title is not None and title.wordWrap() is True
+    assert overview is not None and overview.wordWrap() is True
+    assert main_info is not None and main_info.isHidden() is False
+    assert toggle is not None and toggle.isHidden() is True
+
+    mark_button = hero.findChild(QPushButton, "candidateMarkWatchedButton")
+    hide_button = hero.findChild(QPushButton, "candidateHideButton")
+    if profile.show_mark_watched_button:
+        assert mark_button is not None
+    else:
+        assert mark_button is None
+    if profile.show_hide_candidate_button:
+        assert hide_button is not None
+    else:
+        assert hide_button is None
 
 
 def test_detail_hero_layout_skeleton(qapp) -> None:
@@ -1764,14 +1913,15 @@ def test_detail_chips_container_height_matches_visible_rows(qapp) -> None:
 def test_watched_detail_card_hides_overview_without_text() -> None:
     import inspect
 
+    import desktop.shared.detail.card_layout as card_layout_module
     import desktop.shared.detail.card as watched_view_module
 
     source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
-    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
+    layout_source = inspect.getsource(card_layout_module.build_detail_card_layout)
     assert "has_overview_text(card)" in source
     assert "_overview_frame.setVisible(False)" in source
-    assert "detailOverviewDivider" in init_source
-    assert "detail_overview_top_gap" in init_source
+    assert "detailOverviewDivider" in layout_source
+    assert "detail_overview_top_gap" in layout_source
 
 
 def test_detail_overview_section_renders_description(qapp) -> None:
@@ -1952,12 +2102,12 @@ def test_detail_overview_width_is_fixed_to_poster_width(qapp) -> None:
 def test_detail_overview_has_no_absolute_positioning() -> None:
     import inspect
 
-    import desktop.shared.detail.card as watched_view_module
+    import desktop.shared.detail.card_layout as card_layout_module
 
-    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
-    overview_source = init_source[
-        init_source.index('setObjectName("detailOverviewSection")') :
-        init_source.index("info_column.addWidget")
+    layout_source = inspect.getsource(card_layout_module.build_detail_card_layout)
+    overview_source = layout_source[
+        layout_source.index('setObjectName("detailOverviewSection")') :
+        layout_source.index("info_column.addWidget")
     ]
 
     assert ".move(" not in overview_source
@@ -1967,17 +2117,18 @@ def test_detail_overview_has_no_absolute_positioning() -> None:
 def test_watched_detail_card_renders_main_info_block() -> None:
     import inspect
 
+    import desktop.shared.detail.card_layout as card_layout_module
     import desktop.shared.detail.card as watched_view_module
 
-    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
+    layout_source = inspect.getsource(card_layout_module.build_detail_card_layout)
     show_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
     empty_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_empty)
 
-    assert "ОСНОВНАЯ ИНФОРМАЦИЯ" in init_source
-    assert 'setObjectName("detailMainInfoSection")' in init_source
-    assert 'setObjectName("detailMainInfoPanel")' in init_source
-    assert 'setObjectName("detailMainInfoHeader")' in init_source
-    assert 'setObjectName("detailMainInfoToggleButton")' in init_source
+    assert "ОСНОВНАЯ ИНФОРМАЦИЯ" in layout_source
+    assert 'setObjectName("detailMainInfoSection")' in layout_source
+    assert 'setObjectName("detailMainInfoPanel")' in layout_source
+    assert 'setObjectName("detailMainInfoHeader")' in layout_source
+    assert 'setObjectName("detailMainInfoToggleButton")' in layout_source
     assert "build_main_info_items(card)" in show_source
     assert "_set_main_info_items([])" in empty_source
 
@@ -2331,22 +2482,22 @@ def test_detail_main_info_panel_is_below_score_row(qapp) -> None:
 def test_watched_detail_card_does_not_render_my_score_ring() -> None:
     import inspect
 
-    import desktop.shared.detail.card as watched_view_module
+    import desktop.shared.detail.card_layout as card_layout_module
 
-    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
+    layout_source = inspect.getsource(card_layout_module.build_detail_card_layout)
 
-    assert 'score_summary_widget.setObjectName("detailScoreSummaryRow")' in init_source
-    assert 'self._final_score_stars_block.setObjectName("detailFinalScoreStars")' in init_source
-    assert 'self._final_score_stars_lane.setObjectName("detailFinalScoreStarsLane")' in init_source
-    assert 'RatingCircleIndicator("моя"' not in init_source
-    assert "self._metrics_row.addWidget(self._score_indicator" not in init_source
-    assert "StarRatingIndicator(" in init_source
-    assert "star_size=self._profile.detail_star_size" in init_source
-    assert "star_gap=self._profile.detail_star_gap" in init_source
-    assert "_rating_stars_row" not in init_source
-    assert "_tmdb_ring_slot.setFixedSize(" in init_source
-    assert "self._profile.detail_rating_widget_size," in init_source
-    assert "self._score_summary_row.addWidget" in init_source
+    assert 'score_summary_widget.setObjectName("detailScoreSummaryRow")' in layout_source
+    assert 'owner._final_score_stars_block.setObjectName("detailFinalScoreStars")' in layout_source
+    assert 'owner._final_score_stars_lane.setObjectName("detailFinalScoreStarsLane")' in layout_source
+    assert 'RatingCircleIndicator("моя"' not in layout_source
+    assert "owner._metrics_row.addWidget(owner._score_indicator" not in layout_source
+    assert "StarRatingIndicator(" in layout_source
+    assert "star_size=profile.detail_star_size" in layout_source
+    assert "star_gap=profile.detail_star_gap" in layout_source
+    assert "_rating_stars_row" not in layout_source
+    assert "_tmdb_ring_slot.setFixedSize(" in layout_source
+    assert "profile.detail_rating_widget_size," in layout_source
+    assert "owner._score_summary_row.addWidget" in layout_source
 
 
 def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
@@ -2555,20 +2706,20 @@ def test_watched_user_score_badge_is_poster_shell_overlay(qapp) -> None:
 def test_watched_user_score_badge_has_readable_background() -> None:
     import inspect
 
-    import desktop.shared.detail.card as detail_card_module
+    import desktop.shared.detail.card_layout as card_layout_module
     from desktop.theme import COLOR_TEXT, COLOR_TEXT_INVERTED
     from desktop.theme.styles.detail_card import build_detail_card_style
 
     style = build_detail_card_style()
-    init_source = inspect.getsource(detail_card_module.WatchedDetailCard.__init__)
+    layout_source = inspect.getsource(card_layout_module.build_detail_card_layout)
 
     assert "QLabel#detailUserScoreBadge" in style
     assert f"background-color: {COLOR_TEXT}" in style
     assert f"border: 1px solid {COLOR_TEXT}" in style
     assert f"color: {COLOR_TEXT_INVERTED}" in style
-    assert "class UserScoreBadgeLabel(QLabel)" in init_source
-    assert "drawRoundedRect" in init_source
-    assert "QColor(COLOR_TEXT)" in init_source
+    assert "class UserScoreBadgeLabel(QLabel)" in layout_source
+    assert "drawRoundedRect" in layout_source
+    assert "QColor(COLOR_TEXT)" in layout_source
 
 
 def test_watched_user_score_badge_hides_without_user_score(qapp) -> None:
@@ -2606,20 +2757,20 @@ def test_candidate_detail_card_never_shows_user_score_badge(qapp) -> None:
 def test_candidate_detail_actions_are_icon_only_under_poster() -> None:
     import inspect
 
-    import desktop.shared.detail.card as watched_view_module
+    import desktop.shared.detail.card_layout as card_layout_module
 
-    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
+    layout_source = inspect.getsource(card_layout_module.build_detail_card_layout)
 
-    assert 'QPushButton("👁")' not in init_source
-    assert 'QPushButton("Hide")' not in init_source
-    assert 'QPushButton()' in init_source
-    assert 'make_detail_action_icon("eye"' in init_source
-    assert 'make_detail_action_icon("hide"' in init_source
-    assert "self._poster_actions_layout.addWidget" in init_source
-    assert "poster_column.addWidget(self._poster_actions_widget)" in init_source
-    assert "title_row.addWidget(self._poster_actions_widget" not in init_source
-    assert "self._metrics_row.addWidget(self._mark_watched_button" not in init_source
-    assert "self._metrics_row.addWidget(self._hide_button" not in init_source
+    assert 'QPushButton("👁")' not in layout_source
+    assert 'QPushButton("Hide")' not in layout_source
+    assert 'QPushButton()' in layout_source
+    assert 'make_detail_action_icon("eye"' in layout_source
+    assert 'make_detail_action_icon("hide"' in layout_source
+    assert "owner._poster_actions_layout.addWidget" in layout_source
+    assert "poster_column.addWidget(owner._poster_actions_widget)" in layout_source
+    assert "title_row.addWidget(owner._poster_actions_widget" not in layout_source
+    assert "owner._metrics_row.addWidget(owner._mark_watched_button" not in layout_source
+    assert "owner._metrics_row.addWidget(owner._hide_button" not in layout_source
 
 
 def test_candidate_detail_actions_are_poster_descendants(qapp) -> None:
@@ -3225,11 +3376,12 @@ def test_open_path_in_shell_missing_path() -> None:
 def test_watched_detail_card_has_poster_context_menu() -> None:
     import inspect
 
+    import desktop.shared.detail.card_layout as card_layout_module
     import desktop.shared.detail.card as watched_view_module
 
-    init_source = inspect.getsource(watched_view_module.WatchedDetailCard.__init__)
-    assert "CustomContextMenu" in init_source
-    assert "_show_poster_context_menu" in init_source
+    layout_source = inspect.getsource(card_layout_module.build_detail_card_layout)
+    assert "CustomContextMenu" in layout_source
+    assert "_show_poster_context_menu" in layout_source
 
     menu_source = inspect.getsource(watched_view_module.WatchedDetailCard._show_poster_context_menu)
     assert "Открыть постер" in menu_source
@@ -3659,10 +3811,11 @@ def test_candidate_filter_sections_define_visual_hierarchy() -> None:
 
 
 def test_candidate_list_search_matches_watched_search_scale() -> None:
+    from desktop.theme.layout import INPUT_PADDING_X, INPUT_PADDING_Y
     from desktop.theme.scaling import font_px, layout_px
     from desktop.theme.styles.candidates_shell import build_candidates_shell_style
     from desktop.theme.styles.watched_shell import build_watched_shell_style
-    from desktop.theme.tokens import FONT_SECTION, INPUT_PADDING_X, INPUT_PADDING_Y
+    from desktop.theme.tokens import FONT_SECTION
 
     candidate_style = build_candidates_shell_style()
     watched_style = build_watched_shell_style()
@@ -3864,6 +4017,42 @@ def test_candidate_filters_view_numeric_threshold_sliders_collect_values(monkeyp
     assert filters["min_tmdb_votes"] == 10_000
 
 
+def test_candidate_filters_view_before_apply_seam(monkeypatch, qapp) -> None:
+    from desktop.candidates.filters_view import CandidateFiltersView
+    from desktop.candidates.session import CandidateSearchSession
+
+    class ServiceStub:
+        def get_search_overview_view(self):
+            return {
+                "is_empty": False,
+                "stats": {"unique_total": 1, "ready_total": 1, "incomplete_total": 0},
+            }
+
+        def get_search_filter_defaults_view(self):
+            return {"defaults": {}}
+
+        def get_search_filter_chip_options_view(self):
+            return {"genres": [], "countries": []}
+
+    captured = {}
+    session = CandidateSearchSession(service=ServiceStub())
+    view = CandidateFiltersView(
+        session,
+        service=session.service,
+        on_before_apply=lambda filters: {**filters, "criteria_name": "seam"},
+    )
+    monkeypatch.setattr(
+        session,
+        "apply_filters_async",
+        lambda filters, *, parent=None: captured.update({"filters": filters, "parent": parent}) or 1,
+    )
+
+    view._apply_filters()
+
+    assert captured["filters"]["criteria_name"] == "seam"
+    assert captured["parent"] is view.widget
+
+
 def test_candidate_filters_view_uses_threshold_sliders_not_spinboxes() -> None:
     import inspect
 
@@ -3921,6 +4110,7 @@ def test_watched_window_includes_candidate_tabs() -> None:
     factory_source = inspect.getsource(tabs_module.build_main_tabs)
     assert "build_main_tabs" in init_source
     assert "WatchedTabView" in factory_source
+    assert "AnalyticsView" not in factory_source
     assert "CandidateFiltersView" in factory_source
     assert "CandidateListView" in factory_source
     assert "SettingsTabView" in factory_source
@@ -3937,6 +4127,114 @@ def test_watched_window_includes_candidate_tabs() -> None:
     assert "_tab_registry.register" not in init_source
     assert "registry.register" in factory_source
     assert "registry.focus" in factory_source
+
+
+def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
+    from PyQt6.QtWidgets import QTabWidget, QWidget
+
+    import desktop.shell.tabs as tabs_module
+
+    class FakeWatchedTabView:
+        def __init__(
+            self,
+            *,
+            parent=None,
+            on_status_message=None,
+            on_entries_changed=None,
+        ) -> None:
+            self.widget = QWidget(parent)
+            self.entries = [("Alpha", {"main_info": {"title": "Alpha"}}, {"title": "Alpha"})]
+            self._on_entries_changed = on_entries_changed
+
+        def reload_entries(self, added_key: str | None = None) -> None:
+            return None
+
+    class FakeCandidateSearchSession:
+        pass
+
+    class FakeCandidateListView:
+        def __init__(self, *args, **kwargs) -> None:
+            self.widget = QWidget()
+            self.activation_count = 0
+
+        def on_tab_activated(self) -> None:
+            self.activation_count += 1
+
+    class FakeSimpleTabView:
+        def __init__(self, *args, **kwargs) -> None:
+            self.widget = QWidget()
+
+    monkeypatch.setattr(tabs_module, "WatchedTabView", FakeWatchedTabView)
+    monkeypatch.setattr(tabs_module, "CandidateSearchSession", FakeCandidateSearchSession)
+    monkeypatch.setattr(tabs_module, "CandidateFiltersView", FakeSimpleTabView)
+    monkeypatch.setattr(tabs_module, "CandidateListView", FakeCandidateListView)
+    monkeypatch.setattr(tabs_module, "SettingsTabView", FakeSimpleTabView)
+
+    tabs = QTabWidget()
+    parent = QWidget()
+    registry, context = tabs_module.build_main_tabs(
+        tabs,
+        parent,
+        on_status_message=lambda _message, _timeout_ms: None,
+    )
+
+    assert tabs.count() == 4
+    assert [tabs.tabText(index) for index in range(tabs.count())] == [
+        "Моё",
+        "Фильтры",
+        "Кандидаты",
+        "Настройки",
+    ]
+    assert hasattr(context, "analytics_tab_view") is False
+    assert len(registry._specs) == 4
+    assert len(registry._specs) == len(set(registry._specs))
+    assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
+    assert all(hasattr(spec.view, "widget") for spec in registry._specs.values())
+
+    for index in range(tabs.count()):
+        registry.on_current_changed(index)
+
+    assert registry._specs["candidates"].view.activation_count == 1
+
+
+def test_cross_tab_wiring_stays_in_shell_tabs() -> None:
+    shell_tabs_path = Path("desktop/shell/tabs.py")
+    shell_source = shell_tabs_path.read_text(encoding="utf-8")
+
+    assert "ShellTabSpec(" in shell_source
+    assert "on_candidate_moved_to_watched" in shell_source
+    assert "watched_tab_view.reload_entries" in shell_source
+    assert "on_watched_added=on_candidate_moved_to_watched" in shell_source
+    assert "on_applied=lambda: registry.focus(\"candidates\")" in shell_source
+
+    forbidden_snippets = {
+        "ShellTabSpec(",
+        "registry.focus(",
+        "watched_tab_view.reload_entries",
+        "on_watched_added=",
+        "on_entries_changed=",
+    }
+    forbidden_tab_imports = {
+        "from desktop.watched.tab import WatchedTabView": "desktop/watched/",
+        "from desktop.candidates.filters_view import CandidateFiltersView": "desktop/candidates/",
+        "from desktop.candidates.list_view import CandidateListView": "desktop/candidates/",
+        "from desktop.settings.tab_view import SettingsTabView": "desktop/settings/",
+    }
+    findings = set()
+
+    for path in Path("desktop").rglob("*.py"):
+        normalized_path = path.as_posix()
+        if normalized_path == shell_tabs_path.as_posix():
+            continue
+        source = path.read_text(encoding="utf-8")
+        for snippet in forbidden_snippets:
+            if snippet in source:
+                findings.add((normalized_path, snippet))
+        for snippet, allowed_prefix in forbidden_tab_imports.items():
+            if snippet in source and not normalized_path.startswith(allowed_prefix):
+                findings.add((normalized_path, snippet))
+
+    assert findings == set()
 
 
 def test_analytics_view_hides_removed_imdb_sections() -> None:
@@ -4193,23 +4491,73 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
 def test_candidate_list_view_wires_mark_watched_transfer() -> None:
     import inspect
 
+    import desktop.candidates.list_actions as actions_module
     import desktop.candidates.list_view as module
 
-    source = inspect.getsource(module.CandidateListView)
-    assert "run_candidate_transfer_flow" in source
-    assert "set_mark_watched_handler" in source
-    assert "on_watched_added" in source
+    view_source = inspect.getsource(module.CandidateListView)
+    actions_source = inspect.getsource(actions_module.CandidateListActionsMixin)
+    assert "CandidateListActionsMixin" in view_source
+    assert "set_mark_watched_handler" in view_source
+    assert "run_candidate_transfer_flow" not in view_source
+    assert "run_candidate_transfer_flow" in actions_source
+    assert "on_watched_added" in actions_source
+    assert "reload_from_pool(force=True)" in actions_source
+
+
+def test_candidate_list_actions_transfer_refreshes_pool_and_notifies(monkeypatch, qapp) -> None:
+    from types import SimpleNamespace
+
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.candidates.list_actions import CandidateListActionsMixin
+
+    class FakeSession:
+        filters = {"only_unwatched": True}
+
+        def __init__(self) -> None:
+            self.reload_calls: list[bool] = []
+
+        def reload_from_pool(self, *, force: bool = False) -> None:
+            self.reload_calls.append(force)
+
+    class FakeView(CandidateListActionsMixin):
+        pass
+
+    candidate = {"title": "Alpha"}
+    result = SimpleNamespace(ok=True)
+    added_results = []
+    session = FakeSession()
+    view = FakeView()
+    view._selected_candidate = candidate
+    view._session = session
+    view._on_watched_added = added_results.append
+    view._widget = QWidget()
+
+    monkeypatch.setattr(
+        "desktop.watched.add_title.run_candidate_transfer_flow",
+        lambda parent, selected_candidate: result if selected_candidate is candidate else None,
+    )
+
+    view._transfer_selected_to_watched()
+
+    assert view._selected_candidate is None
+    assert session.reload_calls == [True]
+    assert added_results == [result]
 
 
 def test_candidate_list_view_starts_async_poster_download() -> None:
     import inspect
 
+    import desktop.candidates.list_actions as actions_module
     import desktop.candidates.list_view as module
 
-    source = inspect.getsource(module.CandidateListView)
-    assert "CandidatePosterDownloadWorker" in source
-    assert "candidate_poster_url_for_download" in source
-    assert "apply_local_poster_path" in source
+    view_source = inspect.getsource(module.CandidateListView)
+    actions_source = inspect.getsource(actions_module.CandidateListActionsMixin)
+    assert "CandidatePosterDownloadWorker" not in view_source
+    assert "candidate_poster_url_for_download" in view_source
+    assert "_start_poster_download" in view_source
+    assert "CandidatePosterDownloadWorker" in actions_source
+    assert "apply_local_poster_path" in actions_source
 
 
 def test_candidate_session_reload_from_pool_reapplies_filters() -> None:

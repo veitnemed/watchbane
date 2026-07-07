@@ -86,9 +86,9 @@ def resolve_local_poster_path_from_record(
 
 def resolve_local_poster_path(movie: dict, card: dict | None = None) -> str | None:
     """Return a local filesystem poster path for a watched movie record."""
-    from web.export import build_watched_movie_card
+    from dataset.read_models.watched import prepare_card_for_display
 
-    display_card = card if card is not None else build_watched_movie_card(movie)
+    display_card = card if card is not None else prepare_card_for_display(movie)
     main_info = movie.get("main_info") if isinstance(movie.get("main_info"), dict) else {}
     title = display_card.get("title") or main_info.get("title") or movie.get("title")
     year = display_card.get("year", main_info.get("year", movie.get("year")))

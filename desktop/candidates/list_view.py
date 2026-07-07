@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from desktop.candidates.list_actions import CandidateListActionsMixin
 from desktop.candidates.list_delegate import build_candidate_list_item_delegate
 from desktop.candidates.list_model import CandidateListModel
 from desktop.candidates.presenters import (
@@ -30,9 +31,8 @@ from desktop.candidates.presenters import (
     candidate_poster_url_for_download,
 )
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
-from desktop.candidates.workers.poster_worker import CandidatePosterDownloadWorker
 from desktop.shared.widgets.list_search import DebouncedLineEditSearch, resolve_selection_row
-from desktop.shared.detail import WatchedDetailCard
+from desktop.shared.detail import DetailCard
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.theme.shell_layout import (
     CANDIDATE_LIST_MAX_WIDTH_PX,
@@ -47,8 +47,8 @@ from desktop.theme.shell_layout import (
     DETAIL_TAB_TOP_MARGIN_PX,
     LEFT_PANEL_TOP_COMPENSATION_PX,
 )
+from desktop.theme.layout import CANDIDATE_LIST_MAX_WIDTH, CANDIDATE_LIST_MIN_WIDTH
 from desktop.theme.scaling import list_px
-from desktop.theme.tokens import CANDIDATE_LIST_MAX_WIDTH, CANDIDATE_LIST_MIN_WIDTH
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ CANDIDATE_DETAIL_STRETCH = 7
 CANDIDATE_LIST_ITEM_SPACING = list_px(2)
 
 
-class CandidateListView:
+class CandidateListView(CandidateListActionsMixin):
     """Candidates tab: sort controls, card list, read-only detail card."""
 
     def __init__(
@@ -78,7 +78,7 @@ class CandidateListView:
         self._pool_unique_total = 0
         self._detail_entries: dict[str, tuple] = {}
         self._poster_request_seq = 0
-        self._poster_worker: CandidatePosterDownloadWorker | None = None
+        self._poster_worker = None
         self._model = CandidateListModel(parent=None)
         self._delegate = None
 
@@ -176,7 +176,7 @@ class CandidateListView:
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
-        self._detail_card = WatchedDetailCard(profile=detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE)
+        self._detail_card = DetailCard(profile=detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE)
         self._detail_card.set_mark_watched_handler(self._transfer_selected_to_watched)
         self._detail_card.set_hide_handler(self._hide_selected_candidate)
         scroll.setWidget(self._detail_card.widget)
@@ -198,39 +198,6 @@ class CandidateListView:
             return
         self._clear_detail(show_filters_hint=False, loading=True)
         self._session.apply_filters_async(dict(DEFAULT_BROWSE_FILTERS), parent=self._widget)
-
-    def _transfer_selected_to_watched(self) -> None:
-        candidate = self._selected_candidate
-        if not isinstance(candidate, dict):
-            return
-
-        from desktop.watched.add_title import run_candidate_transfer_flow
-
-        parent = self._widget.window()
-        result = run_candidate_transfer_flow(parent, candidate)
-        if result is None or getattr(result, "ok", False) is False:
-            return
-
-        self._selected_candidate = None
-        if self._session.filters is not None:
-            self._session.reload_from_pool(force=True)
-        if self._on_watched_added is not None:
-            self._on_watched_added(result)
-
-    def _hide_selected_candidate(self) -> None:
-        candidate = self._selected_candidate
-        if not isinstance(candidate, dict):
-            return
-
-        result = self._service.hide_candidate(candidate)
-        if isinstance(result, dict) and result.get("ok") is False:
-            return
-
-        identity = candidate_detail_identity(candidate)
-        self._detail_entries.pop(identity, None)
-        self._selected_candidate = None
-        self._selected_identity = None
-        self._session.remove_candidate(candidate)
 
     @property
     def widget(self) -> QWidget:
@@ -366,35 +333,6 @@ class CandidateListView:
                 (render_done - build_done) * 1000,
                 total_ms,
             )
-
-    def _start_poster_download(self, poster_url: str, identity: str, request_seq: int) -> None:
-        worker = CandidatePosterDownloadWorker(poster_url, parent=self._widget)
-        worker.finished_with_path.connect(
-            lambda local_path, seq=request_seq, ident=identity: self._on_poster_download_finished(
-                seq,
-                ident,
-                local_path,
-            )
-        )
-        worker.finished.connect(worker.deleteLater)
-        self._poster_worker = worker
-        worker.start()
-
-    def _on_poster_download_finished(self, request_seq: int, identity: str, local_path: str) -> None:
-        if request_seq != self._poster_request_seq:
-            return
-
-        entry = self._detail_entries.get(identity)
-        if entry is not None:
-            entry_key, movie, card = entry
-            updated_card = dict(card)
-            updated_card["poster_path"] = local_path
-            updated_card["poster_src"] = local_path
-            self._detail_entries[identity] = (entry_key, movie, updated_card)
-
-        self._detail_card.apply_local_poster_path(local_path)
-        self._model.update_poster_path(identity, local_path)
-        self._results_list.viewport().update()
 
     def _on_loading_changed(self) -> None:
         if self._session.is_loading:

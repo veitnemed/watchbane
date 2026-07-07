@@ -13,7 +13,7 @@ from desktop.theme.shell_layout import (
     SIDEBAR_MAX_WIDTH_PX,
     SIDEBAR_MIN_WIDTH_PX,
 )
-from desktop.theme.tokens import WATCHED_ADD_TITLE_MIN_HEIGHT
+from desktop.theme.layout import WATCHED_ADD_TITLE_MIN_HEIGHT
 from desktop.watched.filters_panel import WatchedFiltersPanel
 from desktop.watched.model import SORT_OPTIONS, WatchedEntry
 

@@ -12,23 +12,32 @@
 
 Desktop — **тонкий слой сценариев** поверх `dataset`, `candidates.service`, `posters`. UI не пишет JSON напрямую.
 
+Вкладка `Информация` удалена из активного shell. Если новая задача упоминает `Информация`, `Information`, `Analytics tab` или analytics как вкладку главного окна, сначала нужно уточнить требуемый сценарий и не восстанавливать вкладку автоматически.
+
 ```text
 start_app.py → desktop.app.main()
                  → shell/main_window.WatchedMoviesWindow
-                      → WatchedTabView / Candidate*View / AnalyticsView
+                      → WatchedTabView / Candidate*View / SettingsTabView
                            → presenters + shared widgets
                            → service layer (dataset, candidates)
 ```
 
+`desktop/watched/model/load.py` — compatibility wrapper. Фактическая загрузка watched read model живет в `dataset/read_models/watched.py`.
+
 ## Структура пакетов
 
 ```text
+dataset/
+  read_models/
+    watched.py                   # watched desktop/export read facade (dataset_key, movie, display card)
+
 desktop/
   app.py                         # thin entry: re-exports main + WatchedMoviesWindow
 
   shell/
     bootstrap.py                 # QApplication, WebEngine prep, main()
     main_window.py               # WatchedMoviesWindow: chrome + status bar
+    tab_contract.py              # TabView protocol + optional activation helper
     tabs.py                      # build_main_tabs(), MainTabRegistry, AppTabsContext
   watched/
     model/                       # load, filter, sort, format, writes (no Qt widgets)
@@ -61,15 +70,15 @@ desktop/
     filters_controls.py          # threshold slider helpers
     presenters.py                # format/map candidate records
     workers/poster_worker.py
-  analytics/
-    view.py                      # Information/AnalyticsView orchestrator
+  analytics/                     # internal report/chart helpers, not an active shell tab
+    view.py                      # legacy/non-registered AnalyticsView
     chart_constructor.py         # pure chart-constructor aggregation
     constants.py                 # typography, spacing, icons
     sections/
-      summary.py                 # legacy/internal helpers, not active Information UI
+      summary.py                 # legacy/internal helpers
       charts_host.py             # Plotly host
       fallback_bars.py           # bar fallbacks
-      lists.py                   # legacy/internal list helpers, not active Information UI
+      lists.py                   # legacy/internal list helpers
     charts.py                    # Plotly HTML builders, generic constructor charts
   shared/
     detail/
@@ -89,7 +98,9 @@ desktop/
       genre_chip_selector.py
       country_chip_selector.py
   theme/
-    tokens.py                    # COLOR_*, FONT_*, spacing, radius
+    tokens.py                    # COLOR_*, FONT_*, radius, semantic names
+    layout.py                    # spacing, margins, min/max sizes, scaled layout constants
+    shell_layout.py              # compatibility re-exports for shell layout constants
     styles/
       app.py                     # build_app_style (composer)
       shell.py                   # tabs, scrollbars, status bar
@@ -107,12 +118,15 @@ desktop/
 | --- | --- | --- |
 | `app.py` | thin entry, re-exports `main` | shell |
 | `shell/main_window.py` | главное окно, status bar | shell |
+| `shell/tab_contract.py` | `TabView` protocol and optional activation helper | shell |
 | `shell/tabs.py` | `build_main_tabs()`, tab registry, cross-tab wiring | shell |
 | `watched/tab.py` | layout, list state, selection | feature view |
 | `watched/tab_actions.py` | delete/score/add-title write actions | feature view |
 | `watched/sidebar.py` | list widget, search, sort, add-title button | feature view |
 | `watched/filters_panel.py` | collapsible score/year/genre filters | feature view |
-| `watched/model/` | load/filter/format, poster paths, score save | model |
+| `watched/model/load.py` | compatibility wrapper over `dataset/read_models/watched.py` | model, no Qt |
+| `watched/model/` | watched load, filters, watched-specific formatters, score save; no Qt and no `shared/detail` presenter re-export | model |
+| `dataset/read_models/watched.py` | watched read facade: load dataset, lookup/poster cache, display card | domain read model |
 | `shared/detail/` | card, delegate, presenters (no `watched/` import) | shared |
 | `watched/dialogs/score_edit.py` | диалог редактирования user_score | dialog |
 | `watched/add_title/` | wizard добавления / transfer из pool | dialog + worker |
@@ -123,32 +137,45 @@ desktop/
 | `candidates/list_view.py` | вкладка Кандидаты | feature view |
 | `candidates/list_delegate.py` | card-style list row delegate | shared UI |
 | `candidates/presenters.py` | format/map для UI | presenter |
-| `analytics/view.py` | read-only вкладка Information/Analytics (genre reports + chart constructor) | feature view |
+| `analytics/view.py` | legacy/non-registered analytics view; not an active desktop tab | internal UI |
 | `analytics/chart_constructor.py` | pure aggregation for custom charts | model |
 | `analytics/sections/*` | Plotly host, fallback bars and legacy/internal section helpers | feature view |
 | `analytics/charts.py` | Plotly chart builders, including generic constructor charts | charts |
+| `settings/tab_view.py` | active settings tab for UI scale/preferences | feature view |
 | `shared/widgets/` | range_slider, list_search, chip selectors | shared |
-| `theme/tokens.py` | colors, fonts, spacing | theme |
+| `theme/tokens.py` | colors, fonts, radii, semantic visual names | theme |
+| `theme/layout.py` | spacing, margins, min/max sizes, scaled layout constants | theme |
+| `theme/shell_layout.py` | compatibility facade over `theme/layout.py` | theme |
 | `theme/styles/*` | QSS builders per screen | theme |
 
-## Контракт feature view
+## Контракт TabView
 
-Каждая вкладка — класс с единым интерфейсом (как `CandidateListView`, `WatchedTabView`, `AnalyticsView`):
+Каждая активная вкладка регистрируется через `ShellTabSpec` в `desktop/shell/tabs.py`.
+Контракт описан в `desktop/shell/tab_contract.py`.
+
+Минимальный интерфейс view-класса (как `CandidateListView`, `WatchedTabView`, `SettingsTabView`):
 
 ```python
-class SomeTabView:
+class TabView(Protocol):
     @property
     def widget(self) -> QWidget: ...   # корневой виджет для QTabWidget
+```
 
-    def on_tab_activated(self) -> None: ...  # опционально: lazy refresh
+`on_tab_activated()` не является обязательным методом view. `MainTabRegistry` вызывает `activate_tab_view(view)`, который безопасно делает `getattr(view, "on_tab_activated", None)` и запускает hook только если он callable.
+
+Шаблон добавления вкладки:
+
+```python
+feature_view = SomeFeatureView(...)
+registry.register(ShellTabSpec("feature_id", "Label", feature_view))
 ```
 
 Правила:
 
 - view **не импортирует** другие feature views напрямую;
-- cross-tab события идут через shell (`WatchedMoviesWindow`) или shared session (`CandidateSearchSession`);
+- cross-tab wiring живет только в shell (`desktop/shell/tabs.py`) или shared session (`CandidateSearchSession`);
 - status bar — callback `on_status_message(msg, timeout_ms)` из shell;
-- изменение watched-базы — callback `on_entries_changed(entries)` для analytics и др.
+- изменение watched-базы не должно напрямую регистрировать removed `Информация`/analytics tab callbacks.
 
 ## Куда класть новый код
 
@@ -169,27 +196,35 @@ class SomeTabView:
 | Candidate list row paint | `candidates/list_delegate.py` |
 | Write-сценарий (save/delete) | `watched/delete.py` / `dataset` + dialog |
 | Переиспользуемый виджет без domain | `shared/widgets/` |
-| Новый цвет/spacing | `theme/tokens.py` |
+| Новый цвет/радиус/семантический font token | `theme/tokens.py` |
+| Новый размер, margin, spacing, min/max width/height | `theme/layout.py` + scaling helpers |
 | QSS нового экрана | `theme/styles/<screen>.py` |
 
 ## Запрещённые зависимости
 
 ```text
 ❌ desktop → storage (напрямую save/load JSON)
+❌ desktop → web.export (для watched display cards)
 ❌ feature view → feature view (Watched → Candidate)
 ❌ shared/detail → watched/ (presenters live in shared)
 ❌ watched/model/ → PyQt6
+❌ watched/model/__init__.py → shared/detail presenter re-export
 ❌ candidates/* → watched/tab.py
+✅ desktop → dataset read facade (`dataset/read_models/watched.py` / `dataset.service`)
 ✅ candidate views → shared/detail (card reused across watched, candidates, add-title)
-✅ watched/model → shared/detail/presenters (re-export for backward compat)
 ✅ все views → dataset / candidates.service
 ```
+
+Временный whitelist для существующих desktop → storage импортов:
+
+- `desktop/shell/bootstrap.py` → `storage.runtime.ensure_runtime_data_layout`: startup runtime data layout, не feature load/save.
+- `desktop/shared/detail/posters.py` → `storage.files.open_file`: shell-open adapter для локального пути. TODO: вынести в отдельный platform/files facade при следующей чистке storage boundary.
 
 ## Добавление вкладки (чеклист)
 
 1. Создать view в `desktop/<feature>/` с `.widget`.
 2. Бизнес-логику — в `dataset` / `candidates` / model без Qt.
-3. QSS — через `desktop.theme` (`tokens.py` + `styles/`).
+3. QSS — через `desktop.theme` (`tokens.py` для цветов/font/radius, `layout.py` для размеров, `styles/` для QSS).
 4. Зарегистрировать в `shell/tabs.py` через `build_main_tabs()` / `MainTabRegistry`.
 5. Cross-tab callbacks — в `build_main_tabs()` (не в feature views).
 6. Тесты в `tests/test_desktop.py`.
@@ -208,7 +243,7 @@ class SomeTabView:
 10. ~~`shared/detail/{types,presenters,posters}.py` — убрать `watched/` из card~~ done
 11. ~~Разбить монолиты: `shared/detail/*`, `watched/{sidebar,filters_panel,model/}`, `candidates/list_delegate.py`~~ done
 12. ~~`analytics/sections/*`, `build_main_tabs()` в shell, docs~~ done
-13. ~~Cleanup: удалить `desktop/settings/`, split `filters_view`, `watched/tab` + `add_title`, `shared/detail/card`~~ done
+13. ~~Cleanup: split `filters_view`, `watched/tab` + `add_title`, `shared/detail/card`; keep `desktop/settings/` as an active feature package~~ done
 
 ## Проверки
 
@@ -216,3 +251,21 @@ class SomeTabView:
 py -m compileall desktop dataset candidates storage ui tests
 py -m pytest tests/test_desktop.py
 ```
+
+## New Code Routing Guardrail
+
+Use this routing for new desktop code:
+
+- New tab: `desktop/<feature>/view.py` plus `ShellTabSpec` registration in `desktop/shell/tabs.py`.
+- Actions/write orchestration: `desktop/<feature>/actions.py` or a focused `desktop/<feature>/<scenario>_actions.py`.
+- State without Qt: `desktop/<feature>/state.py`.
+- Shared widget: `desktop/shared/widgets/`.
+- Detail card formatting: `desktop/shared/detail/`.
+- QSS: `desktop/theme/styles/`.
+- Domain read/write: `dataset/` or `candidates.service`.
+- Sizes, margins and spacing: `desktop/theme/layout.py` plus scaling helpers.
+
+Guardrail tests:
+
+- `tests/test_desktop.py` checks tab registration, optional activation, tab ids, cross-tab wiring boundaries and desktop import boundaries.
+- `tests/test_ui_scale_settings.py` checks scale anchors and hardcoded fixed-size whitelist.

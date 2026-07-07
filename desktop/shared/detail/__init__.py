@@ -1,6 +1,6 @@
 """Shared detail card widgets and presenters."""
 
-from desktop.shared.detail.card import WatchedDetailCard
+from desktop.shared.detail.card import DetailCard, WatchedDetailCard
 from desktop.shared.detail.additional_info import (
     build_additional_info_items,
     format_episode_runtime,
@@ -72,6 +72,7 @@ __all__ = [
     "ADD_TITLE_PREVIEW_CARD_PROFILE",
     "CANDIDATE_DETAIL_CARD_PROFILE",
     "DETAIL_CARD_LAYOUT_PROFILE",
+    "DetailCard",
     "DetailCardLayoutProfile",
     "DetailEntry",
     "LIST_ITEM_HEIGHT",

@@ -1,5 +1,3 @@
-"""Read-only analytics feature: view and Plotly charts."""
+"""Internal analytics chart/report helpers; not an active desktop shell tab."""
 
-from desktop.analytics.view import AnalyticsView
-
-__all__ = ["AnalyticsView"]
+__all__: list[str] = []

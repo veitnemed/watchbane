@@ -7,7 +7,7 @@ from collections.abc import Callable
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QHBoxLayout, QScrollArea, QSplitter, QWidget
 
-from desktop.shared.detail import WatchedDetailCard
+from desktop.shared.detail import DetailCard
 from desktop.shared.widgets.list_search import resolve_selection_row
 from desktop.theme.shell_layout import (
     DETAIL_TAB_TOP_MARGIN_PX,
@@ -146,7 +146,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         scroll.setWidgetResizable(True)
         scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
-        self._detail_card = WatchedDetailCard()
+        self._detail_card = DetailCard()
         scroll.setWidget(self._detail_card.widget)
         return scroll
 

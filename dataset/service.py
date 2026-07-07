@@ -29,6 +29,13 @@ from dataset.genres.stats import (
     show_dataset_genres,
 )
 from dataset.models.results import AddRecordResult, UpdateRecordResult
+from dataset.read_models.watched import (
+    WatchedEntry,
+    build_watched_lookup_cache,
+    load_watched_entries,
+    prepare_card_for_display,
+    reload_poster_cache,
+)
 from dataset.records.add import add_dataset_record
 from dataset.records.delete import (
     backup_before_watched_delete,
@@ -79,6 +86,7 @@ __all__ = [
     "AddTitleResolveBundle",
     "IMDB_DELTA_LIST_PREVIEW_LIMIT",
     "UpdateRecordResult",
+    "WatchedEntry",
     "add_dataset_record",
     "add_movie",
     "add_tag",
@@ -103,6 +111,7 @@ __all__ = [
     "build_preview_movie_from_defaults",
     "build_score_analytics",
     "build_watched_delete_preview",
+    "build_watched_lookup_cache",
     "delete_all_tags",
     "delete_tag",
     "delete_watched_record",
@@ -116,8 +125,11 @@ __all__ = [
     "get_dataset_stats",
     "is_correct_tag_name",
     "load_tags",
+    "load_watched_entries",
     "move_edit_files_to_backup",
+    "prepare_card_for_display",
     "replace_dataset_from_excel",
+    "reload_poster_cache",
     "resolve_title_data_for_add",
     "resolve_title_for_add",
     "save_add_title_record",

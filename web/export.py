@@ -6,8 +6,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from candidates.models.keys import title_identity_key
 from common.cards import build_watched_movie_card, resolve_watched_description
+from dataset.read_models.watched import build_watched_lookup_cache
 
 DEFAULT_WATCHED_MOVIES_JSON = Path("web") / "data" / "watched_movies.json"
 
@@ -21,31 +21,7 @@ def iter_dataset_movies(data):
 
 def build_export_lookup_cache(meta=None, pool_by_identity=None) -> dict:
     """Build one lookup map for meta and candidate pool descriptions."""
-    if meta is None:
-        from storage.data import load_meta
-
-        meta = load_meta()
-
-    meta_by_title = {}
-    for meta_title, meta_obj in meta.items():
-        if isinstance(meta_obj, dict):
-            meta_by_title[meta_title.strip().casefold()] = meta_obj
-
-    if pool_by_identity is None:
-        pool_by_identity = {}
-        try:
-            from candidates.repositories.pool_repository import load_candidate_pool
-
-            for candidate in load_candidate_pool().values():
-                if isinstance(candidate, dict):
-                    pool_by_identity.setdefault(title_identity_key(candidate), candidate)
-        except Exception:
-            pass
-
-    return {
-        "meta_by_title": meta_by_title,
-        "pool_by_identity": pool_by_identity,
-    }
+    return build_watched_lookup_cache(meta=meta, pool_by_identity=pool_by_identity)
 
 
 def export_watched_movies_json(data, path=None) -> Path:

@@ -44,10 +44,12 @@ class CandidateFiltersView:
         *,
         service=None,
         on_applied: Callable[[], None] | None = None,
+        on_before_apply: Callable[[dict], dict] | None = None,
     ) -> None:
         self._session = session
         self._service = service or session.service
         self._on_applied = on_applied
+        self._on_before_apply = on_before_apply
         self._genre_options: list[str] = []
         self._year_max = constant.NOW_YEAR
 
@@ -345,8 +347,15 @@ class CandidateFiltersView:
         self._clear_filter_controls()
         self._apply_filters()
 
+    def on_before_apply(self, filters: dict) -> dict:
+        """Extension seam for tests/future wrappers; default is no-op."""
+        if self._on_before_apply is None:
+            return filters
+        return self._on_before_apply(filters)
+
     def _apply_filters(self) -> None:
-        self._session.apply_filters_async(self._collect_filters(), parent=self._widget)
+        filters = self.on_before_apply(self._collect_filters())
+        self._session.apply_filters_async(filters, parent=self._widget)
 
         if self._on_applied is not None:
             self._on_applied()

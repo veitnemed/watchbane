@@ -313,6 +313,10 @@ def font_px(value: int | float) -> int:
     """Scale a visual font token for QSS or QFont."""
     return _font_px(value)
 
+
+# Layout constants are defined in desktop.theme.layout and re-exported here for compatibility.
+from desktop.theme.layout import *  # noqa: E402,F403
+
 __all__ = [
     "COLOR_BG",
     "COLOR_SURFACE",

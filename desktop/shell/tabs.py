@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QTabWidget, QWidget
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.list_view import CandidateListView
 from desktop.candidates.session import CandidateSearchSession
+from desktop.shell.tab_contract import TabView, activate_tab_view
 from desktop.settings.tab_view import SettingsTabView
 from desktop.watched.tab import WatchedTabView
 
@@ -20,7 +21,7 @@ class ShellTabSpec:
 
     tab_id: str
     label: str
-    view: object
+    view: TabView
 
 
 @dataclass
@@ -59,9 +60,7 @@ class MainTabRegistry:
         if tab_id is None:
             return
         view = self._specs[tab_id].view
-        activated = getattr(view, "on_tab_activated", None)
-        if callable(activated):
-            activated()
+        activate_tab_view(view)
 
 
 def build_main_tabs(
