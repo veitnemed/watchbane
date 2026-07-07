@@ -250,12 +250,31 @@ QFrame#addTitlePreviewCard {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_CARD_LARGE)}px;
 }}
-QFrame#addTitlePreviewCard QLabel#detailTitle {{
-    font-size: {font_px(18)}px;
-}}
 QScrollArea#addTitlePreviewScroll {{
     background: transparent;
     border: none;
+}}
+QWidget#addTitleCompactPreviewCard {{
+    background: transparent;
+}}
+QLabel#addTitleCompactTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(24)}px;
+    font-weight: 700;
+}}
+QLabel#addTitleCompactMeta {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_BASE)}px;
+}}
+QLabel#addTitleCompactGenrePill {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(15)}px;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {font_px(FONT_SMALL)}px;
+    padding: 0 {px(16)}px;
 }}
 QLabel#addTitleConfirmHint {{
     background: transparent;

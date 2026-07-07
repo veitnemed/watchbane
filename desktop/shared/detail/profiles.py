@@ -22,6 +22,7 @@ from desktop.theme import (
     DETAIL_INFO_COLUMN_MAX_WIDTH,
     DETAIL_INFO_MAX_WIDTH,
     DETAIL_INFO_MIN_WIDTH,
+    DETAIL_INFO_TOP_OFFSET,
     DETAIL_MAIN_INFO_LABEL_WIDTH,
     DETAIL_MAIN_INFO_PANEL_PADDING_X,
     DETAIL_MAIN_INFO_PANEL_PADDING_Y,
@@ -48,6 +49,8 @@ from desktop.theme import (
     DETAIL_STAR_GAP,
     DETAIL_STAR_SIZE,
     DETAIL_STARS_LEFT_GAP,
+    DETAIL_SCORE_MAIN_INFO_GAP,
+    DETAIL_TITLE_CHIPS_GAP,
     DETAIL_TITLE_FONT_FALLBACK,
     DETAIL_TITLE_FONT_FAMILY,
     DETAIL_TITLE_FONT_SIZE,
@@ -57,7 +60,7 @@ from desktop.theme import (
     DETAIL_USER_SCORE_BADGE_MIN_WIDTH,
     DETAIL_USER_SCORE_BADGE_PADDING_X,
     DETAIL_USER_SCORE_BADGE_RADIUS,
-    DETAIL_USER_SCORE_BADGE_RIGHT,
+    DETAIL_USER_SCORE_BADGE_LEFT,
     DETAIL_USER_SCORE_BADGE_TOP,
     FONT_RATING_LABEL_POINT,
     FONT_RATING_VALUE_POINT,
@@ -150,6 +153,7 @@ class DetailCardLayoutProfile:
     detail_info_min_width: int = detail_px(DETAIL_INFO_MIN_WIDTH)
     detail_info_max_width: int = detail_px(DETAIL_INFO_MAX_WIDTH)
     detail_info_column_max_width: int = detail_px(DETAIL_INFO_COLUMN_MAX_WIDTH)
+    detail_info_top_offset: int = detail_px(DETAIL_INFO_TOP_OFFSET)
     detail_title_font_family: str = DETAIL_TITLE_FONT_FAMILY
     detail_title_font_fallback: str = DETAIL_TITLE_FONT_FALLBACK
     detail_title_font_size: int = font_px(DETAIL_TITLE_FONT_SIZE)
@@ -173,7 +177,7 @@ class DetailCardLayoutProfile:
     detail_user_score_badge_height: int = detail_px(DETAIL_USER_SCORE_BADGE_HEIGHT)
     detail_user_score_badge_radius: int = detail_px(DETAIL_USER_SCORE_BADGE_RADIUS)
     detail_user_score_badge_top: int = detail_px(DETAIL_USER_SCORE_BADGE_TOP)
-    detail_user_score_badge_right: int = detail_px(DETAIL_USER_SCORE_BADGE_RIGHT)
+    detail_user_score_badge_left: int = detail_px(DETAIL_USER_SCORE_BADGE_LEFT)
     detail_user_score_badge_padding_x: int = detail_px(DETAIL_USER_SCORE_BADGE_PADDING_X)
     detail_main_info_top_gap: int = detail_px(DETAIL_MAIN_INFO_TOP_GAP)
     detail_main_info_panel_radius: int = detail_px(DETAIL_MAIN_INFO_PANEL_RADIUS)
@@ -194,15 +198,15 @@ class DetailCardLayoutProfile:
     detail_divider_height: int = detail_px(1)
     detail_title_min_height: int = detail_px(36)
     detail_title_meta_gap: int = detail_px(4)
-    detail_title_chips_gap: int = detail_px(12)
+    detail_title_chips_gap: int = detail_px(DETAIL_TITLE_CHIPS_GAP)
     detail_column_spacing: int = detail_px(12)
     detail_small_spacing: int = detail_px(8)
-    detail_micro_spacing: int = detail_px(2)
-    detail_section_spacing: int = detail_px(6)
+    detail_micro_spacing: int = detail_px(DETAIL_SCORE_MAIN_INFO_GAP)
+    detail_section_spacing: int = detail_px(DETAIL_SCORE_MAIN_INFO_GAP)
     detail_poster_actions_top_gap: int = detail_px(10)
     detail_candidate_action_button_size: int = detail_px(36)
     detail_candidate_action_icon_size: int = detail_px(24)
-    detail_main_info_compact_padding_y_cap: int = detail_px(12)
+    detail_main_info_compact_padding_y_cap: int = detail_px(22)
     detail_main_info_compact_row_height: int = detail_px(38)
     detail_main_info_value_extra_height: int = detail_px(8)
 

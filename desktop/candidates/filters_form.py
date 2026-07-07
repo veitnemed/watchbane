@@ -64,18 +64,48 @@ def build_filters_form(
     form.setContentsMargins(0, 0, 0, 0)
     form.setSpacing(CANDIDATE_ROOT_SPACING_PX)
 
+    def add_section(title: str) -> tuple[QFrame, QVBoxLayout]:
+        section = QFrame()
+        section.setObjectName("candidateFilterSection")
+        section_layout = QVBoxLayout(section)
+        section_layout.setContentsMargins(
+            layout_px(18),
+            layout_px(16),
+            layout_px(18),
+            layout_px(18),
+        )
+        section_layout.setSpacing(layout_px(12))
+
+        title_label = QLabel(title)
+        title_label.setObjectName("candidateFilterSectionTitle")
+        section_layout.addWidget(title_label)
+        form.addWidget(section)
+        return section, section_layout
+
+    def add_divider(section_layout: QVBoxLayout) -> None:
+        divider = QFrame()
+        divider.setObjectName("candidateFilterDivider")
+        divider.setFrameShape(QFrame.Shape.HLine)
+        divider.setFrameShadow(QFrame.Shadow.Plain)
+        section_layout.addSpacing(layout_px(2))
+        section_layout.addWidget(divider)
+        section_layout.addSpacing(layout_px(2))
+
+    _basic_section, basic_layout = add_section("Основные условия")
     country_selector = CountryChipSelector([])
-    form.addWidget(field_label("Страна"))
-    form.addWidget(country_selector)
+    basic_layout.addWidget(field_label("Страна"))
+    basic_layout.addWidget(country_selector)
+    add_divider(basic_layout)
 
     year_header = QHBoxLayout()
     year_header.setContentsMargins(0, 0, 0, 0)
+    year_header.setSpacing(layout_px(8))
     year_header.addWidget(field_label("Год"))
     year_header.addStretch()
     year_range_label = QLabel("")
     year_range_label.setObjectName("candidateSearchYearRangeLabel")
     year_header.addWidget(year_range_label)
-    form.addLayout(year_header)
+    basic_layout.addLayout(year_header)
 
     year_slider = RangeSlider(
         CANDIDATE_YEAR_MIN,
@@ -85,15 +115,18 @@ def build_filters_form(
     )
     year_slider.setObjectName("candidateSearchYearRange")
     year_slider.rangeChanged.connect(on_year_range_changed)
-    form.addWidget(year_slider)
+    basic_layout.addWidget(year_slider)
 
+    _genres_section, genres_layout = add_section("Жанры")
     include_genre_selector = GenreChipSelector(object_name="candidateSearchIncludeGenres")
     exclude_genre_selector = GenreChipSelector(object_name="candidateSearchExcludeGenres")
-    form.addWidget(field_label("Включить жанры"))
-    form.addWidget(include_genre_selector)
-    form.addWidget(field_label("Исключить жанры"))
-    form.addWidget(exclude_genre_selector)
+    genres_layout.addWidget(field_label("Включить"))
+    genres_layout.addWidget(include_genre_selector)
+    add_divider(genres_layout)
+    genres_layout.addWidget(field_label("Исключить"))
+    genres_layout.addWidget(exclude_genre_selector)
 
+    _tmdb_section, tmdb_layout = add_section("Пороги TMDb")
     tmdb_score_range_label = QLabel("")
     tmdb_score_range_label.setObjectName("candidateSearchFilterValue")
     tmdb_score_slider = make_min_threshold_slider(
@@ -102,7 +135,8 @@ def build_filters_form(
         "candidateSearchTmdbScoreRange",
         lambda: update_score_range_label(tmdb_score_slider, tmdb_score_range_label),
     )
-    add_threshold_filter_row(form, "Мин. TMDb", tmdb_score_range_label, tmdb_score_slider)
+    add_threshold_filter_row(tmdb_layout, "Оценка", tmdb_score_range_label, tmdb_score_slider)
+    add_divider(tmdb_layout)
 
     tmdb_votes_range_label = QLabel("")
     tmdb_votes_range_label.setObjectName("candidateSearchFilterValue")
@@ -112,8 +146,9 @@ def build_filters_form(
         "candidateSearchTmdbVotesRange",
         lambda: update_votes_range_label(tmdb_votes_slider, tmdb_votes_range_label),
     )
-    add_threshold_filter_row(form, "Мин. голосов TMDb", tmdb_votes_range_label, tmdb_votes_slider)
+    add_threshold_filter_row(tmdb_layout, "Голоса", tmdb_votes_range_label, tmdb_votes_slider)
 
+    _visibility_section, visibility_layout = add_section("Статус и видимость")
     only_complete_check = QCheckBox("Только complete")
     only_complete_check.setObjectName("candidateSearchOnlyComplete")
     only_complete_check.setChecked(DEFAULT_BROWSE_FILTERS["only_complete"])
@@ -123,9 +158,10 @@ def build_filters_form(
     hide_hidden_check = QCheckBox("Скрывать hidden")
     hide_hidden_check.setObjectName("candidateSearchHideHidden")
     hide_hidden_check.setChecked(DEFAULT_BROWSE_FILTERS["hide_hidden"])
-    form.addWidget(only_complete_check)
-    form.addWidget(only_unwatched_check)
-    form.addWidget(hide_hidden_check)
+    visibility_layout.addWidget(only_complete_check)
+    visibility_layout.addWidget(only_unwatched_check)
+    visibility_layout.addWidget(hide_hidden_check)
+    form.addStretch(1)
 
     scroll.setWidget(form_host)
 

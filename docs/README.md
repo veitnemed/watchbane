@@ -59,6 +59,7 @@ py start_app.py
 - `assets/desktop/` - desktop assets.
 - `tests/` - активный pytest-набор.
 - `archive/legacy/` - старые ML/model и прежние ручные тесты.
+- `screens/tmp_ui/` - локальные временные UI-скриншоты; содержимое не коммитится.
 
 ## Candidate Pool
 

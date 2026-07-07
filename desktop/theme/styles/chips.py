@@ -77,6 +77,7 @@ QPushButton#countryChipClear:hover {{
     color: {COLOR_TEXT};
 }}
 QLabel#countryChipCount {{
+    background: transparent;
     color: {COLOR_TEXT_SECONDARY};
     font-size: {font_px(FONT_SMALL)}px;
 }}

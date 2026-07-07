@@ -68,7 +68,13 @@ def scale_px(value: int | float, channel: str = "layout") -> int:
 
 def scale_font(value: int | float) -> int:
     """Scale font point/pixel values to an integer."""
-    return _minimum_preserving_round(value, channel="font")
+    if value == 0:
+        return 0
+    scaled_value = scale_float(value, channel="font")
+    scaled = int(scaled_value + 0.5) if scaled_value > 0 else int(scaled_value - 0.5)
+    if scaled == 0:
+        return 1 if scaled_value > 0 else -1
+    return scaled
 
 
 def layout_px(value: int | float) -> int:

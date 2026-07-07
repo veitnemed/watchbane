@@ -181,8 +181,10 @@ py scripts/refresh_watched_from_tmdb.py --dry-run
 ## Repository Notes
 
 - Runtime user data lives under `data/` and is ignored by git.
+- Temporary UI screenshots live under `screens/tmp_ui/` and are ignored by git.
 - Legacy experiments live under `archive/` and are not active runtime.
 - Contribution and project hygiene docs live in [`docs/`](docs/).
+- Local cleanup rules are documented in [workspace housekeeping](docs/WORKSPACE_HOUSEKEEPING.md).
 
 ## Contributing
 

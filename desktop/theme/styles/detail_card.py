@@ -31,10 +31,10 @@ QFrame#detailPosterShell {{
     border-radius: {poster_px(DETAIL_POSTER_RADIUS)}px;
 }}
 QLabel#detailUserScoreBadge {{
-    background-color: {COLOR_SCORE_BADGE_BG};
-    border: 1px solid {COLOR_RATING};
+    background-color: {COLOR_TEXT};
+    border: 1px solid {COLOR_TEXT};
     border-radius: {detail_px(DETAIL_USER_SCORE_BADGE_RADIUS)}px;
-    color: {COLOR_RATING};
+    color: {COLOR_TEXT_INVERTED};
     font-size: {font_px(DETAIL_USER_SCORE_BADGE_FONT_SIZE)}px;
     font-weight: 700;
     padding: 0 {detail_px(DETAIL_USER_SCORE_BADGE_PADDING_X)}px;
@@ -113,6 +113,21 @@ QLabel#detailMainInfoHeader {{
     font-weight: 700;
     letter-spacing: 1px;
     padding: 0;
+}}
+QPushButton#detailMainInfoToggleButton {{
+    background-color: {COLOR_DETAIL_ACTION_BG};
+    border: 1px solid {COLOR_DETAIL_HERO_BORDER};
+    border-radius: {detail_px(RADIUS_BUTTON_SMALL)}px;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 600;
+    padding: {detail_px(3)}px {detail_px(8)}px;
+    min-height: {detail_px(24)}px;
+}}
+QPushButton#detailMainInfoToggleButton:hover {{
+    border-color: {COLOR_BORDER_ACTIVE};
+    color: {COLOR_TEXT};
+    background-color: {COLOR_DETAIL_ACTION_BG_HOVER};
 }}
 QLabel#mainInfoLabel,
 QLabel#detailMainInfoLabel {{

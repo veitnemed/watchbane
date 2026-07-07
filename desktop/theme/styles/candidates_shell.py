@@ -9,7 +9,9 @@ def build_candidates_shell_style() -> str:
     """Return stylesheet for candidate search filters and list."""
     return f"""
 QLineEdit#candidateListSearch {{
-    font-size: {font_px(FONT_BASE)}px;
+    font-size: {font_px(FONT_SECTION)}px;
+    padding: {px(INPUT_PADDING_Y + 1)}px {px(INPUT_PADDING_X + 2)}px;
+    min-height: {px(34)}px;
 }}
 QWidget#candidateSearchSidebar {{
     background: transparent;
@@ -17,7 +19,7 @@ QWidget#candidateSearchSidebar {{
 QLabel#candidateSearchHeader {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_SECTION)}px;
+    font-size: {font_px(FONT_TITLE)}px;
     font-weight: 700;
 }}
 QFrame#candidateFiltersIntro {{
@@ -46,10 +48,11 @@ QLabel#candidateSearchExplanation {{
     font-size: {font_px(FONT_BASE)}px;
 }}
 QLabel#candidateSearchFieldLabel {{
+    background: transparent;
     color: {COLOR_TEXT};
     font-size: {font_px(FONT_SECTION)}px;
     font-weight: 700;
-    padding: {px(8)}px 0 {px(2)}px 0;
+    padding: {px(6)}px 0 {px(2)}px 0;
 }}
 QListWidget#candidateListWidget {{
     background-color: {COLOR_CARD};
@@ -113,16 +116,41 @@ QComboBox#candidateListSort::down-arrow {{
 QWidget#candidateFiltersRoot {{
     font-size: {font_px(FONT_BASE)}px;
 }}
+QScrollArea#candidateSearchFiltersScroll,
+QWidget#candidateSearchFiltersHost {{
+    background: transparent;
+}}
+QFrame#candidateFilterSection {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_CARD)}px;
+}}
+QFrame#candidateFilterSection:hover {{
+    border-color: {COLOR_BORDER_HOVER};
+}}
+QLabel#candidateFilterSectionTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SECTION + 2)}px;
+    font-weight: 700;
+    padding: 0 0 {px(4)}px 0;
+}}
+QFrame#candidateFilterDivider {{
+    background-color: {COLOR_DIVIDER};
+    border: none;
+    min-height: {px(1)}px;
+    max-height: {px(1)}px;
+}}
 QPushButton#candidateSearchApplyTopButton {{
     background-color: {COLOR_ADD_BUTTON};
     border: 1px solid {COLOR_ADD_BUTTON_BORDER};
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_SMALL)}px;
+    font-size: {font_px(FONT_BASE + 1)}px;
     font-weight: 600;
-    padding: {px(4)}px {px(12)}px;
-    min-height: {px(28)}px;
-    max-height: {px(32)}px;
+    padding: {px(7)}px {px(14)}px;
+    min-height: {px(38)}px;
+    max-height: {px(42)}px;
 }}
 QPushButton#candidateSearchApplyTopButton:hover {{
     background-color: {COLOR_ADD_BUTTON_HOVER};
@@ -132,11 +160,11 @@ QPushButton#candidateSearchResetTopButton {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_SMALL)}px;
+    font-size: {font_px(FONT_BASE + 1)}px;
     font-weight: 600;
-    padding: {px(4)}px {px(12)}px;
-    min-height: {px(28)}px;
-    max-height: {px(32)}px;
+    padding: {px(7)}px {px(14)}px;
+    min-height: {px(38)}px;
+    max-height: {px(42)}px;
 }}
 QPushButton#candidateSearchResetTopButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};

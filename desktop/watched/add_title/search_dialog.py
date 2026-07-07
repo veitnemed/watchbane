@@ -123,17 +123,6 @@ class AddTitleSearchDialog(QDialog):
         self._status_label.hide()
         root_layout.addWidget(self._status_label)
 
-        footer = QHBoxLayout()
-        footer.setContentsMargins(0, layout_px(4), 0, 0)
-        footer.addStretch()
-        self._cancel_button = QPushButton("Отмена")
-        self._cancel_button.setObjectName("addTitleSecondaryButton")
-        self._cancel_button.setAutoDefault(False)
-        self._cancel_button.setDefault(False)
-        self._cancel_button.clicked.connect(self._cancel_search_dialog)
-        footer.addWidget(self._cancel_button)
-        root_layout.addLayout(footer)
-
         self._title_input.setFocus(Qt.FocusReason.OtherFocusReason)
         if self.last_title:
             self._title_input.selectAll()
@@ -162,7 +151,6 @@ class AddTitleSearchDialog(QDialog):
         self._title_input.setEnabled(not active)
         self._country_combo.setEnabled(not active)
         self._search_button.setEnabled(not active)
-        self._cancel_button.setEnabled(True)
         self._progress.setVisible(active)
         self._status_label.setVisible(active)
         self.setFixedHeight(SEARCH_DIALOG_HEIGHT_ACTIVE if active else SEARCH_DIALOG_HEIGHT)
@@ -179,7 +167,6 @@ class AddTitleSearchDialog(QDialog):
         )
         if worker_running:
             self._cancel_after_worker = True
-            self._cancel_button.setEnabled(False)
             self._status_label.setVisible(True)
             self._status_label.setText("Отмена после текущего шага…")
             self._worker.requestInterruption()

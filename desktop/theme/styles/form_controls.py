@@ -14,6 +14,7 @@ QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox {{
     border-radius: {px(RADIUS_INPUT)}px;
     padding: {px(INPUT_PADDING_Y)}px {px(INPUT_PADDING_X)}px;
     color: {COLOR_TEXT};
+    font-size: {font_px(FONT_BASE)}px;
     selection-background-color: {COLOR_SELECTED_BG};
 }}
 QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus {{
@@ -56,7 +57,7 @@ QLabel#candidateSearchYearRangeLabel,
 QLabel#candidateSearchFilterValue {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_BASE)}px;
+    font-size: {font_px(FONT_BASE + 1)}px;
     font-weight: 600;
 }}
 QComboBox#candidateSearchCriteria,
@@ -80,15 +81,16 @@ QSpinBox#candidateSearchTopN:focus {{
 QCheckBox#candidateSearchOnlyComplete,
 QCheckBox#candidateSearchOnlyUnwatched,
 QCheckBox#candidateSearchHideHidden {{
+    background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {font_px(FONT_BASE)}px;
+    font-size: {font_px(FONT_BASE + 1)}px;
     spacing: {px(8)}px;
-    min-height: {px(28)}px;
+    min-height: {px(32)}px;
 }}
 QCheckBox#candidateSearchOnlyComplete::indicator,
 QCheckBox#candidateSearchOnlyUnwatched::indicator,
 QCheckBox#candidateSearchHideHidden::indicator {{
-    width: {px(18)}px;
-    height: {px(18)}px;
+    width: {px(20)}px;
+    height: {px(20)}px;
 }}
 """

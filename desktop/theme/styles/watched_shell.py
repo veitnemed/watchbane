@@ -15,7 +15,9 @@ QWidget#watchedSidebar {{
     background: transparent;
 }}
 QLineEdit#watchedSearch {{
-    font-size: {font_px(FONT_BASE)}px;
+    font-size: {font_px(FONT_SECTION)}px;
+    padding: {px(INPUT_PADDING_Y + 1)}px {px(INPUT_PADDING_X + 2)}px;
+    min-height: {px(34)}px;
 }}
 QPushButton#watchedAddTitle {{
     background-color: {COLOR_ADD_BUTTON};
@@ -67,9 +69,10 @@ QPushButton#watchedFilterResetAll {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_SMALL)}px;
+    font-size: {font_px(FONT_SECTION)}px;
     font-weight: 600;
-    padding: {px(8)}px {px(10)}px;
+    padding: {px(9)}px {px(12)}px;
+    min-height: {px(36)}px;
 }}
 QPushButton#watchedFilterResetAll:hover {{
     background-color: {COLOR_CONTROL_HOVER};
@@ -96,9 +99,9 @@ QComboBox#watchedSort {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_INPUT)}px;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_BASE)}px;
-    padding: {px(INPUT_PADDING_Y)}px {px(INPUT_PADDING_X)}px;
-    min-height: {px(20)}px;
+    font-size: {font_px(FONT_SECTION)}px;
+    padding: {px(INPUT_PADDING_Y + 1)}px {px(INPUT_PADDING_X + 2)}px;
+    min-height: {px(34)}px;
 }}
 QComboBox#watchedSort:focus {{
     border: 1px solid {COLOR_FOCUS_BORDER};
@@ -114,33 +117,40 @@ QComboBox#watchedSort::down-arrow {{
 QFrame#watchedScoreFilter,
 QFrame#watchedYearFilter,
 QFrame#watchedGenreFilter {{
-    background-color: transparent;
-    border: none;
-    border-radius: 0;
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_BUTTON)}px;
 }}
 QLabel#watchedScoreFilterTitle,
 QLabel#watchedYearFilterTitle,
 QLabel#watchedGenreFilterTitle {{
     background: transparent;
-    color: {COLOR_TEXT_SECONDARY};
-    font-size: {font_px(FONT_SMALL)}px;
-    font-weight: 600;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SECTION)}px;
+    font-weight: 700;
 }}
 QComboBox#watchedGenre {{
-    background-color: {COLOR_SURFACE};
-    font-size: {font_px(FONT_SMALL)}px;
-    padding: {px(5)}px {px(8)}px;
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_INPUT)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SECTION)}px;
+    padding: {px(7)}px {px(10)}px;
+    min-height: {px(36)}px;
+}}
+QComboBox#watchedGenre:focus {{
+    border: 1px solid {COLOR_FOCUS_BORDER};
 }}
 QLabel#watchedScoreFilterLabel,
 QLabel#watchedYearFilterLabel {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {font_px(FONT_SMALL)}px;
+    font-size: {font_px(FONT_SECTION)}px;
 }}
 QLabel#watchedFilterValue {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_SMALL)}px;
+    font-size: {font_px(FONT_SECTION)}px;
     font-weight: 600;
 }}
 """

@@ -46,4 +46,8 @@ data/rating_order_drafts/*.json
 /reports/
 _safety_audit/
 
+# Local UI screenshot smoke outputs
+screens/tmp_ui/*
+!screens/tmp_ui/.gitkeep
+
 /tmdb_net

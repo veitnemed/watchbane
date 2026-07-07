@@ -61,6 +61,11 @@ def _list_text_values(value: Any) -> list[str]:
     return result
 
 
+def list_watch_provider_values(value: Any) -> list[str]:
+    """Return normalized watch-provider names without formatting for a specific UI."""
+    return _list_text_values(value)
+
+
 def _plural_ru(value: int, forms: tuple[str, str, str]) -> str:
     value_abs = abs(value)
     if value_abs % 100 in range(11, 15):

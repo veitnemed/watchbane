@@ -11,6 +11,7 @@
 - [STRUCTURE_PLAN.md](STRUCTURE_PLAN.md) - план структурной чистки.
 - [REFACTORING_CHECKLIST.md](REFACTORING_CHECKLIST.md) - чеклист безопасного завершения рефакторинга.
 - [DATA_STORAGE_PLAN.md](DATA_STORAGE_PLAN.md) - структура локального хранения данных.
+- [WORKSPACE_HOUSEKEEPING.md](WORKSPACE_HOUSEKEEPING.md) - правила для временных скриншотов, локальных кэшей и больших generated-артефактов.
 - [add_functions.md](add_functions.md) - правила добавления и изменения функционала.
 - [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления и изменения записей.
 - [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - визуальный контракт desktop GUI.
@@ -223,6 +224,7 @@ KP API и локальный IMDb dataset не участвуют в public add-
 - `data/diagnostics/*.json` - generated diagnostics.
 - `data/cache/` - локальные кэши.
 - `datasets/dataset_sql_light/imdb_light.sqlite3` - локальная SQL-база для non-candidate/internal сценариев.
+- `screens/tmp_ui/` - локальные временные UI-скриншоты; содержимое ignored, tracked только `.gitkeep`.
 
 Активные JSON в репозитории:
 

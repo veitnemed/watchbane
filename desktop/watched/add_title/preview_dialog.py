@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
-    QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
 )
 
@@ -21,13 +21,12 @@ from config import constant
 from config import scheme
 from dataset import service
 from diagnostics.gui_event_log import log_event
-from desktop.shared.detail import ADD_TITLE_PREVIEW_CARD_PROFILE, WatchedDetailCard
 from desktop.watched.add_title.constants import (
     ADD_TITLE_DIALOG_STYLE,
-    PREVIEW_CARD_SCROLL_MIN_HEIGHT,
     PREVIEW_DIALOG_HEIGHT,
     PREVIEW_DIALOG_WIDTH,
 )
+from desktop.watched.add_title.compact_preview_card import AddTitleCompactPreviewCard
 from desktop.watched.model import (
     USER_SCORE_MAX,
     USER_SCORE_MIN,
@@ -81,15 +80,9 @@ class AddTitlePreviewDialog(QDialog):
         self._fill_warning_label()
         root_layout.addWidget(self._warning_label)
 
-        scroll = QScrollArea()
-        scroll.setObjectName("addTitlePreviewScroll")
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setMinimumHeight(PREVIEW_CARD_SCROLL_MIN_HEIGHT)
-
         card_shell = QFrame()
         card_shell.setObjectName("addTitlePreviewCard")
+        card_shell.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Maximum)
         card_shell_layout = QVBoxLayout(card_shell)
         card_shell_layout.setContentsMargins(
             layout_px(10),
@@ -99,10 +92,9 @@ class AddTitlePreviewDialog(QDialog):
         )
         card_shell_layout.setSpacing(0)
 
-        self._detail_card = WatchedDetailCard(card_shell, profile=ADD_TITLE_PREVIEW_CARD_PROFILE)
-        card_shell_layout.addWidget(self._detail_card.widget)
-        scroll.setWidget(card_shell)
-        root_layout.addWidget(scroll, stretch=1)
+        self._preview_card = AddTitleCompactPreviewCard(card_shell)
+        card_shell_layout.addWidget(self._preview_card.widget, alignment=Qt.AlignmentFlag.AlignTop)
+        root_layout.addWidget(card_shell, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         confirm_hint = QLabel(
             "Проверьте карточку и укажите только вашу оценку"
@@ -155,7 +147,7 @@ class AddTitlePreviewDialog(QDialog):
         root_layout.addLayout(actions)
 
         preview_entry = ("__preview__", bundle.preview_movie, bundle.preview_card)
-        self._detail_card.show_entry(preview_entry)
+        self._preview_card.show_entry(preview_entry)
         self._update_confirm_state()
         self._score_input.setFocus(Qt.FocusReason.OtherFocusReason)
 

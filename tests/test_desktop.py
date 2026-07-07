@@ -54,6 +54,14 @@ def _make_entries() -> list[tuple[str, dict, dict]]:
     return [(key, movie, prepare_card_for_display(movie)) for key, movie, _ in entries]
 
 
+def _flush_qt_deferred_deletes(qapp) -> None:
+    from PyQt6.QtCore import QCoreApplication, QEvent
+
+    qapp.processEvents()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    qapp.processEvents()
+
+
 def test_desktop_app_imports_without_window() -> None:
     import desktop.app as app_module
 
@@ -128,11 +136,127 @@ def test_add_title_preview_dialog_uses_readonly_year_and_score_only_save() -> No
     assert "QSpinBox" not in source
     assert "year=" not in source.replace("resolved_year", "")
     assert "save_add_title_record" in source
+    assert "AddTitleCompactPreviewCard" in source
+    assert "WatchedDetailCard" not in source
+
+
+def _make_add_title_preview_bundle(*, extra_fields: bool = True):
+    from dataset.add_flow.bundle import AddTitleResolveBundle
+
+    card = {
+        "title": "Наруто",
+        "year": 2002,
+        "object_type": "tv",
+        "country": "Япония",
+        "watch_providers": "Crunchyroll",
+        "tmdb_score": 8.4,
+        "tmdb_votes": 5600,
+        "final_score": 0.72,
+        "genres": ["Боевик", "Фантастика", "Приключения", "Аниме"],
+        "overview": (
+            "Мальчик-ниндзя мечтает стать сильнейшим в деревне и постепенно "
+            "находит друзей, соперников и собственный путь."
+        ),
+    }
+    if extra_fields:
+        card.update({"status": "Ended", "episode_run_time": 24})
+
+    return AddTitleResolveBundle(
+        title="Наруто",
+        country="",
+        defaults={
+            "main_info": {"title": "Наруто", "year": 2002, "country": "Япония"},
+            "raw_scores": {},
+            "genre": {},
+        },
+        meta_payload={},
+        poster_hints={},
+        preview_movie={"main_info": {"title": "Наруто", "year": 2002}},
+        preview_card=card,
+        found=True,
+        statuses={"tmdb_api": "найдено"},
+    )
+
+
+def test_add_title_preview_dialog_uses_compact_preview_card(qapp) -> None:
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
+
+    dialog = AddTitlePreviewDialog(_make_add_title_preview_bundle())
+    dialog.show()
+    qapp.processEvents()
+
+    compact_card = dialog.findChild(QWidget, "addTitleCompactPreviewCard")
+    assert compact_card is not None
+    assert hasattr(dialog, "_preview_card")
+    assert hasattr(dialog, "_detail_card") is False
+    assert dialog.findChild(QWidget, "addTitleCompactMainInfoSection") is None
+    assert dialog.findChild(QWidget, "addTitleCompactOverviewSection") is None
+
+    dialog.close()
+
+
+def test_add_title_compact_preview_renders_only_summary_content(qapp) -> None:
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QLabel, QWidget
+
+    from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
+
+    dialog = AddTitlePreviewDialog(_make_add_title_preview_bundle(extra_fields=True))
+    dialog.show()
+    qapp.processEvents()
+    card = dialog._preview_card
+
+    assert card._poster_label.isVisible()
+    assert card._title_label.text() == "Наруто"
+    assert card._meta_label.text() == "2002"
+    assert dialog.findChild(QWidget, "addTitleCompactMainInfoPanel") is None
+    assert dialog.findChild(QLabel, "addTitleCompactOverviewText") is None
+    assert len(dialog.findChildren(QLabel, "addTitleCompactGenrePill")) == 3
+    assert card._title_label.alignment() & Qt.AlignmentFlag.AlignHCenter
+    assert card._meta_label.alignment() & Qt.AlignmentFlag.AlignHCenter
+
+    dialog.close()
+
+
+def test_add_title_compact_preview_stays_short_for_dialog(qapp) -> None:
+    from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
+
+    dialog = AddTitlePreviewDialog(_make_add_title_preview_bundle(extra_fields=True))
+    dialog.show()
+    qapp.processEvents()
+    card = dialog._preview_card
+
+    assert card.widget.height() <= card._poster_label.height() + 8
+
+    dialog.close()
+
+
+def test_add_title_compact_preview_dialog_centers_card_shell(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame
+
+    from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
+
+    dialog = AddTitlePreviewDialog(_make_add_title_preview_bundle(extra_fields=True))
+    dialog.show()
+    qapp.processEvents()
+
+    shell = dialog.findChild(QFrame, "addTitlePreviewCard")
+    assert shell is not None
+    dialog_center_x = dialog.rect().center().x()
+    shell_center_x = shell.geometry().center().x()
+
+    assert abs(shell_center_x - dialog_center_x) <= 2
+    assert shell.width() < dialog.width() - 20
+
+    dialog.close()
 
 
 def test_add_title_search_dialog_enter_starts_search_without_default_cancel(qapp) -> None:
     from PyQt6.QtCore import Qt
     from PyQt6.QtTest import QTest
+    from PyQt6.QtWidgets import QPushButton
 
     from desktop.watched.add_title.search_dialog import AddTitleSearchDialog
 
@@ -140,8 +264,8 @@ def test_add_title_search_dialog_enter_starts_search_without_default_cancel(qapp
     calls = []
     dialog._start_search = lambda *, trigger="unknown": calls.append(trigger)
 
-    assert dialog._cancel_button.autoDefault() is False
-    assert dialog._cancel_button.isDefault() is False
+    assert hasattr(dialog, "_cancel_button") is False
+    assert all(button.text() != "Отмена" for button in dialog.findChildren(QPushButton))
 
     QTest.keyClick(dialog._title_input, Qt.Key.Key_Return)
 
@@ -702,9 +826,20 @@ def test_build_main_info_items_formats_type_and_country_only() -> None:
     ) == [
         {"label": "Тип", "value": "Сериал"},
         {"label": "Страна", "value": "Россия"},
-        {"label": "Где смотреть", "value": "нет данных"},
-        {"label": "Голоса TMDb", "value": "3 456"},
+        {"label": "Где смотреть", "value": "Неизвестно"},
+        {"label": "Голоса TMDb", "value": "3.5к"},
     ]
+
+
+def test_format_votes_display_uses_compact_tmdb_votes() -> None:
+    from desktop.shared.detail.main_info import format_votes_display
+
+    assert format_votes_display(8) == "Крайне мало"
+    assert format_votes_display(12) == "0.1к"
+    assert format_votes_display(99) == "0.1к"
+    assert format_votes_display(777) == "0.8к"
+    assert format_votes_display(1200) == "1.2к"
+    assert format_votes_display(12000) == "12к"
 
 
 def test_build_title_meta_text_formats_year_and_seasons() -> None:
@@ -735,8 +870,29 @@ def test_build_main_info_items_hides_empty_votes_and_defaults_type() -> None:
 
     assert build_main_info_items({"imdb_votes": None, "kp_votes": 0}) == [
         {"label": "Тип", "value": "Неизвестно"},
-        {"label": "Где смотреть", "value": "нет данных"},
+        {"label": "Где смотреть", "value": "Неизвестно"},
     ]
+
+
+def test_build_main_info_items_compacts_watch_provider_overflow() -> None:
+    from desktop.watched import build_main_info_items
+
+    provider_item = next(
+        item
+        for item in build_main_info_items(
+            {
+                "object_type": "series",
+                "watch_providers": ["premier", "Kinopoisk", "Okko", "Ivi"],
+            }
+        )
+        if item["label"] == "Где смотреть"
+    )
+
+    assert provider_item == {
+        "label": "Где смотреть",
+        "value": "Premier, Kinopoisk +2",
+        "tooltip": "Okko, Ivi",
+    }
 
 
 def test_build_additional_info_items_formats_tmdb_fields() -> None:
@@ -1393,6 +1549,7 @@ def test_detail_hero_layout_skeleton(qapp) -> None:
     assert poster_shell.width() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
     assert poster_shell.height() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_height
     assert info_column.minimumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_info_min_width
+    assert info_column.layout().contentsMargins().top() == DETAIL_CARD_LAYOUT_PROFILE.detail_info_top_offset
     assert is_descendant(title, info_column)
     assert is_descendant(chips, info_column)
     assert is_descendant(score_row, info_column)
@@ -1535,6 +1692,7 @@ def test_detail_chips_center_text(qapp) -> None:
 
     assert len(chips) == 2
     assert all(chip.alignment() == Qt.AlignmentFlag.AlignCenter for chip in chips)
+    assert all(chip.testAttribute(Qt.WidgetAttribute.WA_StyledBackground) for chip in chips)
 
 
 def test_detail_chips_container_stays_above_score_row(qapp) -> None:
@@ -1565,6 +1723,8 @@ def test_detail_chips_container_stays_above_score_row(qapp) -> None:
     info_layout = info_column.layout()
 
     assert info_layout.indexOf(chips) < info_layout.indexOf(score_row)
+    chip_score_gap = info_layout.itemAt(info_layout.indexOf(chips) + 1).spacerItem()
+    assert chip_score_gap.sizeHint().height() == DETAIL_CARD_LAYOUT_PROFILE.detail_micro_spacing
 
 
 def test_detail_chips_container_height_matches_visible_rows(qapp) -> None:
@@ -1723,7 +1883,8 @@ def test_detail_card_uses_profile_composition_widths(qapp) -> None:
 
     assert content.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width
     assert info_column.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_info_column_max_width
-    assert overview.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_overview_max_width
+    assert overview.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
+    assert overview.minimumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
     assert main_info.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
 
 
@@ -1775,6 +1936,19 @@ def test_detail_overview_uses_profile_left_inset(qapp) -> None:
     assert margins.left() == DETAIL_CARD_LAYOUT_PROFILE.detail_overview_left_inset
 
 
+def test_detail_overview_width_is_fixed_to_poster_width(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    section = detail.widget.findChild(QFrame, "detailOverviewSection")
+
+    assert section is not None
+    assert section.minimumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
+    assert section.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
+
+
 def test_detail_overview_has_no_absolute_positioning() -> None:
     import inspect
 
@@ -1803,6 +1977,7 @@ def test_watched_detail_card_renders_main_info_block() -> None:
     assert 'setObjectName("detailMainInfoSection")' in init_source
     assert 'setObjectName("detailMainInfoPanel")' in init_source
     assert 'setObjectName("detailMainInfoHeader")' in init_source
+    assert 'setObjectName("detailMainInfoToggleButton")' in init_source
     assert "build_main_info_items(card)" in show_source
     assert "_set_main_info_items([])" in empty_source
 
@@ -1849,7 +2024,7 @@ def test_detail_main_info_panel_renders_known_rows(qapp) -> None:
     assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
     assert "Сериал" in values
     assert "США" in values
-    assert "12 850" in values
+    assert "12.9к" in values
 
 
 def test_detail_title_meta_renders_year_and_seasons_under_title(qapp) -> None:
@@ -1889,7 +2064,7 @@ def test_detail_title_meta_renders_year_and_seasons_under_title(qapp) -> None:
 
 
 def test_detail_main_info_panel_renders_former_additional_rows(qapp) -> None:
-    from PyQt6.QtWidgets import QLabel, QFrame
+    from PyQt6.QtWidgets import QLabel, QFrame, QPushButton
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
@@ -1910,16 +2085,189 @@ def test_detail_main_info_panel_renders_former_additional_rows(qapp) -> None:
             },
         )
     )
-    qapp.processEvents()
+    _flush_qt_deferred_deletes(qapp)
 
     panel = detail.widget.findChild(QFrame, "detailMainInfoPanel")
+    toggle = detail.widget.findChild(QPushButton, "detailMainInfoToggleButton")
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
     values = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoValue")]
 
     assert "Статус" in labels
-    assert "Длительность серии" in labels
+    assert "Длительность серии" not in labels
     assert "Завершен" in values
+    assert toggle is not None
+    assert toggle.isHidden() is False
+    assert toggle.text() == "Показать больше"
+
+    toggle.click()
+    _flush_qt_deferred_deletes(qapp)
+
+    labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
+    values = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoValue")]
+
+    assert "Длительность серии" in labels
     assert "52 мин" in values
+    assert toggle.text() == "Скрыть"
+
+
+def test_detail_main_info_toggle_is_hidden_for_four_or_fewer_rows(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QFrame, QPushButton
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "country": "US",
+                "object_type": "series",
+                "watch_providers": ["Kinopoisk"],
+                "tmdb_votes": 12850,
+            },
+        )
+    )
+    _flush_qt_deferred_deletes(qapp)
+
+    panel = detail.widget.findChild(QFrame, "detailMainInfoPanel")
+    toggle = detail.widget.findChild(QPushButton, "detailMainInfoToggleButton")
+    labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
+
+    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert toggle is not None
+    assert toggle.isHidden() is True
+
+
+def test_detail_main_info_values_are_single_line_with_provider_tooltip(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QFrame
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "country": "RU",
+                "object_type": "series",
+                "watch_providers": ["premier", "Kinopoisk", "Okko", "Ivi"],
+                "tmdb_votes": 777,
+            },
+        )
+    )
+    _flush_qt_deferred_deletes(qapp)
+
+    panel = detail.widget.findChild(QFrame, "detailMainInfoPanel")
+    values = panel.findChildren(QLabel, "detailMainInfoValue")
+    provider_value = next(item for item in values if item.text().startswith("Premier, Kinopoisk"))
+
+    assert all(item.wordWrap() is False for item in values)
+    assert all(item.minimumHeight() == item.maximumHeight() for item in values)
+    assert provider_value.text() == "Premier, Kinopoisk +2"
+    assert provider_value.toolTip() == "Okko, Ivi"
+
+
+def test_detail_main_info_toggle_collapses_and_expands_rows(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QFrame, QPushButton
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "country": "RU",
+                "object_type": "series",
+                "watch_providers": ["Premier", "Kinopoisk"],
+                "tmdb_votes": 417,
+                "status": "Returning Series",
+                "episode_run_time": [48],
+            },
+        )
+    )
+    _flush_qt_deferred_deletes(qapp)
+
+    panel = detail.widget.findChild(QFrame, "detailMainInfoPanel")
+    toggle = detail.widget.findChild(QPushButton, "detailMainInfoToggleButton")
+    labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
+
+    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert toggle is not None
+    assert toggle.text() == "Показать больше"
+
+    toggle.click()
+    _flush_qt_deferred_deletes(qapp)
+    labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
+
+    assert labels == [
+        "Тип",
+        "Страна",
+        "Где смотреть",
+        "Голоса TMDb",
+        "Статус",
+        "Длительность серии",
+    ]
+    assert toggle.text() == "Скрыть"
+
+    toggle.click()
+    _flush_qt_deferred_deletes(qapp)
+    labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
+
+    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert toggle.text() == "Показать больше"
+
+
+def test_detail_main_info_resets_to_collapsed_for_new_entry(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QFrame, QPushButton
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    first_card = {
+        "title": "Alpha",
+        "runtime_status": "watched",
+        "country": "RU",
+        "object_type": "series",
+        "watch_providers": ["Premier"],
+        "tmdb_votes": 417,
+        "status": "Returning Series",
+        "episode_run_time": [48],
+    }
+    second_card = {
+        "title": "Bravo",
+        "runtime_status": "watched",
+        "country": "US",
+        "object_type": "series",
+        "watch_providers": ["HBO"],
+        "tmdb_votes": 12850,
+        "status": "Ended",
+        "episode_run_time": [52],
+    }
+
+    detail.show_entry(("Alpha", {}, first_card))
+    _flush_qt_deferred_deletes(qapp)
+    toggle = detail.widget.findChild(QPushButton, "detailMainInfoToggleButton")
+    toggle.click()
+    _flush_qt_deferred_deletes(qapp)
+
+    detail.show_entry(("Bravo", {}, second_card))
+    _flush_qt_deferred_deletes(qapp)
+
+    panel = detail.widget.findChild(QFrame, "detailMainInfoPanel")
+    labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
+
+    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert toggle.text() == "Показать больше"
 
 
 def test_detail_card_does_not_create_additional_info_section(qapp) -> None:
@@ -1976,6 +2324,8 @@ def test_detail_main_info_panel_is_below_score_row(qapp) -> None:
     info_layout = info_column.layout()
 
     assert info_layout.indexOf(score_row) < info_layout.indexOf(main_info)
+    score_info_gap = info_layout.itemAt(info_layout.indexOf(score_row) + 1).spacerItem()
+    assert score_info_gap.sizeHint().height() == DETAIL_CARD_LAYOUT_PROFILE.detail_micro_spacing
 
 
 def test_watched_detail_card_does_not_render_my_score_ring() -> None:
@@ -2160,11 +2510,21 @@ def test_detail_card_poster_shell_exists(qapp) -> None:
 
 def test_watched_user_score_badge_is_poster_shell_overlay(qapp) -> None:
     from PyQt6.QtCore import Qt
-    from PyQt6.QtWidgets import QLabel, QFrame
+    from PyQt6.QtWidgets import QLabel, QFrame, QWidget
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
+    def is_descendant(child: QWidget, parent: QWidget) -> bool:
+        current = child
+        while current is not None:
+            if current is parent:
+                return True
+            current = current.parent()
+        return False
+
     detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.widget.resize(1200, 800)
+    detail.widget.show()
     detail.show_entry(
         (
             "Alpha",
@@ -2183,30 +2543,32 @@ def test_watched_user_score_badge_is_poster_shell_overlay(qapp) -> None:
 
     assert shell is not None
     assert badge is not None
-    assert badge.parent() is shell
+    assert is_descendant(badge, shell)
     assert badge.text() == "★ 9.0"
     assert badge.isHidden() is False
     assert badge.testAttribute(Qt.WidgetAttribute.WA_StyledBackground) is True
-    assert badge.x() >= shell.width() - badge.width() - DETAIL_CARD_LAYOUT_PROFILE.detail_user_score_badge_right - 1
-    assert badge.y() == DETAIL_CARD_LAYOUT_PROFILE.detail_user_score_badge_top
+    badge_position = badge.mapTo(shell, badge.rect().topLeft())
+    assert abs(badge_position.x() - DETAIL_CARD_LAYOUT_PROFILE.detail_user_score_badge_left) <= 1
+    assert abs(badge_position.y() - DETAIL_CARD_LAYOUT_PROFILE.detail_user_score_badge_top) <= 1
 
 
 def test_watched_user_score_badge_has_readable_background() -> None:
     import inspect
 
     import desktop.shared.detail.card as detail_card_module
-    from desktop.theme import COLOR_RATING, COLOR_SCORE_BADGE_BG
+    from desktop.theme import COLOR_TEXT, COLOR_TEXT_INVERTED
     from desktop.theme.styles.detail_card import build_detail_card_style
 
     style = build_detail_card_style()
     init_source = inspect.getsource(detail_card_module.WatchedDetailCard.__init__)
 
     assert "QLabel#detailUserScoreBadge" in style
-    assert f"background-color: {COLOR_SCORE_BADGE_BG}" in style
-    assert f"border: 1px solid {COLOR_RATING}" in style
+    assert f"background-color: {COLOR_TEXT}" in style
+    assert f"border: 1px solid {COLOR_TEXT}" in style
+    assert f"color: {COLOR_TEXT_INVERTED}" in style
     assert "class UserScoreBadgeLabel(QLabel)" in init_source
     assert "drawRoundedRect" in init_source
-    assert "QColor(COLOR_SCORE_BADGE_BG)" in init_source
+    assert "QColor(COLOR_TEXT)" in init_source
 
 
 def test_watched_user_score_badge_hides_without_user_score(qapp) -> None:
@@ -2226,7 +2588,7 @@ def test_watched_user_score_badge_hides_without_user_score(qapp) -> None:
 
 
 def test_candidate_detail_card_never_shows_user_score_badge(qapp) -> None:
-    from PyQt6.QtWidgets import QLabel, QFrame
+    from PyQt6.QtWidgets import QLabel
 
     from desktop.shared.detail import CANDIDATE_DETAIL_CARD_PROFILE, WatchedDetailCard
 
@@ -2234,12 +2596,9 @@ def test_candidate_detail_card_never_shows_user_score_badge(qapp) -> None:
     detail.show_entry(("Candidate", {}, {"title": "Candidate", "user_score": 9, "tmdb_score": 7.2}))
     qapp.processEvents()
 
-    shell = detail.widget.findChild(QFrame, "detailPosterShell")
     badge = detail.widget.findChild(QLabel, "detailUserScoreBadge")
 
-    assert shell is not None
     assert badge is not None
-    assert badge.parent() is shell
     assert badge.text() == ""
     assert badge.isHidden() is True
 
@@ -2624,9 +2983,10 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "DETAIL_POSTER_RADIUS": 16,
         "DETAIL_POSTER_BORDER_WIDTH": 1,
         "DETAIL_POSTER_RIGHT_GAP": 42,
-        "DETAIL_INFO_MIN_WIDTH": 440,
+        "DETAIL_INFO_MIN_WIDTH": 350,
         "DETAIL_INFO_MAX_WIDTH": 760,
         "DETAIL_INFO_COLUMN_MAX_WIDTH": 700,
+        "DETAIL_INFO_TOP_OFFSET": 18,
         "DETAIL_TITLE_FONT_FAMILY": "Segoe UI",
         "DETAIL_TITLE_FONT_FALLBACK": "Arial, sans-serif",
         "DETAIL_TITLE_FONT_SIZE": 34,
@@ -2655,15 +3015,15 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "DETAIL_USER_SCORE_BADGE_RADIUS": 20,
         "DETAIL_USER_SCORE_BADGE_FONT_SIZE": 16,
         "DETAIL_USER_SCORE_BADGE_TOP": 16,
-        "DETAIL_USER_SCORE_BADGE_RIGHT": 16,
+        "DETAIL_USER_SCORE_BADGE_LEFT": 16,
         "DETAIL_USER_SCORE_BADGE_PADDING_X": 10,
         "DETAIL_MAIN_INFO_TOP_GAP": 38,
         "DETAIL_MAIN_INFO_PANEL_RADIUS": 16,
-        "DETAIL_MAIN_INFO_PANEL_PADDING_X": 28,
-        "DETAIL_MAIN_INFO_PANEL_PADDING_Y": 18,
+        "DETAIL_MAIN_INFO_PANEL_PADDING_X": 34,
+        "DETAIL_MAIN_INFO_PANEL_PADDING_Y": 22,
         "DETAIL_MAIN_INFO_ROW_HEIGHT": 54,
-        "DETAIL_MAIN_INFO_ROW_GAP": 10,
-        "DETAIL_MAIN_INFO_HEADER_PANEL_GAP": 24,
+        "DETAIL_MAIN_INFO_ROW_GAP": 12,
+        "DETAIL_MAIN_INFO_HEADER_PANEL_GAP": 28,
         "DETAIL_MAIN_INFO_LABEL_WIDTH": 230,
         "DETAIL_OVERVIEW_TOP_GAP": 14,
         "DETAIL_OVERVIEW_LEFT_INSET": 0,
@@ -2671,6 +3031,8 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "DETAIL_OVERVIEW_TEXT_TOP_GAP": 20,
         "DETAIL_OVERVIEW_MAX_LINES_COLLAPSED": 4,
         "DETAIL_OVERVIEW_MAX_WIDTH": 360,
+        "DETAIL_TITLE_CHIPS_GAP": 42,
+        "DETAIL_SCORE_MAIN_INFO_GAP": 30,
         "DETAIL_SECTION_MAX_WIDTH": 920,
     }
 
@@ -2688,8 +3050,12 @@ def test_detail_hero_contract_tokens_are_available() -> None:
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_overview_max_width == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width == theme.DETAIL_CONTENT_MAX_WIDTH
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_info_column_max_width == theme.DETAIL_INFO_COLUMN_MAX_WIDTH
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_info_top_offset == theme.DETAIL_INFO_TOP_OFFSET
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_overview_max_width == theme.DETAIL_OVERVIEW_MAX_WIDTH
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width == theme.DETAIL_SECTION_MAX_WIDTH
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_title_chips_gap == theme.DETAIL_TITLE_CHIPS_GAP
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_micro_spacing == theme.DETAIL_SCORE_MAIN_INFO_GAP
+    assert DETAIL_CARD_LAYOUT_PROFILE.detail_section_spacing == theme.DETAIL_SCORE_MAIN_INFO_GAP
 
 
 def test_detail_card_style_uses_requested_font_sizes() -> None:
@@ -2707,6 +3073,7 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     assert "QLabel#detailMainInfoHeader" in style
     assert f"font-size: {font_px(tokens.FONT_DETAIL_MAIN_INFO_HEADER)}px;" in style
     assert f"font-size: {font_px(tokens.FONT_DETAIL_MAIN_INFO_VALUE)}px;" in style
+    assert "QPushButton#detailMainInfoToggleButton" in style
     assert "QLabel#detailOverviewText" in style
     assert f"font-size: {font_px(tokens.FONT_DETAIL_OVERVIEW_TEXT)}px;" in style
     assert f"font-size: {font_px(tokens.FONT_OVERVIEW_TITLE)}px;" in style
@@ -2717,6 +3084,7 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     assert "QLabel#genrePill" in style
     assert f"font-size: {font_px(tokens.DETAIL_CHIP_FONT_SIZE)}px;" in style
     assert f"padding: 0 {detail_px(tokens.DETAIL_CHIP_H_PADDING)}px;" in style
+    assert f"border-radius: {detail_px(tokens.DETAIL_CHIP_RADIUS)}px;" in style
 
 
 def test_fit_poster_pixmap_for_display_avoids_upscale(qapp) -> None:
@@ -3274,16 +3642,42 @@ def test_filter_chip_selectors_do_not_show_local_reset_buttons(qapp) -> None:
     assert genre_selector.findChild(QPushButton, "genreChipClear") is None
 
 
-def test_candidate_filter_field_labels_look_like_section_headers() -> None:
+def test_candidate_filter_sections_define_visual_hierarchy() -> None:
     from desktop.theme.scaling import font_px
     from desktop.theme.styles.candidates_shell import build_candidates_shell_style
     from desktop.theme.tokens import FONT_SECTION
 
     style = build_candidates_shell_style()
 
+    assert "QFrame#candidateFilterSection" in style
+    assert "QLabel#candidateFilterSectionTitle" in style
+    assert "QFrame#candidateFilterDivider" in style
+    assert f"font-size: {font_px(FONT_SECTION + 2)}px;" in style
     assert "QLabel#candidateSearchFieldLabel" in style
     assert f"font-size: {font_px(FONT_SECTION)}px;" in style
     assert "font-weight: 700;" in style
+
+
+def test_candidate_list_search_matches_watched_search_scale() -> None:
+    from desktop.theme.scaling import font_px, layout_px
+    from desktop.theme.styles.candidates_shell import build_candidates_shell_style
+    from desktop.theme.styles.watched_shell import build_watched_shell_style
+    from desktop.theme.tokens import FONT_SECTION, INPUT_PADDING_X, INPUT_PADDING_Y
+
+    candidate_style = build_candidates_shell_style()
+    watched_style = build_watched_shell_style()
+    expected_font = f"font-size: {font_px(FONT_SECTION)}px;"
+    expected_padding = f"padding: {layout_px(INPUT_PADDING_Y + 1)}px {layout_px(INPUT_PADDING_X + 2)}px;"
+    expected_min_height = f"min-height: {layout_px(34)}px;"
+
+    assert "QLineEdit#candidateListSearch" in candidate_style
+    assert "QLineEdit#watchedSearch" in watched_style
+    assert expected_font in candidate_style
+    assert expected_padding in candidate_style
+    assert expected_min_height in candidate_style
+    assert expected_font in watched_style
+    assert expected_padding in watched_style
+    assert expected_min_height in watched_style
 
 
 def test_country_chip_selector_toggle_country_updates_selection(qapp) -> None:
@@ -3488,6 +3882,23 @@ def test_candidate_filters_view_uses_threshold_sliders_not_spinboxes() -> None:
     assert "QSpinBox" not in source
 
 
+def test_candidate_filters_form_uses_grouped_sections() -> None:
+    import inspect
+
+    import desktop.candidates.filters_form as form_module
+
+    source = inspect.getsource(form_module.build_filters_form)
+
+    assert "add_section" in source
+    assert "add_divider" in source
+    assert "candidateFilterSection" in source
+    assert "candidateFilterDivider" in source
+    assert "Основные условия" in source
+    assert "Жанры" in source
+    assert "Пороги TMDb" in source
+    assert "Статус и видимость" in source
+
+
 def test_candidate_filters_view_places_apply_button_in_top_bar() -> None:
     import inspect
 
@@ -3496,6 +3907,7 @@ def test_candidate_filters_view_places_apply_button_in_top_bar() -> None:
     source = inspect.getsource(module.CandidateFiltersView.__init__)
     assert "top_bar" in source
     assert "_update_apply_button_width" in source
+    assert "control_px(40)" in inspect.getsource(module)
     assert "form.addWidget(self._apply_button)" not in source
 
 

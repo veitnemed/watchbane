@@ -211,6 +211,17 @@ def test_minimum_preserving_rounding_keeps_tiny_values_non_zero() -> None:
     assert scaling.scale_px(-1) == -1
 
 
+def test_font_scaling_uses_half_up_rounding_for_compact_scales() -> None:
+    import desktop.theme.scaling as scaling
+
+    scaling.set_ui_scale(0.75)
+    scaling._scale_tuning = dict(DEFAULT_TUNING)
+
+    assert scaling.font_px(14) == 11
+    assert scaling.font_px(13) == 10
+    assert scaling.font_px(12) == 9
+
+
 def test_default_tuning_profile_values_match_base_tokens() -> None:
     import desktop.shared.detail.profiles as profiles
     from desktop.theme import tokens
@@ -295,6 +306,19 @@ def test_tmdb_ring_value_font_scales_with_ui_scale(qapp) -> None:
     assert ring_100._value_font_point == 24
     assert ring_75._value_font_point == 18
     assert ring_75._value_font_point < ring_100._value_font_point
+
+
+def test_range_slider_keeps_readable_minimum_at_compact_scale(qapp) -> None:
+    import desktop.theme.scaling as scaling
+    from desktop.shared.widgets.range_slider import RangeSlider
+
+    scaling.set_ui_scale(0.75)
+    scaling._scale_tuning = dict(DEFAULT_TUNING)
+
+    slider = RangeSlider(0, 10, 0, 10)
+
+    assert slider.minimumHeight() >= 34
+    assert slider.sizeHint().height() >= 34
 
 
 def test_candidate_detail_card_profile_scales_with_ui_scale(qapp) -> None:
@@ -494,6 +518,7 @@ def test_shell_tabs_and_add_title_use_control_scaled_typography() -> None:
     import desktop.theme.scaling as scaling
     from desktop.theme.styles.shell import build_shell_style
     from desktop.theme.styles.watched_shell import build_watched_shell_style
+    from desktop.theme.tokens import COLOR_SURFACE
     from desktop.theme.tokens import (
         FONT_BASE,
         FONT_SECTION,
@@ -508,5 +533,28 @@ def test_shell_tabs_and_add_title_use_control_scaled_typography() -> None:
     assert f"font-size: {scaling.font_px(FONT_BASE)}px" in shell_style
     assert f"min-height: {scaling.control_px(34)}px" in shell_style
     assert f"font-size: {scaling.font_px(FONT_SECTION)}px" in watched_style
+    assert "QLineEdit#watchedSearch" in watched_style
+    assert "QFrame#watchedScoreFilter" in watched_style
+    assert f"background-color: {COLOR_SURFACE}" in watched_style
+    assert f"min-height: {scaling.layout_px(34)}px" in watched_style
     assert f"min-height: {scaling.control_px(WATCHED_ADD_TITLE_MIN_HEIGHT)}px" in watched_style
     assert f"font-size: {scaling.font_px(WATCHED_SIDEBAR_LABEL_FONT)}px" in watched_style
+
+
+def test_app_style_includes_settings_scaled_typography() -> None:
+    import desktop.theme.scaling as scaling
+    from desktop.theme.styles.app import build_app_style
+    from desktop.theme.tokens import FONT_BASE, FONT_SECTION, FONT_TITLE
+
+    scaling.set_ui_scale(0.75)
+    scaling._scale_tuning = dict(DEFAULT_TUNING)
+
+    style = build_app_style()
+
+    assert "QWidget#settingsTabRoot" in style
+    assert "QFrame#settingsInterfaceSection" in style
+    assert "QLabel#uiScaleLabel" in style
+    assert "QPushButton#saveSettingsButton" in style
+    assert f"font-size: {scaling.font_px(FONT_BASE)}px" in style
+    assert f"font-size: {scaling.font_px(FONT_SECTION)}px" in style
+    assert f"font-size: {scaling.font_px(FONT_TITLE)}px" in style

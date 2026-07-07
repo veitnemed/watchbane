@@ -38,6 +38,7 @@ def make_pill_label(text: str, object_name: str, rich: bool = False):
     pill = QLabel()
     pill.setObjectName(object_name)
     pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
     if rich:
         pill.setTextFormat(Qt.TextFormat.RichText)
     pill.setText(text)

@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_UP
+
 from candidates.models import country_schema
 from desktop.shared.detail.additional_info import (
     build_additional_info_items,
     format_seasons_episodes,
-    format_watch_providers,
+    list_watch_provider_values,
 )
 from desktop.shared.detail.presenters import format_year_display
 
 
 UNKNOWN_OBJECT_TYPE = "Неизвестно"
-NO_DATA_LABEL = "нет данных"
+NO_DATA_LABEL = "Неизвестно"
+WATCH_PROVIDER_VISIBLE_COUNT = 2
 
 
 def _clean_text(value) -> str | None:
@@ -47,6 +50,22 @@ def normalize_object_type(value, card: dict | None = None) -> str:
     return text or UNKNOWN_OBJECT_TYPE
 
 
+def _capitalize_display_value(value) -> str:
+    text = _clean_text(value)
+    if text is None:
+        return ""
+    return f"{text[:1].upper()}{text[1:]}"
+
+
+def _format_compact_thousands(value: int) -> str:
+    compact = (Decimal(value) / Decimal(1000)).quantize(
+        Decimal("0.1"),
+        rounding=ROUND_HALF_UP,
+    )
+    text = format(compact, "f").rstrip("0").rstrip(".")
+    return f"{text}к"
+
+
 def format_votes_display(value) -> str | None:
     if value in (None, "") or isinstance(value, bool):
         return None
@@ -56,12 +75,45 @@ def format_votes_display(value) -> str | None:
         return None
     if votes <= 0:
         return None
-    return f"{votes:,}".replace(",", " ")
+    if votes < 10:
+        return "Крайне мало"
+    if votes < 100:
+        return "0.1к"
+    return _format_compact_thousands(votes)
 
 
-def build_main_info_items(card: dict) -> list[dict[str, str]]:
+def _build_watch_provider_item(value) -> dict[str, object]:
+    providers = [_capitalize_display_value(provider) for provider in list_watch_provider_values(value)]
+    providers = [provider for provider in providers if provider]
+    if not providers:
+        return {"label": "Где смотреть", "value": NO_DATA_LABEL}
+
+    visible_providers = providers[:WATCH_PROVIDER_VISIBLE_COUNT]
+    hidden_providers = providers[WATCH_PROVIDER_VISIBLE_COUNT:]
+    item: dict[str, object] = {
+        "label": "Где смотреть",
+        "value": ", ".join(visible_providers),
+    }
+    if hidden_providers:
+        item["value"] = f"{item['value']} +{len(hidden_providers)}"
+        item["tooltip"] = ", ".join(hidden_providers)
+    return item
+
+
+def _normalize_main_info_item(item: dict[str, object]) -> dict[str, object]:
+    normalized = dict(item)
+    normalized["value"] = _capitalize_display_value(normalized.get("value", ""))
+    tooltip = _clean_text(normalized.get("tooltip"))
+    if tooltip is None:
+        normalized.pop("tooltip", None)
+    else:
+        normalized["tooltip"] = tooltip
+    return normalized
+
+
+def build_main_info_items(card: dict) -> list[dict[str, object]]:
     """Build compact label/value rows for the title main-info block."""
-    items: list[dict[str, str]] = []
+    items: list[dict[str, object]] = []
 
     items.append(
         {
@@ -77,8 +129,8 @@ def build_main_info_items(card: dict) -> list[dict[str, str]]:
         ) or country
         items.append({"label": "Страна", "value": country})
 
-    providers = format_watch_providers(card.get("watch_providers") or card.get("watch_providers_ru"))
-    items.append({"label": "Где смотреть", "value": providers or NO_DATA_LABEL})
+    provider_source = card.get("watch_providers") or card.get("watch_providers_ru")
+    items.append(_build_watch_provider_item(provider_source))
 
     tmdb_votes = format_votes_display(card.get("tmdb_votes"))
     if tmdb_votes is not None:
@@ -86,7 +138,7 @@ def build_main_info_items(card: dict) -> list[dict[str, str]]:
 
     items.extend(build_additional_info_items(card))
 
-    return items
+    return [_normalize_main_info_item(item) for item in items]
 
 
 def build_title_meta_text(card: dict) -> str:

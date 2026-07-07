@@ -32,7 +32,7 @@ from desktop.theme.shell_layout import (
 )
 
 APPLY_BUTTON_WIDTH_RATIO = 0.25
-APPLY_BUTTON_HEIGHT = control_px(32)
+APPLY_BUTTON_HEIGHT = control_px(40)
 
 
 class CandidateFiltersView:

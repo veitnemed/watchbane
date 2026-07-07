@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from desktop.shared.detail.action_icons import make_detail_action_icon
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.card_pills import clear_layout, fill_detail_chip_rows, make_meta_pill
@@ -18,8 +20,6 @@ from desktop.shared.detail.profiles import DetailCardLayoutProfile
 from desktop.shared.detail.rating_indicator import StarRatingIndicator
 from desktop.shared.detail.types import DetailEntry
 from desktop.theme import (
-    COLOR_RATING,
-    COLOR_SCORE_BADGE_BG,
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
     TRANSPARENT_STYLE,
@@ -29,6 +29,7 @@ from desktop.theme import (
 )
 
 RATING_META_PILLS_SPACING = 1
+MAIN_INFO_COLLAPSED_ROW_COUNT = 4
 
 
 class WatchedDetailCard(DetailCardPosterMixin):
@@ -55,6 +56,8 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._mark_watched_button = None
         self._hide_button = None
         self._detail_chip_labels: list[str] = []
+        self._main_info_items: list[dict[str, Any]] = []
+        self._main_info_expanded = False
         card = self
 
         class DetailCardFrame(QFrame):
@@ -72,8 +75,8 @@ class WatchedDetailCard(DetailCardPosterMixin):
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
                 rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
                 radius = rect.height() / 2
-                painter.setPen(QPen(QColor(COLOR_RATING), 1))
-                painter.setBrush(QColor(COLOR_SCORE_BADGE_BG))
+                painter.setPen(QPen(QColor(COLOR_TEXT), 1))
+                painter.setBrush(QColor(COLOR_TEXT))
                 painter.drawRoundedRect(rect, radius, radius)
                 painter.end()
                 super().paintEvent(event)
@@ -137,6 +140,23 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._poster_label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._poster_label.customContextMenuRequested.connect(self._show_poster_context_menu)
 
+        self._poster_overlay = QWidget(self._poster_shell)
+        self._poster_overlay.setObjectName("detailPosterOverlay")
+        self._poster_overlay.setStyleSheet(TRANSPARENT_STYLE)
+        self._poster_overlay.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._poster_overlay.setFixedSize(
+            self._profile.detail_poster_content_width,
+            self._profile.detail_poster_content_height,
+        )
+        poster_overlay_layout = QHBoxLayout(self._poster_overlay)
+        poster_overlay_layout.setContentsMargins(
+            max(0, self._profile.detail_user_score_badge_left - poster_border_width),
+            max(0, self._profile.detail_user_score_badge_top - poster_border_width),
+            0,
+            0,
+        )
+        poster_overlay_layout.setSpacing(0)
+
         self._user_score_badge = UserScoreBadgeLabel("", self._poster_shell)
         self._user_score_badge.setObjectName("detailUserScoreBadge")
         self._user_score_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -154,6 +174,12 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._user_score_badge.hide()
 
         poster_shell_layout.addWidget(self._poster_label, 0, 0)
+        poster_overlay_layout.addWidget(
+            self._user_score_badge,
+            alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
+        )
+        poster_overlay_layout.addStretch(1)
+        poster_shell_layout.addWidget(self._poster_overlay, 0, 0)
 
         self._poster_column_widget = QWidget()
         self._poster_column_widget.setObjectName("detailPosterColumn")
@@ -175,7 +201,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
             QSizePolicy.Policy.Minimum,
         )
         info_column = QVBoxLayout(self._info_column_widget)
-        info_column.setContentsMargins(0, 0, 0, 0)
+        info_column.setContentsMargins(0, self._profile.detail_info_top_offset, 0, 0)
         info_column.setSpacing(self._profile.detail_column_spacing)
 
         self._title_block_widget = QWidget()
@@ -375,7 +401,15 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._main_info_title_label.setObjectName("detailMainInfoHeader")
         self._main_info_title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
+        self._main_info_toggle_button = QPushButton("Показать больше")
+        self._main_info_toggle_button.setObjectName("detailMainInfoToggleButton")
+        self._main_info_toggle_button.setAutoDefault(False)
+        self._main_info_toggle_button.setDefault(False)
+        self._main_info_toggle_button.clicked.connect(self._toggle_main_info_expanded)
+        self._main_info_toggle_button.hide()
+
         main_info_header_layout.addWidget(self._main_info_title_label)
+        main_info_header_layout.addWidget(self._main_info_toggle_button)
         main_info_header_layout.addWidget(self._main_info_divider, stretch=1)
 
         self._main_info_panel = QFrame()
@@ -404,8 +438,8 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._overview_frame = QFrame()
         self._overview_frame.setObjectName("detailOverviewSection")
         self._overview_frame.setFrameShape(QFrame.Shape.NoFrame)
-        self._overview_frame.setMaximumWidth(self._profile.detail_overview_max_width)
-        self._overview_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        self._overview_frame.setFixedWidth(self._profile.detail_poster_width)
+        self._overview_frame.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
         overview_layout = QVBoxLayout(self._overview_frame)
         overview_layout.setContentsMargins(self._profile.detail_overview_left_inset, 0, 0, 0)
         overview_layout.setSpacing(0)
@@ -561,6 +595,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._overview_label.setText("")
         self._overview_frame.setVisible(False)
         self._overview_gap_widget.setVisible(False)
+        self._main_info_expanded = False
         self._set_main_info_items([])
         if self._mark_watched_button is not None:
             self._mark_watched_button.setEnabled(self._mark_watched_handler is not None)
@@ -588,6 +623,7 @@ class WatchedDetailCard(DetailCardPosterMixin):
         self._detail_chip_labels = detail_pills
         self._refresh_detail_chips()
 
+        self._main_info_expanded = False
         self._set_main_info_items(build_main_info_items(card))
 
         if has_overview_text(card):
@@ -640,11 +676,11 @@ class WatchedDetailCard(DetailCardPosterMixin):
             self._user_score_badge.hide()
             return
         self._user_score_badge.setText(str(badge.get("text", "")))
-        self._position_user_score_badge()
+        self._resize_user_score_badge()
         self._user_score_badge.show()
         self._user_score_badge.raise_()
 
-    def _position_user_score_badge(self) -> None:
+    def _resize_user_score_badge(self) -> None:
         badge_width = max(
             self._profile.detail_user_score_badge_min_width,
             self._user_score_badge.sizeHint().width(),
@@ -653,22 +689,18 @@ class WatchedDetailCard(DetailCardPosterMixin):
             badge_width,
             self._profile.detail_user_score_badge_height,
         )
-        self._user_score_badge.move(
-            max(0, self._profile.detail_poster_width - badge_width - self._profile.detail_user_score_badge_right),
-            self._profile.detail_user_score_badge_top,
-        )
 
     def _set_info_grid_items(
         self,
         grid,
         section,
-        items: list[dict[str, str]],
+        items: list[dict[str, Any]],
         *,
         label_object_name: str,
         value_object_name: str,
     ) -> None:
         from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import QLabel
+        from PyQt6.QtWidgets import QLabel, QSizePolicy
 
         clear_layout(grid)
         compact_row_height = min(
@@ -679,32 +711,51 @@ class WatchedDetailCard(DetailCardPosterMixin):
             label = QLabel(str(item.get("label", "")))
             label.setObjectName(label_object_name)
             label.setFixedWidth(self._profile.detail_main_info_label_width)
-            label.setMinimumHeight(compact_row_height)
+            label.setFixedHeight(compact_row_height)
             label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
-            value = QLabel(str(item.get("value", "")))
+            value_text = str(item.get("value", ""))
+            value = QLabel(value_text)
             value.setObjectName(value_object_name)
-            value.setWordWrap(True)
-            value.setMinimumHeight(compact_row_height)
-            value.setMaximumHeight(
-                max(
-                    compact_row_height,
-                    value.fontMetrics().lineSpacing() * 2 + self._profile.detail_main_info_value_extra_height,
-                )
-            )
+            value.setWordWrap(False)
+            value.setFixedHeight(compact_row_height)
+            value.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             value.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-            value.setToolTip(str(item.get("value", "")))
+            value.setToolTip(str(item.get("tooltip") or value_text))
 
             grid.addWidget(label, row, 0)
             grid.addWidget(value, row, 1)
 
         section.setVisible(len(items) > 0)
 
-    def _set_main_info_items(self, items: list[dict[str, str]]) -> None:
+    def _set_main_info_items(self, items: list[dict[str, Any]]) -> None:
+        self._main_info_items = list(items)
+        self._render_main_info_items()
+
+    def _visible_main_info_items(self) -> list[dict[str, Any]]:
+        if self._main_info_expanded:
+            return list(self._main_info_items)
+        return list(self._main_info_items[:MAIN_INFO_COLLAPSED_ROW_COUNT])
+
+    def _toggle_main_info_expanded(self) -> None:
+        self._main_info_expanded = not self._main_info_expanded
+        self._render_main_info_items()
+
+    def _update_main_info_toggle_button(self) -> None:
+        has_hidden_rows = len(self._main_info_items) > MAIN_INFO_COLLAPSED_ROW_COUNT
+        self._main_info_toggle_button.setVisible(has_hidden_rows)
+        if has_hidden_rows:
+            self._main_info_toggle_button.setText("Скрыть" if self._main_info_expanded else "Показать больше")
+
+    def _render_main_info_items(self) -> None:
+        if len(self._main_info_items) <= MAIN_INFO_COLLAPSED_ROW_COUNT:
+            self._main_info_expanded = False
+        visible_items = self._visible_main_info_items()
         self._set_info_grid_items(
             self._main_info_grid,
             self._main_info_section,
-            items,
+            visible_items,
             label_object_name="detailMainInfoLabel",
             value_object_name="detailMainInfoValue",
         )
+        self._update_main_info_toggle_button()

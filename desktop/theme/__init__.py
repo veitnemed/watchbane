@@ -12,6 +12,7 @@ from desktop.theme.styles import (
     build_poster_image_style,
     build_poster_placeholder_style,
     build_score_edit_dialog_style,
+    build_settings_style,
 )
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "build_poster_image_style",
     "build_poster_placeholder_style",
     "build_score_edit_dialog_style",
+    "build_settings_style",
 ]
 
 globals().update({name: getattr(tokens, name) for name in tokens.__all__})

@@ -93,11 +93,13 @@ def test_enter_in_title_input_starts_search_and_does_not_reject(qapp) -> None:
     assert dialog.resolve_bundle is None
 
 
-def test_cancel_button_is_not_default_or_auto_default(qapp) -> None:
+def test_search_dialog_has_no_cancel_button(qapp) -> None:
+    from PyQt6.QtWidgets import QPushButton
+
     dialog = _dialog()
 
-    assert dialog._cancel_button.isDefault() is False
-    assert dialog._cancel_button.autoDefault() is False
+    assert hasattr(dialog, "_cancel_button") is False
+    assert all(button.text() != "Отмена" for button in dialog.findChildren(QPushButton))
 
 
 def test_find_button_does_not_create_second_worker_when_search_is_running(qapp) -> None:

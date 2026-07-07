@@ -7,6 +7,7 @@ from collections.abc import Callable
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
 
 from desktop.shared.widgets.range_slider import RangeSlider
+from desktop.theme.scaling import layout_px
 
 SCORE_SLIDER_MAX = 100
 SCORE_SLIDER_STEP = 0.1
@@ -39,6 +40,7 @@ def add_threshold_filter_row(
 ) -> None:
     header = QHBoxLayout()
     header.setContentsMargins(0, 0, 0, 0)
+    header.setSpacing(layout_px(8))
     header.addWidget(field_label(title))
     header.addStretch()
     header.addWidget(value_label)

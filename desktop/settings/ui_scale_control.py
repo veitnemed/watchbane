@@ -54,8 +54,13 @@ class UiScaleControlPanel(QWidget):
         section = QFrame()
         section.setObjectName("settingsInterfaceSection")
         section_layout = QVBoxLayout(section)
-        section_layout.setContentsMargins(0, 0, 0, 0)
-        section_layout.setSpacing(layout_px(10))
+        section_layout.setContentsMargins(
+            layout_px(16),
+            layout_px(14),
+            layout_px(16),
+            layout_px(14),
+        )
+        section_layout.setSpacing(layout_px(12))
 
         title = QLabel("Интерфейс")
         title.setObjectName("settingsSectionTitle")

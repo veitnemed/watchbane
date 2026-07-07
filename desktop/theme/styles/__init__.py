@@ -14,6 +14,7 @@ from desktop.theme.styles.dialogs import (
     build_delete_dialog_style,
     build_score_edit_dialog_style,
 )
+from desktop.theme.styles.settings import build_settings_style
 
 __all__ = [
     "build_add_title_dialog_style",
@@ -26,4 +27,5 @@ __all__ = [
     "build_poster_image_style",
     "build_poster_placeholder_style",
     "build_score_edit_dialog_style",
+    "build_settings_style",
 ]
