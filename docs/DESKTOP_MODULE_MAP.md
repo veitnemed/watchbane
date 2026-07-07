@@ -29,6 +29,8 @@ start_app.py → desktop.app.main()
 ```text
 dataset/
   language.py                    # data_language helpers, localized fallbacks, TMDb locale mapping
+  migrations/
+    tmdb_localized.py            # safe TMDb localized backfill for old watched/candidate data
   read_models/
     watched.py                   # watched desktop/export read facade (dataset_key, movie, display card)
 
@@ -127,6 +129,7 @@ desktop/
 | `i18n/catalog.py` | ru/en catalog for interface labels/buttons/messages/placeholders | UI i18n |
 | `i18n/translator.py` | `tr(key)` and persisted interface language lookup | UI i18n |
 | `dataset/language.py` | `data_language` normalization, localized value selection, genre labels, TMDb locale mapping | domain localization |
+| `dataset/migrations/tmdb_localized.py` | backfill old JSON records with `localized.<lang>.title/overview` from TMDb locale responses | domain migration |
 | `watched/tab.py` | layout, list state, selection | feature view |
 | `watched/tab_actions.py` | delete/score/add-title write actions | feature view |
 | `watched/sidebar.py` | list widget, search, sort, add-title button | feature view |
@@ -180,6 +183,7 @@ class TabView(Protocol):
 - Data localization живет в `dataset/language.py`; desktop read models и presenters принимают `data_language` и должны иметь safe fallback на `ru`/legacy fields.
 - Desktop TMDb flows получают locale через app setting `data_language` (`ru -> ru-RU`, `en -> en-US`) и сохраняют фактический locale в `source_query.language`.
 - Настройки языков доступны в `Настройки -> Интерфейс -> Язык`; для первого стабильного варианта смена применяется после restart или перезагрузки экранов.
+- Старые локальные JSON без `localized.en` обновляются через `scripts/backfill_watched_localized_from_tmdb.py`; backfill добавляет только localized layer, делает backup рядом с JSON и не переименовывает dataset keys.
 
 Шаблон добавления вкладки:
 
@@ -216,6 +220,7 @@ registry.register(ShellTabSpec("feature_id", tr("tabs.feature"), feature_view))
 | Переиспользуемый виджет без domain | `shared/widgets/` |
 | UI label/button/message/placeholder | `i18n/catalog.py` + `tr("feature.key")` |
 | Отображаемые localized data/title/overview/genre/country | `dataset/language.py` + read model/presenter `data_language` parameter |
+| Backfill localized data для старого watched/candidate JSON | `dataset/migrations/tmdb_localized.py` + `scripts/backfill_watched_localized_from_tmdb.py` |
 | Desktop TMDb request language | `desktop/settings/app_settings.language_to_tmdb_locale()` at desktop boundary, pass locale into `dataset`/`candidates` service |
 | Новый цвет/радиус/семантический font token | `theme/tokens.py` |
 | Новый размер, margin, spacing, min/max width/height | `theme/layout.py` + scaling helpers |

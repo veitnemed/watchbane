@@ -18,6 +18,57 @@ def _normalize_title(value) -> str:
     return str(value or "").strip().lower().replace("ё", "е")
 
 
+_CYRILLIC_TO_LATIN = {
+    "а": "a",
+    "б": "b",
+    "в": "v",
+    "г": "g",
+    "д": "d",
+    "е": "e",
+    "ё": "e",
+    "ж": "zh",
+    "з": "z",
+    "и": "i",
+    "й": "y",
+    "к": "k",
+    "л": "l",
+    "м": "m",
+    "н": "n",
+    "о": "o",
+    "п": "p",
+    "р": "r",
+    "с": "s",
+    "т": "t",
+    "у": "u",
+    "ф": "f",
+    "х": "kh",
+    "ц": "ts",
+    "ч": "ch",
+    "ш": "sh",
+    "щ": "shch",
+    "ъ": "",
+    "ы": "y",
+    "ь": "",
+    "э": "e",
+    "ю": "yu",
+    "я": "ya",
+}
+
+
+def _transliterate_cyrillic_query(value: str) -> str:
+    result = []
+    for char in str(value or ""):
+        lower = char.casefold()
+        mapped = _CYRILLIC_TO_LATIN.get(lower)
+        if mapped is None:
+            result.append(char)
+        elif char.isupper() and mapped:
+            result.append(mapped[:1].upper() + mapped[1:])
+        else:
+            result.append(mapped)
+    return "".join(result).strip()
+
+
 def _year_from_item(item: dict[str, Any]) -> int | None:
     value = item.get("year") or item.get("first_air_date")
     if value in (None, ""):
@@ -79,15 +130,35 @@ def _unique_queries(queries: list) -> list:
     return result
 
 
+def _tmdb_search_titles(title: str) -> tuple[str, ...]:
+    title = str(title or "").strip()
+    transliterated = _transliterate_cyrillic_query(title)
+    if transliterated and transliterated.casefold() != title.casefold():
+        return (title, transliterated)
+    return (title,)
+
+
 def _title_score(item: dict[str, Any], title: str) -> float:
     if title == "":
         return 0.0
-    expected = _normalize_title(title)
+    expected_values = [_normalize_title(title)]
+    transliterated = _transliterate_cyrillic_query(title)
+    if transliterated and transliterated.casefold() != str(title or "").casefold():
+        expected_values.append(_normalize_title(transliterated))
     candidates = [
         _normalize_title(item.get("name")),
         _normalize_title(item.get("original_name")),
     ]
-    return max((SequenceMatcher(None, expected, candidate).ratio() for candidate in candidates if candidate), default=0.0)
+    return max(
+        (
+            SequenceMatcher(None, expected, candidate).ratio()
+            for expected in expected_values
+            if expected
+            for candidate in candidates
+            if candidate
+        ),
+        default=0.0,
+    )
 
 
 def choose_best_tmdb_result(
@@ -134,6 +205,14 @@ def _normalizer_payload(raw_details: dict[str, Any], normalizer) -> dict[str, An
     return data
 
 
+def _tmdb_search_languages(language: str) -> tuple[str, ...]:
+    primary = str(language or api_tmdb.DEFAULT_LANGUAGE).strip() or api_tmdb.DEFAULT_LANGUAGE
+    fallback = api_tmdb.DEFAULT_LANGUAGE
+    if primary == fallback:
+        return (primary,)
+    return (primary, fallback)
+
+
 def search_tmdb_defaults_data(
     queries: list,
     *,
@@ -154,43 +233,45 @@ def search_tmdb_defaults_data(
         if title == "":
             continue
 
-        try:
-            try:
-                results = search_func(title, language=resolved_language)
-            except TypeError:
-                results = search_func(title)
-            choose = choose_func or choose_best_tmdb_result
-            try:
-                selected = choose(
-                    results,
-                    title=title,
-                    year=_query_year(query),
-                    country=_query_country(query),
-                )
-            except TypeError:
-                selected = choose(results)
-            if selected is None:
-                last_error = _tmdb_error("not_found", f"TMDb не нашёл объект: {title}")
-                continue
+        for search_title in _tmdb_search_titles(title):
+            for search_language in _tmdb_search_languages(resolved_language):
+                try:
+                    try:
+                        results = search_func(search_title, language=search_language)
+                    except TypeError:
+                        results = search_func(search_title)
+                    choose = choose_func or choose_best_tmdb_result
+                    try:
+                        selected = choose(
+                            results,
+                            title=search_title,
+                            year=_query_year(query),
+                            country=_query_country(query),
+                        )
+                    except TypeError:
+                        selected = choose(results)
+                    if selected is None:
+                        last_error = _tmdb_error("not_found", f"TMDb не нашёл объект: {title}")
+                        continue
 
-            try:
-                details = details_func(
-                    int(selected["id"]),
-                    language=resolved_language,
-                    append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
-                )
-            except TypeError:
-                details = details_func(
-                    int(selected["id"]),
-                    append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
-                )
-            return {
-                "data": _normalizer_payload(details, normalizer),
-                "error": None,
-                "status": "найдено",
-            }
-        except Exception as error:  # noqa: BLE001 - внешний API не должен ронять ручное добавление.
-            last_error = _tmdb_error("network_error", str(error))
+                    try:
+                        details = details_func(
+                            int(selected["id"]),
+                            language=resolved_language,
+                            append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
+                        )
+                    except TypeError:
+                        details = details_func(
+                            int(selected["id"]),
+                            append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
+                        )
+                    return {
+                        "data": _normalizer_payload(details, normalizer),
+                        "error": None,
+                        "status": "найдено",
+                    }
+                except Exception as error:  # noqa: BLE001 - внешний API не должен ронять ручное добавление.
+                    last_error = _tmdb_error("network_error", str(error))
 
     if last_error is None:
         last_error = _tmdb_error("not_found", "TMDb не нашёл объект")

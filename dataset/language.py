@@ -12,6 +12,19 @@ DATA_LANGUAGE_TMDB_LOCALES = {
     "ru": "ru-RU",
     "en": "en-US",
 }
+_ENGLISH_GENRE_LABELS_BY_KEY = {
+    "action_adventure": ("Action", "Adventure"),
+    "sci_fi_fantasy": ("Sci-Fi", "Fantasy"),
+    "detective": ("Detective",),
+    "melodrama": ("Melodrama",),
+    "romance": ("Romance",),
+}
+_LEGACY_DATASET_GENRE_KEY_ALIASES = {
+    "has_action": "action_adventure",
+    "has_fantasy": "sci_fi_fantasy",
+    "has_detective": "mystery",
+    "has_melodrama": "melodrama",
+}
 
 
 def normalize_data_language(value) -> str:
@@ -38,6 +51,20 @@ def _clean_text(value) -> str | None:
         return None
     text = str(value).strip()
     return text if text else None
+
+
+def _is_latinish_text(value: str | None) -> bool:
+    text = _clean_text(value)
+    if text is None:
+        return False
+    letters = [char for char in text if char.isalpha()]
+    if not letters:
+        return False
+    latin_letters = [
+        char for char in letters
+        if ("a" <= char.casefold() <= "z")
+    ]
+    return len(latin_letters) / len(letters) >= 0.7
 
 
 def _path_value(record: dict, selector: str | Iterable[str]):
@@ -162,23 +189,20 @@ def build_localized_block_from_legacy(record: dict, default_language: str = "ru"
             ),
         ),
     )
-    _set_localized_if_missing(
-        localized,
-        "en",
-        "title",
-        _first_text(
-            source,
-            (
-                "original_title",
-                "original_name",
-                "enName",
-                "alternative_title",
-                "alternativeName",
-                "title_en",
-                "name_en",
-            ),
+    en_title = _first_text(
+        source,
+        (
+            "enName",
+            "alternative_title",
+            "alternativeName",
+            "title_en",
+            "name_en",
         ),
     )
+    if en_title is None:
+        original_title = _first_text(source, ("original_title", "original_name"))
+        en_title = original_title if _is_latinish_text(original_title) else None
+    _set_localized_if_missing(localized, "en", "title", en_title)
     _set_localized_if_missing(
         localized,
         "en",
@@ -213,8 +237,6 @@ def choose_display_title(record: dict, language: str) -> str | None:
         en_value = _localized_text(source, "en", "title") or _first_text(
             source,
             (
-                "original_title",
-                "original_name",
                 "enName",
                 "alternative_title",
                 "alternativeName",
@@ -222,6 +244,9 @@ def choose_display_title(record: dict, language: str) -> str | None:
                 "name_en",
             ),
         )
+        if en_value is None:
+            original_title = _first_text(source, ("original_title", "original_name"))
+            en_value = original_title if _is_latinish_text(original_title) else None
         if en_value is not None:
             return en_value
 
@@ -290,6 +315,14 @@ def choose_genre_labels(genre_keys, language: str) -> list[str]:
     for raw_key in keys:
         key = str(raw_key or "").strip()
         if key == "":
+            continue
+        canonical_key = _LEGACY_DATASET_GENRE_KEY_ALIASES.get(key, key)
+        if normalized == "en" and canonical_key in _ENGLISH_GENRE_LABELS_BY_KEY:
+            for text in _ENGLISH_GENRE_LABELS_BY_KEY[canonical_key]:
+                label = _clean_text(text)
+                if label is not None and label not in seen:
+                    seen.add(label)
+                    labels.append(label)
             continue
         tag_key = key if key in tags else f"has_{key}"
         settings = tags.get(tag_key)

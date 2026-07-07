@@ -93,6 +93,14 @@ def _build_tmdb_add_defaults(
         localized_source,
         default_language=normalize_data_language(data_language),
     )
+    selected_language = normalize_data_language(data_language)
+    localized.setdefault(selected_language, {})
+    selected_title = _normalize_text(tmdb_data.get("title"))
+    selected_overview = _normalize_text(tmdb_data.get("overview") or tmdb_data.get("description"))
+    if selected_title:
+        localized[selected_language]["title"] = selected_title
+    if selected_overview:
+        localized[selected_language]["overview"] = selected_overview
     if localized:
         defaults["localized"] = localized
     return defaults

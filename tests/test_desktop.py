@@ -1,6 +1,7 @@
 import copy
 import ast
 import inspect
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -267,6 +268,162 @@ def test_add_title_resolve_uses_data_language_for_tmdb_locale() -> None:
     assert result["defaults"]["localized"]["en"]["overview"] == "English overview"
 
 
+def test_add_title_resolve_fallback_search_keeps_english_naruto_title() -> None:
+    from dataset.resolve import service as resolve_service
+
+    search_calls = []
+    details_calls = []
+
+    def fake_search(title, *, language=None):
+        search_calls.append((title, language))
+        if title == "Naruto" and language == "en-US":
+            return [{"id": 46260, "name": "Naruto"}]
+        return []
+
+    def fake_details(tmdb_id, *, language=None, **kwargs):
+        details_calls.append((tmdb_id, language))
+        assert kwargs["append_to_response"] == resolve_service.api_tmdb.DEFAULT_TV_DETAIL_APPENDS
+        return {
+            "id": tmdb_id,
+            "name": "Naruto",
+            "original_name": "ナルト",
+            "first_air_date": "2002-10-03",
+            "origin_country": ["JP"],
+            "production_countries": [{"iso_3166_1": "JP", "name": "Japan"}],
+            "original_language": "ja",
+            "genres": [{"id": 10759, "name": "Action & Adventure"}],
+            "vote_average": 8.4,
+            "vote_count": 5600,
+            "popularity": 60.0,
+            "overview": "Naruto Uzumaki wants to become the strongest ninja in his village.",
+            "external_ids": {"imdb_id": "tt0409591"},
+        }
+
+    result = resolve_service.resolve_title_data_for_add(
+        "Наруто",
+        "JP",
+        data_language="en",
+        tmdb_search_func=fake_search,
+        tmdb_choose_func=lambda results, **_kwargs: results[0] if results else None,
+        tmdb_details_func=fake_details,
+    )
+
+    assert search_calls == [("Наруто", "en-US"), ("Наруто", "ru-RU"), ("Naruto", "en-US")]
+    assert details_calls == [(46260, "en-US")]
+    assert result["found"] is True
+    assert result["defaults"]["main_info"]["title"] == "Naruto"
+    assert result["defaults"]["localized"]["en"]["title"] == "Naruto"
+    assert result["defaults"]["localized"]["en"]["title"] != "ナルト"
+    assert result["defaults"]["localized"]["en"]["overview"].startswith("Naruto Uzumaki")
+
+
+def test_tmdb_result_choice_matches_cyrillic_naruto_to_english_name() -> None:
+    from dataset.resolve.sources import choose_best_tmdb_result
+
+    selected = choose_best_tmdb_result(
+        [
+            {
+                "id": 46260,
+                "name": "Naruto",
+                "original_name": "ナルト",
+                "origin_country": ["JP"],
+                "vote_count": 100,
+                "popularity": 20.0,
+            },
+            {
+                "id": 31910,
+                "name": "Naruto Shippūden",
+                "original_name": "ナルト 疾風伝",
+                "origin_country": ["JP"],
+                "vote_count": 10000,
+                "popularity": 90.0,
+            },
+        ],
+        title="Наруто",
+        country="JP",
+    )
+
+    assert selected is not None
+    assert selected["id"] == 46260
+    assert selected["original_name"] == "ナルト"
+
+
+def test_live_tmdb_naruto_english_locale_uses_display_name_not_original_japanese() -> None:
+    if os.environ.get("WATCHBANE_RUN_TMDB_API_TESTS") != "1":
+        pytest.skip("Set WATCHBANE_RUN_TMDB_API_TESTS=1 to run live TMDb API smoke.")
+
+    from dataset.resolve import service as resolve_service
+
+    result = resolve_service.resolve_title_data_for_add("Наруто", "JP", data_language="en")
+
+    assert result["found"] is True
+    assert result["tmdb_language"] == "en-US"
+    assert result["defaults"]["main_info"]["title"] == "Naruto"
+    assert result["defaults"]["localized"]["en"]["title"] == "Naruto"
+    assert result["tmdb_data"]["original_title"] == "ナルト"
+
+
+def test_tmdb_localized_backfill_uses_locale_name_not_original_japanese() -> None:
+    from dataset.migrations.tmdb_localized import backfill_mapping_from_tmdb
+
+    calls = []
+
+    def fake_details(tmdb_id, *, language=None, **_kwargs):
+        calls.append((tmdb_id, language))
+        return {
+            "id": tmdb_id,
+            "name": "Naruto",
+            "original_name": "ナルト",
+            "overview": "Naruto Uzumaki wants to become the strongest ninja in his village.",
+        }
+
+    updated, report = backfill_mapping_from_tmdb(
+        {
+            "naruto": {
+                "tmdb_id": 46260,
+                "main_info": {"title": "Наруто", "year": 2002},
+            }
+        },
+        data_language="en",
+        details_func=fake_details,
+    )
+
+    assert calls == [(46260, "en-US")]
+    assert report["changed_records"] == 1
+    assert updated["naruto"]["localized"]["en"]["title"] == "Naruto"
+    assert updated["naruto"]["localized"]["en"]["title"] != "ナルト"
+    assert updated["naruto"]["localized"]["en"]["overview"].startswith("Naruto Uzumaki")
+
+
+def test_tmdb_localized_backfill_uses_translation_block_when_top_level_empty() -> None:
+    from dataset.migrations.tmdb_localized import localized_block_from_tmdb_details
+
+    block = localized_block_from_tmdb_details(
+        {
+            "name": "Fallback Name",
+            "overview": "",
+            "translations": {
+                "translations": [
+                    {
+                        "iso_3166_1": "US",
+                        "iso_639_1": "en",
+                        "data": {
+                            "name": "Translated Name",
+                            "overview": "Translated overview.",
+                        },
+                    }
+                ]
+            },
+        },
+        "en",
+    )
+
+    assert block == {
+        "title": "Translated Name",
+        "overview": "Translated overview.",
+    }
+
+
 def test_add_title_worker_passes_data_language(monkeypatch, qapp) -> None:
     from types import SimpleNamespace
 
@@ -448,6 +605,22 @@ def test_data_language_helpers_choose_genre_labels() -> None:
     assert choose_genre_labels(["has_drama"], "ru") == ["Драма"]
     assert choose_genre_labels(["has_drama"], "en") == ["Drama"]
     assert choose_genre_labels(["drama"], "en") == ["Drama"]
+    assert choose_genre_labels(["has_action"], "en") == ["Action", "Adventure"]
+    assert choose_genre_labels(["has_fantasy"], "en") == ["Sci-Fi", "Fantasy"]
+    assert choose_genre_labels(["action_adventure"], "en") == ["Action", "Adventure"]
+
+
+def test_candidate_filter_genre_labels_localize_to_data_language() -> None:
+    from candidates.models.genre_schema import normalize_genre_filter_list
+    from desktop.candidates.filters_view import _genre_labels_for_language
+
+    labels = _genre_labels_for_language(
+        ["Боевик/приключения", "Фантастика/фэнтези", "Драма"],
+        "en",
+    )
+
+    assert labels == ["Action", "Adventure", "Sci-Fi", "Fantasy", "Drama"]
+    assert normalize_genre_filter_list(labels) == ["action_adventure", "sci_fi_fantasy", "drama"]
 
 
 def test_apply_app_icon_sets_qapplication_icon(qapp) -> None:
@@ -714,6 +887,38 @@ def test_build_watched_movie_card_respects_data_language() -> None:
     assert en_card["overview"] == "Русское описание"
     assert en_card["country"] == "Russia"
     assert en_card["genres"] == ["Drama"]
+
+
+def test_build_watched_movie_card_uses_localized_meta_fallback_for_english() -> None:
+    from common.cards import build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Наруто", "year": 2002, "user_score": 8.0},
+        "raw_scores": {},
+    }
+    meta = {
+        "localized": {
+            "en": {
+                "title": "Naruto",
+                "overview": "Naruto Uzumaki wants to become the strongest ninja in his village.",
+            }
+        },
+        "genre_keys": ["action_adventure", "sci_fi_fantasy"],
+        "country_codes": ["JP"],
+    }
+
+    card = build_watched_movie_card(
+        movie,
+        poster_cache={},
+        lookup_cache={"meta_by_title": {}, "pool_by_identity": {}},
+        meta_obj=meta,
+        data_language="en",
+    )
+
+    assert card["title"] == "Naruto"
+    assert card["overview"].startswith("Naruto Uzumaki")
+    assert card["genres"] == ["Action", "Adventure", "Sci-Fi", "Fantasy"]
+    assert card["country"] == "Japan"
 
 
 def test_prepare_card_for_display_accepts_data_language() -> None:

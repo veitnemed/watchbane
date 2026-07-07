@@ -136,6 +136,14 @@ Desktop language settings:
 - supported values are Russian and English;
 - language changes apply after restart or screen reload depending on the setting.
 
+Existing local JSON created before bilingual data support can be backfilled from TMDb locale responses:
+
+```powershell
+py scripts/backfill_watched_localized_from_tmdb.py --target all --language en
+```
+
+The backfill adds `localized.en.title/overview`, creates backups next to the JSON files and keeps dataset keys and legacy fields unchanged.
+
 Public setup for candidate discovery requires only `TMDB_TOKEN` in the environment, `.env.local`, or `tmdb.env`.
 
 No KP API token or local IMDb dataset is required for the public product.

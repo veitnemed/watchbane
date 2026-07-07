@@ -111,6 +111,16 @@ def build_tmdb_add_defaults(series: dict, genres: list | None = None, data_langu
     localized_source = dict(series or {})
     localized_source["main_info"] = defaults[scheme.MAIN_INFO]
     localized = build_localized_block_from_legacy(localized_source, default_language=data_language)
+    selected_language = str(data_language or "ru").strip().casefold()
+    if selected_language not in {"ru", "en"}:
+        selected_language = "ru"
+    localized.setdefault(selected_language, {})
+    selected_title = extract_tmdb_title(series)
+    selected_overview = extract_tmdb_description(series)
+    if selected_title:
+        localized[selected_language]["title"] = selected_title
+    if selected_overview:
+        localized[selected_language]["overview"] = selected_overview
     if localized:
         defaults["localized"] = localized
     return defaults

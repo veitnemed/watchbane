@@ -209,6 +209,26 @@ def _first_number(field_name: str, sections: list[dict], converter):
     return None
 
 
+def _localized_title_only(record: dict | None, data_language: str) -> str | None:
+    source = _as_dict(record)
+    language = normalize_data_language(data_language)
+    localized = _as_dict(source.get("localized"))
+    language_block = _as_dict(localized.get(language))
+    title = _clean_text(language_block.get("title"))
+    if title is not None:
+        return title
+    if language == "en":
+        return _first_text(
+            source,
+            "title_en",
+            "name_en",
+            "enName",
+            "alternative_title",
+            "alternativeName",
+        )
+    return _first_text(source, "main_info.title", "title", "name")
+
+
 def _first_existing(field_name: str, sections: list[dict]):
     for section in sections:
         value = section.get(field_name)
@@ -356,6 +376,21 @@ def _genres(movie: dict, data_language: str = "ru") -> list[str]:
     return _genres_from_flags(movie, data_language)
 
 
+def _resolve_genres(
+    movie: dict,
+    resolved_meta: dict | None,
+    pool_candidate: dict | None,
+    data_language: str,
+) -> list[str]:
+    for source in (movie, resolved_meta, pool_candidate):
+        if isinstance(source, dict) is False:
+            continue
+        genres = _genres(source, data_language=data_language)
+        if len(genres) > 0:
+            return genres
+    return []
+
+
 def _meta_obj_for_title(title: str, lookup_cache: dict | None, meta_obj=None) -> dict | None:
     if isinstance(meta_obj, dict):
         return meta_obj
@@ -426,11 +461,19 @@ def build_watched_movie_card(
     main_info = _as_dict(movie.get("main_info"))
     raw_scores = _as_dict(movie.get("raw_scores"))
     legacy_title = _clean_text(main_info.get("title")) or _clean_text(movie.get("title")) or ""
-    title = choose_display_title(movie, language) or legacy_title
     year = _to_int(main_info.get("year", movie.get("year")))
     poster_fields = _resolve_poster_fields(movie, poster_cache=poster_cache)
     resolved_meta = _meta_obj_for_title(legacy_title, lookup_cache, meta_obj=meta_obj)
     pool_candidate = _pool_candidate_for_title(legacy_title, year, lookup_cache)
+    title = (
+        _localized_title_only(movie, language)
+        or _localized_title_only(resolved_meta, language)
+        or _localized_title_only(pool_candidate, language)
+        or choose_display_title(movie, language)
+        or choose_display_title(resolved_meta, language)
+        or choose_display_title(pool_candidate, language)
+        or legacy_title
+    )
     tmdb_sections = _tmdb_score_sections(movie, raw_scores, resolved_meta, pool_candidate)
     country = _resolve_country(
         movie,
@@ -453,7 +496,7 @@ def build_watched_movie_card(
         "tmdb_popularity": _first_number("tmdb_popularity", tmdb_sections, _to_float),
         "quality_score": quality_score if quality_score is not None else computed_tmdb_scores.get("quality_score"),
         "final_score": final_score if final_score is not None else computed_tmdb_scores.get("final_score"),
-        "genres": _genres(movie, data_language=language),
+        "genres": _resolve_genres(movie, resolved_meta, pool_candidate, language),
         "country": country,
         "object_type": _object_type(movie, default="series"),
         "overview": _resolve_overview(
