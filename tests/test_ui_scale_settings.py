@@ -9,12 +9,19 @@ import pytest
 
 from config import constant
 from desktop.settings.app_settings import (
+    APP_DATA_LANGUAGE_ENV,
+    APP_INTERFACE_LANGUAGE_ENV,
+    APP_LANGUAGE_DEFAULT,
     APP_UI_SCALE_DEFAULT,
     APP_UI_SCALE_MAX,
     APP_UI_SCALE_MIN,
     AppSettings,
+    get_persisted_data_language,
+    get_persisted_interface_language,
     get_persisted_ui_scale,
+    language_to_tmdb_locale,
     load_app_settings,
+    normalize_language,
     normalize_ui_scale,
     save_app_settings,
 )
@@ -67,12 +74,33 @@ def test_missing_settings_file_gives_default_ui_scale(monkeypatch, tmp_path) -> 
     assert load_app_settings().ui_scale == APP_UI_SCALE_DEFAULT
 
 
+def test_missing_settings_file_gives_default_languages(monkeypatch, tmp_path) -> None:
+    _use_settings_path(monkeypatch, tmp_path)
+
+    settings = load_app_settings()
+
+    assert settings.interface_language == APP_LANGUAGE_DEFAULT
+    assert settings.data_language == APP_LANGUAGE_DEFAULT
+
+
 def test_missing_ui_scale_gives_default(monkeypatch, tmp_path) -> None:
     settings_path = _use_settings_path(monkeypatch, tmp_path)
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text(json.dumps({"other": True}), encoding="utf-8")
 
     assert load_app_settings().ui_scale == APP_UI_SCALE_DEFAULT
+
+
+def test_legacy_ui_scale_only_settings_payload_loads(monkeypatch, tmp_path) -> None:
+    settings_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(json.dumps({"ui_scale": 1.25}), encoding="utf-8")
+
+    settings = load_app_settings()
+
+    assert settings.ui_scale == 1.25
+    assert settings.interface_language == "ru"
+    assert settings.data_language == "ru"
 
 
 def test_invalid_json_does_not_crash(monkeypatch, tmp_path) -> None:
@@ -95,6 +123,36 @@ def test_invalid_ui_scale_value_defaults_or_clamps() -> None:
     assert normalize_ui_scale("1.25") == 1.25
 
 
+def test_invalid_language_value_defaults_to_ru() -> None:
+    assert normalize_language(None) == "ru"
+    assert normalize_language(True) == "ru"
+    assert normalize_language("") == "ru"
+    assert normalize_language("de") == "ru"
+    assert normalize_language("RU") == "ru"
+    assert normalize_language(" en ") == "en"
+
+
+def test_invalid_persisted_language_values_default_to_ru(monkeypatch, tmp_path) -> None:
+    settings_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(
+        json.dumps(
+            {
+                "ui_scale": 1.10,
+                "interface_language": "de",
+                "data_language": "",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_app_settings()
+
+    assert settings.ui_scale == 1.10
+    assert settings.interface_language == "ru"
+    assert settings.data_language == "ru"
+
+
 def test_save_then_load_ui_scale(monkeypatch, tmp_path) -> None:
     settings_path = _use_settings_path(monkeypatch, tmp_path)
 
@@ -102,6 +160,29 @@ def test_save_then_load_ui_scale(monkeypatch, tmp_path) -> None:
 
     assert settings_path.exists()
     assert load_app_settings().ui_scale == 1.25
+
+
+def test_save_then_load_languages(monkeypatch, tmp_path) -> None:
+    settings_path = _use_settings_path(monkeypatch, tmp_path)
+
+    save_app_settings(
+        AppSettings(
+            ui_scale=1.25,
+            interface_language="en",
+            data_language="ru",
+        )
+    )
+
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    settings = load_app_settings()
+
+    assert payload == {
+        "ui_scale": 1.25,
+        "interface_language": "en",
+        "data_language": "ru",
+    }
+    assert settings.interface_language == "en"
+    assert settings.data_language == "ru"
 
 
 def test_watchbane_ui_scale_env_override_is_current_process_only(monkeypatch, tmp_path) -> None:
@@ -112,6 +193,31 @@ def test_watchbane_ui_scale_env_override_is_current_process_only(monkeypatch, tm
 
     assert get_persisted_ui_scale() == 1.35
     assert json.loads(settings_path.read_text(encoding="utf-8"))["ui_scale"] == 1.10
+
+
+def test_language_env_overrides_are_independent(monkeypatch, tmp_path) -> None:
+    settings_path = _use_settings_path(monkeypatch, tmp_path)
+    save_app_settings(
+        AppSettings(
+            ui_scale=1.10,
+            interface_language="ru",
+            data_language="en",
+        )
+    )
+
+    monkeypatch.setenv(APP_INTERFACE_LANGUAGE_ENV, "en")
+    monkeypatch.setenv(APP_DATA_LANGUAGE_ENV, "ru")
+
+    assert get_persisted_interface_language() == "en"
+    assert get_persisted_data_language() == "ru"
+    assert json.loads(settings_path.read_text(encoding="utf-8"))["interface_language"] == "ru"
+    assert json.loads(settings_path.read_text(encoding="utf-8"))["data_language"] == "en"
+
+
+def test_language_to_tmdb_locale() -> None:
+    assert language_to_tmdb_locale("ru") == "ru-RU"
+    assert language_to_tmdb_locale("en") == "en-US"
+    assert language_to_tmdb_locale("de") == "ru-RU"
 
 
 def test_get_scale_tuning_defaults_when_local_file_is_missing(monkeypatch) -> None:
@@ -377,6 +483,7 @@ def test_settings_dialog_selecting_125_saves_ui_scale(monkeypatch, tmp_path, qap
     from desktop.settings.dialog import SettingsDialog, UI_SCALE_RESTART_MESSAGE
 
     _use_settings_path(monkeypatch, tmp_path)
+    save_app_settings(AppSettings(ui_scale=1.0, interface_language="en", data_language="en"))
     dialog = SettingsDialog()
     slider = dialog.findChild(QSlider, "uiScaleSlider")
     save_button = dialog.findChild(QPushButton, "saveSettingsButton")
@@ -387,7 +494,10 @@ def test_settings_dialog_selecting_125_saves_ui_scale(monkeypatch, tmp_path, qap
     slider.setValue(125)
     save_button.click()
 
-    assert load_app_settings().ui_scale == 1.25
+    settings = load_app_settings()
+    assert settings.ui_scale == 1.25
+    assert settings.interface_language == "en"
+    assert settings.data_language == "en"
     assert dialog.restart_message == UI_SCALE_RESTART_MESSAGE
     assert message_label.text() == UI_SCALE_RESTART_MESSAGE
     assert messages == [UI_SCALE_RESTART_MESSAGE]

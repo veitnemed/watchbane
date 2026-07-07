@@ -16,11 +16,17 @@ APP_UI_SCALE_MIN = 0.50
 APP_UI_SCALE_MAX = 2.00
 APP_UI_SCALE_PRESETS = (0.50, 0.75, 0.85, 1.0, 1.10, 1.25, 1.35, 1.50, 1.75, 2.00)
 APP_UI_SCALE_ENV = "WATCHBANE_UI_SCALE"
+APP_LANGUAGE_DEFAULT = "ru"
+APP_LANGUAGE_SUPPORTED = ("ru", "en")
+APP_INTERFACE_LANGUAGE_ENV = "WATCHBANE_INTERFACE_LANGUAGE"
+APP_DATA_LANGUAGE_ENV = "WATCHBANE_DATA_LANGUAGE"
 
 
 @dataclass(frozen=True)
 class AppSettings:
     ui_scale: float = APP_UI_SCALE_DEFAULT
+    interface_language: str = APP_LANGUAGE_DEFAULT
+    data_language: str = APP_LANGUAGE_DEFAULT
 
 
 def normalize_ui_scale(value) -> float:
@@ -46,6 +52,24 @@ def normalize_ui_scale(value) -> float:
     return max(APP_UI_SCALE_MIN, min(APP_UI_SCALE_MAX, scale))
 
 
+def normalize_language(value) -> str:
+    """Return a supported app language code."""
+    if isinstance(value, bool) or value in (None, ""):
+        return APP_LANGUAGE_DEFAULT
+    text = str(value).strip().casefold()
+    if text in APP_LANGUAGE_SUPPORTED:
+        return text
+    return APP_LANGUAGE_DEFAULT
+
+
+def language_to_tmdb_locale(language: str) -> str:
+    """Map an app data language to a TMDb locale."""
+    return {
+        "ru": "ru-RU",
+        "en": "en-US",
+    }[normalize_language(language)]
+
+
 def _settings_path() -> Path:
     return Path(constant.APP_SETTINGS_JSON)
 
@@ -53,7 +77,11 @@ def _settings_path() -> Path:
 def _settings_from_payload(payload) -> AppSettings:
     if isinstance(payload, dict) is False:
         return AppSettings()
-    return AppSettings(ui_scale=normalize_ui_scale(payload.get("ui_scale", APP_UI_SCALE_DEFAULT)))
+    return AppSettings(
+        ui_scale=normalize_ui_scale(payload.get("ui_scale", APP_UI_SCALE_DEFAULT)),
+        interface_language=normalize_language(payload.get("interface_language", APP_LANGUAGE_DEFAULT)),
+        data_language=normalize_language(payload.get("data_language", APP_LANGUAGE_DEFAULT)),
+    )
 
 
 def load_app_settings() -> AppSettings:
@@ -73,7 +101,11 @@ def load_app_settings() -> AppSettings:
 
 def save_app_settings(settings: AppSettings) -> None:
     """Persist desktop settings with an atomic replace."""
-    normalized = AppSettings(ui_scale=normalize_ui_scale(settings.ui_scale))
+    normalized = AppSettings(
+        ui_scale=normalize_ui_scale(settings.ui_scale),
+        interface_language=normalize_language(settings.interface_language),
+        data_language=normalize_language(settings.data_language),
+    )
     path = _settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -90,3 +122,19 @@ def get_persisted_ui_scale() -> float:
     if env_value not in (None, ""):
         return normalize_ui_scale(env_value)
     return load_app_settings().ui_scale
+
+
+def get_persisted_interface_language() -> str:
+    """Return the interface language for the current process."""
+    env_value = os.environ.get(APP_INTERFACE_LANGUAGE_ENV)
+    if env_value not in (None, ""):
+        return normalize_language(env_value)
+    return load_app_settings().interface_language
+
+
+def get_persisted_data_language() -> str:
+    """Return the data language for the current process."""
+    env_value = os.environ.get(APP_DATA_LANGUAGE_ENV)
+    if env_value not in (None, ""):
+        return normalize_language(env_value)
+    return load_app_settings().data_language

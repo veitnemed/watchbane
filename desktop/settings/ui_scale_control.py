@@ -141,7 +141,14 @@ class UiScaleControlPanel(QWidget):
         self.set_ui_scale(APP_UI_SCALE_DEFAULT)
 
     def _save(self) -> None:
-        save_app_settings(AppSettings(ui_scale=self.selected_ui_scale()))
+        current_settings = load_app_settings()
+        save_app_settings(
+            AppSettings(
+                ui_scale=self.selected_ui_scale(),
+                interface_language=current_settings.interface_language,
+                data_language=current_settings.data_language,
+            )
+        )
         self._restart_message = UI_SCALE_RESTART_MESSAGE
         self._message_label.setText(UI_SCALE_RESTART_MESSAGE)
         self._message_label.setVisible(True)
