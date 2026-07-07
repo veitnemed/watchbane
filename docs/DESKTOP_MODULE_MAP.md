@@ -39,6 +39,9 @@ desktop/
     main_window.py               # WatchedMoviesWindow: chrome + status bar
     tab_contract.py              # TabView protocol + optional activation helper
     tabs.py                      # build_main_tabs(), MainTabRegistry, AppTabsContext
+  i18n/
+    catalog.py                   # ru/en interface strings
+    translator.py                # tr(key) with ru/key fallback
   watched/
     model/                       # load, filter, sort, format, writes (no Qt widgets)
       load.py
@@ -120,6 +123,8 @@ desktop/
 | `shell/main_window.py` | главное окно, status bar | shell |
 | `shell/tab_contract.py` | `TabView` protocol and optional activation helper | shell |
 | `shell/tabs.py` | `build_main_tabs()`, tab registry, cross-tab wiring | shell |
+| `i18n/catalog.py` | ru/en catalog for interface labels/buttons/messages/placeholders | UI i18n |
+| `i18n/translator.py` | `tr(key)` and persisted interface language lookup | UI i18n |
 | `watched/tab.py` | layout, list state, selection | feature view |
 | `watched/tab_actions.py` | delete/score/add-title write actions | feature view |
 | `watched/sidebar.py` | list widget, search, sort, add-title button | feature view |
@@ -163,11 +168,19 @@ class TabView(Protocol):
 
 `on_tab_activated()` не является обязательным методом view. `MainTabRegistry` вызывает `activate_tab_view(view)`, который безопасно делает `getattr(view, "on_tab_activated", None)` и запускает hook только если он callable.
 
+## Контракт языка интерфейса
+
+- `interface_language` переводит только desktop UI strings: labels, buttons, messages, placeholders, tooltips.
+- `data_language` не должен использоваться для интерфейсных подписей; он зарезервирован для отображаемых данных и будущих metadata/TMDb запросов.
+- Перевод интерфейса применяется после restart: view создаётся с текущим persisted `interface_language`, без динамического retranslate всего окна.
+- Новые пользовательские строки добавляются в `desktop/i18n/catalog.py` для `ru` и `en`; каталоги должны иметь одинаковый набор ключей.
+- Data strings не переводятся через interface i18n: title, overview, genres, countries, candidate titles и значения metadata остаются данными.
+
 Шаблон добавления вкладки:
 
 ```python
 feature_view = SomeFeatureView(...)
-registry.register(ShellTabSpec("feature_id", "Label", feature_view))
+registry.register(ShellTabSpec("feature_id", tr("tabs.feature"), feature_view))
 ```
 
 Правила:
@@ -196,6 +209,7 @@ registry.register(ShellTabSpec("feature_id", "Label", feature_view))
 | Candidate list row paint | `candidates/list_delegate.py` |
 | Write-сценарий (save/delete) | `watched/delete.py` / `dataset` + dialog |
 | Переиспользуемый виджет без domain | `shared/widgets/` |
+| UI label/button/message/placeholder | `i18n/catalog.py` + `tr("feature.key")` |
 | Новый цвет/радиус/семантический font token | `theme/tokens.py` |
 | Новый размер, margin, spacing, min/max width/height | `theme/layout.py` + scaling helpers |
 | QSS нового экрана | `theme/styles/<screen>.py` |

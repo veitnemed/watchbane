@@ -473,6 +473,7 @@ def test_settings_dialog_displays_current_scale(monkeypatch, tmp_path, qapp) -> 
     interface_language_combo = dialog.findChild(QComboBox, "interfaceLanguageCombo")
     data_language_combo = dialog.findChild(QComboBox, "dataLanguageCombo")
 
+    assert dialog.windowTitle() == "Settings"
     assert slider is not None
     assert slider.value() == 125
     assert value_label is not None
@@ -552,7 +553,7 @@ def test_settings_tab_uses_slider_scale_control() -> None:
 
     assert "UiScaleControlPanel" in tab_source
     assert "uiScaleSlider" not in tab_source
-    assert '"Настройки"' in factory_source
+    assert 'tr("tabs.settings")' in factory_source
     assert "SettingsTabView" in factory_source
     assert '"Информация"' not in factory_source
     assert "AnalyticsView" not in factory_source
@@ -576,7 +577,7 @@ def test_settings_tab_contains_language_controls(monkeypatch, tmp_path, qapp) ->
     data_language_hint = view.widget.findChild(QLabel, "dataLanguageHint")
 
     assert interface_language_combo is not None
-    assert interface_language_combo.itemText(0) == "Русский"
+    assert interface_language_combo.itemText(0) == "Russian"
     assert interface_language_combo.itemData(0) == "ru"
     assert interface_language_combo.itemText(1) == "English"
     assert interface_language_combo.itemData(1) == "en"
@@ -584,14 +585,14 @@ def test_settings_tab_contains_language_controls(monkeypatch, tmp_path, qapp) ->
     assert data_language_combo is not None
     assert data_language_combo.currentData() == "ru"
     assert interface_language_label is not None
-    assert interface_language_label.text() == "Язык интерфейса"
+    assert interface_language_label.text() == "Interface language"
     assert data_language_label is not None
-    assert data_language_label.text() == "Язык данных"
+    assert data_language_label.text() == "Data language"
     assert interface_language_hint is not None
-    assert interface_language_hint.text() == "Язык интерфейса меняет кнопки и подписи."
+    assert interface_language_hint.text() == "Interface language changes buttons and labels."
     assert interface_language_hint.wordWrap() is True
     assert data_language_hint is not None
-    assert data_language_hint.text() == "Язык данных меняет названия, описания и будущие загрузки метаданных."
+    assert data_language_hint.text() == "Data language changes titles, descriptions, and future metadata downloads."
     assert data_language_hint.wordWrap() is True
 
 

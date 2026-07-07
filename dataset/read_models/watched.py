@@ -67,24 +67,34 @@ def _get_lookup_cache() -> dict:
     return _lookup_cache
 
 
-def load_watched_entries() -> list[WatchedEntry]:
+def load_watched_entries(data_language: str = "ru") -> list[WatchedEntry]:
     """Load dataset and return (dataset_key, movie, display_card) tuples."""
     data = storage_data.load_dataset()
     poster_cache = reload_poster_cache()
     lookup_cache = _get_lookup_cache()
     return [
-        (key, movie, build_watched_movie_card(movie, poster_cache=poster_cache, lookup_cache=lookup_cache))
+        (
+            key,
+            movie,
+            build_watched_movie_card(
+                movie,
+                poster_cache=poster_cache,
+                lookup_cache=lookup_cache,
+                data_language=data_language,
+            ),
+        )
         for key, movie in data.items()
     ]
 
 
-def prepare_card_for_display(movie: dict) -> dict:
+def prepare_card_for_display(movie: dict, data_language: str = "ru") -> dict:
     """Build a watched display card without mutating the source movie."""
     original = deepcopy(movie)
     card = build_watched_movie_card(
         movie,
         poster_cache=_get_poster_cache(),
         lookup_cache=_get_lookup_cache(),
+        data_language=data_language,
     )
     if movie != original:
         raise RuntimeError("build_watched_movie_card mutated the source movie")

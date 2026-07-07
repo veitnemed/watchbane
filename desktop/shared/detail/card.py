@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from desktop.i18n import tr
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.card_layout import build_detail_card_layout
 from desktop.shared.detail.card_pills import clear_layout, fill_detail_chip_rows, make_meta_pill
@@ -114,7 +115,9 @@ class DetailCard(DetailCardPosterMixin):
         self._genre_section.setFixedHeight(height)
         self._genre_section.setVisible(True)
 
-    def show_empty(self, title: str = "Выберите тайтл слева") -> None:
+    def show_empty(self, title: str | None = None) -> None:
+        if title is None:
+            title = tr("watched.empty.select_title")
         self._set_poster_placeholder()
         self._set_local_poster_path(None)
         self._title_label.setText(title)
@@ -276,7 +279,9 @@ class DetailCard(DetailCardPosterMixin):
         has_hidden_rows = len(self._main_info_items) > MAIN_INFO_COLLAPSED_ROW_COUNT
         self._main_info_toggle_button.setVisible(has_hidden_rows)
         if has_hidden_rows:
-            self._main_info_toggle_button.setText("Скрыть" if self._main_info_expanded else "Показать больше")
+            self._main_info_toggle_button.setText(
+                tr("detail.show_less") if self._main_info_expanded else tr("detail.show_more")
+            )
 
     def _render_main_info_items(self) -> None:
         if len(self._main_info_items) <= MAIN_INFO_COLLAPSED_ROW_COUNT:

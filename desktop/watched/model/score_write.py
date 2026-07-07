@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
 
+from desktop.i18n import tr
 from desktop.watched.model.filters import USER_SCORE_MIN
 from desktop.watched.model.load import WatchedEntry
 
@@ -40,19 +41,19 @@ def save_watched_user_score(dataset_key: str, user_score: float):
 def format_save_user_score_status(result) -> str:
     """Short GUI status text after save attempt."""
     if result.ok and result.reason == "updated":
-        return "Оценка сохранена"
+        return tr("watched.score.status.saved")
     if result.ok and result.reason == "nothing_changed":
-        return "Изменений нет"
+        return tr("watched.score.status.no_changes")
     return result.message
 
 
 def validate_score_edit_entry(entry: WatchedEntry | None) -> tuple[bool, str]:
     """Validate that a watched entry can be used for score edit dialog."""
     if entry is None:
-        return False, "Запись не выбрана"
+        return False, tr("watched.score.status.not_selected")
 
     dataset_key, _movie, _card = entry
     if str(dataset_key).strip() == "":
-        return False, "Запись не выбрана"
+        return False, tr("watched.score.status.not_selected")
 
     return True, ""

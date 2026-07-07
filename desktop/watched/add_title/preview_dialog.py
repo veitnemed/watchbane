@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QLocale, Qt
 from PyQt6.QtWidgets import (
     QDialog,
     QDoubleSpinBox,
@@ -21,6 +21,8 @@ from config import constant
 from config import scheme
 from dataset import service
 from diagnostics.gui_event_log import log_event
+from desktop.i18n import tr
+from desktop.settings.app_settings import get_persisted_interface_language
 from desktop.watched.add_title.constants import (
     ADD_TITLE_DIALOG_STYLE,
     PREVIEW_DIALOG_HEIGHT,
@@ -35,6 +37,13 @@ from desktop.watched.model import (
     normalize_user_score_value,
 )
 from desktop.theme.scaling import layout_px
+
+
+def _score_input_locale() -> QLocale:
+    language = get_persisted_interface_language()
+    if language == "en":
+        return QLocale(QLocale.Language.English, QLocale.Country.UnitedStates)
+    return QLocale(QLocale.Language.Russian, QLocale.Country.Russia)
 
 
 class AddTitlePreviewDialog(QDialog):
@@ -54,7 +63,11 @@ class AddTitlePreviewDialog(QDialog):
         self.search_again = False
 
         self.setObjectName("addTitlePreviewDialog")
-        window_title = "Перенос из pool — подтверждение" if self._transfer_mode else "Добавить тайтл — подтверждение"
+        window_title = (
+            tr("add_title.window.transfer_preview")
+            if self._transfer_mode
+            else tr("add_title.window.preview")
+        )
         self.setWindowTitle(window_title)
         self.setModal(True)
         self.setMinimumWidth(PREVIEW_DIALOG_WIDTH)
@@ -97,9 +110,9 @@ class AddTitlePreviewDialog(QDialog):
         root_layout.addWidget(card_shell, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         confirm_hint = QLabel(
-            "Проверьте карточку и укажите только вашу оценку"
+            tr("add_title.confirm.hint")
             if self._transfer_mode is False
-            else "Проверьте карточку и укажите оценку для переноса в watched"
+            else tr("add_title.confirm.transfer_hint")
         )
         confirm_hint.setObjectName("addTitleConfirmHint")
         confirm_hint.setWordWrap(True)
@@ -109,7 +122,7 @@ class AddTitlePreviewDialog(QDialog):
         form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(layout_px(8))
 
-        year_label = QLabel("Год")
+        year_label = QLabel(tr("add_title.field.year"))
         year_label.setObjectName("addTitleFieldLabel")
         self._year_label = QLabel(self._format_resolved_year(bundle))
         self._year_label.setObjectName("addTitleYearValue")
@@ -119,10 +132,11 @@ class AddTitlePreviewDialog(QDialog):
         self._score_input.setRange(USER_SCORE_MIN, USER_SCORE_MAX)
         self._score_input.setSingleStep(USER_SCORE_STEP)
         self._score_input.setDecimals(1)
+        self._score_input.setLocale(_score_input_locale())
         self._score_input.setValue(USER_SCORE_MIN)
         self._score_input.valueChanged.connect(self._update_confirm_state)
 
-        score_label = QLabel("Моя оценка")
+        score_label = QLabel(tr("add_title.field.score"))
         score_label.setObjectName("addTitleFieldLabel")
         form.addRow(year_label, self._year_label)
         form.addRow(score_label, self._score_input)
@@ -130,13 +144,15 @@ class AddTitlePreviewDialog(QDialog):
 
         actions = QHBoxLayout()
         actions.setSpacing(layout_px(10))
-        self._back_button = QPushButton("Искать другой")
+        self._back_button = QPushButton(tr("add_title.search_again"))
         self._back_button.setObjectName("addTitleSecondaryButton")
         self._back_button.clicked.connect(self._go_search_again)
         if self._transfer_mode:
             self._back_button.hide()
         self._confirm_button = QPushButton(
-            "Добавить в watched" if self._transfer_mode else "Добавить тайтл"
+            tr("add_title.confirm.add_to_watched")
+            if self._transfer_mode
+            else tr("add_title.confirm.add")
         )
         self._confirm_button.setObjectName("addTitleConfirmButton")
         self._confirm_button.clicked.connect(self._confirm_add)
@@ -157,7 +173,7 @@ class AddTitlePreviewDialog(QDialog):
 
     @staticmethod
     def _format_preview_header(card: dict) -> str:
-        title = str(card.get("title") or "").strip() or "Без названия"
+        title = str(card.get("title") or "").strip() or tr("common.untitled")
         year = card.get("year")
         if year not in (None, ""):
             return f"{title} ({year})"
@@ -166,7 +182,7 @@ class AddTitlePreviewDialog(QDialog):
     def _format_resolved_year(self, bundle: service.AddTitleResolveBundle) -> str:
         year = self._resolved_year(bundle)
         if year is None:
-            return "не указан"
+            return tr("add_title.value.not_set")
         return str(year)
 
     def _resolved_year(self, bundle: service.AddTitleResolveBundle) -> int | None:
@@ -184,8 +200,7 @@ class AddTitlePreviewDialog(QDialog):
 
             if candidate_service.is_pool_candidate_incomplete(self._bundle.pool_candidate):
                 self._warning_label.setText(
-                    "Кандидат неполный: не хватает TMDb/core metadata. "
-                    "Можно продолжить, но проверьте карточку перед сохранением."
+                    tr("add_title.preview.incomplete_candidate")
                 )
                 self._warning_label.show()
                 return
@@ -193,8 +208,7 @@ class AddTitlePreviewDialog(QDialog):
         status_lines = service.format_resolve_status_lines(self._bundle.statuses)
         if self._bundle.found is False:
             self._warning_label.setText(
-                "Автоматически данные не найдены. Вернитесь к поиску или укажите только оценку, "
-                "если карточка уже содержит корректный год."
+                tr("add_title.preview.no_auto_data")
             )
             self._warning_label.show()
         elif len(status_lines) > 0:
@@ -228,15 +242,18 @@ class AddTitlePreviewDialog(QDialog):
         )
         if valid.is_correct_score(str(user_score)) is False:
             log_event("add_title.preview.invalid_score", score=user_score)
-            QMessageBox.warning(self, "Добавить тайтл", "Укажите корректную оценку (0–10).")
+            QMessageBox.warning(self, tr("add_title.header"), tr("add_title.error.invalid_score"))
             return
         if year is None or valid.is_correct_year(str(year)) is False:
             log_event("add_title.preview.invalid_year", **{"resolved_year": year})
             QMessageBox.warning(
                 self,
-                "Добавить тайтл",
-                f"Год не задан или некорректен ({YEAR_FILTER_MIN}–{constant.NOW_YEAR}). "
-                "Вернитесь к поиску и выберите другой тайтл.",
+                tr("add_title.header"),
+                tr(
+                    "add_title.error.invalid_year",
+                    min_value=YEAR_FILTER_MIN,
+                    max_value=constant.NOW_YEAR,
+                ),
             )
             return
 
@@ -248,7 +265,7 @@ class AddTitlePreviewDialog(QDialog):
             poster_hints=self._bundle.poster_hints,
             pool_candidate=self._bundle.pool_candidate,
         )
-        dialog_title = "Перенос из pool" if self._transfer_mode else "Добавить тайтл"
+        dialog_title = tr("add_title.window.transfer") if self._transfer_mode else tr("add_title.header")
         if result.ok is False:
             self._confirm_button.setEnabled(True)
             log_event("add_title.preview.save_failed", message=result.message)

@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from desktop.i18n import tr
+from desktop.settings.app_settings import get_persisted_data_language
+from dataset.language import normalize_data_language
+
 from typing import Any
 
 
-TMDB_STATUS_LABELS = {
+TMDB_STATUS_LABELS_RU = {
     "returning series": "Продолжается",
     "planned": "Запланирован",
     "in production": "В производстве",
@@ -14,6 +18,24 @@ TMDB_STATUS_LABELS = {
     "cancelled": "Отменен",
     "pilot": "Пилот",
 }
+TMDB_STATUS_LABELS_EN = {
+    "returning series": "Returning series",
+    "planned": "Planned",
+    "in production": "In production",
+    "ended": "Ended",
+    "canceled": "Canceled",
+    "cancelled": "Canceled",
+    "pilot": "Pilot",
+}
+
+# Backward-compatible public constant.
+TMDB_STATUS_LABELS = TMDB_STATUS_LABELS_RU
+
+
+def _resolve_data_language(data_language: str | None = None) -> str:
+    if data_language is None:
+        data_language = get_persisted_data_language()
+    return normalize_data_language(data_language)
 
 
 def _has_value(value: Any) -> bool:
@@ -78,18 +100,31 @@ def _plural_ru(value: int, forms: tuple[str, str, str]) -> str:
     return forms[2]
 
 
-def format_seasons_episodes(seasons: Any, episodes: Any) -> str | None:
+def _plural_en(value: int, singular: str, plural: str) -> str:
+    return singular if abs(value) == 1 else plural
+
+
+def format_seasons_episodes(seasons: Any, episodes: Any, data_language: str | None = None) -> str | None:
+    language = _resolve_data_language(data_language)
     seasons_count = _to_int(seasons)
     episodes_count = _to_int(episodes)
     parts: list[str] = []
     if seasons_count is not None and seasons_count > 0:
-        parts.append(f"{seasons_count} {_plural_ru(seasons_count, ('сезон', 'сезона', 'сезонов'))}")
+        if language == "en":
+            parts.append(f"{seasons_count} {_plural_en(seasons_count, 'season', 'seasons')}")
+        else:
+            parts.append(f"{seasons_count} {_plural_ru(seasons_count, ('сезон', 'сезона', 'сезонов'))}")
     if episodes_count is not None and episodes_count > 0:
-        parts.append(f"{episodes_count} {_plural_ru(episodes_count, ('серия', 'серии', 'серий'))}")
+        if language == "en":
+            parts.append(f"{episodes_count} {_plural_en(episodes_count, 'episode', 'episodes')}")
+        else:
+            parts.append(f"{episodes_count} {_plural_ru(episodes_count, ('серия', 'серии', 'серий'))}")
     return " / ".join(parts) if parts else None
 
 
-def format_episode_runtime(value: Any) -> str | None:
+def format_episode_runtime(value: Any, data_language: str | None = None) -> str | None:
+    language = _resolve_data_language(data_language)
+    unit = "min" if language == "en" else "мин"
     values = value if isinstance(value, (list, tuple, set)) else [value]
     minutes: list[int] = []
     for item in values:
@@ -99,8 +134,8 @@ def format_episode_runtime(value: Any) -> str | None:
     if not minutes:
         return None
     if len(minutes) == 1:
-        return f"{minutes[0]} мин"
-    return ", ".join(f"{item} мин" for item in minutes[:3])
+        return f"{minutes[0]} {unit}"
+    return ", ".join(f"{item} {unit}" for item in minutes[:3])
 
 
 def format_watch_providers(value: Any) -> str | None:
@@ -108,27 +143,37 @@ def format_watch_providers(value: Any) -> str | None:
     return ", ".join(providers[:6]) if providers else None
 
 
-def format_tmdb_status(status: Any, in_production: Any = None) -> str | None:
+def format_tmdb_status(status: Any, in_production: Any = None, data_language: str | None = None) -> str | None:
+    language = _resolve_data_language(data_language)
+    labels = TMDB_STATUS_LABELS_EN if language == "en" else TMDB_STATUS_LABELS_RU
     text = _clean_text(status)
     if text is not None:
-        return TMDB_STATUS_LABELS.get(text.casefold(), text)
+        return labels.get(text.casefold(), text)
     if in_production is True:
-        return "В производстве"
+        return "In production" if language == "en" else "В производстве"
     if in_production is False:
-        return "Не в производстве"
+        return "Not in production" if language == "en" else "Не в производстве"
     return None
 
 
-def build_additional_info_items(card: dict) -> list[dict[str, str]]:
+def build_additional_info_items(card: dict, data_language: str | None = None) -> list[dict[str, str]]:
     """Build compact rows for the title additional-info block."""
     items: list[dict[str, str]] = []
+    language = _resolve_data_language(data_language)
 
-    status = format_tmdb_status(card.get("status") or card.get("tmdb_status"), card.get("in_production"))
+    status = format_tmdb_status(
+        card.get("status") or card.get("tmdb_status"),
+        card.get("in_production"),
+        data_language=language,
+    )
     if status is not None:
-        items.append({"label": "Статус", "value": status})
+        items.append({"label": tr("detail.info.status"), "value": status})
 
-    runtime = format_episode_runtime(card.get("episode_run_time") or card.get("runtime_minutes"))
+    runtime = format_episode_runtime(
+        card.get("episode_run_time") or card.get("runtime_minutes"),
+        data_language=language,
+    )
     if runtime is not None:
-        items.append({"label": "Длительность серии", "value": runtime})
+        items.append({"label": tr("detail.info.runtime"), "value": runtime})
 
     return [item for item in items if _has_value(item.get("value"))]

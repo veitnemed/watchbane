@@ -131,6 +131,15 @@ Desktop:
 
 Console остаётся рабочим fallback и местом для pool maintenance-сценариев.
 
+### Interface language
+
+Статус: ru/en core desktop UI connected.
+
+- `interface_language` меняет только labels/buttons/messages/placeholders/tooltips.
+- `data_language` не используется для интерфейсных строк и не меняет title, overview, genres, countries или candidate titles.
+- Перевод применяется после restart: новые views создаются через `desktop.i18n.tr(...)`, динамического retranslate всего окна нет.
+- Новые интерфейсные строки добавляются в `desktop/i18n/catalog.py` сразу для `ru` и `en`.
+
 ## Этап 8. Final guardrails
 
 Статус: done / enforced by tests.

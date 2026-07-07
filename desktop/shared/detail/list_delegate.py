@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from desktop.i18n import tr
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.posters import resolve_local_poster_path
 from desktop.shared.detail.presenters import format_user_score_display, format_year_display
@@ -168,7 +169,7 @@ class WatchedListItemDelegate:
                 text_right = rect.right() - detail_profiles.LIST_ITEM_H_PADDING
                 text_width = max(detail_profiles.LIST_MIN_TEXT_WIDTH, text_right - text_left)
 
-                title = str(card.get("title") or _key or "Без названия")
+                title = str(card.get("title") or _key or tr("common.untitled"))
                 year = card.get("year")
                 year_text = format_year_display(year)
                 score_text = format_user_score_display(card.get("user_score"))

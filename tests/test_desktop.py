@@ -65,6 +65,12 @@ def _flush_qt_deferred_deletes(qapp) -> None:
     qapp.processEvents()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_desktop_settings(monkeypatch, tmp_path):
+    settings_path = tmp_path / "data" / "settings.json"
+    monkeypatch.setattr(constant, "APP_SETTINGS_JSON", str(settings_path))
+
+
 def test_desktop_app_imports_without_window() -> None:
     import desktop.app as app_module
 
@@ -85,6 +91,194 @@ def test_desktop_app_icon_asset_loads(qapp) -> None:
 
     assert APP_ICON_PATH.exists()
     assert build_app_icon().isNull() is False
+
+
+def test_i18n_catalogs_have_same_keys() -> None:
+    from desktop.i18n import SUPPORTED_LANGUAGES, TRANSLATIONS
+
+    key_sets = {language: set(TRANSLATIONS[language]) for language in SUPPORTED_LANGUAGES}
+    assert key_sets["ru"] == key_sets["en"]
+
+
+def test_i18n_translator_defaults_and_fallbacks(monkeypatch) -> None:
+    from desktop.settings.app_settings import AppSettings
+    import desktop.i18n.translator as translator_module
+
+    monkeypatch.setattr(
+        translator_module,
+        "load_app_settings",
+        lambda: AppSettings(interface_language="ru", data_language="en"),
+    )
+
+    assert translator_module.tr("tabs.watched") == "Моё"
+
+    monkeypatch.setattr(
+        translator_module,
+        "load_app_settings",
+        lambda: AppSettings(interface_language="en", data_language="ru"),
+    )
+    monkeypatch.delitem(translator_module.TRANSLATIONS["en"], "tabs.watched")
+
+    assert translator_module.tr("tabs.watched") == "Моё"
+    assert translator_module.tr("missing.translation.key") == "missing.translation.key"
+
+
+def test_english_ui_labels_cover_sort_and_chip_controls(qapp) -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    from desktop.candidates.presenters import candidate_sort_mode_label, format_candidate_metric_value
+    from desktop.shared.widgets.country_chip_selector import CountryChipSelector
+    from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
+    from desktop.watched.sidebar import _watched_sort_label
+
+    assert _watched_sort_label("user_score", "fallback") == "My rating"
+    assert candidate_sort_mode_label("final_score") == "Final"
+    assert format_candidate_metric_value({"final_score": 9.2}, "final_score") == "Final 9.2"
+
+    country_selector = CountryChipSelector([{"code": "US", "label": "United States"}])
+    genre_selector = GenreChipSelector()
+    genre_selector.set_options(["Drama"])
+
+    assert country_selector._count_label.text() == "All countries"
+    assert genre_selector._count_label.text() == "Selected: 0"
+
+
+def test_english_data_language_formats_detail_values() -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.shared.detail.additional_info import format_episode_runtime, format_seasons_episodes
+    from desktop.shared.detail.main_info import (
+        build_main_info_items,
+        build_title_meta_text,
+        format_air_date_display,
+        format_votes_display,
+        normalize_object_type,
+    )
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    assert normalize_object_type("series", data_language="en") == "Series"
+    assert format_air_date_display("2022-03-16", data_language="en") == "16 Mar 2022"
+    assert format_seasons_episodes(6, 63, data_language="en") == "6 seasons / 63 episodes"
+    assert format_episode_runtime([46], data_language="en") == "46 min"
+    assert format_votes_display(3456, data_language="en") == "3.5k"
+    assert build_title_meta_text(
+        {"year": 2015, "number_of_seasons": 6, "number_of_episodes": 63},
+        data_language="en",
+    ) == "2015 • 6 seasons / 63 episodes"
+
+    items = build_main_info_items(
+        {
+            "country": "US",
+            "object_type": "series",
+            "first_air_date": "2015-02-08",
+            "last_air_date": "2022-08-15",
+            "status": "Ended",
+        },
+        data_language="en",
+    )
+
+    assert {"label": "Type", "value": "Series"} in items
+    assert {"label": "Country", "value": "United States"} in items
+    assert {"label": "Premiere", "value": "8 Feb 2015"} in items
+    assert {"label": "Last episode", "value": "15 Aug 2022"} in items
+    assert {"label": "Status", "value": "Ended"} in items
+
+
+def test_english_country_display_and_add_title_country_combo(qapp) -> None:
+    from candidates.models.country_schema import candidate_country_for_display
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.watched.add_title.search_dialog import AddTitleSearchDialog
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    assert candidate_country_for_display({"country": "US"}, language="en") == "United States"
+
+    dialog = AddTitleSearchDialog(initial_country="US")
+
+    assert dialog._country_combo.itemText(0) == "Any country"
+    assert dialog._country_combo.currentText() == "United States"
+
+
+def test_data_language_migration_adds_localized_without_renaming_keys(tmp_path) -> None:
+    import json
+
+    from dataset.migrations.data_language import migrate_data_language_files
+
+    dataset_path = tmp_path / "watched" / "titles.json"
+    meta_path = tmp_path / "watched" / "meta.json"
+    pool_path = tmp_path / "candidates" / "pool.json"
+    dataset_path.parent.mkdir(parents=True)
+    pool_path.parent.mkdir(parents=True)
+
+    original_dataset = {
+        "Триггер": {
+            "main_info": {"title": "Триггер", "year": 2020, "user_score": 8.0},
+            "description": "Русское описание",
+            "original_title": "Trigger",
+        }
+    }
+    original_meta = {
+        "Триггер": {
+            "main_info": {"title": "Триггер"},
+            "description": "Описание из meta",
+        }
+    }
+    original_pool = {
+        "better-call-saul-2015": {
+            "title": "Лучше звоните Солу",
+            "original_title": "Better Call Saul",
+            "description": "Русское описание кандидата",
+            "overview_en": "English candidate overview",
+            "genre_keys": ["drama"],
+        }
+    }
+
+    dataset_path.write_text(json.dumps(original_dataset, ensure_ascii=False), encoding="utf-8")
+    meta_path.write_text(json.dumps(original_meta, ensure_ascii=False), encoding="utf-8")
+    pool_path.write_text(json.dumps(original_pool, ensure_ascii=False), encoding="utf-8")
+
+    report = migrate_data_language_files(
+        dataset_path=dataset_path,
+        meta_path=meta_path,
+        pool_path=pool_path,
+        timestamp="test",
+    )
+
+    migrated_dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+    migrated_pool = json.loads(pool_path.read_text(encoding="utf-8"))
+
+    assert list(migrated_dataset) == ["Триггер"]
+    assert migrated_dataset["Триггер"]["main_info"]["title"] == "Триггер"
+    assert migrated_dataset["Триггер"]["description"] == "Русское описание"
+    assert migrated_dataset["Триггер"]["localized"]["ru"]["title"] == "Триггер"
+    assert migrated_dataset["Триггер"]["localized"]["ru"]["overview"] == "Русское описание"
+    assert migrated_dataset["Триггер"]["localized"]["en"]["title"] == "Trigger"
+    assert "overview" not in migrated_dataset["Триггер"]["localized"]["en"]
+    assert list(migrated_pool) == ["better-call-saul-2015"]
+    assert migrated_pool["better-call-saul-2015"]["localized"]["en"]["title"] == "Better Call Saul"
+    assert migrated_pool["better-call-saul-2015"]["localized"]["en"]["overview"] == "English candidate overview"
+    assert Path(report["files"]["watched_dataset"]["backup_path"]).exists()
+    assert json.loads(Path(report["files"]["watched_dataset"]["backup_path"]).read_text(encoding="utf-8")) == original_dataset
+
+
+def test_candidate_migration_en_title_falls_back_to_title() -> None:
+    from dataset.migrations.data_language import migrate_candidate_record
+
+    migrated, changed = migrate_candidate_record({"title": "Только русский"})
+
+    assert changed is True
+    assert migrated["localized"]["ru"]["title"] == "Только русский"
+    assert migrated["localized"]["en"]["title"] == "Только русский"
+
+
+def test_data_language_helpers_choose_genre_labels() -> None:
+    from dataset.language import choose_genre_labels
+
+    assert choose_genre_labels(["has_drama"], "ru") == ["Драма"]
+    assert choose_genre_labels(["has_drama"], "en") == ["Drama"]
+    assert choose_genre_labels(["drama"], "en") == ["Drama"]
 
 
 def test_apply_app_icon_sets_qapplication_icon(qapp) -> None:
@@ -121,14 +315,14 @@ def test_add_title_button_opens_wizard_dialog() -> None:
     preview_source = inspect.getsource(preview_module)
 
     assert "watchedAddTitle" in sidebar_source
-    assert "+ Добавить тайтл" in sidebar_source
+    assert 'tr("watched.add_title.button")' in sidebar_source
     assert "run_add_title_flow" in handler_source
     assert "reload_entries" in handler_source
     assert "_show_add_title_stub" not in handler_source
     assert "class AddTitleSearchDialog" in search_source
     assert "class AddTitlePreviewDialog" in preview_source
     assert "run_add_title_flow" in handler_source
-    assert "Искать другой" in preview_source
+    assert 'tr("add_title.search_again")' in preview_source
 
 
 def test_add_title_preview_dialog_uses_readonly_year_and_score_only_save() -> None:
@@ -196,6 +390,21 @@ def test_add_title_preview_dialog_uses_compact_preview_card(qapp) -> None:
     assert hasattr(dialog, "_detail_card") is False
     assert dialog.findChild(QWidget, "addTitleCompactMainInfoSection") is None
     assert dialog.findChild(QWidget, "addTitleCompactOverviewSection") is None
+
+    dialog.close()
+
+
+def test_add_title_preview_score_input_uses_english_locale(qapp) -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    dialog = AddTitlePreviewDialog(_make_add_title_preview_bundle())
+    dialog.show()
+    qapp.processEvents()
+
+    assert dialog._score_input.text() == "0.0"
 
     dialog.close()
 
@@ -312,6 +521,40 @@ def test_prepare_card_for_display_does_not_mutate_movie() -> None:
     assert card["title"] == "Mutation Check"
 
 
+def test_build_watched_movie_card_respects_data_language() -> None:
+    from common.cards import build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Триггер", "year": 2020, "user_score": 8.0},
+        "localized": {
+            "ru": {"title": "Триггер", "overview": "Русское описание"},
+            "en": {"title": "Trigger"},
+        },
+        "genre": {"has_drama": 1},
+    }
+
+    ru_card = build_watched_movie_card(movie, poster_cache={}, data_language="ru")
+    en_card = build_watched_movie_card(movie, poster_cache={}, data_language="en")
+
+    assert ru_card["title"] == "Триггер"
+    assert ru_card["overview"] == "Русское описание"
+    assert ru_card["genres"] == ["Драма"]
+    assert en_card["title"] == "Trigger"
+    assert en_card["overview"] == "Русское описание"
+    assert en_card["genres"] == ["Drama"]
+
+
+def test_prepare_card_for_display_accepts_data_language() -> None:
+    from desktop.watched import prepare_card_for_display
+
+    movie = _make_movie("Лучше звоните Солу", 9.0, 2015)
+    movie["original_title"] = "Better Call Saul"
+
+    card = prepare_card_for_display(movie, data_language="en")
+
+    assert card["title"] == "Better Call Saul"
+
+
 def test_watched_load_model_uses_dataset_read_facade_only() -> None:
     import inspect
 
@@ -381,10 +624,11 @@ def test_watched_read_facade_returns_desktop_entry_shape(monkeypatch) -> None:
     poster_cache = {"Facade Shape": "poster.jpg"}
     lookup_cache = {"meta_by_title": {}, "pool_by_identity": {}}
 
-    def fake_build_card(movie_obj, *, poster_cache=None, lookup_cache=None):
+    def fake_build_card(movie_obj, *, poster_cache=None, lookup_cache=None, data_language="ru"):
         assert movie_obj is movie
         assert poster_cache is poster_cache_value
         assert lookup_cache is lookup_cache_value
+        assert data_language == "en"
         return {"title": movie_obj["main_info"]["title"], "year": 2021}
 
     poster_cache_value = poster_cache
@@ -394,7 +638,7 @@ def test_watched_read_facade_returns_desktop_entry_shape(monkeypatch) -> None:
     monkeypatch.setattr(watched_read_model, "_get_lookup_cache", lambda: lookup_cache_value)
     monkeypatch.setattr(watched_read_model, "build_watched_movie_card", fake_build_card)
 
-    entries = watched_read_model.load_watched_entries()
+    entries = watched_read_model.load_watched_entries(data_language="en")
 
     assert entries == [("Facade Shape", movie, {"title": "Facade Shape", "year": 2021})]
 
@@ -1554,11 +1798,11 @@ def test_watched_layout_uses_collapsible_filters_and_rich_list() -> None:
     assert "watchedListCounter" in sidebar_source
     assert "watchedSortRow" in sidebar_source
     assert "watchedSortLabel" in sidebar_source
-    assert "Сортировка" in sidebar_source
+    assert 'tr("common.sort")' in sidebar_source
     assert "reset_all" in filters_source
     assert "watchedScoreReset" not in filters_source
     assert "watchedYearReset" not in filters_source
-    assert "Удалить запись" in actions_source
+    assert 'tr("watched.context.delete_record")' in actions_source
     assert "_delete_watched_entry" in actions_source
     assert "execute_watched_delete" in actions_source
 
@@ -2162,7 +2406,7 @@ def test_watched_detail_card_renders_main_info_block() -> None:
     show_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
     empty_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_empty)
 
-    assert "ОСНОВНАЯ ИНФОРМАЦИЯ" in layout_source
+    assert 'tr("detail.main_info.title")' in layout_source
     assert 'setObjectName("detailMainInfoSection")' in layout_source
     assert 'setObjectName("detailMainInfoPanel")' in layout_source
     assert 'setObjectName("detailMainInfoHeader")' in layout_source
@@ -3422,8 +3666,8 @@ def test_watched_detail_card_has_poster_context_menu() -> None:
     assert "_show_poster_context_menu" in layout_source
 
     menu_source = inspect.getsource(watched_view_module.WatchedDetailCard._show_poster_context_menu)
-    assert "Открыть постер" in menu_source
-    assert "Папка poster-cache" in menu_source
+    assert 'tr("detail.poster.open")' in menu_source
+    assert 'tr("detail.poster.cache_folder")' in menu_source
 
     show_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
     assert "_set_local_poster_path" in show_source
@@ -3607,7 +3851,7 @@ def test_refresh_after_delete_wiring() -> None:
     import desktop.watched.tab as watched_tab_module
 
     source = inspect.getsource(watched_tab_module.WatchedTabView._refresh_after_delete)
-    assert "load_watched_entries" in source
+    assert "_load_entries_for_actions" in source
     assert "_filters.reload_genre_options" in source
     assert "_reload_watched_search_index" in source
     assert "resolve_selection_row" in source
@@ -3634,9 +3878,9 @@ def test_open_list_context_menu_includes_delete_action() -> None:
     import desktop.watched.tab as watched_tab_module
 
     source = inspect.getsource(watched_tab_module.WatchedTabView._open_list_context_menu)
-    assert "Удалить запись" in source
+    assert 'tr("watched.context.delete_record")' in source
     assert "_delete_watched_entry" in source
-    assert "Изменить оценку" in source
+    assert 'tr("watched.context.edit_score")' in source
 
 
 def test_format_candidate_list_label_shows_sort_metric() -> None:
@@ -3700,6 +3944,34 @@ def test_build_candidate_readonly_card_passes_main_info_fields(monkeypatch) -> N
     assert build_user_score_badge_item(card) is None
     assert "user_score_badge" not in card
     assert "imdb_votes" not in card
+
+
+def test_build_candidate_readonly_card_respects_data_language(monkeypatch) -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_card
+
+    monkeypatch.setattr(
+        "desktop.candidates.presenters.resolve_local_poster_path_for_candidate",
+        lambda candidate: None,
+    )
+
+    candidate = {
+        "title": "Лучше звоните Солу",
+        "original_title": "Better Call Saul",
+        "description": "Русское описание",
+        "overview_en": "English overview",
+        "genre_keys": ["drama"],
+        "year": 2015,
+    }
+
+    ru_card = build_candidate_readonly_card(candidate, data_language="ru")
+    en_card = build_candidate_readonly_card(candidate, data_language="en")
+
+    assert ru_card["title"] == "Лучше звоните Солу"
+    assert ru_card["overview"] == "Русское описание"
+    assert ru_card["genres"] == ["Драма"]
+    assert en_card["title"] == "Better Call Saul"
+    assert en_card["overview"] == "English overview"
+    assert en_card["genres"] == ["Drama"]
 
 
 def test_build_candidate_readonly_card_normalizes_country_for_display(monkeypatch) -> None:
@@ -4126,10 +4398,10 @@ def test_candidate_filters_form_uses_grouped_sections() -> None:
     assert "add_divider" in source
     assert "candidateFilterSection" in source
     assert "candidateFilterDivider" in source
-    assert "Основные условия" in source
-    assert "Жанры" in source
-    assert "Пороги TMDb" in source
-    assert "Статус и видимость" in source
+    assert 'tr("candidates.filters.basic")' in source
+    assert 'tr("candidates.filters.genres")' in source
+    assert 'tr("candidates.filters.tmdb")' in source
+    assert 'tr("candidates.filters.visibility")' in source
 
 
 def test_candidate_filters_view_places_apply_button_in_top_bar() -> None:
@@ -4158,10 +4430,10 @@ def test_watched_window_includes_candidate_tabs() -> None:
     assert "CandidateFiltersView" in factory_source
     assert "CandidateListView" in factory_source
     assert "SettingsTabView" in factory_source
-    assert '"Фильтры"' in factory_source
-    assert '"Кандидаты"' in factory_source
-    assert '"Моё"' in factory_source
-    assert '"Настройки"' in factory_source
+    assert 'tr("tabs.filters")' in factory_source
+    assert 'tr("tabs.candidates")' in factory_source
+    assert 'tr("tabs.watched")' in factory_source
+    assert 'tr("tabs.settings")' in factory_source
     assert '"Информация"' not in factory_source
     assert '"Watched"' not in factory_source
     assert '"Analytics"' not in factory_source
@@ -4176,6 +4448,8 @@ def test_watched_window_includes_candidate_tabs() -> None:
 def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     from PyQt6.QtWidgets import QTabWidget, QWidget
 
+    from desktop.settings.app_settings import AppSettings
+    import desktop.i18n.translator as translator_module
     import desktop.shell.tabs as tabs_module
 
     class FakeWatchedTabView:
@@ -4213,6 +4487,11 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     monkeypatch.setattr(tabs_module, "CandidateFiltersView", FakeSimpleTabView)
     monkeypatch.setattr(tabs_module, "CandidateListView", FakeCandidateListView)
     monkeypatch.setattr(tabs_module, "SettingsTabView", FakeSimpleTabView)
+    monkeypatch.setattr(
+        translator_module,
+        "load_app_settings",
+        lambda: AppSettings(interface_language="ru", data_language="ru"),
+    )
 
     tabs = QTabWidget()
     parent = QWidget()
@@ -4239,6 +4518,55 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
         registry.on_current_changed(index)
 
     assert registry._specs["candidates"].view.activation_count == 1
+
+
+def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> None:
+    from PyQt6.QtWidgets import QTabWidget, QWidget
+
+    from desktop.settings.app_settings import AppSettings
+    import desktop.i18n.translator as translator_module
+    import desktop.shell.tabs as tabs_module
+
+    class FakeWatchedTabView:
+        def __init__(self, *args, **kwargs) -> None:
+            self.widget = QWidget()
+            self.entries = []
+
+        def reload_entries(self, added_key: str | None = None) -> None:
+            return None
+
+    class FakeCandidateSearchSession:
+        pass
+
+    class FakeSimpleTabView:
+        def __init__(self, *args, **kwargs) -> None:
+            self.widget = QWidget()
+
+    monkeypatch.setattr(tabs_module, "WatchedTabView", FakeWatchedTabView)
+    monkeypatch.setattr(tabs_module, "CandidateSearchSession", FakeCandidateSearchSession)
+    monkeypatch.setattr(tabs_module, "CandidateFiltersView", FakeSimpleTabView)
+    monkeypatch.setattr(tabs_module, "CandidateListView", FakeSimpleTabView)
+    monkeypatch.setattr(tabs_module, "SettingsTabView", FakeSimpleTabView)
+    monkeypatch.setattr(
+        translator_module,
+        "load_app_settings",
+        lambda: AppSettings(interface_language="en", data_language="ru"),
+    )
+
+    tabs = QTabWidget()
+    registry, _context = tabs_module.build_main_tabs(
+        tabs,
+        QWidget(),
+        on_status_message=lambda _message, _timeout_ms: None,
+    )
+
+    assert [tabs.tabText(index) for index in range(tabs.count())] == [
+        "My library",
+        "Filters",
+        "Candidates",
+        "Settings",
+    ]
+    assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
 
 
 def test_cross_tab_wiring_stays_in_shell_tabs() -> None:

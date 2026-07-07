@@ -6,10 +6,10 @@ from collections.abc import Callable
 
 from PyQt6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from desktop.i18n import tr
 from desktop.shared.widgets.range_slider import RangeSlider
 from desktop.theme.scaling import layout_px
 from desktop.watched.model import (
-    GENRE_FILTER_ALL,
     USER_SCORE_MAX,
     USER_SCORE_MIN,
     USER_SCORE_STEP,
@@ -40,7 +40,7 @@ class WatchedFiltersPanel:
         self._entries = entries
         self._expanded = False
 
-        self.toggle = QPushButton("▸ Фильтры")
+        self.toggle = QPushButton(format_watched_filters_label(is_expanded=False))
         self.toggle.setObjectName("watchedFilterToggle")
         self.toggle.clicked.connect(self.toggle_panel)
 
@@ -94,7 +94,7 @@ class WatchedFiltersPanel:
         current = self.selected_genre()
         self._genre_combo.blockSignals(True)
         self._genre_combo.clear()
-        self._genre_combo.addItem(GENRE_FILTER_ALL, None)
+        self._genre_combo.addItem(tr("filters.watched.all_genres"), None)
         for genre in get_available_genres(self._entries):
             self._genre_combo.addItem(genre, genre)
         if current is not None:
@@ -142,7 +142,7 @@ class WatchedFiltersPanel:
         layout.addWidget(self._build_year_filter_panel())
         layout.addWidget(self._build_genre_filter_panel())
 
-        reset_all_button = QPushButton("Сбросить фильтры")
+        reset_all_button = QPushButton(tr("watched.filters.reset_all"))
         reset_all_button.setObjectName("watchedFilterResetAll")
         reset_all_button.clicked.connect(self.reset_all)
         layout.addWidget(reset_all_button)
@@ -163,7 +163,7 @@ class WatchedFiltersPanel:
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
         header_row.setSpacing(layout_px(8))
-        title = QLabel("Оценка")
+        title = QLabel(tr("watched.filters.score"))
         title.setObjectName("watchedScoreFilterTitle")
         header_row.addWidget(title)
         header_row.addStretch()
@@ -200,7 +200,7 @@ class WatchedFiltersPanel:
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
         header_row.setSpacing(layout_px(8))
-        title = QLabel("Год")
+        title = QLabel(tr("watched.filters.year"))
         title.setObjectName("watchedYearFilterTitle")
         header_row.addWidget(title)
         header_row.addStretch()
@@ -234,13 +234,13 @@ class WatchedFiltersPanel:
         )
         layout.setSpacing(layout_px(10))
 
-        title = QLabel("Жанр")
+        title = QLabel(tr("watched.filters.genre"))
         title.setObjectName("watchedGenreFilterTitle")
         layout.addWidget(title)
 
         self._genre_combo = QComboBox()
         self._genre_combo.setObjectName("watchedGenre")
-        self._genre_combo.addItem(GENRE_FILTER_ALL, None)
+        self._genre_combo.addItem(tr("filters.watched.all_genres"), None)
         for genre in get_available_genres(self._entries):
             self._genre_combo.addItem(genre, genre)
         self._genre_combo.currentIndexChanged.connect(self._on_filters_changed)

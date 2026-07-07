@@ -5,6 +5,7 @@ from __future__ import annotations
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
+from desktop.i18n import tr
 from desktop.shared.widgets.collapsible_chip_helpers import (
     ChipExpandControl,
     order_keys_by_checked,
@@ -50,7 +51,7 @@ class CountryChipSelector(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(layout_px(8))
 
-        self._count_label = QLabel("Все страны")
+        self._count_label = QLabel(tr("common.all_countries"))
         self._count_label.setObjectName("countryChipCount")
         root.addWidget(self._count_label)
 
@@ -158,6 +159,10 @@ class CountryChipSelector(QWidget):
 
     def _update_count_label(self, *_args, emit_selection: bool = True) -> None:
         count = len(self.selected_country_codes())
-        self._count_label.setText("Все страны" if count == 0 else f"Выбрано: {count}")
+        self._count_label.setText(
+            tr("common.all_countries")
+            if count == 0
+            else tr("common.selected_count", count=count)
+        )
         if emit_selection:
             self.selection_changed.emit()

@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QTabWidget, QWidget
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.list_view import CandidateListView
 from desktop.candidates.session import CandidateSearchSession
+from desktop.i18n import tr
 from desktop.shell.tab_contract import TabView, activate_tab_view
 from desktop.settings.tab_view import SettingsTabView
 from desktop.watched.tab import WatchedTabView
@@ -76,14 +77,14 @@ def build_main_tabs(
         parent=parent,
         on_status_message=on_status_message,
     )
-    registry.register(ShellTabSpec("watched", "Моё", watched_tab_view))
+    registry.register(ShellTabSpec("watched", tr("tabs.watched"), watched_tab_view))
 
     candidate_session = CandidateSearchSession()
 
     def on_candidate_moved_to_watched(result) -> None:
         added_key = getattr(result, "title", None)
         watched_tab_view.reload_entries(added_key=added_key)
-        message = getattr(result, "message", None) or "Кандидат перенесён в просмотренные."
+        message = getattr(result, "message", None) or tr("candidates.transfer.moved_to_watched")
         on_status_message(message, 5000)
 
     candidate_filters_view = CandidateFiltersView(
@@ -94,14 +95,14 @@ def build_main_tabs(
         candidate_session,
         on_watched_added=on_candidate_moved_to_watched,
     )
-    registry.register(ShellTabSpec("filters", "Фильтры", candidate_filters_view))
-    registry.register(ShellTabSpec("candidates", "Кандидаты", candidate_list_view))
+    registry.register(ShellTabSpec("filters", tr("tabs.filters"), candidate_filters_view))
+    registry.register(ShellTabSpec("candidates", tr("tabs.candidates"), candidate_list_view))
 
     settings_tab_view = SettingsTabView(
         parent=parent,
         on_status_message=on_status_message,
     )
-    registry.register(ShellTabSpec("settings", "Настройки", settings_tab_view))
+    registry.register(ShellTabSpec("settings", tr("tabs.settings"), settings_tab_view))
 
     tabs.currentChanged.connect(registry.on_current_changed)
 

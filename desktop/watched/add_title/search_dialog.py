@@ -18,10 +18,13 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from candidates.models import country_schema
 from candidates.sources.tmdb.country_options import add_title_country_combo_options
 from common import valid
 from dataset import service
 from diagnostics.gui_event_log import log_event
+from desktop.i18n import tr
+from desktop.settings.app_settings import get_persisted_interface_language
 from desktop.watched.add_title.constants import (
     ADD_TITLE_DIALOG_STYLE,
     SEARCH_DIALOG_HEIGHT,
@@ -47,6 +50,7 @@ class AddTitleSearchDialog(QDialog):
         self._bundle: service.AddTitleResolveBundle | None = None
         self._worker: AddTitleResolveWorker | None = None
         self._worker_factory = worker_factory or AddTitleResolveWorker
+        self._interface_language = get_persisted_interface_language()
         self._request_seq = 0
         self._active_request_id = 0
         self._cancel_after_worker = False
@@ -54,7 +58,7 @@ class AddTitleSearchDialog(QDialog):
         self.last_country = initial_country
 
         self.setObjectName("addTitleSearchDialog")
-        self.setWindowTitle("Добавить тайтл — поиск")
+        self.setWindowTitle(tr("add_title.window.search"))
         self.setModal(True)
         self.setFixedSize(SEARCH_DIALOG_WIDTH, SEARCH_DIALOG_HEIGHT)
         self.setStyleSheet(ADD_TITLE_DIALOG_STYLE)
@@ -68,11 +72,11 @@ class AddTitleSearchDialog(QDialog):
         )
         root_layout.setSpacing(layout_px(8))
 
-        header = QLabel("Добавить тайтл")
+        header = QLabel(tr("add_title.header"))
         header.setObjectName("addTitleHeader")
         root_layout.addWidget(header)
 
-        subtitle = QLabel("Введите название и нажмите «Найти»")
+        subtitle = QLabel(tr("add_title.search.subtitle"))
         subtitle.setObjectName("addTitleSubtitle")
         subtitle.setWordWrap(True)
         root_layout.addWidget(subtitle)
@@ -90,17 +94,17 @@ class AddTitleSearchDialog(QDialog):
 
         self._title_input = QLineEdit()
         self._title_input.setObjectName("addTitleSearchInput")
-        self._title_input.setPlaceholderText("Название сериала")
+        self._title_input.setPlaceholderText(tr("add_title.search.input_placeholder"))
         self._title_input.setText(self.last_title)
         self._title_input.returnPressed.connect(lambda: self._start_search(trigger="enter"))
 
         self._country_combo = QComboBox()
         self._country_combo.setObjectName("addTitleCountryCombo")
         for label, value in add_title_country_combo_options():
-            self._country_combo.addItem(label, value)
+            self._country_combo.addItem(self._country_display_label(label, value), value)
         self._set_country_selection(initial_country)
 
-        self._search_button = QPushButton("Найти")
+        self._search_button = QPushButton(tr("add_title.search.button"))
         self._search_button.setObjectName("addTitleSearchButton")
         self._search_button.setAutoDefault(False)
         self._search_button.setDefault(False)
@@ -131,13 +135,27 @@ class AddTitleSearchDialog(QDialog):
     def resolve_bundle(self) -> service.AddTitleResolveBundle | None:
         return self._bundle
 
+    def _country_display_label(self, label: str, value: str) -> str:
+        if str(value or "").strip() == "":
+            return tr("add_title.country.any")
+        codes = country_schema.normalize_country_filter_list(value or label)
+        return (
+            country_schema.build_country_display(codes, language=self._interface_language)
+            or str(label or "").strip()
+        )
+
     def _set_country_selection(self, country: str) -> None:
         normalized = str(country or "").strip()
         if normalized == "":
             self._country_combo.setCurrentIndex(0)
             return
+        selected_codes = country_schema.normalize_country_filter_list(normalized)
         for index in range(self._country_combo.count()):
             if self._country_combo.itemData(index) == normalized:
+                self._country_combo.setCurrentIndex(index)
+                return
+            option_codes = country_schema.normalize_country_filter_list(self._country_combo.itemData(index))
+            if selected_codes and option_codes == selected_codes:
                 self._country_combo.setCurrentIndex(index)
                 return
 
@@ -168,7 +186,7 @@ class AddTitleSearchDialog(QDialog):
         if worker_running:
             self._cancel_after_worker = True
             self._status_label.setVisible(True)
-            self._status_label.setText("Отмена после текущего шага…")
+            self._status_label.setText(tr("add_title.search.cancel_after_step"))
             self._worker.requestInterruption()
             log_event("add_title.search.cancel_requested", request_id=self._active_request_id)
             return
@@ -186,7 +204,7 @@ class AddTitleSearchDialog(QDialog):
         title = self._title_input.text().strip()
         if valid.is_correct_title(title) is False:
             log_event("add_title.search.invalid_title", trigger=trigger, request_id=0, title=title)
-            QMessageBox.warning(self, "Добавить тайтл", "Введите корректное название.")
+            QMessageBox.warning(self, tr("add_title.header"), tr("add_title.error.invalid_title"))
             return
 
         self.last_title = title
@@ -204,7 +222,7 @@ class AddTitleSearchDialog(QDialog):
             country=self.last_country,
         )
         self._set_search_active(True)
-        self._status_label.setText("Поиск…")
+        self._status_label.setText(tr("add_title.status.searching"))
         self._progress.setValue(0)
         self._progress.setMaximum(7)
 
@@ -234,7 +252,7 @@ class AddTitleSearchDialog(QDialog):
         percent = int(round(100 * current / max(total, 1)))
         self._progress.setFormat(f"{percent}%")
         if self._cancel_after_worker:
-            self._status_label.setText("Отмена после текущего шага…")
+            self._status_label.setText(tr("add_title.search.cancel_after_step"))
         else:
             self._status_label.setText(message)
 
@@ -249,7 +267,11 @@ class AddTitleSearchDialog(QDialog):
             log_event("add_title.search.cancel_completed", request_id=request_id)
             self.reject()
             return
-        QMessageBox.critical(self, "Добавить тайтл", f"Ошибка поиска:\n{message}")
+        QMessageBox.critical(
+            self,
+            tr("add_title.header"),
+            tr("add_title.error.search_failed", message=message),
+        )
 
     def _on_resolve_finished(self, request_id: int, bundle: service.AddTitleResolveBundle) -> None:
         if self._is_current_request(request_id) is False:

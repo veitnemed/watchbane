@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from PyQt6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
 
+from desktop.i18n import tr
 from desktop.settings.ui_scale_control import UiScaleControlPanel
 from desktop.theme.scaling import layout_px
 from desktop.theme.shell_layout import (
@@ -44,7 +45,7 @@ class SettingsTabView:
         )
         layout.setSpacing(WATCHED_TAB_SPACING_PX)
 
-        title = QLabel("Настройки")
+        title = QLabel(tr("settings.title"))
         title.setObjectName("settingsTabTitle")
         layout.addWidget(title)
 

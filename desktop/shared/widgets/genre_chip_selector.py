@@ -5,6 +5,7 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt, QSize, QRect, pyqtSignal
 from PyQt6.QtWidgets import QLabel, QLayout, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
+from desktop.i18n import tr
 from desktop.shared.widgets.collapsible_chip_helpers import (
     ChipExpandControl,
     order_keys_by_checked,
@@ -108,7 +109,7 @@ class GenreChipSelector(QWidget):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(layout_px(8))
 
-        self._count_label = QLabel("Выбрано: 0")
+        self._count_label = QLabel(tr("common.selected_count", count=0))
         self._count_label.setObjectName("genreChipCount")
         root.addWidget(self._count_label)
 
@@ -188,6 +189,6 @@ class GenreChipSelector(QWidget):
 
     def _update_count_label(self, *_args, emit_selection: bool = True) -> None:
         count = len(self.selected_genres())
-        self._count_label.setText(f"Выбрано: {count}")
+        self._count_label.setText(tr("common.selected_count", count=count))
         if emit_selection:
             self.selection_changed.emit()

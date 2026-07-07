@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QAbstractListModel, QModelIndex, Qt
 
+from desktop.i18n import tr
 from desktop.candidates.presenters import (
     candidate_detail_identity,
     resolve_local_poster_path_for_candidate,
@@ -40,7 +41,7 @@ class CandidateListModel(QAbstractListModel):
 
         candidate = self._candidates[row]
         if role == int(Qt.ItemDataRole.DisplayRole):
-            title = candidate.get("title") or candidate.get("name") or "Без названия"
+            title = candidate.get("title") or candidate.get("name") or tr("common.untitled")
             year = candidate.get("year") or "?"
             return f"{title} ({year})"
         if role == CandidateListRoles.CandidateRole:

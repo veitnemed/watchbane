@@ -106,24 +106,29 @@ def build_country_codes(candidate: dict) -> list[str]:
     return codes
 
 
-def build_country_display(country_codes: list[str]) -> str | None:
-    """Maps primary ISO-2 country code to Russian UI label."""
+def build_country_display(country_codes: list[str], language: str = "ru") -> str | None:
+    """Maps primary ISO-2 country code to a display label."""
+    labels = (
+        country_reference.ENGLISH_COUNTRY_NAME_BY_ISO2
+        if str(language or "").strip().casefold() == "en"
+        else country_reference.COUNTRY_NAME_BY_ISO2
+    )
     for iso2 in country_codes:
-        label = country_reference.COUNTRY_NAME_BY_ISO2.get(iso2)
+        label = labels.get(iso2)
         if label:
             return label
     return None
 
 
-def candidate_country_for_display(candidate: dict) -> str:
+def candidate_country_for_display(candidate: dict, language: str = "ru") -> str:
     """Returns UI country label, preferring country_display with legacy fallback."""
     display = str(candidate.get("country_display") or "").strip()
     if display != "":
         codes = normalize_country_filter_list(display)
-        return build_country_display(codes) or display
+        return build_country_display(codes, language=language) or display
 
     codes = build_country_codes(candidate)
-    normalized_display = build_country_display(codes)
+    normalized_display = build_country_display(codes, language=language)
     if normalized_display is not None:
         return normalized_display
 
@@ -132,4 +137,8 @@ def candidate_country_for_display(candidate: dict) -> str:
         raw_values = _iter_raw_countries(candidate.get("country"))
     if len(raw_values) == 0:
         return ""
+    codes = normalize_country_filter_list(raw_values)
+    normalized_display = build_country_display(codes, language=language)
+    if normalized_display is not None:
+        return normalized_display
     return ", ".join(raw_values)

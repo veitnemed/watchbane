@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from desktop.i18n import tr
 from desktop.candidates.session import CandidateSearchSession
 
 
@@ -11,24 +12,25 @@ def series_count_phrase(count: int) -> str:
     remainder_100 = value % 100
     remainder_10 = value % 10
     if 11 <= remainder_100 <= 14:
-        suffix = "сериалов"
+        key = "candidates.filters.series.many"
     elif remainder_10 == 1:
-        suffix = "сериал"
+        key = "candidates.filters.series.one"
     elif 2 <= remainder_10 <= 4:
-        suffix = "сериала"
+        key = "candidates.filters.series.some"
     else:
-        suffix = "сериалов"
-    return f"{value} {suffix}"
+        key = "candidates.filters.series.many"
+    return tr(key, count=value)
 
 
 def format_pool_stats_user(stats: dict) -> str:
     unique_total = int(stats.get("unique_total", stats.get("storage_total", 0)) or 0)
     ready_total = int(stats.get("ready_total", 0) or 0)
     incomplete_total = int(stats.get("incomplete_total", 0) or 0)
-    return (
-        f"В базе {series_count_phrase(unique_total)}"
-        f" · {ready_total} с полной TMDb metadata"
-        f" · {incomplete_total} требуют metadata диагностики"
+    return tr(
+        "candidates.filters.pool.stats",
+        count_phrase=series_count_phrase(unique_total),
+        ready_total=ready_total,
+        incomplete_total=incomplete_total,
     )
 
 
@@ -42,30 +44,30 @@ def build_intro_copy(
     """Return lead text, stats text and whether apply button should be enabled."""
     if overview.get("is_empty"):
         return (
-            "Список кандидатов пока пуст.",
-            "Сначала добавьте сериалы через консоль: сбор кандидатов или импорт.",
+            tr("candidates.filters.empty.lead"),
+            tr("candidates.filters.empty.stats"),
             False,
         )
 
-    lead = (
-        "Настройте условия ниже и нажмите «Применить фильтры». "
-        "Список откроется на вкладке «Кандидаты»."
-    )
+    lead = tr("candidates.filters.intro.lead")
     stats = overview.get("stats") or {}
     unique_total = int(stats.get("unique_total", stats.get("storage_total", 0)) or 0)
 
     if result_ok is False and result_count == 0:
         return (
             lead,
-            "По выбранным условиям ничего не найдено. "
-            "Ослабьте фильтры или разрешите неполные карточки.",
+            tr("candidates.filters.no_results.stats"),
             True,
         )
 
     if result_count is not None and result_count > 0:
         return (
             lead,
-            f"Подходит {series_count_phrase(result_count)} из {unique_total}.",
+            tr(
+                "candidates.filters.matched.stats",
+                count_phrase=series_count_phrase(result_count),
+                total=unique_total,
+            ),
             True,
         )
 
@@ -74,13 +76,16 @@ def build_intro_copy(
         if filtered > 0:
             return (
                 lead,
-                f"Подходит {series_count_phrase(filtered)} из {unique_total}.",
+                tr(
+                    "candidates.filters.matched.stats",
+                    count_phrase=series_count_phrase(filtered),
+                    total=unique_total,
+                ),
                 True,
             )
         return (
             lead,
-            "По выбранным условиям ничего не найдено. "
-            "Ослабьте фильтры или разрешите неполные карточки.",
+            tr("candidates.filters.no_results.stats"),
             True,
         )
 

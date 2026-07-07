@@ -8,6 +8,12 @@ from candidates.models import genre_schema
 from candidates.models import country_schema
 from candidates.models.keys import title_identity_key
 from config import constant
+from dataset.language import (
+    choose_display_overview,
+    choose_display_title,
+    choose_genre_labels,
+    normalize_data_language,
+)
 from posters.cache import lookup_poster_cache_entry
 
 
@@ -217,7 +223,12 @@ def _tmdb_score_sections(movie: dict, raw_scores: dict, meta_obj: dict | None, p
     return sections
 
 
-def _compute_watched_tmdb_scores(movie: dict, sections: list[dict], country: str | None) -> dict:
+def _compute_watched_tmdb_scores(
+    movie: dict,
+    sections: list[dict],
+    country: str | None,
+    data_language: str,
+) -> dict:
     if _first_number("tmdb_score", sections, _to_float) is None:
         return {}
 
@@ -232,7 +243,7 @@ def _compute_watched_tmdb_scores(movie: dict, sections: list[dict], country: str
         "country_codes": _first_existing("country_codes", sections),
         "origin_country": _first_existing("origin_country", sections),
         "original_language": _first_existing("original_language", sections),
-        "genres": _genres(movie) or _first_existing("genres", sections),
+        "genres": _genres(movie, data_language=data_language) or _first_existing("genres", sections),
         "genre_keys": _first_existing("genre_keys", sections),
         "genres_tmdb": _first_existing("genres_tmdb", sections),
         "description": _first_existing("description", sections),
@@ -295,34 +306,44 @@ def _resolve_country(movie: dict, title: str, year, lookup_cache: dict | None = 
     return None
 
 
-def _genres_from_flags(movie: dict) -> list[str]:
+def _genres_from_flags(movie: dict, data_language: str) -> list[str]:
     genre_section = _as_dict(movie.get(constant.GENRE_SECTION))
-    result = []
+    genre_keys = []
 
     for feature in constant.GENRE:
         if genre_section.get(feature) != 1:
             continue
-        label = _clean_text(constant.FIELD_LABELS.get(feature))
-        if label is None:
-            label = feature.removeprefix("has_").replace("_", " ").title()
-        if label not in result:
-            result.append(label)
+        genre_keys.append(feature)
 
-    return result
+    if len(genre_keys) > 0:
+        return choose_genre_labels(genre_keys, data_language)
+    return []
 
 
-def _genres(movie: dict) -> list[str]:
+def _genres(movie: dict, data_language: str = "ru") -> list[str]:
+    genre_keys = _as_list(movie.get("genre_keys"))
+    if len(genre_keys) > 0:
+        return choose_genre_labels(genre_keys, data_language)
+
     for field_name in ("genres_display", "genre_display"):
         values = _list_text_values(movie.get(field_name))
         if len(values) > 0:
+            if normalize_data_language(data_language) == "en":
+                keys = genre_schema.normalize_genre_filter_list(values)
+                localized = choose_genre_labels(keys, data_language)
+                if len(localized) > 0:
+                    return localized
             return genre_schema.normalize_genre_display_labels(values)
 
     for field_name in ("genres", "imdb_genres", "genres_tmdb", "tmdb_genres"):
         values = _list_text_values(movie.get(field_name))
         if len(values) > 0:
+            keys = genre_schema.normalize_genre_filter_list(values)
+            if len(keys) > 0:
+                return choose_genre_labels(keys, data_language)
             return genre_schema.normalize_genre_display_labels(values)
 
-    return genre_schema.normalize_genre_display_labels(_genres_from_flags(movie))
+    return _genres_from_flags(movie, data_language)
 
 
 def _meta_obj_for_title(title: str, lookup_cache: dict | None, meta_obj=None) -> dict | None:
@@ -333,10 +354,17 @@ def _meta_obj_for_title(title: str, lookup_cache: dict | None, meta_obj=None) ->
     return lookup_cache["meta_by_title"].get(title.strip().casefold())
 
 
-def resolve_watched_description(title: str, year, meta_obj: dict | None, pool_by_identity: dict) -> str:
+def resolve_watched_description(
+    title: str,
+    year,
+    meta_obj: dict | None,
+    pool_by_identity: dict,
+    *,
+    data_language: str = "ru",
+) -> str:
     """Resolve watched-title description from meta and candidate pool."""
     if isinstance(meta_obj, dict):
-        meta_text = _clean_text(meta_obj.get("description"))
+        meta_text = choose_display_overview(meta_obj, data_language) or _clean_text(meta_obj.get("description"))
         if meta_text is not None:
             return meta_text
 
@@ -344,7 +372,7 @@ def resolve_watched_description(title: str, year, meta_obj: dict | None, pool_by
     if isinstance(pool_candidate, dict):
         from candidates.views.formatters import format_candidate_description
 
-        pool_text = format_candidate_description(pool_candidate)
+        pool_text = format_candidate_description(pool_candidate, data_language=data_language)
         if pool_text and pool_text != "нет данных":
             return pool_text
 
@@ -357,21 +385,21 @@ def _resolve_overview(
     year,
     lookup_cache: dict | None = None,
     meta_obj=None,
+    data_language: str = "ru",
 ) -> str | None:
-    direct = _first_text(
-        movie,
-        "overview",
-        "description",
-        "short_description",
-        "shortDescription",
-        "plot",
-    )
+    direct = choose_display_overview(movie, data_language)
     if direct is not None:
         return direct
 
     resolved_meta = _meta_obj_for_title(title, lookup_cache, meta_obj=meta_obj)
     pool_by_identity = lookup_cache["pool_by_identity"] if lookup_cache else {}
-    resolved_text = resolve_watched_description(title, year, resolved_meta, pool_by_identity)
+    resolved_text = resolve_watched_description(
+        title,
+        year,
+        resolved_meta,
+        pool_by_identity,
+        data_language=data_language,
+    )
     return resolved_text or None
 
 
@@ -380,19 +408,22 @@ def build_watched_movie_card(
     poster_cache=None,
     lookup_cache=None,
     meta_obj=None,
+    data_language: str = "ru",
 ) -> dict:
     """Build one compact read-only card from a dataset record."""
+    language = normalize_data_language(data_language)
     movie = _as_dict(movie)
     main_info = _as_dict(movie.get("main_info"))
     raw_scores = _as_dict(movie.get("raw_scores"))
-    title = _clean_text(main_info.get("title")) or _clean_text(movie.get("title")) or ""
+    legacy_title = _clean_text(main_info.get("title")) or _clean_text(movie.get("title")) or ""
+    title = choose_display_title(movie, language) or legacy_title
     year = _to_int(main_info.get("year", movie.get("year")))
     poster_fields = _resolve_poster_fields(movie, poster_cache=poster_cache)
-    resolved_meta = _meta_obj_for_title(title, lookup_cache, meta_obj=meta_obj)
-    pool_candidate = _pool_candidate_for_title(title, year, lookup_cache)
+    resolved_meta = _meta_obj_for_title(legacy_title, lookup_cache, meta_obj=meta_obj)
+    pool_candidate = _pool_candidate_for_title(legacy_title, year, lookup_cache)
     tmdb_sections = _tmdb_score_sections(movie, raw_scores, resolved_meta, pool_candidate)
-    country = _resolve_country(movie, title, year, lookup_cache=lookup_cache, meta_obj=resolved_meta)
-    computed_tmdb_scores = _compute_watched_tmdb_scores(movie, tmdb_sections, country)
+    country = _resolve_country(movie, legacy_title, year, lookup_cache=lookup_cache, meta_obj=resolved_meta)
+    computed_tmdb_scores = _compute_watched_tmdb_scores(movie, tmdb_sections, country, language)
     quality_score = _first_number("quality_score", tmdb_sections, _to_float)
     final_score = _first_number("final_score", tmdb_sections, _to_float)
 
@@ -405,10 +436,17 @@ def build_watched_movie_card(
         "tmdb_popularity": _first_number("tmdb_popularity", tmdb_sections, _to_float),
         "quality_score": quality_score if quality_score is not None else computed_tmdb_scores.get("quality_score"),
         "final_score": final_score if final_score is not None else computed_tmdb_scores.get("final_score"),
-        "genres": _genres(movie),
+        "genres": _genres(movie, data_language=language),
         "country": country,
         "object_type": _object_type(movie, default="series"),
-        "overview": _resolve_overview(movie, title, year, lookup_cache=lookup_cache, meta_obj=meta_obj),
+        "overview": _resolve_overview(
+            movie,
+            legacy_title,
+            year,
+            lookup_cache=lookup_cache,
+            meta_obj=resolved_meta,
+            data_language=language,
+        ),
         "poster_url": poster_fields["poster_url"],
         "poster_path": poster_fields["poster_path"],
         "poster_src": poster_fields["poster_src"],

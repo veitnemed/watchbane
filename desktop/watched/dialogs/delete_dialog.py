@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
+from desktop.i18n import tr
 from desktop.theme import build_delete_dialog_style
 from desktop.theme.scaling import layout_px
 from desktop.watched.delete import (
@@ -29,7 +30,7 @@ class WatchedDeleteDialog(QDialog):
     def __init__(self, preview: dict, parent=None) -> None:
         super().__init__(parent)
         self.setObjectName("deleteRecordDialog")
-        self.setWindowTitle("Удалить запись")
+        self.setWindowTitle(tr("watched.delete.dialog.title"))
         self.setModal(True)
         self.setFixedWidth(layout_px(430))
         self.setStyleSheet(DELETE_DIALOG_STYLE)
@@ -56,11 +57,11 @@ class WatchedDeleteDialog(QDialog):
         )
         card_layout.setSpacing(layout_px(12))
 
-        header = QLabel("Удалить запись")
+        header = QLabel(tr("watched.delete.dialog.title"))
         header.setObjectName("deleteRecordTitle")
         card_layout.addWidget(header)
 
-        warning = QLabel("Запись будет удалена из dataset, meta и poster-cache.")
+        warning = QLabel(tr("watched.delete.dialog.warning"))
         warning.setObjectName("deleteRecordWarning")
         warning.setWordWrap(True)
         card_layout.addWidget(warning)
@@ -71,7 +72,9 @@ class WatchedDeleteDialog(QDialog):
             label.setWordWrap(True)
             card_layout.addWidget(label)
 
-        confirm_label = QLabel(f"Введите {DELETE_CONFIRMATION_TEXT} для подтверждения")
+        confirm_label = QLabel(
+            tr("watched.delete.dialog.confirm_label", confirmation=DELETE_CONFIRMATION_TEXT)
+        )
         confirm_label.setObjectName("deleteRecordFieldLabel")
         card_layout.addWidget(confirm_label)
 
@@ -88,11 +91,11 @@ class WatchedDeleteDialog(QDialog):
         cancel_button = buttons.button(QDialogButtonBox.StandardButton.Cancel)
         if delete_button is not None:
             delete_button.setObjectName("deleteRecordConfirmButton")
-            delete_button.setText("Удалить")
+            delete_button.setText(tr("watched.delete.dialog.delete"))
             delete_button.setEnabled(False)
             delete_button.setAutoDefault(False)
         if cancel_button is not None:
-            cancel_button.setText("Отмена")
+            cancel_button.setText(tr("common.cancel"))
             cancel_button.setAutoDefault(False)
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)

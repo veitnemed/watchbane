@@ -7,6 +7,8 @@ from collections.abc import Callable
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QHBoxLayout, QScrollArea, QSplitter, QWidget
 
+from desktop.i18n import tr
+from desktop.settings.app_settings import get_persisted_data_language
 from desktop.shared.detail import DetailCard
 from desktop.shared.widgets.list_search import resolve_selection_row
 from desktop.theme.shell_layout import (
@@ -46,8 +48,9 @@ class WatchedTabView(WatchedTabActionsMixin):
         self._parent = parent
         self._on_status_message = on_status_message
         self._on_entries_changed = on_entries_changed
+        self._data_language = get_persisted_data_language()
 
-        self._entries: list[WatchedEntry] = load_watched_entries()
+        self._entries: list[WatchedEntry] = self._load_entries()
         self._watched_search_index = build_watched_search_index(self._entries)
         self._visible_entries: list[WatchedEntry] = list(self._entries)
         self._sort_key = SORT_OPTIONS[0][0]
@@ -101,6 +104,12 @@ class WatchedTabView(WatchedTabActionsMixin):
     def entries(self) -> list[WatchedEntry]:
         return self._entries
 
+    def _load_entries(self) -> list[WatchedEntry]:
+        try:
+            return load_watched_entries(data_language=self._data_language)
+        except TypeError:
+            return load_watched_entries()
+
     def reload_entries(self, added_key: str | None = None) -> None:
         """Refresh watched list after an external add (e.g. candidate transfer)."""
         previous_key = None
@@ -108,7 +117,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         if 0 <= current_row < len(self._visible_entries):
             previous_key = self._visible_entries[current_row][0]
 
-        self._entries = load_watched_entries()
+        self._entries = self._load_entries()
         self._reload_watched_search_index()
         self._filters.reload_genre_options(self._entries)
         self._refresh_list()
@@ -242,7 +251,7 @@ class WatchedTabView(WatchedTabActionsMixin):
 
     def _show_empty_details(self) -> None:
         if self._search_input.text().strip():
-            title = "Ничего не найдено"
+            title = tr("watched.empty.not_found")
         else:
-            title = "Выберите тайтл слева"
+            title = tr("watched.empty.select_title")
         self._detail_card.show_empty(title)
