@@ -576,7 +576,7 @@ def test_settings_tab_uses_slider_scale_control() -> None:
 
     assert "UiScaleControlPanel" in tab_source
     assert "uiScaleSlider" not in tab_source
-    assert 'tr("tabs.settings")' in factory_source
+    assert 'languages.tr("tabs.settings")' in factory_source
     assert "SettingsTabView" in factory_source
     assert '"Информация"' not in factory_source
     assert "AnalyticsView" not in factory_source

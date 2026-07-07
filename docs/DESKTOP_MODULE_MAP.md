@@ -278,6 +278,19 @@ py -m compileall desktop dataset candidates storage ui tests
 py -m pytest tests/test_desktop.py
 ```
 
+## Language Extension Guardrail
+
+Use `desktop/language_context.py` for new tabs and feature-level UI objects.
+
+- Shell creates a `DesktopLanguageContext` once in `desktop/shell/tabs.py`.
+- Tab labels use `language_context.tr("tabs.<id>")`, not hardcoded strings.
+- UI labels/buttons/messages/placeholders go through `desktop/i18n/catalog.py` and `tr(...)`/`language_context.tr(...)`.
+- Data display uses explicit `data_language` arguments in read models and presenters.
+- TMDb requests started by desktop use `DesktopLanguageContext.tmdb_locale` or `language_to_tmdb_locale(data_language)`.
+- Do not use `interface_language` to choose title/overview/poster data.
+- Do not use `data_language` for UI copy.
+- If a new feature has list/detail posters, route poster selection through localized `poster_url/poster_path` and clear local pixmap caches when a file is replaced.
+
 ## New Code Routing Guardrail
 
 Use this routing for new desktop code:

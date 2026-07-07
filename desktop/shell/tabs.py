@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QTabWidget, QWidget
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.list_view import CandidateListView
 from desktop.candidates.session import CandidateSearchSession
-from desktop.i18n import tr
+from desktop.language_context import DesktopLanguageContext, load_desktop_language_context
 from desktop.shell.tab_contract import TabView, activate_tab_view
 from desktop.settings.tab_view import SettingsTabView
 from desktop.watched.tab import WatchedTabView
@@ -69,22 +69,24 @@ def build_main_tabs(
     parent: QWidget,
     *,
     on_status_message: Callable[[str, int], None],
+    language_context: DesktopLanguageContext | None = None,
 ) -> tuple[MainTabRegistry, AppTabsContext]:
     """Create main-window tabs, register them and wire cross-tab callbacks."""
     registry = MainTabRegistry(tabs)
+    languages = language_context or load_desktop_language_context()
 
     watched_tab_view = WatchedTabView(
         parent=parent,
         on_status_message=on_status_message,
     )
-    registry.register(ShellTabSpec("watched", tr("tabs.watched"), watched_tab_view))
+    registry.register(ShellTabSpec("watched", languages.tr("tabs.watched"), watched_tab_view))
 
     candidate_session = CandidateSearchSession()
 
     def on_candidate_moved_to_watched(result) -> None:
         added_key = getattr(result, "title", None)
         watched_tab_view.reload_entries(added_key=added_key)
-        message = getattr(result, "message", None) or tr("candidates.transfer.moved_to_watched")
+        message = getattr(result, "message", None) or languages.tr("candidates.transfer.moved_to_watched")
         on_status_message(message, 5000)
 
     candidate_filters_view = CandidateFiltersView(
@@ -95,14 +97,14 @@ def build_main_tabs(
         candidate_session,
         on_watched_added=on_candidate_moved_to_watched,
     )
-    registry.register(ShellTabSpec("filters", tr("tabs.filters"), candidate_filters_view))
-    registry.register(ShellTabSpec("candidates", tr("tabs.candidates"), candidate_list_view))
+    registry.register(ShellTabSpec("filters", languages.tr("tabs.filters"), candidate_filters_view))
+    registry.register(ShellTabSpec("candidates", languages.tr("tabs.candidates"), candidate_list_view))
 
     settings_tab_view = SettingsTabView(
         parent=parent,
         on_status_message=on_status_message,
     )
-    registry.register(ShellTabSpec("settings", tr("tabs.settings"), settings_tab_view))
+    registry.register(ShellTabSpec("settings", languages.tr("tabs.settings"), settings_tab_view))
 
     tabs.currentChanged.connect(registry.on_current_changed)
 

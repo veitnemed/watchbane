@@ -139,6 +139,7 @@ Console остаётся рабочим fallback и местом для pool mai
 - `data_language` не используется для интерфейсных строк; он меняет отображаемые данные: title, overview, genres, countries и candidate titles, если есть localized data, и имеет fallback на `ru`/legacy fields.
 - Перевод применяется после restart: новые views создаются через `desktop.i18n.tr(...)`, динамического retranslate всего окна нет.
 - Новые интерфейсные строки добавляются в `desktop/i18n/catalog.py` сразу для `ru` и `en`.
+- Для новых вкладок shell использует `DesktopLanguageContext` из `desktop/language_context.py`: tab labels берутся через `language_context.tr(...)`, а не hardcoded strings.
 
 ### Data language
 
@@ -146,6 +147,8 @@ Console остаётся рабочим fallback и местом для pool mai
 
 - Watched read model, candidate presenters, filters genre labels and add-title preview read `AppSettings.data_language`.
 - Desktop-initiated TMDb flows use `data_language` locale (`ru-RU` / `en-US`) instead of hardcoded `ru-RU`.
+- New read models and presenters must accept explicit `data_language`; do not infer data language from `interface_language`.
+- New poster/list/detail flows must prefer localized `poster_url/poster_path` and invalidate local pixmap caches when a poster file is replaced.
 - Existing local JSON can be backfilled with TMDb localized strings via `scripts/backfill_watched_localized_from_tmdb.py --target watched-meta|candidate-pool|all --language en`.
 - Backfill only adds `localized.<lang>.title/overview`, creates a backup next to the JSON file and does not rename dataset keys or overwrite legacy title/overview fields.
 

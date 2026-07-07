@@ -124,6 +124,29 @@ def test_i18n_translator_defaults_and_fallbacks(monkeypatch) -> None:
     assert translator_module.tr("missing.translation.key") == "missing.translation.key"
 
 
+def test_i18n_translator_respects_interface_language_env(monkeypatch) -> None:
+    import desktop.i18n.translator as translator_module
+
+    monkeypatch.setenv("WATCHBANE_INTERFACE_LANGUAGE", "en")
+
+    assert translator_module.get_interface_language() == "en"
+    assert translator_module.tr("tabs.watched") == "My library"
+
+
+def test_desktop_language_context_keeps_interface_and_data_independent(monkeypatch) -> None:
+    from desktop.language_context import load_desktop_language_context
+
+    monkeypatch.setenv("WATCHBANE_INTERFACE_LANGUAGE", "en")
+    monkeypatch.setenv("WATCHBANE_DATA_LANGUAGE", "ru")
+
+    context = load_desktop_language_context()
+
+    assert context.interface_language == "en"
+    assert context.data_language == "ru"
+    assert context.tmdb_locale == "ru-RU"
+    assert context.tr("tabs.settings") == "Settings"
+
+
 def test_english_ui_labels_cover_sort_and_chip_controls(qapp) -> None:
     from desktop.settings.app_settings import AppSettings, save_app_settings
 
@@ -5302,10 +5325,11 @@ def test_watched_window_includes_candidate_tabs() -> None:
     assert "CandidateFiltersView" in factory_source
     assert "CandidateListView" in factory_source
     assert "SettingsTabView" in factory_source
-    assert 'tr("tabs.filters")' in factory_source
-    assert 'tr("tabs.candidates")' in factory_source
-    assert 'tr("tabs.watched")' in factory_source
-    assert 'tr("tabs.settings")' in factory_source
+    assert "load_desktop_language_context" in factory_source
+    assert 'languages.tr("tabs.filters")' in factory_source
+    assert 'languages.tr("tabs.candidates")' in factory_source
+    assert 'languages.tr("tabs.watched")' in factory_source
+    assert 'languages.tr("tabs.settings")' in factory_source
     assert '"Информация"' not in factory_source
     assert '"Watched"' not in factory_source
     assert '"Analytics"' not in factory_source
@@ -5395,8 +5419,7 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
 def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> None:
     from PyQt6.QtWidgets import QTabWidget, QWidget
 
-    from desktop.settings.app_settings import AppSettings
-    import desktop.i18n.translator as translator_module
+    from desktop.language_context import DesktopLanguageContext
     import desktop.shell.tabs as tabs_module
 
     class FakeWatchedTabView:
@@ -5419,17 +5442,16 @@ def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> N
     monkeypatch.setattr(tabs_module, "CandidateFiltersView", FakeSimpleTabView)
     monkeypatch.setattr(tabs_module, "CandidateListView", FakeSimpleTabView)
     monkeypatch.setattr(tabs_module, "SettingsTabView", FakeSimpleTabView)
-    monkeypatch.setattr(
-        translator_module,
-        "load_app_settings",
-        lambda: AppSettings(interface_language="en", data_language="ru"),
-    )
-
     tabs = QTabWidget()
     registry, _context = tabs_module.build_main_tabs(
         tabs,
         QWidget(),
         on_status_message=lambda _message, _timeout_ms: None,
+        language_context=DesktopLanguageContext(
+            interface_language="en",
+            data_language="ru",
+            tmdb_locale="ru-RU",
+        ),
     )
 
     assert [tabs.tabText(index) for index in range(tabs.count())] == [
