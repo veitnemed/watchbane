@@ -31,6 +31,7 @@ from desktop.candidates.presenters import (
     candidate_sort_mode_label,
     candidate_poster_url_for_download,
 )
+from candidates.pool.localized_posters import ensure_candidate_localized_poster
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language
@@ -83,7 +84,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._detail_entries: dict[str, tuple] = {}
         self._poster_request_seq = 0
         self._poster_worker = None
-        self._model = CandidateListModel(parent=None)
+        self._model = CandidateListModel(parent=None, data_language=self._data_language)
         self._delegate = None
 
         self._widget = QWidget()
@@ -233,6 +234,7 @@ class CandidateListView(CandidateListActionsMixin):
             return
         self._data_language = data_language
         self._detail_entries = {}
+        self._model.set_data_language(data_language)
         self._rebuild_list_delegate()
 
     def _apply_visible_candidates(self) -> None:
@@ -339,7 +341,7 @@ class CandidateListView(CandidateListActionsMixin):
                 self._clear_detail(show_filters_hint=not self._session.has_results)
             return
 
-        candidate = self._candidates[row]
+        candidate = self._candidate_with_current_language_poster(self._candidates[row])
         self._selected_candidate = candidate
         self._selected_identity = candidate_detail_identity(candidate)
         lookup_done = perf_counter()
@@ -361,7 +363,10 @@ class CandidateListView(CandidateListActionsMixin):
         self._detail_card.show_entry(entry)
         render_done = perf_counter()
 
-        poster_url = candidate_poster_url_for_download(candidate)
+        poster_url = candidate_poster_url_for_download(
+            candidate,
+            data_language=self._data_language,
+        )
         if poster_url not in (None, ""):
             self._start_poster_download(poster_url, identity, request_seq)
 
@@ -375,6 +380,25 @@ class CandidateListView(CandidateListActionsMixin):
                 (render_done - build_done) * 1000,
                 total_ms,
             )
+
+    def _candidate_with_current_language_poster(self, candidate: dict) -> dict:
+        try:
+            updated_candidate, changed = ensure_candidate_localized_poster(
+                candidate,
+                data_language=self._data_language,
+            )
+        except Exception:
+            return candidate
+
+        if changed is not True or not isinstance(updated_candidate, dict):
+            return candidate
+
+        identity = candidate_detail_identity(candidate)
+        candidate.clear()
+        candidate.update(updated_candidate)
+        self._detail_entries.pop(identity, None)
+        self._model.update_poster_path(identity, None)
+        return candidate
 
     def _on_loading_changed(self) -> None:
         if self._session.is_loading:

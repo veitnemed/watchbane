@@ -1159,6 +1159,72 @@ def test_poster_cache_uses_localized_language_and_drops_stale_local_path(monkeyp
     assert stale_local.exists() is False
 
 
+def test_sync_poster_for_display_fetches_missing_language_poster_from_tmdb(monkeypatch, tmp_path) -> None:
+    from dataset.read_models import watched as watched_read_model
+    from posters import cache as poster_cache_module
+
+    monkeypatch.setattr(poster_cache_module, "DEFAULT_POSTER_IMAGES_DIR", tmp_path)
+    movie = {"main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5}}
+    meta_store = {
+        "Naruto": {
+            "tmdb_id": 46260,
+            "poster_url": "https://image.tmdb.org/t/p/w342/naruto_ru.jpg",
+        }
+    }
+    poster_cache = {
+        poster_cache_module.poster_identity_key("Naruto", 2002): {
+            "title": "Naruto",
+            "year": 2002,
+            "status": "found",
+            "poster_url": "https://image.tmdb.org/t/p/w342/naruto_ru.jpg",
+            "local_path": None,
+        }
+    }
+    details_calls = []
+    download_calls = []
+
+    monkeypatch.setattr(watched_read_model.storage_data, "get_meta_obj", lambda _title: meta_store["Naruto"])
+    monkeypatch.setattr(watched_read_model.storage_data, "load_meta", lambda: copy.deepcopy(meta_store))
+    monkeypatch.setattr(watched_read_model.storage_data, "save_meta", lambda meta: meta_store.update(meta))
+    monkeypatch.setattr(watched_read_model, "_get_poster_cache", lambda: poster_cache)
+    monkeypatch.setattr(watched_read_model, "reload_poster_cache", lambda: poster_cache)
+    monkeypatch.setattr(poster_cache_module, "load_poster_cache", lambda: poster_cache)
+    monkeypatch.setattr(poster_cache_module, "save_poster_cache", lambda cache: poster_cache.update(cache))
+
+    def fake_get_tv_details(tmdb_id, *, language=None, append_to_response=None, **_kwargs):
+        details_calls.append((tmdb_id, language, append_to_response))
+        return {
+            "id": 46260,
+            "name": "Naruto",
+            "overview": "English Naruto overview.",
+            "images": {
+                "posters": [
+                    {
+                        "file_path": "/naruto_en.jpg",
+                        "iso_639_1": "en",
+                        "vote_average": 8.0,
+                        "vote_count": 10,
+                    }
+                ],
+            },
+        }
+
+    def fake_download(title, year):
+        download_calls.append((title, year))
+        return {"ok": True, "reason": "downloaded", "local_path": str(tmp_path / "naruto.jpg")}
+
+    monkeypatch.setattr("apis.tmdb_api.get_tv_details", fake_get_tv_details)
+    monkeypatch.setattr("posters.download_images.download_poster_for_title", fake_download)
+
+    result = watched_read_model.sync_poster_for_display(movie, data_language="en")
+
+    assert result["meta_updated"] is True
+    assert details_calls[0][0:2] == (46260, "en-US")
+    assert meta_store["Naruto"]["localized"]["en"]["poster_path"] == "/naruto_en.jpg"
+    assert result["entry"]["poster_url"] == "https://image.tmdb.org/t/p/original/naruto_en.jpg"
+    assert download_calls == [("Naruto", 2002)]
+
+
 def test_build_watched_movie_card_uses_localized_meta_fallback_for_english() -> None:
     from common.cards import build_watched_movie_card
 
@@ -4621,6 +4687,165 @@ def test_build_candidate_readonly_card_respects_data_language(monkeypatch) -> No
     assert en_card["genres"] == ["Drama"]
 
 
+def test_build_candidate_readonly_card_uses_localized_poster_for_data_language(monkeypatch) -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_card
+
+    monkeypatch.setattr(
+        "desktop.candidates.presenters.resolve_local_poster_path_for_candidate",
+        lambda candidate, data_language="ru": None,
+    )
+    candidate = {
+        "title": "Pool Show",
+        "year": 2020,
+        "poster_url": "https://image.tmdb.org/t/p/original/ru.jpg",
+        "localized": {
+            "en": {
+                "title": "Pool Show",
+                "poster_path": "/en.jpg",
+                "poster_url": "https://image.tmdb.org/t/p/original/en.jpg",
+            }
+        },
+    }
+
+    card = build_candidate_readonly_card(candidate, data_language="en")
+
+    assert card["poster_url"] == "https://image.tmdb.org/t/p/original/en.jpg"
+    assert card["poster_path"] == "/en.jpg"
+
+
+def test_candidate_poster_url_for_download_uses_data_language_localized_url(monkeypatch) -> None:
+    from desktop.candidates.presenters import candidate_poster_url_for_download
+
+    monkeypatch.setattr(
+        "desktop.candidates.presenters.resolve_local_poster_path_for_candidate",
+        lambda candidate, data_language="ru": None,
+    )
+    candidate = {
+        "title": "Pool Show",
+        "year": 2020,
+        "poster_url": "https://image.tmdb.org/t/p/original/ru.jpg",
+        "localized": {
+            "en": {
+                "poster_path": "/en.jpg",
+                "poster_url": "https://image.tmdb.org/t/p/original/en.jpg",
+            }
+        },
+    }
+
+    assert (
+        candidate_poster_url_for_download(candidate, data_language="en")
+        == "https://image.tmdb.org/t/p/original/en.jpg"
+    )
+
+
+def test_candidate_localized_poster_enrichment_persists_pool(monkeypatch) -> None:
+    from candidates.pool import localized_posters
+
+    pool = {
+        "pool show|2020": {
+            "pool_entry_key": "pool show|2020",
+            "title": "Pool Show",
+            "year": 2020,
+            "tmdb_id": 101,
+            "poster_url": "https://image.tmdb.org/t/p/original/ru.jpg",
+        }
+    }
+    saved = {}
+
+    monkeypatch.setattr(localized_posters.pool_repository, "load_candidate_pool", lambda: copy.deepcopy(pool))
+    monkeypatch.setattr(localized_posters.pool_repository, "save_candidate_pool", lambda data: saved.update(data))
+
+    def fake_details(tmdb_id, *, language=None, append_to_response=None):
+        assert (tmdb_id, language) == (101, "en-US")
+        return {
+            "id": 101,
+            "name": "Pool Show",
+            "images": {
+                "posters": [
+                    {
+                        "file_path": "/en.jpg",
+                        "iso_639_1": "en",
+                        "vote_average": 8.0,
+                        "vote_count": 10,
+                    }
+                ],
+            },
+        }
+
+    updated, changed = localized_posters.ensure_candidate_localized_poster(
+        pool["pool show|2020"],
+        data_language="en",
+        details_func=fake_details,
+    )
+
+    assert changed is True
+    assert updated["localized"]["en"]["poster_path"] == "/en.jpg"
+    assert saved["pool show|2020"]["localized"]["en"]["poster_url"] == "https://image.tmdb.org/t/p/original/en.jpg"
+
+
+def test_candidate_list_model_resets_poster_cache_on_data_language_change(monkeypatch, qapp) -> None:
+    from desktop.candidates.list_model import CandidateListModel
+
+    calls = []
+
+    def fake_resolve(candidate, data_language="ru"):
+        calls.append(data_language)
+        return f"{data_language}.jpg"
+
+    monkeypatch.setattr(
+        "desktop.candidates.list_model.resolve_local_poster_path_for_candidate",
+        fake_resolve,
+    )
+    candidate = {"title": "Pool Show", "year": 2020}
+    model = CandidateListModel([candidate], data_language="ru")
+
+    assert model.poster_path_for_candidate(candidate) == "ru.jpg"
+    assert model.poster_path_for_candidate(candidate) == "ru.jpg"
+    model.set_data_language("en")
+
+    assert model.poster_path_for_candidate(candidate) == "en.jpg"
+    assert calls == ["ru", "en"]
+
+
+def test_candidate_list_view_selection_enriches_missing_language_poster(monkeypatch) -> None:
+    from desktop.candidates.list_view import CandidateListView
+
+    candidate = {"title": "Pool Show", "year": 2020, "tmdb_id": 101}
+    view = CandidateListView.__new__(CandidateListView)
+    view._data_language = "en"
+    view._detail_entries = {"Pool Show": ("key", {}, {})}
+    calls = {}
+
+    class FakeModel:
+        def update_poster_path(self, identity, path):
+            calls["model"] = (identity, path)
+
+    def fake_ensure(candidate_arg, *, data_language="ru"):
+        calls["ensure"] = (candidate_arg, data_language)
+        return (
+            {
+                **candidate_arg,
+                "localized": {
+                    "en": {
+                        "poster_url": "https://image.tmdb.org/t/p/original/en.jpg",
+                    }
+                },
+            },
+            True,
+        )
+
+    view._model = FakeModel()
+    monkeypatch.setattr("desktop.candidates.list_view.ensure_candidate_localized_poster", fake_ensure)
+
+    updated = view._candidate_with_current_language_poster(candidate)
+
+    assert calls["ensure"] == (candidate, "en")
+    assert updated is candidate
+    assert candidate["localized"]["en"]["poster_url"].endswith("/en.jpg")
+    assert calls["model"] == ("Pool Show", None)
+    assert view._detail_entries == {}
+
+
 def test_build_candidate_readonly_card_normalizes_country_for_display(monkeypatch) -> None:
     from desktop.candidates.presenters import build_candidate_readonly_card
 
@@ -5549,10 +5774,33 @@ def test_watched_tab_selection_lazily_syncs_current_language_poster(monkeypatch)
     from desktop.watched.tab import WatchedTabView
 
     movie = {"main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5}}
+    item_data = {}
+
+    class FakeItem:
+        def setData(self, role, value):
+            item_data["data"] = (role, value)
+
+        def setToolTip(self, value):
+            item_data["tooltip"] = value
+
+    class FakeListWidget:
+        def count(self):
+            return 1
+
+        def item(self, row):
+            return FakeItem() if row == 0 else None
+
+        def viewport(self):
+            return self
+
+        def update(self):
+            item_data["updated"] = True
+
     view = WatchedTabView.__new__(WatchedTabView)
     view._data_language = "en"
     view._visible_entries = [("Naruto", movie, {"title": "Naruto", "poster_src": "ru.jpg"})]
     view._entries = list(view._visible_entries)
+    view._list_widget = FakeListWidget()
     calls = {}
 
     def fake_sync(movie_arg, *, data_language="ru"):
@@ -5573,6 +5821,80 @@ def test_watched_tab_selection_lazily_syncs_current_language_poster(monkeypatch)
     assert updated[2]["poster_src"] == "en.jpg"
     assert view._visible_entries[0] == updated
     assert view._entries[0] == updated
+    assert item_data["data"][1] == updated
+    assert item_data["updated"] is True
+
+
+def test_watched_tab_selection_clears_replaced_poster_pixmap_cache(monkeypatch) -> None:
+    from desktop.watched.tab import WatchedTabView
+
+    movie = {"main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5}}
+
+    class FakeItem:
+        def setData(self, _role, _value):
+            pass
+
+        def setToolTip(self, _value):
+            pass
+
+    class FakeListWidget:
+        def count(self):
+            return 1
+
+        def item(self, row):
+            return FakeItem() if row == 0 else None
+
+        def viewport(self):
+            return self
+
+        def update(self):
+            pass
+
+    view = WatchedTabView.__new__(WatchedTabView)
+    view._data_language = "en"
+    view._visible_entries = [("Naruto", movie, {"title": "Naruto", "poster_src": "ru.jpg"})]
+    view._entries = list(view._visible_entries)
+    view._list_widget = FakeListWidget()
+    cleared = []
+
+    monkeypatch.setattr(
+        "desktop.watched.tab.sync_poster_for_display",
+        lambda movie_arg, *, data_language="ru": {
+            "updated": True,
+            "download": {"local_path": "poster.jpg"},
+            "entry": {"local_path": "poster.jpg"},
+        },
+    )
+    monkeypatch.setattr(
+        "desktop.watched.tab.prepare_card_for_display",
+        lambda movie_arg, *, data_language="ru": {"title": "Naruto", "poster_src": "poster.jpg"},
+    )
+    monkeypatch.setattr(
+        "desktop.watched.tab.clear_detail_poster_source_cache",
+        lambda path=None: cleared.append(("detail", path)),
+    )
+    monkeypatch.setattr(
+        "desktop.watched.tab.clear_list_thumb_pixmap_cache",
+        lambda path=None: cleared.append(("list", path)),
+    )
+
+    view._entry_with_current_language_poster(0)
+
+    assert ("detail", "poster.jpg") in cleared
+    assert ("list", "poster.jpg") in cleared
+
+
+def test_poster_pixmap_cache_clear_helpers() -> None:
+    from desktop.shared.detail import card_poster, list_delegate
+
+    card_poster._detail_poster_source_cache["poster.jpg"] = object()
+    list_delegate._thumb_pixmap_cache["poster.jpg"] = object()
+
+    card_poster.clear_detail_poster_source_cache("poster.jpg")
+    list_delegate.clear_list_thumb_pixmap_cache("poster.jpg")
+
+    assert "poster.jpg" not in card_poster._detail_poster_source_cache
+    assert "poster.jpg" not in list_delegate._thumb_pixmap_cache
 
 
 def test_candidate_list_view_uses_list_search_module() -> None:

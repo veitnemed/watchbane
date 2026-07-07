@@ -134,23 +134,36 @@ def candidate_detail_identity(candidate: dict) -> str:
     return str(candidate.get("pool_entry_key") or candidate.get("title") or "candidate")
 
 
-def resolve_local_poster_path_for_candidate(candidate: dict) -> str | None:
+def _candidate_poster_hints(candidate: dict, data_language: str = "ru") -> dict:
+    return build_poster_hints_from_candidate(
+        candidate,
+        data_language=normalize_data_language(data_language),
+    )
+
+
+def resolve_local_poster_path_for_candidate(candidate: dict, data_language: str = "ru") -> str | None:
     """Return a local poster path from pool fields. Never downloads or uses network."""
     from desktop.shared.detail.posters import resolve_local_poster_path_from_record
 
+    hints = _candidate_poster_hints(candidate, data_language=data_language)
     return resolve_local_poster_path_from_record(
         candidate,
+        card={
+            "poster_url": hints.get("poster_url"),
+            "poster_path": hints.get("poster_path"),
+            "poster_src": hints.get("poster_path"),
+        },
         title=candidate.get("title") or candidate.get("name"),
         year=candidate.get("year"),
     )
 
 
-def candidate_poster_url_for_download(candidate: dict) -> str | None:
+def candidate_poster_url_for_download(candidate: dict, data_language: str = "ru") -> str | None:
     """Return poster URL when local preview file is missing."""
-    if resolve_local_poster_path_for_candidate(candidate) not in (None, ""):
+    if resolve_local_poster_path_for_candidate(candidate, data_language=data_language) not in (None, ""):
         return None
 
-    hints = build_poster_hints_from_candidate(candidate)
+    hints = _candidate_poster_hints(candidate, data_language=data_language)
     poster_url = hints.get("poster_url")
     if poster_url in (None, ""):
         return None
@@ -210,7 +223,16 @@ def build_candidate_readonly_card(candidate: dict, data_language: str = "ru") ->
     if len(genres_display) > 0:
         card["genres"] = genres_display
 
-    local_poster = resolve_local_poster_path_for_candidate(candidate)
+    poster_hints = _candidate_poster_hints(candidate, data_language=language)
+    if poster_hints.get("poster_url") not in (None, ""):
+        card["poster_url"] = poster_hints.get("poster_url")
+    if poster_hints.get("poster_path") not in (None, ""):
+        card["poster_path"] = poster_hints.get("poster_path")
+
+    try:
+        local_poster = resolve_local_poster_path_for_candidate(candidate, data_language=language)
+    except TypeError:
+        local_poster = resolve_local_poster_path_for_candidate(candidate)
     if local_poster not in (None, ""):
         card["poster_path"] = local_poster
         card["poster_src"] = local_poster

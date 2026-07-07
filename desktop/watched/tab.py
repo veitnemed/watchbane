@@ -10,6 +10,8 @@ from PyQt6.QtWidgets import QHBoxLayout, QScrollArea, QSplitter, QWidget
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language
 from desktop.shared.detail import DetailCard
+from desktop.shared.detail.card_poster import clear_detail_poster_source_cache
+from desktop.shared.detail.list_delegate import clear_list_thumb_pixmap_cache
 from desktop.shared.widgets.list_search import resolve_selection_row
 from desktop.theme.shell_layout import (
     DETAIL_TAB_TOP_MARGIN_PX,
@@ -263,17 +265,44 @@ class WatchedTabView(WatchedTabActionsMixin):
         if result.get("updated") is not True:
             return entry
 
+        self._clear_replaced_poster_pixmap_cache(result)
         updated_entry = (
             key,
             movie,
             prepare_card_for_display(movie, data_language=self._data_language),
         )
         self._visible_entries[row] = updated_entry
+        self._update_list_item_entry(row, updated_entry)
         for index, existing in enumerate(self._entries):
             if existing[0] == key:
                 self._entries[index] = updated_entry
                 break
         return updated_entry
+
+    def _update_list_item_entry(self, row: int, entry: WatchedEntry) -> None:
+        if row < 0 or row >= self._list_widget.count():
+            return
+        item = self._list_widget.item(row)
+        if item is None:
+            return
+        item.setData(Qt.ItemDataRole.UserRole, entry)
+        item.setToolTip(format_list_label(entry[2]))
+        self._list_widget.viewport().update()
+
+    def _clear_replaced_poster_pixmap_cache(self, result: dict) -> None:
+        paths = []
+        download = result.get("download")
+        if isinstance(download, dict):
+            paths.append(download.get("local_path"))
+        entry = result.get("entry")
+        if isinstance(entry, dict):
+            paths.append(entry.get("local_path"))
+
+        for path in paths:
+            if path in (None, ""):
+                continue
+            clear_detail_poster_source_cache(str(path))
+            clear_list_thumb_pixmap_cache(str(path))
 
     def _show_empty_details(self) -> None:
         if self._search_input.text().strip():

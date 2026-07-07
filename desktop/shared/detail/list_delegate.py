@@ -21,6 +21,14 @@ from desktop.theme.scaling import list_px
 _thumb_pixmap_cache: dict[str, object] = {}
 
 
+def clear_list_thumb_pixmap_cache(poster_path: str | None = None) -> None:
+    """Clear cached list thumbnail pixmaps after a local poster file is replaced."""
+    if poster_path in (None, ""):
+        _thumb_pixmap_cache.clear()
+        return
+    _thumb_pixmap_cache.pop(str(poster_path), None)
+
+
 def fit_poster_pixmap_for_display(pixmap, max_width: int, max_height: int):
     """Fit a poster into the display box without unnecessary upscale blur."""
     from PyQt6.QtCore import Qt

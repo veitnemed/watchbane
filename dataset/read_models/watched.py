@@ -6,6 +6,7 @@ from copy import deepcopy
 
 from candidates.models.keys import title_identity_key
 from common.cards import build_watched_movie_card
+from dataset.language import normalize_data_language, tmdb_locale_for_data_language
 from storage import data as storage_data
 
 WatchedEntry = tuple[str, dict, dict]
@@ -108,6 +109,101 @@ def _movie_title_year(movie: dict) -> tuple[str, object]:
     return title, year
 
 
+def _localized_poster_available(record: dict | None, data_language: str) -> bool:
+    if isinstance(record, dict) is False:
+        return False
+    localized = record.get("localized") if isinstance(record.get("localized"), dict) else {}
+    block = localized.get(normalize_data_language(data_language))
+    if isinstance(block, dict) is False:
+        return False
+    return any(block.get(key) not in (None, "") for key in ("poster_url", "poster_path"))
+
+
+def _tmdb_id_from_meta(meta_obj: dict | None):
+    if isinstance(meta_obj, dict) is False:
+        return None
+    if meta_obj.get("tmdb_id") not in (None, ""):
+        return meta_obj.get("tmdb_id")
+    tmdb_data = meta_obj.get("tmdb_data")
+    if isinstance(tmdb_data, dict):
+        return tmdb_data.get("id") or tmdb_data.get("tmdb_id")
+    return None
+
+
+def _merge_localized_blocks(record: dict, blocks: dict) -> dict:
+    updated = deepcopy(record)
+    localized = updated.setdefault("localized", {})
+    if isinstance(localized, dict) is False:
+        localized = {}
+        updated["localized"] = localized
+
+    for language, block in blocks.items():
+        if isinstance(block, dict) is False:
+            continue
+        language_block = localized.setdefault(normalize_data_language(language), {})
+        if isinstance(language_block, dict) is False:
+            language_block = {}
+            localized[normalize_data_language(language)] = language_block
+        for field_name, value in block.items():
+            if value in (None, ""):
+                continue
+            if field_name in {"poster_path", "poster_url"} or language_block.get(field_name) in (None, ""):
+                language_block[field_name] = value
+    return updated
+
+
+def _find_meta_key(meta: dict, title: str) -> str | None:
+    expected = str(title or "").strip().casefold()
+    for key in meta.keys():
+        if str(key).strip().casefold() == expected:
+            return key
+    return None
+
+
+def _ensure_tmdb_localized_poster_in_meta(
+    title: str,
+    meta_obj: dict | None,
+    data_language: str,
+) -> tuple[dict | None, bool]:
+    """Fetch and persist localized poster metadata for old records on demand."""
+    language = normalize_data_language(data_language)
+    if _localized_poster_available(meta_obj, language):
+        return meta_obj, False
+
+    tmdb_id = _tmdb_id_from_meta(meta_obj)
+    if tmdb_id in (None, ""):
+        return meta_obj, False
+
+    from apis import tmdb_api
+    from dataset.tmdb_localized import localized_blocks_from_tmdb_details
+
+    details = tmdb_api.get_tv_details(
+        int(tmdb_id),
+        language=tmdb_locale_for_data_language(language),
+        append_to_response=tmdb_api.DEFAULT_TV_DETAIL_APPENDS,
+    )
+    blocks = localized_blocks_from_tmdb_details(details, current_language=language)
+    if _localized_poster_available({"localized": blocks}, language) is False:
+        return meta_obj, False
+
+    updated_meta_obj = _merge_localized_blocks(dict(meta_obj or {}), blocks)
+    try:
+        meta = storage_data.load_meta()
+        meta_key = _find_meta_key(meta, title)
+        if meta_key is not None:
+            meta[meta_key] = _merge_localized_blocks(
+                meta[meta_key] if isinstance(meta[meta_key], dict) else {},
+                blocks,
+            )
+            storage_data.save_meta(meta)
+            global _lookup_cache
+            _lookup_cache = None
+            return meta[meta_key], True
+    except Exception:
+        return updated_meta_obj, True
+    return updated_meta_obj, True
+
+
 def sync_poster_for_display(movie: dict, data_language: str = "ru") -> dict:
     """Best-effort lazy poster sync for the current data language."""
     title, year = _movie_title_year(movie)
@@ -120,6 +216,7 @@ def sync_poster_for_display(movie: dict, data_language: str = "ru") -> dict:
     cache_before = _get_poster_cache()
     before = lookup_poster_cache_entry(title, year, cache=cache_before) or {}
     meta_obj = storage_data.get_meta_obj(title)
+    meta_obj, meta_updated = _ensure_tmdb_localized_poster_in_meta(title, meta_obj, data_language)
     entry = sync_poster_cache_from_meta_and_sources(
         title,
         year,
@@ -136,7 +233,8 @@ def sync_poster_for_display(movie: dict, data_language: str = "ru") -> dict:
         download = download_poster_for_title(title, year)
     reload_poster_cache()
     return {
-        "updated": bool(poster_changed or needs_download),
+        "updated": bool(meta_updated or poster_changed or needs_download),
+        "meta_updated": meta_updated,
         "poster_changed": poster_changed,
         "download": download,
         "entry": entry,

@@ -9,6 +9,14 @@ from desktop.theme import build_poster_image_style, build_poster_placeholder_sty
 _detail_poster_source_cache: dict[str, object] = {}
 
 
+def clear_detail_poster_source_cache(poster_path: str | None = None) -> None:
+    """Clear cached detail poster pixmaps after a local poster file is replaced."""
+    if poster_path in (None, ""):
+        _detail_poster_source_cache.clear()
+        return
+    _detail_poster_source_cache.pop(str(poster_path), None)
+
+
 def load_detail_poster_source_pixmap(poster_path: str):
     from PyQt6.QtGui import QPixmap
 

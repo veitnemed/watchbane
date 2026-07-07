@@ -20,10 +20,16 @@ class CandidateListRoles:
 class CandidateListModel(QAbstractListModel):
     """List model that keeps candidate rows and caches poster path lookups."""
 
-    def __init__(self, candidates: list[dict] | None = None, parent=None) -> None:
+    def __init__(
+        self,
+        candidates: list[dict] | None = None,
+        parent=None,
+        data_language: str = "ru",
+    ) -> None:
         super().__init__(parent)
         self._candidates: list[dict] = []
         self._poster_paths_by_identity: dict[str, str | None] = {}
+        self._data_language = str(data_language or "ru")
         if candidates:
             self.set_candidates(candidates)
 
@@ -70,6 +76,18 @@ class CandidateListModel(QAbstractListModel):
         }
         self.endResetModel()
 
+    def set_data_language(self, data_language: str) -> None:
+        language = str(data_language or "ru")
+        if language == self._data_language:
+            return
+        self._data_language = language
+        self._poster_paths_by_identity = {}
+        if len(self._candidates) == 0:
+            return
+        top_left = self.index(0, 0)
+        bottom_right = self.index(len(self._candidates) - 1, 0)
+        self.dataChanged.emit(top_left, bottom_right, [CandidateListRoles.PosterPathRole])
+
     def candidate_at(self, row: int) -> dict | None:
         if row < 0 or row >= len(self._candidates):
             return None
@@ -86,7 +104,10 @@ class CandidateListModel(QAbstractListModel):
     def poster_path_for_candidate(self, candidate: dict) -> str | None:
         identity = candidate_detail_identity(candidate)
         if identity not in self._poster_paths_by_identity:
-            self._poster_paths_by_identity[identity] = resolve_local_poster_path_for_candidate(candidate)
+            self._poster_paths_by_identity[identity] = resolve_local_poster_path_for_candidate(
+                candidate,
+                data_language=self._data_language,
+            )
         return self._poster_paths_by_identity.get(identity)
 
     def update_poster_path(self, identity: str, path: str | None) -> None:

@@ -179,6 +179,9 @@ def extract_existing_poster_info(movie: dict, *, data_language: str | None = Non
         section = _section(search_movie, section_name)
         if len(section) == 0:
             continue
+        localized_section_poster = _localized_poster_info(section, data_language)
+        if localized_section_poster is not None:
+            return localized_section_poster
 
         poster_url, url_field = _first_in_section(section, POSTER_URL_FIELDS)
         if poster_url is not None:
