@@ -101,10 +101,53 @@ def prepare_card_for_display(movie: dict, data_language: str = "ru") -> dict:
     return card
 
 
+def _movie_title_year(movie: dict) -> tuple[str, object]:
+    main_info = movie.get("main_info") if isinstance(movie.get("main_info"), dict) else {}
+    title = str(main_info.get("title") or movie.get("title") or "").strip()
+    year = main_info.get("year", movie.get("year"))
+    return title, year
+
+
+def sync_poster_for_display(movie: dict, data_language: str = "ru") -> dict:
+    """Best-effort lazy poster sync for the current data language."""
+    title, year = _movie_title_year(movie)
+    if title == "":
+        return {"updated": False, "reason": "missing_title"}
+
+    from posters.cache import lookup_poster_cache_entry, sync_poster_cache_from_meta_and_sources
+    from posters.download_images import download_poster_for_title
+
+    cache_before = _get_poster_cache()
+    before = lookup_poster_cache_entry(title, year, cache=cache_before) or {}
+    meta_obj = storage_data.get_meta_obj(title)
+    entry = sync_poster_cache_from_meta_and_sources(
+        title,
+        year,
+        meta_obj=meta_obj,
+        movie=movie,
+        data_language=data_language,
+    )
+    poster_changed = before.get("poster_url") != entry.get("poster_url")
+    needs_download = entry.get("status") == "found" and (
+        poster_changed or entry.get("local_path") in (None, "")
+    )
+    download = None
+    if needs_download:
+        download = download_poster_for_title(title, year)
+    reload_poster_cache()
+    return {
+        "updated": bool(poster_changed or needs_download),
+        "poster_changed": poster_changed,
+        "download": download,
+        "entry": entry,
+    }
+
+
 __all__ = [
     "WatchedEntry",
     "build_watched_lookup_cache",
     "load_watched_entries",
     "prepare_card_for_display",
     "reload_poster_cache",
+    "sync_poster_for_display",
 ]

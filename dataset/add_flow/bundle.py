@@ -48,7 +48,10 @@ def build_add_title_resolve_bundle(resolved: dict, data_language: str = "ru") ->
         defaults = title_resolve.build_empty_add_defaults(resolved["title"])
 
     meta_payload = title_resolve.build_add_meta_payload(resolved)
-    poster_hints = title_resolve.build_poster_hints_from_resolve(resolved)
+    poster_hints = title_resolve.build_poster_hints_from_resolve(
+        resolved,
+        data_language=data_language,
+    )
     preview_movie = build_preview_movie_from_defaults(defaults)
     preview_card = build_preview_card_from_defaults(
         defaults,

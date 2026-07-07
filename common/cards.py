@@ -90,14 +90,37 @@ def _first_text(movie: dict, *field_names: str) -> str | None:
     return None
 
 
-def _poster_url(movie: dict) -> str | None:
+def _localized_poster_value(movie: dict, data_language: str, *field_names: str) -> str | None:
+    localized = _as_dict(movie.get("localized"))
+    block = _as_dict(localized.get(normalize_data_language(data_language)))
+    for field_name in field_names:
+        text = _clean_text(block.get(field_name))
+        if text is not None:
+            return text
+    return None
+
+
+def _poster_url(movie: dict, data_language: str = "ru") -> str | None:
+    localized = _localized_poster_value(
+        movie,
+        data_language,
+        "poster_url",
+        "posterUrl",
+        "preview_url",
+        "previewUrl",
+    )
+    if localized is not None:
+        return localized
     poster = _as_dict(movie.get("poster"))
     return _first_text(movie, "poster_url", "posterUrl", "preview_url", "previewUrl") or _clean_text(
         poster.get("url") or poster.get("previewUrl")
     )
 
 
-def _poster_path(movie: dict) -> str | None:
+def _poster_path(movie: dict, data_language: str = "ru") -> str | None:
+    localized = _localized_poster_value(movie, data_language, "poster_path", "posterPath")
+    if localized is not None:
+        return localized
     poster = _as_dict(movie.get("poster"))
     return _first_text(movie, "poster_path", "posterPath") or _clean_text(
         poster.get("path") or poster.get("poster_path")
@@ -114,15 +137,20 @@ def _local_poster_path(value: str | None) -> str | None:
     return str(path) if path.is_file() else None
 
 
-def _resolve_poster_fields(movie: dict, poster_cache: dict | None = None) -> dict:
-    poster_url = _poster_url(movie)
-    poster_path = _poster_path(movie)
+def _resolve_poster_fields(
+    movie: dict,
+    poster_cache: dict | None = None,
+    data_language: str = "ru",
+) -> dict:
+    poster_url = _poster_url(movie, data_language=data_language)
+    poster_path = _poster_path(movie, data_language=data_language)
     poster_source = "existing_field" if poster_url or poster_path else None
 
     main_info = _as_dict(movie.get("main_info"))
     title = _clean_text(main_info.get("title")) or _clean_text(movie.get("title")) or ""
     year = _to_int(main_info.get("year", movie.get("year")))
     cache_entry = lookup_poster_cache_entry(title, year, cache=poster_cache)
+    cache_poster_url = _clean_text(cache_entry.get("poster_url")) if cache_entry else None
 
     if cache_entry and cache_entry.get("status") == "found":
         if poster_url is None:
@@ -133,9 +161,10 @@ def _resolve_poster_fields(movie: dict, poster_cache: dict | None = None) -> dic
             poster_source = _clean_text(cache_entry.get("source")) or "poster_cache"
 
     local_path = _local_poster_path(poster_path)
-    if local_path is None and cache_entry:
+    cache_matches_requested_url = poster_url is None or cache_poster_url in (None, poster_url)
+    if local_path is None and cache_entry and cache_matches_requested_url:
         local_path = _local_poster_path(cache_entry.get("local_path"))
-    if local_path is None and title:
+    if local_path is None and title and cache_matches_requested_url:
         from posters.cache import default_local_poster_path
 
         local_path = default_local_poster_path(title, year)
@@ -462,7 +491,7 @@ def build_watched_movie_card(
     raw_scores = _as_dict(movie.get("raw_scores"))
     legacy_title = _clean_text(main_info.get("title")) or _clean_text(movie.get("title")) or ""
     year = _to_int(main_info.get("year", movie.get("year")))
-    poster_fields = _resolve_poster_fields(movie, poster_cache=poster_cache)
+    poster_fields = _resolve_poster_fields(movie, poster_cache=poster_cache, data_language=language)
     resolved_meta = _meta_obj_for_title(legacy_title, lookup_cache, meta_obj=meta_obj)
     pool_candidate = _pool_candidate_for_title(legacy_title, year, lookup_cache)
     title = (

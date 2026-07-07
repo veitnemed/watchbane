@@ -317,6 +317,121 @@ def test_add_title_resolve_fallback_search_keeps_english_naruto_title() -> None:
     assert result["defaults"]["localized"]["en"]["overview"].startswith("Naruto Uzumaki")
 
 
+def test_add_title_resolve_builds_ru_and_en_localized_blocks_from_tmdb_details() -> None:
+    from dataset.resolve import service as resolve_service
+
+    def fake_search(title, *, language=None):
+        assert language == "en-US"
+        return [{"id": 46260, "name": "Naruto"}]
+
+    def fake_details(tmdb_id, *, language=None, **kwargs):
+        assert tmdb_id == 46260
+        assert language == "en-US"
+        assert kwargs["append_to_response"] == resolve_service.api_tmdb.DEFAULT_TV_DETAIL_APPENDS
+        return {
+            "id": 46260,
+            "name": "Naruto",
+            "original_name": "\u30ca\u30eb\u30c8",
+            "first_air_date": "2002-10-03",
+            "origin_country": ["JP"],
+            "production_countries": [{"iso_3166_1": "JP", "name": "Japan"}],
+            "original_language": "ja",
+            "genres": [{"id": 10759, "name": "Action & Adventure"}],
+            "vote_average": 8.4,
+            "vote_count": 5600,
+            "overview": "English Naruto overview.",
+            "poster_path": "/naruto_en_top.jpg",
+            "translations": {
+                "translations": [
+                    {
+                        "iso_639_1": "ru",
+                        "iso_3166_1": "RU",
+                        "data": {
+                            "name": "\u041d\u0430\u0440\u0443\u0442\u043e",
+                            "overview": "\u0420\u0443\u0441\u0441\u043a\u043e\u0435 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u041d\u0430\u0440\u0443\u0442\u043e.",
+                        },
+                    },
+                    {
+                        "iso_639_1": "en",
+                        "iso_3166_1": "US",
+                        "data": {
+                            "name": "Naruto",
+                            "overview": "English Naruto overview.",
+                        },
+                    },
+                ],
+            },
+            "images": {
+                "posters": [
+                    {"file_path": "/naruto_ru.jpg", "iso_639_1": "ru", "vote_average": 8.0, "vote_count": 10},
+                    {"file_path": "/naruto_en.jpg", "iso_639_1": "en", "vote_average": 7.5, "vote_count": 8},
+                ],
+            },
+        }
+
+    result = resolve_service.resolve_title_data_for_add(
+        "\u041d\u0430\u0440\u0443\u0442\u043e",
+        "JP",
+        data_language="en",
+        tmdb_search_func=fake_search,
+        tmdb_choose_func=lambda results, **_kwargs: results[0],
+        tmdb_details_func=fake_details,
+    )
+
+    localized = result["defaults"]["localized"]
+    assert result["defaults"]["main_info"]["title"] == "Naruto"
+    assert localized["en"]["title"] == "Naruto"
+    assert localized["en"]["overview"] == "English Naruto overview."
+    assert localized["en"]["poster_path"] == "/naruto_en.jpg"
+    assert localized["ru"]["title"] == "\u041d\u0430\u0440\u0443\u0442\u043e"
+    assert localized["ru"]["overview"].startswith("\u0420\u0443\u0441\u0441\u043a\u043e\u0435")
+    assert localized["ru"]["poster_path"] == "/naruto_ru.jpg"
+
+
+def test_add_dataset_record_preserves_localized_payload(monkeypatch) -> None:
+    from dataset.records import add as add_module
+
+    raw_scores = {
+        "kp_score": 8.0,
+        "kp_votes": 1000,
+        "imdb_score": 8.1,
+        "imdb_votes": 1000,
+    }
+    payload = {
+        "main_info": {
+            "title": "Naruto",
+            "user_score": 8.5,
+            "year": 2002,
+            "country": "JP",
+        },
+        "raw_scores": raw_scores,
+        constant.TAGS_VIBE_SECTION: {feature: 0 for feature in constant.TAGS_VIBE},
+        constant.GENRE_SECTION: {feature: 0 for feature in constant.GENRE},
+        "localized": {
+            "ru": {
+                "title": "\u041d\u0430\u0440\u0443\u0442\u043e",
+                "overview": "\u0420\u0443\u0441\u0441\u043a\u043e\u0435 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435.",
+            },
+            "en": {
+                "title": "Naruto",
+                "overview": "English overview.",
+            },
+        },
+    }
+    saved = {}
+
+    monkeypatch.setattr(add_module, "load_dataset", lambda: {})
+    monkeypatch.setattr(add_module, "save_dataset", lambda data: saved.update(data))
+    monkeypatch.setattr(add_module, "get_meta_obj", lambda _title: {"raw_scores": raw_scores})
+    monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
+
+    result = add_module.add_dataset_record(payload)
+
+    assert result.ok is True
+    assert saved["Naruto"]["localized"]["ru"]["title"] == "\u041d\u0430\u0440\u0443\u0442\u043e"
+    assert saved["Naruto"]["localized"]["en"]["overview"] == "English overview."
+
+
 def test_tmdb_result_choice_matches_cyrillic_naruto_to_english_name() -> None:
     from dataset.resolve.sources import choose_best_tmdb_result
 
@@ -940,6 +1055,108 @@ def test_build_watched_movie_card_respects_data_language() -> None:
     assert en_card["overview"] == "Русское описание"
     assert en_card["country"] == "Russia"
     assert en_card["genres"] == ["Drama"]
+
+
+def test_build_watched_movie_card_switches_added_title_localized_both_ways() -> None:
+    from common.cards import build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5},
+        "localized": {
+            "ru": {
+                "title": "\u041d\u0430\u0440\u0443\u0442\u043e",
+                "overview": "\u0420\u0443\u0441\u0441\u043a\u043e\u0435 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u041d\u0430\u0440\u0443\u0442\u043e.",
+            },
+            "en": {
+                "title": "Naruto",
+                "overview": "English Naruto overview.",
+            },
+        },
+        "country_codes": ["JP"],
+        "genre_keys": ["action_adventure"],
+    }
+
+    ru_card = build_watched_movie_card(movie, poster_cache={}, data_language="ru")
+    en_card = build_watched_movie_card(movie, poster_cache={}, data_language="en")
+
+    assert ru_card["title"] == "\u041d\u0430\u0440\u0443\u0442\u043e"
+    assert ru_card["overview"].startswith("\u0420\u0443\u0441\u0441\u043a\u043e\u0435")
+    assert en_card["title"] == "Naruto"
+    assert en_card["overview"] == "English Naruto overview."
+
+
+def test_build_watched_movie_card_uses_localized_poster_for_data_language(tmp_path) -> None:
+    from common.cards import build_watched_movie_card
+    from posters.cache import poster_identity_key
+
+    stale_local = tmp_path / "ru-poster.jpg"
+    stale_local.write_bytes(b"poster")
+    identity = poster_identity_key("Naruto", 2002)
+    movie = {
+        "main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5},
+        "poster_url": "https://image.tmdb.org/t/p/w342/naruto_ru.jpg",
+        "localized": {
+            "en": {
+                "title": "Naruto",
+                "poster_path": "/naruto_en.jpg",
+                "poster_url": "https://image.tmdb.org/t/p/w342/naruto_en.jpg",
+            }
+        },
+    }
+    poster_cache = {
+        identity: {
+            "status": "found",
+            "poster_url": "https://image.tmdb.org/t/p/w342/naruto_ru.jpg",
+            "local_path": str(stale_local),
+        }
+    }
+
+    card = build_watched_movie_card(movie, poster_cache=poster_cache, data_language="en")
+
+    assert card["poster_url"] == "https://image.tmdb.org/t/p/w342/naruto_en.jpg"
+    assert card["poster_src"] == "https://image.tmdb.org/t/p/w342/naruto_en.jpg"
+    assert card["poster_src"] != str(stale_local)
+
+
+def test_poster_cache_uses_localized_language_and_drops_stale_local_path(monkeypatch, tmp_path) -> None:
+    from posters import cache as poster_cache_module
+
+    monkeypatch.setattr(poster_cache_module, "DEFAULT_POSTER_IMAGES_DIR", tmp_path)
+    stale_local = tmp_path / "naruto-2002.jpg"
+    stale_local.write_bytes(b"old")
+    identity = poster_cache_module.poster_identity_key("Naruto", 2002)
+    cache = {
+        identity: {
+            "title": "Naruto",
+            "year": 2002,
+            "status": "found",
+            "poster_url": "https://image.tmdb.org/t/p/w342/naruto_ru.jpg",
+            "local_path": str(stale_local),
+        }
+    }
+    movie = {
+        "main_info": {"title": "Naruto", "year": 2002},
+        "localized": {
+            "en": {
+                "poster_path": "/naruto_en.jpg",
+                "poster_url": "https://image.tmdb.org/t/p/w342/naruto_en.jpg",
+            },
+        },
+    }
+
+    entry = poster_cache_module.sync_poster_cache_from_meta_and_sources(
+        "Naruto",
+        2002,
+        movie=movie,
+        cache=cache,
+        persist=False,
+        data_language="en",
+    )
+
+    assert entry["poster_url"] == "https://image.tmdb.org/t/p/w342/naruto_en.jpg"
+    assert entry["poster_path"] == "/naruto_en.jpg"
+    assert entry["local_path"] is None
+    assert stale_local.exists() is False
 
 
 def test_build_watched_movie_card_uses_localized_meta_fallback_for_english() -> None:
@@ -5326,6 +5543,36 @@ def test_watched_tab_reload_entries_rereads_data_language(monkeypatch, qapp) -> 
     view.reload_entries()
 
     assert calls[-1] == "en"
+
+
+def test_watched_tab_selection_lazily_syncs_current_language_poster(monkeypatch) -> None:
+    from desktop.watched.tab import WatchedTabView
+
+    movie = {"main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5}}
+    view = WatchedTabView.__new__(WatchedTabView)
+    view._data_language = "en"
+    view._visible_entries = [("Naruto", movie, {"title": "Naruto", "poster_src": "ru.jpg"})]
+    view._entries = list(view._visible_entries)
+    calls = {}
+
+    def fake_sync(movie_arg, *, data_language="ru"):
+        calls["sync"] = (movie_arg, data_language)
+        return {"updated": True}
+
+    def fake_prepare(movie_arg, *, data_language="ru"):
+        calls["prepare"] = (movie_arg, data_language)
+        return {"title": "Naruto", "poster_src": "en.jpg"}
+
+    monkeypatch.setattr("desktop.watched.tab.sync_poster_for_display", fake_sync)
+    monkeypatch.setattr("desktop.watched.tab.prepare_card_for_display", fake_prepare)
+
+    updated = view._entry_with_current_language_poster(0)
+
+    assert calls["sync"] == (movie, "en")
+    assert calls["prepare"] == (movie, "en")
+    assert updated[2]["poster_src"] == "en.jpg"
+    assert view._visible_entries[0] == updated
+    assert view._entries[0] == updated
 
 
 def test_candidate_list_view_uses_list_search_module() -> None:

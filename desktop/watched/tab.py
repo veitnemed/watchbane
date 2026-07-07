@@ -27,6 +27,8 @@ from desktop.watched.model import (
     format_watched_list_counter,
     format_watched_list_status,
     load_watched_entries,
+    prepare_card_for_display,
+    sync_poster_for_display,
 )
 from desktop.watched.sidebar import build_watched_sidebar
 from desktop.watched.tab_actions import WatchedTabActionsMixin
@@ -141,7 +143,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         self._list_widget.blockSignals(True)
         self._list_widget.setCurrentRow(row_to_select)
         self._list_widget.blockSignals(False)
-        self._detail_card.show_entry(self._visible_entries[row_to_select])
+        self._detail_card.show_entry(self._entry_with_current_language_poster(row_to_select))
 
     def _notify_entries_changed(self) -> None:
         if self._on_entries_changed is not None:
@@ -248,7 +250,30 @@ class WatchedTabView(WatchedTabActionsMixin):
         if row < 0 or row >= len(self._visible_entries):
             self._show_empty_details()
             return
-        self._detail_card.show_entry(self._visible_entries[row])
+        self._detail_card.show_entry(self._entry_with_current_language_poster(row))
+
+    def _entry_with_current_language_poster(self, row: int) -> WatchedEntry:
+        entry = self._visible_entries[row]
+        key, movie, _card = entry
+        try:
+            result = sync_poster_for_display(movie, data_language=self._data_language)
+        except Exception:
+            return entry
+
+        if result.get("updated") is not True:
+            return entry
+
+        updated_entry = (
+            key,
+            movie,
+            prepare_card_for_display(movie, data_language=self._data_language),
+        )
+        self._visible_entries[row] = updated_entry
+        for index, existing in enumerate(self._entries):
+            if existing[0] == key:
+                self._entries[index] = updated_entry
+                break
+        return updated_entry
 
     def _show_empty_details(self) -> None:
         if self._search_input.text().strip():

@@ -11,6 +11,7 @@ from dataset.resolve.countries import extract_country_value
 from dataset.resolve.defaults import build_empty_add_defaults
 from dataset.resolve.genres import build_genre_defaults, extract_tmdb_genres
 from dataset.resolve.sources import search_tmdb_defaults_data
+from dataset.tmdb_localized import localized_blocks_from_tmdb_details
 
 ADD_TITLE_RESOLVE_PROGRESS_TOTAL = 4
 
@@ -88,6 +89,15 @@ def _build_tmdb_add_defaults(
     }
     defaults[scheme.GENRE] = build_genre_defaults(genres)
     localized_source = dict(tmdb_data or {})
+    tmdb_localized = localized_blocks_from_tmdb_details(
+        tmdb_data,
+        current_language=normalize_data_language(data_language),
+    )
+    if tmdb_localized:
+        localized_source["localized"] = {
+            **tmdb_localized,
+            **dict(localized_source.get("localized") or {}),
+        }
     localized_source["main_info"] = defaults[scheme.MAIN_INFO]
     localized = build_localized_block_from_legacy(
         localized_source,

@@ -1,5 +1,7 @@
 """Add watched record use-case."""
 
+from copy import deepcopy
+
 from config import constant
 from common import valid
 from dataset.meta.merge import extract_extra_meta
@@ -99,6 +101,9 @@ def add_dataset_record(
         constant.TAGS_VIBE_SECTION: tags_vibe,
         constant.GENRE_SECTION: genre_tags,
     }
+    localized = record_payload.get("localized")
+    if isinstance(localized, dict):
+        new_movie["localized"] = deepcopy(localized)
 
     data[title] = new_movie
     try:

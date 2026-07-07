@@ -3,6 +3,7 @@
 from config import constant
 from config import scheme
 from dataset.language import build_localized_block_from_legacy
+from dataset.tmdb_localized import localized_blocks_from_tmdb_details
 from dataset.resolve.countries import extract_country_value
 from dataset.resolve.genres import build_genre_defaults, extract_tmdb_genres
 
@@ -109,6 +110,12 @@ def build_tmdb_add_defaults(series: dict, genres: list | None = None, data_langu
         scheme.GENRE: build_genre_defaults(genres),
     }
     localized_source = dict(series or {})
+    tmdb_localized = localized_blocks_from_tmdb_details(series, current_language=data_language)
+    if tmdb_localized:
+        localized_source["localized"] = {
+            **tmdb_localized,
+            **dict(localized_source.get("localized") or {}),
+        }
     localized_source["main_info"] = defaults[scheme.MAIN_INFO]
     localized = build_localized_block_from_legacy(localized_source, default_language=data_language)
     selected_language = str(data_language or "ru").strip().casefold()

@@ -192,10 +192,25 @@ def choose_best_tmdb_result(
     return max(results, key=score)
 
 
-def _normalizer_payload(raw_details: dict[str, Any], normalizer) -> dict[str, Any]:
+def _normalizer_payload(
+    raw_details: dict[str, Any],
+    normalizer,
+    *,
+    language: str | None = None,
+) -> dict[str, Any]:
     normalizer = normalizer or prepare_tmdb_candidate
-    data = normalizer(raw_details)
+    source_query = {"language": language} if language not in (None, "") else {}
+    try:
+        data = normalizer(raw_details, source_query=source_query)
+    except TypeError:
+        data = normalizer(raw_details)
     data = dict(data or {})
+    if source_query:
+        current_source_query = data.get("source_query")
+        if isinstance(current_source_query, dict):
+            data["source_query"] = {**current_source_query, **source_query}
+        else:
+            data["source_query"] = dict(source_query)
     if "genres_tmdb" not in data and isinstance(data.get("genres"), list):
         data["genres_tmdb"] = list(data["genres"])
     if "country_display" not in data and isinstance(data.get("countries"), list):
@@ -266,7 +281,11 @@ def search_tmdb_defaults_data(
                             append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
                         )
                     return {
-                        "data": _normalizer_payload(details, normalizer),
+                        "data": _normalizer_payload(
+                            details,
+                            normalizer,
+                            language=resolved_language,
+                        ),
                         "error": None,
                         "status": "найдено",
                     }

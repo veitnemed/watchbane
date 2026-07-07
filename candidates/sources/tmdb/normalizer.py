@@ -8,6 +8,7 @@ from apis import tmdb_api
 from candidates.models import genre_schema
 from candidates.models.schema import compute_completeness, strip_external_rating_fields
 from dataset.language import build_localized_block_from_legacy, normalize_data_language
+from dataset.tmdb_localized import localized_blocks_from_tmdb_details
 
 
 def _unique_non_empty(values) -> list:
@@ -133,9 +134,14 @@ def prepare_tmdb_candidate(
     if country is not None:
         candidate["target_country"] = str(country or "").strip().upper()
 
+    data_language = _data_language_from_source_query(source_query)
+    tmdb_localized = localized_blocks_from_tmdb_details(raw_details, current_language=data_language)
+    localized_source = dict(candidate)
+    if tmdb_localized:
+        localized_source["localized"] = tmdb_localized
     localized = build_localized_block_from_legacy(
-        candidate,
-        default_language=_data_language_from_source_query(source_query),
+        localized_source,
+        default_language=data_language,
     )
     if localized:
         candidate["localized"] = localized

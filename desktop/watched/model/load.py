@@ -7,6 +7,7 @@ from dataset.read_models.watched import (
     load_watched_entries,
     prepare_card_for_display,
     reload_poster_cache,
+    sync_poster_for_display,
 )
 
 
