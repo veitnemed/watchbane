@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP
+from datetime import date
 
 from candidates.models import country_schema
 from desktop.shared.detail.additional_info import (
@@ -16,6 +17,20 @@ from desktop.shared.detail.presenters import format_year_display
 UNKNOWN_OBJECT_TYPE = "Неизвестно"
 NO_DATA_LABEL = "Неизвестно"
 WATCH_PROVIDER_VISIBLE_COUNT = 2
+MONTH_LABELS_RU = {
+    1: "янв",
+    2: "фев",
+    3: "мар",
+    4: "апр",
+    5: "май",
+    6: "июн",
+    7: "июл",
+    8: "авг",
+    9: "сен",
+    10: "окт",
+    11: "ноя",
+    12: "дек",
+}
 
 
 def _clean_text(value) -> str | None:
@@ -82,6 +97,29 @@ def format_votes_display(value) -> str | None:
     return _format_compact_thousands(votes)
 
 
+def format_air_date_display(value) -> str | None:
+    text = _clean_text(value)
+    if text is None:
+        return None
+    try:
+        parsed = date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+    month = MONTH_LABELS_RU.get(parsed.month)
+    if month is None:
+        return None
+    return f"{parsed.day} {month} {parsed.year}"
+
+
+def _last_episode_air_date(card: dict) -> str | None:
+    episode = card.get("last_episode_to_air")
+    if isinstance(episode, dict):
+        air_date = format_air_date_display(episode.get("air_date"))
+        if air_date is not None:
+            return air_date
+    return format_air_date_display(card.get("last_air_date"))
+
+
 def _build_watch_provider_item(value) -> dict[str, object]:
     providers = [_capitalize_display_value(provider) for provider in list_watch_provider_values(value)]
     providers = [provider for provider in providers if provider]
@@ -128,6 +166,14 @@ def build_main_info_items(card: dict) -> list[dict[str, object]]:
             country_schema.normalize_country_filter_list(country)
         ) or country
         items.append({"label": "Страна", "value": country})
+
+    first_air_date = format_air_date_display(card.get("first_air_date"))
+    if first_air_date is not None:
+        items.append({"label": "Премьера", "value": first_air_date})
+
+    last_episode = _last_episode_air_date(card)
+    if last_episode is not None:
+        items.append({"label": "Последний эпизод", "value": last_episode})
 
     provider_source = card.get("watch_providers") or card.get("watch_providers_ru")
     items.append(_build_watch_provider_item(provider_source))

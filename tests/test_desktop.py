@@ -942,6 +942,38 @@ def test_format_votes_display_uses_compact_tmdb_votes() -> None:
     assert format_votes_display(12000) == "12к"
 
 
+def test_build_main_info_items_formats_air_dates() -> None:
+    from desktop.shared.detail.main_info import build_main_info_items, format_air_date_display
+
+    assert format_air_date_display("2022-03-16") == "16 мар 2022"
+    items = build_main_info_items(
+        {
+            "object_type": "series",
+            "first_air_date": "2015-02-08",
+            "last_air_date": "2022-08-15",
+            "last_episode_to_air": {"air_date": "2022-08-15", "name": "Финал"},
+        }
+    )
+
+    assert {"label": "Премьера", "value": "8 фев 2015"} in items
+    assert {"label": "Последний эпизод", "value": "15 авг 2022"} in items
+
+
+def test_build_main_info_items_uses_last_air_date_fallback() -> None:
+    from desktop.shared.detail.main_info import build_main_info_items
+
+    items = build_main_info_items(
+        {
+            "object_type": "series",
+            "first_air_date": "2020-02-10",
+            "last_air_date": "2024-11-07",
+        }
+    )
+
+    assert {"label": "Премьера", "value": "10 фев 2020"} in items
+    assert {"label": "Последний эпизод", "value": "7 ноя 2024"} in items
+
+
 def test_build_title_meta_text_formats_year_and_seasons() -> None:
     from desktop.shared.detail import build_title_meta_text
 
@@ -1170,6 +1202,9 @@ def test_build_watched_movie_card_uses_meta_additional_info_fallback() -> None:
                 "number_of_seasons": 2,
                 "number_of_episodes": 16,
                 "episode_run_time": [48],
+                "first_air_date": "2015-02-08",
+                "last_air_date": "2022-08-15",
+                "last_episode_to_air": {"air_date": "2022-08-15", "episode_number": 13},
                 "watch_providers": ["Kinopoisk"],
                 "status": "Returning Series",
                 "in_production": True,
@@ -1183,6 +1218,9 @@ def test_build_watched_movie_card_uses_meta_additional_info_fallback() -> None:
     assert card["number_of_seasons"] == 2
     assert card["number_of_episodes"] == 16
     assert card["episode_run_time"] == [48]
+    assert card["first_air_date"] == "2015-02-08"
+    assert card["last_air_date"] == "2022-08-15"
+    assert card["last_episode_to_air"] == {"air_date": "2022-08-15", "episode_number": 13}
     assert card["watch_providers"] == ["Kinopoisk"]
     assert card["status"] == "Returning Series"
     assert card["in_production"] is True
@@ -3640,6 +3678,9 @@ def test_build_candidate_readonly_card_passes_main_info_fields(monkeypatch) -> N
             "year": 2020,
             "country_display": "Россия",
             "number_of_seasons": 2,
+            "first_air_date": "2015-02-08",
+            "last_air_date": "2022-08-15",
+            "last_episode_to_air": {"air_date": "2022-08-15", "episode_number": 13},
             "tmdb_score": 8.1,
             "tmdb_votes": 12000,
             "imdb_id": "tt123",
@@ -3649,6 +3690,9 @@ def test_build_candidate_readonly_card_passes_main_info_fields(monkeypatch) -> N
 
     assert card["country"] == "Россия"
     assert card["object_type"] == "series"
+    assert card["first_air_date"] == "2015-02-08"
+    assert card["last_air_date"] == "2022-08-15"
+    assert card["last_episode_to_air"] == {"air_date": "2022-08-15", "episode_number": 13}
     assert card["tmdb_score"] == 8.1
     assert card["tmdb_votes"] == 12000
     assert card["imdb_id"] == "tt123"

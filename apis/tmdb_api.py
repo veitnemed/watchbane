@@ -569,6 +569,7 @@ def normalize_tmdb_tv(raw_details: dict[str, Any]) -> dict[str, Any]:
         "year": get_year(first_air_date),
         "first_air_date": first_air_date,
         "last_air_date": raw_details.get("last_air_date"),
+        "last_episode_to_air": raw_details.get("last_episode_to_air"),
         "status": raw_details.get("status"),
         "type": raw_details.get("type"),
         "in_production": raw_details.get("in_production"),

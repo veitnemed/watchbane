@@ -416,6 +416,9 @@ def build_watched_movie_card(
         "number_of_seasons": _first_number("number_of_seasons", tmdb_sections, _to_int),
         "number_of_episodes": _first_number("number_of_episodes", tmdb_sections, _to_int),
         "episode_run_time": _first_existing("episode_run_time", tmdb_sections),
+        "first_air_date": _first_existing("first_air_date", tmdb_sections),
+        "last_air_date": _first_existing("last_air_date", tmdb_sections),
+        "last_episode_to_air": _first_existing("last_episode_to_air", tmdb_sections),
         "watch_providers": _first_existing("watch_providers", tmdb_sections)
         or _first_existing("watch_providers_ru", tmdb_sections),
         "status": _first_existing("status", tmdb_sections),

@@ -89,6 +89,7 @@ def prepare_tmdb_candidate(
         "year": tmdb_api.get_year(raw_details.get("first_air_date")),
         "first_air_date": raw_details.get("first_air_date"),
         "last_air_date": raw_details.get("last_air_date"),
+        "last_episode_to_air": raw_details.get("last_episode_to_air"),
         "status": raw_details.get("status"),
         "type": raw_details.get("type"),
         "in_production": raw_details.get("in_production"),

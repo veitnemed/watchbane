@@ -18,6 +18,9 @@ def build_candidate_meta_payload(candidate: dict) -> dict:
         "number_of_seasons",
         "number_of_episodes",
         "episode_run_time",
+        "first_air_date",
+        "last_air_date",
+        "last_episode_to_air",
         "watch_providers",
     ):
         if key not in candidate:
@@ -76,6 +79,9 @@ def build_add_meta_payload(resolve_result: dict) -> dict:
             "number_of_seasons",
             "number_of_episodes",
             "episode_run_time",
+            "first_air_date",
+            "last_air_date",
+            "last_episode_to_air",
             "watch_providers",
         ):
             value = tmdb_data.get(key)
