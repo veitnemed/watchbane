@@ -6,34 +6,46 @@
 [![Local first](https://img.shields.io/badge/data-local--first-111827.svg)](docs/DATA_STORAGE_PLAN.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**The local-first app that turns your watchlist into a TMDb-powered candidate pool.**
+**Local-first movie & series recommendation lab.**
 
-Watchbane helps you keep your own watched base, discover new films and series through TMDb, rank them with transparent local scoring, and move good candidates into your personal library without giving the whole process to a black-box service.
+Watchbane is a PyQt desktop app for building a personal recommendation system around your own taste: watched titles, candidate pools, transparent scoring, TMDb metadata, and a clean core for future ML/LLM experiments.
 
-It is local-first, inspectable, and built around a persistent candidate pool instead of one-off search results.
+It is not another locked watchlist. Watchbane is a local-first workspace where your data stays inspectable, recommendation signals stay visible, and the application architecture remains testable as the project grows.
 
 <p align="center">
   <img src="screens/main.png" alt="Watchbane desktop watched library with poster, ratings and title details" width="100%">
 </p>
 
 <p align="center">
-  <strong>Your watched library, recommendations, ratings and metadata in one local desktop workspace.</strong>
+  <strong>Your watched library, candidate pool, ratings, metadata and recommendation experiments in one local desktop workspace.</strong>
 </p>
 
-## The Idea
+## Why Watchbane Exists
 
-Streaming platforms know what they want to sell. Watchbane is for what **you** want to track, compare and remember.
+Streaming platforms optimize for engagement.
 
-You keep the source of truth locally. The app enriches it with external metadata, but does not surrender your data model to any external platform.
+Watchbane is designed for a different question:
+
+> What should I actually watch next, based on my own history, filters, taste and scoring rules?
+
+The project combines a local watched library, external metadata, candidate discovery and transparent recommendation logic. The goal is to make recommendations understandable, reproducible and easy to experiment with.
 
 ```text
-watched library
-   + candidate pool
-   + TMDb discovery
-   + TMDb-only metadata and scoring
-   + poster cache
-   + PyQt desktop UI
+your watched dataset
+  + external metadata
+  + candidate discovery
+  + transparent scoring
+  + filters
+  + future ML/LLM experiments
+  = better watch decisions
 ```
+
+## Core Principles
+
+- **Local-first**: your watched library, candidate pool, ratings and metadata are stored locally. The app can enrich data with external sources, but your personal dataset remains yours.
+- **Transparent scoring**: recommendations should not be a black box. Watchbane exposes signals such as TMDb rating, votes, popularity, country, genres, metadata completeness and personal scoring.
+- **Candidate discovery**: the app is not only a watched-list manager. It keeps a persistent candidate pool that can be searched, filtered, cleaned, hidden, transferred and revisited.
+- **ML-ready architecture**: the desktop UI is one client over a testable recommendation core, so scoring, filters, dataset flows and candidate sources can evolve into ML/LLM experiments.
 
 ## What Makes It Different
 
@@ -44,6 +56,7 @@ watched library
 | Blind recommendations | Visible signals: TMDb rating, votes, popularity, country, type, metadata completeness |
 | Manual copy-paste | Add-title and candidate-transfer flows with preview and confirmation |
 | A pile of scripts | Clear UI / Domain / Infra / Project architecture |
+| UI-only logic | A testable domain core ready for recommendation experiments |
 
 ## Current Experience
 
@@ -53,6 +66,19 @@ watched library
 - **TMDb-only build flow**: discover candidates by country/mode, fetch TMDb Details, score them, import into the shared pool.
 - **Poster cache**: keep preview posters local and avoid waiting on CDN during normal browsing.
 - **Console tools**: maintenance, diagnostics, imports and longer-running operations stay available.
+
+## Recommendation Lab, Not Just a Watchlist
+
+Watchbane is useful as a normal personal media app, but its main direction is broader:
+
+```text
+watchlist app
+  -> candidate discovery tool
+  -> transparent recommendation engine
+  -> ML/LLM experimentation lab
+```
+
+The project is designed to support experiments such as heuristic recommendation scoring, trainable weights from personal ratings, feature extraction from metadata, embeddings for similarity search, LLM-generated explanations, sandbox datasets, alternative candidate sources and local evaluation of recommendation quality.
 
 ## Preview
 
@@ -77,6 +103,7 @@ watched library
 - local-first workflows;
 - custom recommendation experiments;
 - personal media datasets;
+- ML/LLM-assisted recommendation research;
 - Python/PyQt projects that should stay understandable while growing.
 
 ## Architecture
@@ -96,6 +123,15 @@ Start here if you want to understand the code:
 - [Project map](docs/PROJECT_MAP.md)
 - [Desktop module map](docs/DESKTOP_MODULE_MAP.md)
 - [Detailed docs README](docs/README.md)
+
+Architecture goals:
+
+- keep PyQt widgets focused on layout, rendering and user interaction;
+- keep dataset, candidate and scoring logic testable without Qt;
+- route writes through domain services instead of UI code;
+- keep candidate sources replaceable;
+- keep recommendation signals inspectable;
+- keep UI scaling and language behavior covered by guardrail tests.
 
 ## Run It
 
@@ -193,6 +229,12 @@ py scripts/refresh_candidate_pool_from_tmdb.py --dry-run
 py scripts/migrate_watched_raw_scores_tmdb_only.py --dry-run
 py scripts/refresh_watched_from_tmdb.py --dry-run
 ```
+
+## ML / LLM Experimentation Direction
+
+Watchbane is not an ML product yet. It is a foundation for recommendation experiments built on clean local data, explicit candidate sources, transparent scoring and regression tests.
+
+Possible future layers include learned scoring weights from personal ratings, recommendation quality metrics, embedding-based similarity, local title clustering, LLM-generated recommendation explanations, hybrid scoring with explicit user controls and daily trend imports as candidate sources.
 
 ## Repository Notes
 

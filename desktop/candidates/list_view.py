@@ -360,7 +360,7 @@ class CandidateListView(CandidateListActionsMixin):
 
         self._detail_placeholder.hide()
         self._detail_scroll.show()
-        self._detail_card.show_entry(entry)
+        self._show_detail_entry(entry)
         render_done = perf_counter()
 
         poster_url = candidate_poster_url_for_download(
@@ -405,6 +405,14 @@ class CandidateListView(CandidateListActionsMixin):
             self._counter_label.setText(tr("candidates.detail.loading"))
             self._clear_detail(show_filters_hint=False, loading=True)
 
+    def _reset_detail_scroll(self) -> None:
+        bar = self._detail_scroll.verticalScrollBar()
+        bar.setValue(bar.minimum())
+
+    def _show_detail_entry(self, entry: tuple) -> None:
+        self._detail_card.show_entry(entry)
+        self._reset_detail_scroll()
+
     def _clear_detail(
         self,
         *,
@@ -414,6 +422,7 @@ class CandidateListView(CandidateListActionsMixin):
     ) -> None:
         self._poster_request_seq += 1
         self._detail_scroll.hide()
+        self._reset_detail_scroll()
         if loading:
             self._detail_placeholder.setText(tr("candidates.detail.loading"))
             self._detail_placeholder.show()

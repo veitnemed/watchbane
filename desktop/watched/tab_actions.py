@@ -102,7 +102,7 @@ class WatchedTabActionsMixin:
             self._list_widget.blockSignals(True)
             self._list_widget.setCurrentRow(row_to_select)
             self._list_widget.blockSignals(False)
-            self._detail_card.show_entry(self._visible_entries[row_to_select])
+            self._show_detail_entry(self._visible_entries[row_to_select])
         else:
             self._show_empty_details()
 
@@ -147,7 +147,7 @@ class WatchedTabActionsMixin:
             self._list_widget.blockSignals(True)
             self._list_widget.setCurrentRow(row_to_select)
             self._list_widget.blockSignals(False)
-            self._detail_card.show_entry(self._visible_entries[row_to_select])
+            self._show_detail_entry(self._visible_entries[row_to_select])
 
         self._show_status(format_save_user_score_status(result), 4000)
 

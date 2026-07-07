@@ -145,7 +145,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         self._list_widget.blockSignals(True)
         self._list_widget.setCurrentRow(row_to_select)
         self._list_widget.blockSignals(False)
-        self._detail_card.show_entry(self._entry_with_current_language_poster(row_to_select))
+        self._show_detail_entry(self._entry_with_current_language_poster(row_to_select))
 
     def _notify_entries_changed(self) -> None:
         if self._on_entries_changed is not None:
@@ -162,7 +162,16 @@ class WatchedTabView(WatchedTabActionsMixin):
 
         self._detail_card = DetailCard()
         scroll.setWidget(self._detail_card.widget)
+        self._detail_scroll = scroll
         return scroll
+
+    def _reset_detail_scroll(self) -> None:
+        bar = self._detail_scroll.verticalScrollBar()
+        bar.setValue(bar.minimum())
+
+    def _show_detail_entry(self, entry: WatchedEntry) -> None:
+        self._detail_card.show_entry(entry)
+        self._reset_detail_scroll()
 
     def _reload_watched_search_index(self) -> None:
         self._watched_search_index = build_watched_search_index(self._entries)
@@ -252,7 +261,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         if row < 0 or row >= len(self._visible_entries):
             self._show_empty_details()
             return
-        self._detail_card.show_entry(self._entry_with_current_language_poster(row))
+        self._show_detail_entry(self._entry_with_current_language_poster(row))
 
     def _entry_with_current_language_poster(self, row: int) -> WatchedEntry:
         entry = self._visible_entries[row]
@@ -310,3 +319,4 @@ class WatchedTabView(WatchedTabActionsMixin):
         else:
             title = tr("watched.empty.select_title")
         self._detail_card.show_empty(title)
+        self._reset_detail_scroll()
