@@ -5,6 +5,7 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QDialog, QMenu
 
+from desktop.i18n import tr
 from desktop.shared.widgets.list_search import resolve_selection_row
 from desktop.watched.delete import (
     execute_watched_delete,
@@ -25,6 +26,12 @@ from desktop.watched.model import (
 class WatchedTabActionsMixin:
     """CRUD and add-title actions for WatchedTabView."""
 
+    def _load_entries_for_actions(self):
+        loader = getattr(self, "_load_entries", None)
+        if callable(loader):
+            return loader()
+        return load_watched_entries()
+
     def _open_add_title_dialog(self) -> None:
         from desktop.watched.add_title import run_add_title_flow
 
@@ -34,7 +41,7 @@ class WatchedTabActionsMixin:
 
         added_key = result.title
         self.reload_entries(added_key=added_key)
-        self._show_status(result.message or "Новая запись добавлена!", 5000)
+        self._show_status(result.message or tr("watched.status.new_entry_added"), 5000)
 
     def _open_list_context_menu(self, position) -> None:
         item = self._list_widget.itemAt(position)
@@ -45,8 +52,8 @@ class WatchedTabActionsMixin:
 
         self._list_widget.setCurrentItem(item)
         menu = QMenu(self._list_widget)
-        edit_action = menu.addAction("Изменить оценку")
-        delete_action = menu.addAction("Удалить запись")
+        edit_action = menu.addAction(tr("watched.context.edit_score"))
+        delete_action = menu.addAction(tr("watched.context.delete_record"))
         chosen_action = menu.exec(self._list_widget.viewport().mapToGlobal(position))
         if chosen_action is edit_action:
             self._edit_user_score(entry)
@@ -62,7 +69,7 @@ class WatchedTabActionsMixin:
         dataset_key, _movie, _card = entry
         preview = load_delete_preview(dataset_key)
         if preview is None:
-            self._show_status("Запись не найдена", 4000)
+            self._show_status(tr("watched.record.not_found"), 4000)
             return
 
         dialog = WatchedDeleteDialog(preview, parent=self._parent)
@@ -78,7 +85,7 @@ class WatchedTabActionsMixin:
 
     def _refresh_after_delete(self, result: dict) -> None:
         previous_key = self._current_entry_key()
-        self._entries = load_watched_entries()
+        self._entries = self._load_entries_for_actions()
         self._reload_watched_search_index()
         self._filters.reload_genre_options(self._entries)
         self._refresh_list()
@@ -126,7 +133,7 @@ class WatchedTabActionsMixin:
         return dialog.score_value()
 
     def _refresh_after_user_score_save(self, current_key: str, result) -> None:
-        self._entries = load_watched_entries()
+        self._entries = self._load_entries_for_actions()
         self._reload_watched_search_index()
         self._refresh_list()
         self._notify_entries_changed()

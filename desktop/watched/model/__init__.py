@@ -36,6 +36,7 @@ from desktop.watched.model.load import (
     load_watched_entries,
     prepare_card_for_display,
     reload_poster_cache,
+    sync_poster_for_display,
     watched_entry_search_haystack,
 )
 from desktop.watched.model.score_write import (
@@ -82,6 +83,7 @@ __all__ = [
     "score_filter_is_active",
     "sort_entries",
     "validate_score_edit_entry",
+    "sync_poster_for_display",
     "watched_entry_search_haystack",
     "watched_filters_are_active",
     "watched_filters_are_active_from_ranges",

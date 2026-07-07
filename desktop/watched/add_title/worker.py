@@ -15,10 +15,11 @@ class AddTitleResolveWorker(QThread):
     finished_with_result = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, title: str, country: str, parent=None) -> None:
+    def __init__(self, title: str, country: str, parent=None, *, data_language: str = "ru") -> None:
         super().__init__(parent)
         self._title = title
         self._country = country
+        self._data_language = data_language
 
     def run(self) -> None:
         log_event("add_title.worker.run.begin", title=self._title, country=self._country)
@@ -27,6 +28,7 @@ class AddTitleResolveWorker(QThread):
                 self._title,
                 self._country,
                 on_progress=self._on_progress,
+                data_language=self._data_language,
             )
         except Exception as error:  # noqa: BLE001 - surface to dialog
             log_exception("add_title.worker.run.error", error, title=self._title, country=self._country)

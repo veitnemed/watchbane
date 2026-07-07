@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
 
+from desktop.i18n import tr
 from desktop.settings.ui_scale_control import UI_SCALE_RESTART_MESSAGE, UiScaleControlPanel
 from desktop.theme.scaling import layout_px
 from desktop.theme.shell_layout import SETTINGS_DIALOG_MIN_WIDTH_PX
@@ -14,7 +15,7 @@ class SettingsDialog(QDialog):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Настройки")
+        self.setWindowTitle(tr("settings.title"))
         self.setObjectName("settingsDialog")
 
         root = QVBoxLayout(self)
@@ -31,7 +32,7 @@ class SettingsDialog(QDialog):
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         close_button = buttons.button(QDialogButtonBox.StandardButton.Close)
-        close_button.setText("Закрыть")
+        close_button.setText(tr("settings.close"))
         buttons.rejected.connect(self.reject)
         root.addWidget(buttons)
 

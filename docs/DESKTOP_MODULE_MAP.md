@@ -28,6 +28,9 @@ start_app.py → desktop.app.main()
 
 ```text
 dataset/
+  language.py                    # data_language helpers, localized fallbacks, TMDb locale mapping
+  migrations/
+    tmdb_localized.py            # safe TMDb localized backfill for old watched/candidate data
   read_models/
     watched.py                   # watched desktop/export read facade (dataset_key, movie, display card)
 
@@ -39,6 +42,9 @@ desktop/
     main_window.py               # WatchedMoviesWindow: chrome + status bar
     tab_contract.py              # TabView protocol + optional activation helper
     tabs.py                      # build_main_tabs(), MainTabRegistry, AppTabsContext
+  i18n/
+    catalog.py                   # ru/en interface strings
+    translator.py                # tr(key) with ru/key fallback
   watched/
     model/                       # load, filter, sort, format, writes (no Qt widgets)
       load.py
@@ -120,6 +126,10 @@ desktop/
 | `shell/main_window.py` | главное окно, status bar | shell |
 | `shell/tab_contract.py` | `TabView` protocol and optional activation helper | shell |
 | `shell/tabs.py` | `build_main_tabs()`, tab registry, cross-tab wiring | shell |
+| `i18n/catalog.py` | ru/en catalog for interface labels/buttons/messages/placeholders | UI i18n |
+| `i18n/translator.py` | `tr(key)` and persisted interface language lookup | UI i18n |
+| `dataset/language.py` | `data_language` normalization, localized value selection, genre labels, TMDb locale mapping | domain localization |
+| `dataset/migrations/tmdb_localized.py` | backfill old JSON records with `localized.<lang>.title/overview` from TMDb locale responses | domain migration |
 | `watched/tab.py` | layout, list state, selection | feature view |
 | `watched/tab_actions.py` | delete/score/add-title write actions | feature view |
 | `watched/sidebar.py` | list widget, search, sort, add-title button | feature view |
@@ -163,11 +173,23 @@ class TabView(Protocol):
 
 `on_tab_activated()` не является обязательным методом view. `MainTabRegistry` вызывает `activate_tab_view(view)`, который безопасно делает `getattr(view, "on_tab_activated", None)` и запускает hook только если он callable.
 
+## Контракт языка интерфейса
+
+- `interface_language` переводит только desktop UI strings: labels, buttons, messages, placeholders, tooltips.
+- `data_language` не должен использоваться для интерфейсных подписей; он управляет отображаемыми данными и desktop-initiated metadata/TMDb запросами.
+- Перевод интерфейса применяется после restart: view создаётся с текущим persisted `interface_language`, без динамического retranslate всего окна.
+- Новые пользовательские строки добавляются в `desktop/i18n/catalog.py` для `ru` и `en`; каталоги должны иметь одинаковый набор ключей.
+- Data strings не переводятся через interface i18n: title, overview, genres, countries, candidate titles и значения metadata остаются данными.
+- Data localization живет в `dataset/language.py`; desktop read models и presenters принимают `data_language` и должны иметь safe fallback на `ru`/legacy fields.
+- Desktop TMDb flows получают locale через app setting `data_language` (`ru -> ru-RU`, `en -> en-US`) и сохраняют фактический locale в `source_query.language`.
+- Настройки языков доступны в `Настройки -> Интерфейс -> Язык`; для первого стабильного варианта смена применяется после restart или перезагрузки экранов.
+- Старые локальные JSON без `localized.en` обновляются через `scripts/backfill_watched_localized_from_tmdb.py`; backfill добавляет только localized layer, делает backup рядом с JSON и не переименовывает dataset keys.
+
 Шаблон добавления вкладки:
 
 ```python
 feature_view = SomeFeatureView(...)
-registry.register(ShellTabSpec("feature_id", "Label", feature_view))
+registry.register(ShellTabSpec("feature_id", tr("tabs.feature"), feature_view))
 ```
 
 Правила:
@@ -196,6 +218,10 @@ registry.register(ShellTabSpec("feature_id", "Label", feature_view))
 | Candidate list row paint | `candidates/list_delegate.py` |
 | Write-сценарий (save/delete) | `watched/delete.py` / `dataset` + dialog |
 | Переиспользуемый виджет без domain | `shared/widgets/` |
+| UI label/button/message/placeholder | `i18n/catalog.py` + `tr("feature.key")` |
+| Отображаемые localized data/title/overview/genre/country | `dataset/language.py` + read model/presenter `data_language` parameter |
+| Backfill localized data для старого watched/candidate JSON | `dataset/migrations/tmdb_localized.py` + `scripts/backfill_watched_localized_from_tmdb.py` |
+| Desktop TMDb request language | `desktop/settings/app_settings.language_to_tmdb_locale()` at desktop boundary, pass locale into `dataset`/`candidates` service |
 | Новый цвет/радиус/семантический font token | `theme/tokens.py` |
 | Новый размер, margin, spacing, min/max width/height | `theme/layout.py` + scaling helpers |
 | QSS нового экрана | `theme/styles/<screen>.py` |
@@ -251,6 +277,19 @@ registry.register(ShellTabSpec("feature_id", "Label", feature_view))
 py -m compileall desktop dataset candidates storage ui tests
 py -m pytest tests/test_desktop.py
 ```
+
+## Language Extension Guardrail
+
+Use `desktop/language_context.py` for new tabs and feature-level UI objects.
+
+- Shell creates a `DesktopLanguageContext` once in `desktop/shell/tabs.py`.
+- Tab labels use `language_context.tr("tabs.<id>")`, not hardcoded strings.
+- UI labels/buttons/messages/placeholders go through `desktop/i18n/catalog.py` and `tr(...)`/`language_context.tr(...)`.
+- Data display uses explicit `data_language` arguments in read models and presenters.
+- TMDb requests started by desktop use `DesktopLanguageContext.tmdb_locale` or `language_to_tmdb_locale(data_language)`.
+- Do not use `interface_language` to choose title/overview/poster data.
+- Do not use `data_language` for UI copy.
+- If a new feature has list/detail posters, route poster selection through localized `poster_url/poster_path` and clear local pixmap caches when a file is replaced.
 
 ## New Code Routing Guardrail
 

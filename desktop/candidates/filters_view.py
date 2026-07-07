@@ -8,7 +8,9 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from candidates import service as candidate_service
+from candidates.models import country_schema, genre_schema
 from config import constant
+from dataset.language import choose_genre_labels
 from desktop.candidates.filters_controls import (
     SCORE_SLIDER_MAX,
     SCORE_SLIDER_STEP,
@@ -24,6 +26,8 @@ from desktop.candidates.filters_controls import (
 from desktop.candidates.filters_form import CANDIDATE_YEAR_MIN, FiltersFormWidgets, build_filters_form
 from desktop.candidates.filters_intro import build_intro_copy
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.i18n import tr
+from desktop.settings.app_settings import get_persisted_data_language
 from desktop.theme.scaling import control_px, layout_px
 from desktop.theme.shell_layout import (
     CANDIDATE_ROOT_MARGIN_PX,
@@ -33,6 +37,24 @@ from desktop.theme.shell_layout import (
 
 APPLY_BUTTON_WIDTH_RATIO = 0.25
 APPLY_BUTTON_HEIGHT = control_px(40)
+
+
+def _genre_labels_for_language(labels, data_language: str) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for label in labels or []:
+        text = str(label or "").strip()
+        if text == "":
+            continue
+        keys = genre_schema.normalize_genre_filter_list([text])
+        localized_labels = choose_genre_labels(keys, data_language) or [text]
+        for localized in localized_labels:
+            localized = str(localized or "").strip()
+            if localized == "" or localized.casefold() in seen:
+                continue
+            seen.add(localized.casefold())
+            result.append(localized)
+    return result
 
 
 class CandidateFiltersView:
@@ -50,6 +72,7 @@ class CandidateFiltersView:
         self._service = service or session.service
         self._on_applied = on_applied
         self._on_before_apply = on_before_apply
+        self._data_language = get_persisted_data_language()
         self._genre_options: list[str] = []
         self._year_max = constant.NOW_YEAR
 
@@ -71,7 +94,7 @@ class CandidateFiltersView:
         )
         root_layout.setSpacing(CANDIDATE_ROOT_SPACING_PX)
 
-        self._apply_button = QPushButton("Применить фильтры")
+        self._apply_button = QPushButton(tr("candidates.filters.apply"))
         self._apply_button.setObjectName("candidateSearchApplyTopButton")
         self._apply_button.clicked.connect(self._apply_filters)
         self._apply_button.setSizePolicy(
@@ -80,7 +103,7 @@ class CandidateFiltersView:
         )
         self._apply_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
 
-        self._reset_button = QPushButton("Сброс")
+        self._reset_button = QPushButton(tr("candidates.filters.reset"))
         self._reset_button.setObjectName("candidateSearchResetTopButton")
         self._reset_button.clicked.connect(self._reset_filters)
         self._reset_button.setSizePolicy(
@@ -93,7 +116,7 @@ class CandidateFiltersView:
         top_bar.setContentsMargins(0, 0, 0, 0)
         top_bar.setSpacing(CANDIDATE_ROOT_SPACING_PX)
 
-        header = QLabel("Фильтры")
+        header = QLabel(tr("candidates.filters.header"))
         header.setObjectName("candidateSearchHeader")
         header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         top_bar.addWidget(header, stretch=1)
@@ -118,10 +141,7 @@ class CandidateFiltersView:
         )
         intro_layout.setSpacing(layout_px(6))
 
-        self._intro_lead = QLabel(
-            "Настройте условия ниже и нажмите «Применить фильтры». "
-            "Список откроется на вкладке «Кандидаты»."
-        )
+        self._intro_lead = QLabel(tr("candidates.filters.intro.lead"))
         self._intro_lead.setObjectName("candidateFiltersIntroLead")
         self._intro_lead.setWordWrap(True)
         intro_layout.addWidget(self._intro_lead)
@@ -216,14 +236,14 @@ class CandidateFiltersView:
         if self._session.is_loading:
             self._apply_button.setEnabled(False)
             self._reset_button.setEnabled(False)
-            self._intro_lead.setText("Применяю фильтры...")
-            self._intro_stats.setText("Окно можно не трогать, результат появится на вкладке «Кандидаты».")
+            self._intro_lead.setText(tr("candidates.filters.loading.lead"))
+            self._intro_stats.setText(tr("candidates.filters.loading.stats"))
 
     def _on_session_updated(self) -> None:
         if self._session.is_loading:
             return
         if self._session.last_error:
-            self._intro_lead.setText("Не удалось применить фильтры.")
+            self._intro_lead.setText(tr("candidates.filters.error.lead"))
             self._intro_stats.setText(self._session.last_error)
             self._apply_button.setEnabled(True)
             self._reset_button.setEnabled(True)
@@ -288,17 +308,33 @@ class CandidateFiltersView:
         defaults_view = self._service.get_search_filter_defaults_view()
         defaults = defaults_view.get("defaults") or {}
         chip_view = self._service.get_search_filter_chip_options_view()
-        genre_labels = [
+        raw_genre_labels = [
             str(item.get("label") or "").strip()
             for item in chip_view.get("genres") or []
             if str(item.get("label") or "").strip()
         ]
+        genre_labels = _genre_labels_for_language(raw_genre_labels, self._data_language)
         self._genre_options = genre_labels
-        self._include_genre_selector.set_options(genre_labels, defaults.get("include_genres") or [])
-        self._exclude_genre_selector.set_options(genre_labels, defaults.get("exclude_genres") or [])
+        self._include_genre_selector.set_options(
+            genre_labels,
+            _genre_labels_for_language(defaults.get("include_genres") or [], self._data_language),
+        )
+        self._exclude_genre_selector.set_options(
+            genre_labels,
+            _genre_labels_for_language(defaults.get("exclude_genres") or [], self._data_language),
+        )
 
         country_options = [
-            {"code": str(item.get("code") or "").strip(), "label": str(item.get("label") or "").strip()}
+            {
+                "code": str(item.get("code") or "").strip(),
+                "label": (
+                    country_schema.build_country_display(
+                        [str(item.get("code") or "").strip().upper()],
+                        language=self._data_language,
+                    )
+                    or str(item.get("label") or "").strip()
+                ),
+            }
             for item in chip_view.get("countries") or []
             if str(item.get("code") or "").strip()
         ]

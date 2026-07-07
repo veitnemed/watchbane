@@ -7,14 +7,35 @@ from dataset.read_models.watched import (
     load_watched_entries,
     prepare_card_for_display,
     reload_poster_cache,
+    sync_poster_for_display,
 )
 
 
 def watched_entry_search_haystack(entry: WatchedEntry) -> str:
     """Precomputed haystack for watched title search."""
-    key, _movie, card = entry
-    title = str(card.get("title") or key or "").strip().casefold()
-    return f"{str(key).casefold()} {title}".strip()
+    key, movie, card = entry
+    parts = [
+        key,
+        card.get("title"),
+    ]
+    if isinstance(movie, dict):
+        main_info = movie.get("main_info") if isinstance(movie.get("main_info"), dict) else {}
+        localized = movie.get("localized") if isinstance(movie.get("localized"), dict) else {}
+        parts.extend([
+            main_info.get("title"),
+            movie.get("title"),
+            movie.get("name"),
+            movie.get("original_title"),
+            movie.get("original_name"),
+            movie.get("enName"),
+            movie.get("alternative_title"),
+            movie.get("alternativeName"),
+        ])
+        for language in ("ru", "en"):
+            block = localized.get(language)
+            if isinstance(block, dict):
+                parts.append(block.get("title"))
+    return " ".join(str(part).strip() for part in parts if part not in (None, "")).casefold()
 
 
 def build_watched_search_index(entries: list[WatchedEntry]):

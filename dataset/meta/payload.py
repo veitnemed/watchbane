@@ -1,5 +1,7 @@
 """Build meta payloads for watched add and candidate transfer."""
 
+from copy import deepcopy
+
 
 def build_candidate_meta_payload(candidate: dict) -> dict:
     """Собирает дополнительный meta-payload для переноса кандидата в dataset."""
@@ -67,6 +69,10 @@ def build_add_meta_payload(resolve_result: dict) -> dict:
             payload[key] = value
 
     if isinstance(tmdb_data, dict):
+        localized = tmdb_data.get("localized")
+        if isinstance(localized, dict):
+            payload["localized"] = deepcopy(localized)
+
         for key in (
             "poster_path",
             "poster_url",

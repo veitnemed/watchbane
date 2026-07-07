@@ -120,6 +120,40 @@ def _first_in_section(section: dict, field_names: tuple[str, ...]) -> tuple[str 
     return None, None
 
 
+def _normalize_data_language(value: Any) -> str:
+    text = str(value or "").strip().casefold()
+    return text if text in {"ru", "en"} else "ru"
+
+
+def _localized_poster_info(movie: dict, data_language: str | None) -> dict | None:
+    if data_language in (None, ""):
+        return None
+    localized = _as_dict(movie.get("localized"))
+    section = _as_dict(localized.get(_normalize_data_language(data_language)))
+    if len(section) == 0:
+        return None
+
+    poster_url, url_field = _first_in_section(section, POSTER_URL_FIELDS)
+    if poster_url is not None:
+        poster_path, _path_field = _first_in_section(section, POSTER_PATH_FIELDS)
+        return {
+            "poster_path": poster_path,
+            "poster_url": poster_url,
+            "source": f"localized.{_normalize_data_language(data_language)}.{url_field}",
+            "status": "found",
+        }
+
+    poster_path, path_field = _first_in_section(section, POSTER_PATH_FIELDS)
+    if poster_path is not None:
+        return {
+            "poster_path": poster_path,
+            "poster_url": build_tmdb_poster_url(poster_path),
+            "source": f"localized.{_normalize_data_language(data_language)}.{path_field}",
+            "status": "found",
+        }
+    return None
+
+
 def _poster_search_context(movie: dict, meta_obj: dict | None = None) -> dict:
     """Build read-only search context from movie and optional meta."""
     context = dict(movie)
@@ -134,14 +168,20 @@ def _poster_search_context(movie: dict, meta_obj: dict | None = None) -> dict:
     return context
 
 
-def extract_existing_poster_info(movie: dict) -> dict:
+def extract_existing_poster_info(movie: dict, *, data_language: str | None = None) -> dict:
     """Extract poster metadata already present in one movie/meta context."""
     search_movie = _as_dict(movie)
+    localized_poster = _localized_poster_info(search_movie, data_language)
+    if localized_poster is not None:
+        return localized_poster
 
     for section_name in SEARCH_SECTIONS:
         section = _section(search_movie, section_name)
         if len(section) == 0:
             continue
+        localized_section_poster = _localized_poster_info(section, data_language)
+        if localized_section_poster is not None:
+            return localized_section_poster
 
         poster_url, url_field = _first_in_section(section, POSTER_URL_FIELDS)
         if poster_url is not None:
@@ -307,6 +347,19 @@ def _build_cache_entry(title: str, year: Any, poster_info: dict) -> dict:
     }
 
 
+def _remove_stale_local_path(local_path: Any) -> None:
+    text = _clean_text(local_path)
+    if text is None:
+        return
+    try:
+        path = Path(text).resolve()
+        cache_dir = DEFAULT_POSTER_IMAGES_DIR.resolve()
+        if path.is_file() and path.is_relative_to(cache_dir):
+            path.unlink()
+    except OSError:
+        return
+
+
 def upsert_poster_cache_entry(
     title: str,
     year: Any,
@@ -323,9 +376,19 @@ def upsert_poster_cache_entry(
 
     identity = poster_identity_key(title, year)
     current = poster_cache.get(identity)
-    if isinstance(current, dict) and current.get("local_path"):
+    current_url = _clean_text(current.get("poster_url")) if isinstance(current, dict) else None
+    next_url = _clean_text(poster_info.get("poster_url"))
+    if (
+        isinstance(current, dict)
+        and current.get("local_path")
+        and (next_url is None or current_url == next_url)
+    ):
         poster_info = dict(poster_info)
         poster_info["local_path"] = current.get("local_path")
+    elif isinstance(current, dict) and current.get("local_path") and current_url != next_url:
+        _remove_stale_local_path(current.get("local_path"))
+        poster_info = dict(poster_info)
+        poster_info.pop("local_path", None)
     poster_cache[identity] = _build_cache_entry(title, year, poster_info)
     if persist:
         save_poster_cache(poster_cache)
@@ -363,11 +426,12 @@ def sync_poster_cache_from_meta_and_sources(
     cache: dict | None = None,
     *,
     persist: bool = True,
+    data_language: str | None = None,
 ) -> dict:
     """Sync one watched poster-cache entry from movie/meta/extra sources."""
     search_context = _poster_search_context(_as_dict(movie), meta_obj)
-    poster_infos = [extract_existing_poster_info(search_context)]
+    poster_infos = [extract_existing_poster_info(search_context, data_language=data_language)]
     if isinstance(extra_sources, dict):
-        poster_infos.append(extract_existing_poster_info(extra_sources))
+        poster_infos.append(extract_existing_poster_info(extra_sources, data_language=data_language))
     poster_info = _merge_poster_info(*poster_infos)
     return upsert_poster_cache_entry(title, year, poster_info, cache=cache, persist=persist)

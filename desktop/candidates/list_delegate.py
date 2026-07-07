@@ -7,7 +7,7 @@ from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import QStyledItemDelegate, QStyle
 
 from desktop.candidates.list_model import CandidateListRoles
-from desktop.candidates.presenters import format_candidate_metric_value
+from desktop.candidates.presenters import format_candidate_metric_value, format_candidate_title_line
 from desktop.shared.detail import (
     _elide_text,
     _load_list_thumb_pixmap,
@@ -26,9 +26,10 @@ from desktop.theme import (
 )
 
 
-def build_candidate_list_item_delegate(parent, sort_mode: str):
+def build_candidate_list_item_delegate(parent, sort_mode: str, data_language: str = "ru"):
     """Card-style list row like Watched: thumbnail, title, year and sort metric."""
     mode = sort_mode
+    language = data_language
 
     class CandidateListItemDelegate(QStyledItemDelegate):
         def sizeHint(self, option, index):
@@ -112,7 +113,6 @@ def build_candidate_list_item_delegate(parent, sort_mode: str):
             text_right = rect.right() - detail_profiles.LIST_ITEM_H_PADDING
             text_width = max(detail_profiles.LIST_MIN_TEXT_WIDTH, text_right - text_left)
 
-            title = str(candidate.get("title") or candidate.get("name") or "Без названия")
             year = candidate.get("year")
             year_text = format_year_display(year)
             metric_text = format_candidate_metric_value(candidate, mode)
@@ -141,7 +141,11 @@ def build_candidate_list_item_delegate(parent, sort_mode: str):
             painter.drawText(
                 title_rect,
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                _elide_text(painter, title, title_rect.width()),
+                _elide_text(
+                    painter,
+                    format_candidate_title_line(candidate, data_language=language).rsplit(" (", 1)[0],
+                    title_rect.width(),
+                ),
             )
 
             if meta_text:

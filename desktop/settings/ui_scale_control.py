@@ -3,22 +3,29 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
 
 from desktop.settings.app_settings import (
+    APP_LANGUAGE_SUPPORTED,
     APP_UI_SCALE_DEFAULT,
     APP_UI_SCALE_MAX,
     APP_UI_SCALE_MIN,
     AppSettings,
     load_app_settings,
+    normalize_language,
     normalize_ui_scale,
     save_app_settings,
 )
+from desktop.i18n import TRANSLATIONS, tr
 from desktop.theme.scaling import layout_px
 
-UI_SCALE_RESTART_MESSAGE = "Масштаб интерфейса применится после перезапуска приложения."
+UI_SCALE_RESTART_MESSAGE = TRANSLATIONS["ru"]["settings.restart_message"]
 UI_SCALE_SLIDER_MIN_PERCENT = int(APP_UI_SCALE_MIN * 100)
 UI_SCALE_SLIDER_MAX_PERCENT = int(APP_UI_SCALE_MAX * 100)
+LANGUAGE_OPTIONS = (
+    ("settings.language.ru", "ru"),
+    ("settings.language.en", "en"),
+)
 
 
 def format_ui_scale_label(scale: float) -> str:
@@ -62,11 +69,11 @@ class UiScaleControlPanel(QWidget):
         )
         section_layout.setSpacing(layout_px(12))
 
-        title = QLabel("Интерфейс")
+        title = QLabel(tr("settings.interface.section"))
         title.setObjectName("settingsSectionTitle")
         section_layout.addWidget(title)
 
-        scale_label = QLabel("Масштаб интерфейса")
+        scale_label = QLabel(tr("settings.scale.title"))
         scale_label.setObjectName("uiScaleLabel")
         section_layout.addWidget(scale_label)
 
@@ -93,6 +100,38 @@ class UiScaleControlPanel(QWidget):
         slider_row.addWidget(self._value_label)
         section_layout.addLayout(slider_row)
 
+        language_title = QLabel(tr("settings.language.title"))
+        language_title.setObjectName("settingsLanguageTitle")
+        section_layout.addWidget(language_title)
+
+        interface_language_label = QLabel(tr("settings.language.interface"))
+        interface_language_label.setObjectName("interfaceLanguageLabel")
+        section_layout.addWidget(interface_language_label)
+
+        self._interface_language_combo = QComboBox()
+        self._interface_language_combo.setObjectName("interfaceLanguageCombo")
+        self._populate_language_combo(self._interface_language_combo)
+        section_layout.addWidget(self._interface_language_combo)
+
+        interface_language_hint = QLabel(tr("settings.language.interface_hint"))
+        interface_language_hint.setObjectName("interfaceLanguageHint")
+        interface_language_hint.setWordWrap(True)
+        section_layout.addWidget(interface_language_hint)
+
+        data_language_label = QLabel(tr("settings.language.data"))
+        data_language_label.setObjectName("dataLanguageLabel")
+        section_layout.addWidget(data_language_label)
+
+        self._data_language_combo = QComboBox()
+        self._data_language_combo.setObjectName("dataLanguageCombo")
+        self._populate_language_combo(self._data_language_combo)
+        section_layout.addWidget(self._data_language_combo)
+
+        data_language_hint = QLabel(tr("settings.language.data_hint"))
+        data_language_hint.setObjectName("dataLanguageHint")
+        data_language_hint.setWordWrap(True)
+        section_layout.addWidget(data_language_hint)
+
         self._message_label = QLabel("")
         self._message_label.setObjectName("settingsRestartMessage")
         self._message_label.setWordWrap(True)
@@ -102,9 +141,9 @@ class UiScaleControlPanel(QWidget):
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)
         actions.setSpacing(layout_px(10))
-        self._reset_button = QPushButton("Сбросить 100%")
+        self._reset_button = QPushButton(tr("settings.scale.reset_100"))
         self._reset_button.setObjectName("resetUiScaleButton")
-        self._save_button = QPushButton("Сохранить")
+        self._save_button = QPushButton(tr("settings.save"))
         self._save_button.setObjectName("saveSettingsButton")
         actions.addStretch(1)
         actions.addWidget(self._reset_button)
@@ -125,8 +164,17 @@ class UiScaleControlPanel(QWidget):
     def selected_ui_scale(self) -> float:
         return ui_scale_from_slider_percent(self._scale_slider.value())
 
+    def selected_interface_language(self) -> str:
+        return normalize_language(self._interface_language_combo.currentData())
+
+    def selected_data_language(self) -> str:
+        return normalize_language(self._data_language_combo.currentData())
+
     def load_from_settings(self) -> None:
-        self.set_ui_scale(load_app_settings().ui_scale)
+        settings = load_app_settings()
+        self.set_ui_scale(settings.ui_scale)
+        self._set_language_combo(self._interface_language_combo, settings.interface_language)
+        self._set_language_combo(self._data_language_combo, settings.data_language)
 
     def set_ui_scale(self, scale: float) -> None:
         self._scale_slider.blockSignals(True)
@@ -141,8 +189,42 @@ class UiScaleControlPanel(QWidget):
         self.set_ui_scale(APP_UI_SCALE_DEFAULT)
 
     def _save(self) -> None:
-        save_app_settings(AppSettings(ui_scale=self.selected_ui_scale()))
-        self._restart_message = UI_SCALE_RESTART_MESSAGE
-        self._message_label.setText(UI_SCALE_RESTART_MESSAGE)
+        previous_settings = load_app_settings()
+        next_settings = AppSettings(
+            ui_scale=self.selected_ui_scale(),
+            interface_language=self.selected_interface_language(),
+            data_language=self.selected_data_language(),
+        )
+        message = self._settings_saved_message(previous_settings, next_settings)
+        save_app_settings(
+            next_settings
+        )
+        self._restart_message = message
+        self._message_label.setText(message)
         self._message_label.setVisible(True)
-        self.settingsSaved.emit(UI_SCALE_RESTART_MESSAGE)
+        self.settingsSaved.emit(message)
+
+    def _settings_saved_message(self, previous: AppSettings, current: AppSettings) -> str:
+        interface_changed = (
+            normalize_language(previous.interface_language)
+            != normalize_language(current.interface_language)
+        )
+        data_changed = (
+            normalize_language(previous.data_language)
+            != normalize_language(current.data_language)
+        )
+        if interface_changed and data_changed:
+            return tr("settings.restart_message.both")
+        if data_changed:
+            return tr("settings.restart_message.data")
+        return tr("settings.restart_message")
+
+    def _populate_language_combo(self, combo: QComboBox) -> None:
+        for label_key, language in LANGUAGE_OPTIONS:
+            if language in APP_LANGUAGE_SUPPORTED:
+                combo.addItem(tr(label_key), language)
+
+    def _set_language_combo(self, combo: QComboBox, language: str) -> None:
+        normalized = normalize_language(language)
+        index = combo.findData(normalized)
+        combo.setCurrentIndex(index if index >= 0 else 0)

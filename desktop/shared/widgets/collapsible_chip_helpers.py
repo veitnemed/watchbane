@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import QPushButton
 
+from desktop.i18n import tr
+
 COLLAPSED_VISIBLE_CHIP_COUNT = 5
 
 
@@ -56,9 +58,9 @@ class ChipExpandControl:
         if not has_collapsible_items:
             return
         if self.expanded:
-            self._button.setText("Свернуть ▲")
+            self._button.setText(tr("common.chips.collapse"))
         else:
-            self._button.setText(f"Показать ещё ({self._hidden_count}) ▼")
+            self._button.setText(tr("common.chips.show_more", count=self._hidden_count))
 
 
 def order_keys_by_checked(base_keys: list[str], chips: dict[str, QPushButton]) -> list[str]:

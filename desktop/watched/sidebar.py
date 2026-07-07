@@ -5,6 +5,7 @@ from __future__ import annotations
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QVBoxLayout, QWidget
 
+from desktop.i18n import tr
 from desktop.shared.detail import WatchedListItemDelegate
 from desktop.shared.widgets.list_search import DebouncedLineEditSearch
 from desktop.theme.scaling import control_px, layout_px, list_px
@@ -16,6 +17,20 @@ from desktop.theme.shell_layout import (
 from desktop.theme.layout import WATCHED_ADD_TITLE_MIN_HEIGHT
 from desktop.watched.filters_panel import WatchedFiltersPanel
 from desktop.watched.model import SORT_OPTIONS, WatchedEntry
+
+WATCHED_SORT_LABEL_KEYS = {
+    "user_score": "watched.sort.user_score",
+    "tmdb_score": "watched.sort.tmdb_score",
+    "tmdb_votes": "watched.sort.tmdb_votes",
+    "tmdb_popularity": "watched.sort.tmdb_popularity",
+    "year": "watched.sort.year",
+    "title": "watched.sort.title",
+}
+
+
+def _watched_sort_label(sort_key: str, fallback: str) -> str:
+    key = WATCHED_SORT_LABEL_KEYS.get(sort_key)
+    return tr(key) if key is not None else fallback
 
 
 def build_watched_sidebar(
@@ -35,7 +50,7 @@ def build_watched_sidebar(
     layout.setContentsMargins(0, LEFT_PANEL_TOP_COMPENSATION_PX, 0, 0)
     layout.setSpacing(layout_px(14))
 
-    add_title_button = QPushButton("+ Добавить тайтл")
+    add_title_button = QPushButton(tr("watched.add_title.button"))
     add_title_button.setObjectName("watchedAddTitle")
     add_title_button.setMinimumHeight(control_px(WATCHED_ADD_TITLE_MIN_HEIGHT))
     add_title_button.clicked.connect(on_add_title)
@@ -43,7 +58,7 @@ def build_watched_sidebar(
 
     search_input = QLineEdit()
     search_input.setObjectName("watchedSearch")
-    search_input.setPlaceholderText("Поиск по названию")
+    search_input.setPlaceholderText(tr("watched.search.placeholder"))
     search_input.setClearButtonEnabled(True)
     debounced_search = DebouncedLineEditSearch(
         search_input,
@@ -58,13 +73,13 @@ def build_watched_sidebar(
     sort_layout.setContentsMargins(0, 0, 0, 0)
     sort_layout.setSpacing(layout_px(10))
 
-    sort_label = QLabel("Сортировка")
+    sort_label = QLabel(tr("common.sort"))
     sort_label.setObjectName("watchedSortLabel")
 
     sort_combo = QComboBox()
     sort_combo.setObjectName("watchedSort")
     for sort_key, label in SORT_OPTIONS:
-        sort_combo.addItem(label, sort_key)
+        sort_combo.addItem(_watched_sort_label(sort_key, label), sort_key)
     sort_combo.currentIndexChanged.connect(on_filters_changed)
 
     sort_layout.addWidget(sort_label)

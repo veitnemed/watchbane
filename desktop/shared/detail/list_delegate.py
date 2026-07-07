@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from desktop.i18n import tr
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.posters import resolve_local_poster_path
 from desktop.shared.detail.presenters import format_user_score_display, format_year_display
@@ -18,6 +19,14 @@ from desktop.theme import (
 from desktop.theme.scaling import list_px
 
 _thumb_pixmap_cache: dict[str, object] = {}
+
+
+def clear_list_thumb_pixmap_cache(poster_path: str | None = None) -> None:
+    """Clear cached list thumbnail pixmaps after a local poster file is replaced."""
+    if poster_path in (None, ""):
+        _thumb_pixmap_cache.clear()
+        return
+    _thumb_pixmap_cache.pop(str(poster_path), None)
 
 
 def fit_poster_pixmap_for_display(pixmap, max_width: int, max_height: int):
@@ -168,7 +177,7 @@ class WatchedListItemDelegate:
                 text_right = rect.right() - detail_profiles.LIST_ITEM_H_PADDING
                 text_width = max(detail_profiles.LIST_MIN_TEXT_WIDTH, text_right - text_left)
 
-                title = str(card.get("title") or _key or "Без названия")
+                title = str(card.get("title") or _key or tr("common.untitled"))
                 year = card.get("year")
                 year_text = format_year_display(year)
                 score_text = format_user_score_display(card.get("user_score"))

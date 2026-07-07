@@ -7,7 +7,11 @@ from collections.abc import Callable
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QHBoxLayout, QScrollArea, QSplitter, QWidget
 
+from desktop.i18n import tr
+from desktop.settings.app_settings import get_persisted_data_language
 from desktop.shared.detail import DetailCard
+from desktop.shared.detail.card_poster import clear_detail_poster_source_cache
+from desktop.shared.detail.list_delegate import clear_list_thumb_pixmap_cache
 from desktop.shared.widgets.list_search import resolve_selection_row
 from desktop.theme.shell_layout import (
     DETAIL_TAB_TOP_MARGIN_PX,
@@ -25,6 +29,8 @@ from desktop.watched.model import (
     format_watched_list_counter,
     format_watched_list_status,
     load_watched_entries,
+    prepare_card_for_display,
+    sync_poster_for_display,
 )
 from desktop.watched.sidebar import build_watched_sidebar
 from desktop.watched.tab_actions import WatchedTabActionsMixin
@@ -46,8 +52,9 @@ class WatchedTabView(WatchedTabActionsMixin):
         self._parent = parent
         self._on_status_message = on_status_message
         self._on_entries_changed = on_entries_changed
+        self._data_language = get_persisted_data_language()
 
-        self._entries: list[WatchedEntry] = load_watched_entries()
+        self._entries: list[WatchedEntry] = self._load_entries()
         self._watched_search_index = build_watched_search_index(self._entries)
         self._visible_entries: list[WatchedEntry] = list(self._entries)
         self._sort_key = SORT_OPTIONS[0][0]
@@ -101,14 +108,21 @@ class WatchedTabView(WatchedTabActionsMixin):
     def entries(self) -> list[WatchedEntry]:
         return self._entries
 
+    def _load_entries(self) -> list[WatchedEntry]:
+        try:
+            return load_watched_entries(data_language=self._data_language)
+        except TypeError:
+            return load_watched_entries()
+
     def reload_entries(self, added_key: str | None = None) -> None:
         """Refresh watched list after an external add (e.g. candidate transfer)."""
+        self._data_language = get_persisted_data_language()
         previous_key = None
         current_row = self._list_widget.currentRow()
         if 0 <= current_row < len(self._visible_entries):
             previous_key = self._visible_entries[current_row][0]
 
-        self._entries = load_watched_entries()
+        self._entries = self._load_entries()
         self._reload_watched_search_index()
         self._filters.reload_genre_options(self._entries)
         self._refresh_list()
@@ -131,7 +145,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         self._list_widget.blockSignals(True)
         self._list_widget.setCurrentRow(row_to_select)
         self._list_widget.blockSignals(False)
-        self._detail_card.show_entry(self._visible_entries[row_to_select])
+        self._detail_card.show_entry(self._entry_with_current_language_poster(row_to_select))
 
     def _notify_entries_changed(self) -> None:
         if self._on_entries_changed is not None:
@@ -238,11 +252,61 @@ class WatchedTabView(WatchedTabActionsMixin):
         if row < 0 or row >= len(self._visible_entries):
             self._show_empty_details()
             return
-        self._detail_card.show_entry(self._visible_entries[row])
+        self._detail_card.show_entry(self._entry_with_current_language_poster(row))
+
+    def _entry_with_current_language_poster(self, row: int) -> WatchedEntry:
+        entry = self._visible_entries[row]
+        key, movie, _card = entry
+        try:
+            result = sync_poster_for_display(movie, data_language=self._data_language)
+        except Exception:
+            return entry
+
+        if result.get("updated") is not True:
+            return entry
+
+        self._clear_replaced_poster_pixmap_cache(result)
+        updated_entry = (
+            key,
+            movie,
+            prepare_card_for_display(movie, data_language=self._data_language),
+        )
+        self._visible_entries[row] = updated_entry
+        self._update_list_item_entry(row, updated_entry)
+        for index, existing in enumerate(self._entries):
+            if existing[0] == key:
+                self._entries[index] = updated_entry
+                break
+        return updated_entry
+
+    def _update_list_item_entry(self, row: int, entry: WatchedEntry) -> None:
+        if row < 0 or row >= self._list_widget.count():
+            return
+        item = self._list_widget.item(row)
+        if item is None:
+            return
+        item.setData(Qt.ItemDataRole.UserRole, entry)
+        item.setToolTip(format_list_label(entry[2]))
+        self._list_widget.viewport().update()
+
+    def _clear_replaced_poster_pixmap_cache(self, result: dict) -> None:
+        paths = []
+        download = result.get("download")
+        if isinstance(download, dict):
+            paths.append(download.get("local_path"))
+        entry = result.get("entry")
+        if isinstance(entry, dict):
+            paths.append(entry.get("local_path"))
+
+        for path in paths:
+            if path in (None, ""):
+                continue
+            clear_detail_poster_source_cache(str(path))
+            clear_list_thumb_pixmap_cache(str(path))
 
     def _show_empty_details(self) -> None:
         if self._search_input.text().strip():
-            title = "Ничего не найдено"
+            title = tr("watched.empty.not_found")
         else:
-            title = "Выберите тайтл слева"
+            title = tr("watched.empty.select_title")
         self._detail_card.show_empty(title)

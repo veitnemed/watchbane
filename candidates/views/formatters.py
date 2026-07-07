@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataset.language import choose_display_overview
+
 
 def _format_optional_filter_value(value) -> str:
     if value in (None, ""):
@@ -75,13 +77,12 @@ def format_search_filter_default_lines(defaults: dict) -> list[str]:
     ]
 
 
-def format_candidate_description(candidate: dict, limit: int = 200) -> str:
+def format_candidate_description(candidate: dict, limit: int = 200, data_language: str = "ru") -> str:
     """Returns a short saved description without network requests."""
-    for field_name in ("description", "overview", "tmdb_overview", "plot", "short_description"):
-        text = str(candidate.get(field_name) or "").strip()
-        if text:
-            text = " ".join(text.split())
-            if len(text) <= limit:
-                return text
-            return text[: max(0, limit - 3)].rstrip() + "..."
+    overview = choose_display_overview(candidate, data_language)
+    if overview is not None:
+        text = " ".join(str(overview).split())
+        if len(text) <= limit:
+            return text
+        return text[: max(0, limit - 3)].rstrip() + "..."
     return "нет данных"

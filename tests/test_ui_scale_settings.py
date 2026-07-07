@@ -9,12 +9,19 @@ import pytest
 
 from config import constant
 from desktop.settings.app_settings import (
+    APP_DATA_LANGUAGE_ENV,
+    APP_INTERFACE_LANGUAGE_ENV,
+    APP_LANGUAGE_DEFAULT,
     APP_UI_SCALE_DEFAULT,
     APP_UI_SCALE_MAX,
     APP_UI_SCALE_MIN,
     AppSettings,
+    get_persisted_data_language,
+    get_persisted_interface_language,
     get_persisted_ui_scale,
+    language_to_tmdb_locale,
     load_app_settings,
+    normalize_language,
     normalize_ui_scale,
     save_app_settings,
 )
@@ -67,12 +74,33 @@ def test_missing_settings_file_gives_default_ui_scale(monkeypatch, tmp_path) -> 
     assert load_app_settings().ui_scale == APP_UI_SCALE_DEFAULT
 
 
+def test_missing_settings_file_gives_default_languages(monkeypatch, tmp_path) -> None:
+    _use_settings_path(monkeypatch, tmp_path)
+
+    settings = load_app_settings()
+
+    assert settings.interface_language == APP_LANGUAGE_DEFAULT
+    assert settings.data_language == APP_LANGUAGE_DEFAULT
+
+
 def test_missing_ui_scale_gives_default(monkeypatch, tmp_path) -> None:
     settings_path = _use_settings_path(monkeypatch, tmp_path)
     settings_path.parent.mkdir(parents=True)
     settings_path.write_text(json.dumps({"other": True}), encoding="utf-8")
 
     assert load_app_settings().ui_scale == APP_UI_SCALE_DEFAULT
+
+
+def test_legacy_ui_scale_only_settings_payload_loads(monkeypatch, tmp_path) -> None:
+    settings_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(json.dumps({"ui_scale": 1.25}), encoding="utf-8")
+
+    settings = load_app_settings()
+
+    assert settings.ui_scale == 1.25
+    assert settings.interface_language == "ru"
+    assert settings.data_language == "ru"
 
 
 def test_invalid_json_does_not_crash(monkeypatch, tmp_path) -> None:
@@ -95,6 +123,36 @@ def test_invalid_ui_scale_value_defaults_or_clamps() -> None:
     assert normalize_ui_scale("1.25") == 1.25
 
 
+def test_invalid_language_value_defaults_to_ru() -> None:
+    assert normalize_language(None) == "ru"
+    assert normalize_language(True) == "ru"
+    assert normalize_language("") == "ru"
+    assert normalize_language("de") == "ru"
+    assert normalize_language("RU") == "ru"
+    assert normalize_language(" en ") == "en"
+
+
+def test_invalid_persisted_language_values_default_to_ru(monkeypatch, tmp_path) -> None:
+    settings_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(
+        json.dumps(
+            {
+                "ui_scale": 1.10,
+                "interface_language": "de",
+                "data_language": "",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_app_settings()
+
+    assert settings.ui_scale == 1.10
+    assert settings.interface_language == "ru"
+    assert settings.data_language == "ru"
+
+
 def test_save_then_load_ui_scale(monkeypatch, tmp_path) -> None:
     settings_path = _use_settings_path(monkeypatch, tmp_path)
 
@@ -102,6 +160,29 @@ def test_save_then_load_ui_scale(monkeypatch, tmp_path) -> None:
 
     assert settings_path.exists()
     assert load_app_settings().ui_scale == 1.25
+
+
+def test_save_then_load_languages(monkeypatch, tmp_path) -> None:
+    settings_path = _use_settings_path(monkeypatch, tmp_path)
+
+    save_app_settings(
+        AppSettings(
+            ui_scale=1.25,
+            interface_language="en",
+            data_language="ru",
+        )
+    )
+
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    settings = load_app_settings()
+
+    assert payload == {
+        "ui_scale": 1.25,
+        "interface_language": "en",
+        "data_language": "ru",
+    }
+    assert settings.interface_language == "en"
+    assert settings.data_language == "ru"
 
 
 def test_watchbane_ui_scale_env_override_is_current_process_only(monkeypatch, tmp_path) -> None:
@@ -112,6 +193,31 @@ def test_watchbane_ui_scale_env_override_is_current_process_only(monkeypatch, tm
 
     assert get_persisted_ui_scale() == 1.35
     assert json.loads(settings_path.read_text(encoding="utf-8"))["ui_scale"] == 1.10
+
+
+def test_language_env_overrides_are_independent(monkeypatch, tmp_path) -> None:
+    settings_path = _use_settings_path(monkeypatch, tmp_path)
+    save_app_settings(
+        AppSettings(
+            ui_scale=1.10,
+            interface_language="ru",
+            data_language="en",
+        )
+    )
+
+    monkeypatch.setenv(APP_INTERFACE_LANGUAGE_ENV, "en")
+    monkeypatch.setenv(APP_DATA_LANGUAGE_ENV, "ru")
+
+    assert get_persisted_interface_language() == "en"
+    assert get_persisted_data_language() == "ru"
+    assert json.loads(settings_path.read_text(encoding="utf-8"))["interface_language"] == "ru"
+    assert json.loads(settings_path.read_text(encoding="utf-8"))["data_language"] == "en"
+
+
+def test_language_to_tmdb_locale() -> None:
+    assert language_to_tmdb_locale("ru") == "ru-RU"
+    assert language_to_tmdb_locale("en") == "en-US"
+    assert language_to_tmdb_locale("de") == "ru-RU"
 
 
 def test_get_scale_tuning_defaults_when_local_file_is_missing(monkeypatch) -> None:
@@ -354,64 +460,109 @@ def test_candidate_detail_card_profile_scales_with_ui_scale(qapp) -> None:
 
 
 def test_settings_dialog_displays_current_scale(monkeypatch, tmp_path, qapp) -> None:
-    from PyQt6.QtWidgets import QLabel, QSlider
+    from PyQt6.QtWidgets import QLabel, QComboBox, QSlider
 
     from desktop.settings.dialog import SettingsDialog
 
     _use_settings_path(monkeypatch, tmp_path)
-    save_app_settings(AppSettings(ui_scale=1.25))
+    save_app_settings(AppSettings(ui_scale=1.25, interface_language="en", data_language="ru"))
 
     dialog = SettingsDialog()
     slider = dialog.findChild(QSlider, "uiScaleSlider")
     value_label = dialog.findChild(QLabel, "uiScaleValueLabel")
+    interface_language_combo = dialog.findChild(QComboBox, "interfaceLanguageCombo")
+    data_language_combo = dialog.findChild(QComboBox, "dataLanguageCombo")
 
+    assert dialog.windowTitle() == "Settings"
     assert slider is not None
     assert slider.value() == 125
     assert value_label is not None
     assert value_label.text() == "125%"
+    assert interface_language_combo is not None
+    assert interface_language_combo.currentData() == "en"
+    assert data_language_combo is not None
+    assert data_language_combo.currentData() == "ru"
 
 
 def test_settings_dialog_selecting_125_saves_ui_scale(monkeypatch, tmp_path, qapp) -> None:
-    from PyQt6.QtWidgets import QLabel, QPushButton, QSlider
+    from PyQt6.QtWidgets import QLabel, QComboBox, QPushButton, QSlider
 
-    from desktop.settings.dialog import SettingsDialog, UI_SCALE_RESTART_MESSAGE
+    from desktop.i18n import TRANSLATIONS
+    from desktop.settings.dialog import SettingsDialog
 
     _use_settings_path(monkeypatch, tmp_path)
+    save_app_settings(AppSettings(ui_scale=1.0, interface_language="ru", data_language="ru"))
     dialog = SettingsDialog()
     slider = dialog.findChild(QSlider, "uiScaleSlider")
+    interface_language_combo = dialog.findChild(QComboBox, "interfaceLanguageCombo")
+    data_language_combo = dialog.findChild(QComboBox, "dataLanguageCombo")
     save_button = dialog.findChild(QPushButton, "saveSettingsButton")
     message_label = dialog.findChild(QLabel, "settingsRestartMessage")
     messages = []
     dialog.settingsSaved.connect(messages.append)
 
     slider.setValue(125)
+    interface_language_combo.setCurrentIndex(interface_language_combo.findData("en"))
+    data_language_combo.setCurrentIndex(data_language_combo.findData("en"))
     save_button.click()
 
-    assert load_app_settings().ui_scale == 1.25
-    assert dialog.restart_message == UI_SCALE_RESTART_MESSAGE
-    assert message_label.text() == UI_SCALE_RESTART_MESSAGE
-    assert messages == [UI_SCALE_RESTART_MESSAGE]
+    settings = load_app_settings()
+    assert settings.ui_scale == 1.25
+    assert settings.interface_language == "en"
+    assert settings.data_language == "en"
+    expected_message = TRANSLATIONS["ru"]["settings.restart_message.both"]
+    assert dialog.restart_message == expected_message
+    assert message_label.text() == expected_message
+    assert messages == [expected_message]
+
+
+def test_settings_dialog_data_language_only_message(monkeypatch, tmp_path, qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QComboBox, QPushButton
+
+    from desktop.i18n import tr
+    from desktop.settings.dialog import SettingsDialog
+
+    _use_settings_path(monkeypatch, tmp_path)
+    save_app_settings(AppSettings(ui_scale=1.0, interface_language="ru", data_language="ru"))
+    dialog = SettingsDialog()
+    data_language_combo = dialog.findChild(QComboBox, "dataLanguageCombo")
+    save_button = dialog.findChild(QPushButton, "saveSettingsButton")
+    message_label = dialog.findChild(QLabel, "settingsRestartMessage")
+
+    data_language_combo.setCurrentIndex(data_language_combo.findData("en"))
+    save_button.click()
+
+    assert load_app_settings().data_language == "en"
+    assert dialog.restart_message == tr("settings.restart_message.data")
+    assert message_label.text() == tr("settings.restart_message.data")
 
 
 def test_settings_dialog_reset_prepares_and_saves_default_scale(monkeypatch, tmp_path, qapp) -> None:
-    from PyQt6.QtWidgets import QPushButton, QSlider
+    from PyQt6.QtWidgets import QComboBox, QPushButton, QSlider
 
     from desktop.settings.dialog import SettingsDialog
 
     _use_settings_path(monkeypatch, tmp_path)
-    save_app_settings(AppSettings(ui_scale=1.35))
+    save_app_settings(AppSettings(ui_scale=1.35, interface_language="en", data_language="en"))
     dialog = SettingsDialog()
     slider = dialog.findChild(QSlider, "uiScaleSlider")
+    interface_language_combo = dialog.findChild(QComboBox, "interfaceLanguageCombo")
+    data_language_combo = dialog.findChild(QComboBox, "dataLanguageCombo")
     reset_button = dialog.findChild(QPushButton, "resetUiScaleButton")
     save_button = dialog.findChild(QPushButton, "saveSettingsButton")
 
     reset_button.click()
 
     assert slider.value() == 100
+    assert interface_language_combo.currentData() == "en"
+    assert data_language_combo.currentData() == "en"
 
     save_button.click()
 
-    assert load_app_settings().ui_scale == 1.0
+    settings = load_app_settings()
+    assert settings.ui_scale == 1.0
+    assert settings.interface_language == "en"
+    assert settings.data_language == "en"
 
 
 def test_settings_tab_uses_slider_scale_control() -> None:
@@ -425,11 +576,47 @@ def test_settings_tab_uses_slider_scale_control() -> None:
 
     assert "UiScaleControlPanel" in tab_source
     assert "uiScaleSlider" not in tab_source
-    assert '"Настройки"' in factory_source
+    assert 'languages.tr("tabs.settings")' in factory_source
     assert "SettingsTabView" in factory_source
     assert '"Информация"' not in factory_source
     assert "AnalyticsView" not in factory_source
     assert "on_watched_entries_changed" not in factory_source
+
+
+def test_settings_tab_contains_language_controls(monkeypatch, tmp_path, qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QComboBox
+
+    from desktop.settings.tab_view import SettingsTabView
+
+    _use_settings_path(monkeypatch, tmp_path)
+    save_app_settings(AppSettings(ui_scale=1.0, interface_language="en", data_language="ru"))
+
+    view = SettingsTabView()
+    interface_language_combo = view.widget.findChild(QComboBox, "interfaceLanguageCombo")
+    data_language_combo = view.widget.findChild(QComboBox, "dataLanguageCombo")
+    interface_language_label = view.widget.findChild(QLabel, "interfaceLanguageLabel")
+    data_language_label = view.widget.findChild(QLabel, "dataLanguageLabel")
+    interface_language_hint = view.widget.findChild(QLabel, "interfaceLanguageHint")
+    data_language_hint = view.widget.findChild(QLabel, "dataLanguageHint")
+
+    assert interface_language_combo is not None
+    assert interface_language_combo.itemText(0) == "Russian"
+    assert interface_language_combo.itemData(0) == "ru"
+    assert interface_language_combo.itemText(1) == "English"
+    assert interface_language_combo.itemData(1) == "en"
+    assert interface_language_combo.currentData() == "en"
+    assert data_language_combo is not None
+    assert data_language_combo.currentData() == "ru"
+    assert interface_language_label is not None
+    assert interface_language_label.text() == "Interface language"
+    assert data_language_label is not None
+    assert data_language_label.text() == "Data language"
+    assert interface_language_hint is not None
+    assert interface_language_hint.text() == "Interface language changes buttons and labels."
+    assert interface_language_hint.wordWrap() is True
+    assert data_language_hint is not None
+    assert data_language_hint.text() == "Data language changes titles, descriptions, and future metadata downloads."
+    assert data_language_hint.wordWrap() is True
 
 
 def test_startup_scale_diagnostics_handles_missing_screen(monkeypatch) -> None:
@@ -546,7 +733,7 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
 
 @pytest.mark.parametrize("ui_scale", SCALE_ANCHORS)
 def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
-    from PyQt6.QtWidgets import QLabel, QFrame, QLineEdit, QPushButton, QWidget
+    from PyQt6.QtWidgets import QLabel, QComboBox, QFrame, QLineEdit, QPushButton, QWidget
 
     _set_anchor_ui_scale(ui_scale)
 
@@ -594,11 +781,19 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
     restart_message = settings_view.widget.findChild(QLabel, "settingsRestartMessage")
     save_button = settings_view.widget.findChild(QPushButton, "saveSettingsButton")
     reset_button = settings_view.widget.findChild(QPushButton, "resetUiScaleButton")
+    interface_language_combo = settings_view.widget.findChild(QComboBox, "interfaceLanguageCombo")
+    data_language_combo = settings_view.widget.findChild(QComboBox, "dataLanguageCombo")
+    interface_language_hint = settings_view.widget.findChild(QLabel, "interfaceLanguageHint")
+    data_language_hint = settings_view.widget.findChild(QLabel, "dataLanguageHint")
     assert restart_message is not None
     assert restart_message.wordWrap() is True
     assert restart_message.isHidden() is True
     assert save_button is not None and save_button.sizeHint().height() >= 20
     assert reset_button is not None and reset_button.sizeHint().height() >= 20
+    assert interface_language_combo is not None and interface_language_combo.sizeHint().height() >= 20
+    assert data_language_combo is not None and data_language_combo.sizeHint().height() >= 20
+    assert interface_language_hint is not None and interface_language_hint.wordWrap() is True
+    assert data_language_hint is not None and data_language_hint.wordWrap() is True
 
     watched_filters = WatchedFiltersPanel([], on_filters_changed=lambda: None)
     assert watched_filters.panel.isHidden() is True
@@ -819,6 +1014,13 @@ def test_app_style_includes_settings_scaled_typography() -> None:
     assert "QWidget#settingsTabRoot" in style
     assert "QFrame#settingsInterfaceSection" in style
     assert "QLabel#uiScaleLabel" in style
+    assert "QLabel#settingsLanguageTitle" in style
+    assert "QLabel#interfaceLanguageLabel" in style
+    assert "QLabel#dataLanguageLabel" in style
+    assert "QLabel#interfaceLanguageHint" in style
+    assert "QLabel#dataLanguageHint" in style
+    assert "QComboBox#interfaceLanguageCombo" in style
+    assert "QComboBox#dataLanguageCombo" in style
     assert "QPushButton#saveSettingsButton" in style
     assert f"font-size: {scaling.font_px(FONT_BASE)}px" in style
     assert f"font-size: {scaling.font_px(FONT_SECTION)}px" in style

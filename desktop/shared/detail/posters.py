@@ -72,12 +72,16 @@ def resolve_local_poster_path_from_record(
 
     if title in (None, ""):
         main_info = record.get("main_info") if isinstance(record.get("main_info"), dict) else {}
-        title = display_card.get("title") or main_info.get("title") or record.get("title")
+        title = main_info.get("title") or record.get("title") or display_card.get("title")
         if year is None:
             year = display_card.get("year", main_info.get("year", record.get("year")))
     if title not in (None, ""):
-        from posters.cache import default_local_poster_path
+        from posters.cache import default_local_poster_path, lookup_poster_cache_entry
 
+        cache_entry = lookup_poster_cache_entry(str(title), year)
+        cache_url = cache_entry.get("poster_url") if isinstance(cache_entry, dict) else None
+        if poster_url not in (None, "") and cache_url not in (None, "", poster_url):
+            return None
         default_path = default_local_poster_path(str(title), year)
         if default_path not in (None, ""):
             return default_path
@@ -90,7 +94,7 @@ def resolve_local_poster_path(movie: dict, card: dict | None = None) -> str | No
 
     display_card = card if card is not None else prepare_card_for_display(movie)
     main_info = movie.get("main_info") if isinstance(movie.get("main_info"), dict) else {}
-    title = display_card.get("title") or main_info.get("title") or movie.get("title")
+    title = main_info.get("title") or movie.get("title") or display_card.get("title")
     year = display_card.get("year", main_info.get("year", movie.get("year")))
     return resolve_local_poster_path_from_record(
         movie,

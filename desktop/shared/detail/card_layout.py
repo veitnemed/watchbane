@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from desktop.i18n import tr
 from desktop.shared.detail.action_icons import make_detail_action_icon
 from desktop.shared.detail.profiles import DetailCardLayoutProfile
 from desktop.shared.detail.rating_indicator import StarRatingIndicator
@@ -150,7 +151,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     )
     poster_shell_layout.setSpacing(0)
 
-    owner._poster_label = QLabel("Нет постера", owner._poster_shell)
+    owner._poster_label = QLabel(tr("detail.poster.none"), owner._poster_shell)
     owner._poster_label.setObjectName("detailPoster")
     owner._poster_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     owner._poster_label.setFixedSize(
@@ -246,7 +247,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._poster_actions_layout.setContentsMargins(0, 0, 0, 0)
     owner._poster_actions_layout.setSpacing(profile.detail_small_spacing)
 
-    owner._title_label = QLabel("Выберите тайтл слева")
+    owner._title_label = QLabel(tr("watched.empty.select_title"))
     owner._title_label.setObjectName("detailTitle")
     owner._title_label.setWordWrap(True)
     owner._title_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -342,7 +343,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         mark_watched_button = QPushButton()
         owner._mark_watched_button = mark_watched_button
         owner._mark_watched_button.setObjectName("candidateMarkWatchedButton")
-        owner._mark_watched_button.setToolTip("Перенести в просмотренные")
+        owner._mark_watched_button.setToolTip(tr("detail.action.mark_watched"))
         owner._mark_watched_button.setIcon(
             make_detail_action_icon("eye", COLOR_TEXT, COLOR_TEXT_SECONDARY)
         )
@@ -366,7 +367,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         hide_button = QPushButton()
         owner._hide_button = hide_button
         owner._hide_button.setObjectName("candidateHideButton")
-        owner._hide_button.setToolTip("Скрыть кандидата")
+        owner._hide_button.setToolTip(tr("detail.action.hide_candidate"))
         owner._hide_button.setIcon(
             make_detail_action_icon("hide", COLOR_TEXT, COLOR_TEXT_SECONDARY)
         )
@@ -421,11 +422,11 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._main_info_divider.setFixedHeight(profile.detail_divider_height)
     owner._main_info_divider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-    owner._main_info_title_label = QLabel("ОСНОВНАЯ ИНФОРМАЦИЯ")
+    owner._main_info_title_label = QLabel(tr("detail.main_info.title"))
     owner._main_info_title_label.setObjectName("detailMainInfoHeader")
     owner._main_info_title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
-    owner._main_info_toggle_button = QPushButton("Показать больше")
+    owner._main_info_toggle_button = QPushButton(tr("detail.show_more"))
     owner._main_info_toggle_button.setObjectName("detailMainInfoToggleButton")
     owner._main_info_toggle_button.setAutoDefault(False)
     owner._main_info_toggle_button.setDefault(False)
@@ -474,7 +475,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._overview_divider.setFixedHeight(profile.detail_divider_height)
     owner._overview_divider.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
 
-    owner._overview_title_label = QLabel("ОПИСАНИЕ")
+    owner._overview_title_label = QLabel(tr("detail.overview.title"))
     owner._overview_title_label.setObjectName("detailOverviewHeader")
     owner._overview_title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 

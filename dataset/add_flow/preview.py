@@ -1,21 +1,25 @@
 """Preview movie/card builders for add-title flow."""
 
 from config import constant
-from config import genre_tags
 from config import scheme
 from common.cards import build_watched_movie_card
+from dataset.language import choose_genre_labels
 
 
 def build_preview_movie_from_defaults(defaults: dict) -> dict:
     """Build a temporary dataset movie dict for read-only preview."""
     main_info = dict(defaults.get(scheme.MAIN_INFO, {}))
     main_info.setdefault("user_score", None)
-    return {
+    movie = {
         "main_info": main_info,
         "raw_scores": dict(defaults.get(scheme.RAW_SCORES, {})),
         constant.TAGS_VIBE_SECTION: _normalized_tags_vibe(defaults),
         constant.GENRE_SECTION: _normalized_genre(defaults),
     }
+    localized = defaults.get("localized")
+    if isinstance(localized, dict):
+        movie["localized"] = dict(localized)
+    return movie
 
 
 def build_preview_card_from_defaults(
@@ -24,19 +28,24 @@ def build_preview_card_from_defaults(
     resolved: dict | None = None,
     meta_payload: dict | None = None,
     poster_hints: dict | None = None,
+    data_language: str = "ru",
 ) -> dict:
     """Build watched-style card dict for GUI preview."""
     preview_movie = build_preview_movie_from_defaults(defaults)
     meta_obj = dict(meta_payload or {})
-    card = build_watched_movie_card(preview_movie, meta_obj=meta_obj or None)
+    card = build_watched_movie_card(
+        preview_movie,
+        meta_obj=meta_obj or None,
+        data_language=data_language,
+    )
 
-    genre_labels = genre_tags.get_genre_labels()
     genre_section = _normalized_genre(defaults)
-    genres_display = [
-        genre_labels[feature]
+    genre_keys = [
+        feature
         for feature in constant.GENRE
-        if genre_section.get(feature) == 1 and feature in genre_labels
+        if genre_section.get(feature) == 1
     ]
+    genres_display = choose_genre_labels(genre_keys, data_language)
     if len(genres_display) > 0:
         card["genres"] = genres_display
 

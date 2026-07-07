@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+from desktop.i18n import tr
 from desktop.shared.detail.posters import get_poster_cache_directory, open_path_in_shell
 from desktop.theme import build_poster_image_style, build_poster_placeholder_style
 
 _detail_poster_source_cache: dict[str, object] = {}
+
+
+def clear_detail_poster_source_cache(poster_path: str | None = None) -> None:
+    """Clear cached detail poster pixmaps after a local poster file is replaced."""
+    if poster_path in (None, ""):
+        _detail_poster_source_cache.clear()
+        return
+    _detail_poster_source_cache.pop(str(poster_path), None)
 
 
 def load_detail_poster_source_pixmap(poster_path: str):
@@ -87,7 +96,7 @@ class DetailCardPosterMixin:
         if self._poster_label.pixmap() is None or self._poster_label.pixmap().isNull():
             self._poster_label.setPixmap(QPixmap())
             if self._poster_label.text() == "":
-                self._poster_label.setText("Нет постера")
+                self._poster_label.setText(tr("detail.poster.none"))
             self._poster_label.setStyleSheet(build_poster_placeholder_style())
 
     def _schedule_poster_height_sync(self) -> None:
@@ -100,7 +109,7 @@ class DetailCardPosterMixin:
 
         self._poster_source_pixmap = None
         self._poster_label.setPixmap(QPixmap())
-        self._poster_label.setText("Нет постера")
+        self._poster_label.setText(tr("detail.poster.none"))
         self._poster_label.setStyleSheet(build_poster_placeholder_style())
 
     def _set_poster_image(self, poster_path: str) -> bool:
@@ -120,9 +129,9 @@ class DetailCardPosterMixin:
         from PyQt6.QtWidgets import QMenu
 
         menu = QMenu(self._poster_label)
-        open_action = menu.addAction("Открыть постер")
+        open_action = menu.addAction(tr("detail.poster.open"))
         open_action.setEnabled(self._local_poster_path is not None)
-        cache_action = menu.addAction("Папка poster-cache")
+        cache_action = menu.addAction(tr("detail.poster.cache_folder"))
         chosen_action = menu.exec(self._poster_label.mapToGlobal(position))
         if chosen_action is open_action:
             self._open_local_poster()
@@ -136,7 +145,7 @@ class DetailCardPosterMixin:
             return
         ok, error = open_path_in_shell(self._local_poster_path)
         if not ok:
-            QMessageBox.warning(self._frame, "Постер", error or "Не удалось открыть файл постера.")
+            QMessageBox.warning(self._frame, "Poster", error or tr("detail.poster.error.open_file"))
 
     def _open_poster_cache_directory(self) -> None:
         from PyQt6.QtWidgets import QMessageBox
@@ -147,7 +156,7 @@ class DetailCardPosterMixin:
             QMessageBox.warning(
                 self._frame,
                 "Poster-cache",
-                error or "Не удалось открыть папку poster-cache.",
+                error or tr("detail.poster.error.open_cache"),
             )
 
     def apply_local_poster_path(self, poster_path: str | None) -> None:

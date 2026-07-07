@@ -28,12 +28,16 @@ from desktop.candidates.presenters import (
     build_candidate_readonly_detail_entry,
     build_candidate_search_index,
     candidate_detail_identity,
+    candidate_sort_mode_label,
     candidate_poster_url_for_download,
 )
+from candidates.pool.localized_posters import ensure_candidate_localized_poster
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
-from desktop.shared.widgets.list_search import DebouncedLineEditSearch, resolve_selection_row
+from desktop.i18n import tr
+from desktop.settings.app_settings import get_persisted_data_language
 from desktop.shared.detail import DetailCard
 from desktop.shared.detail import profiles as detail_profiles
+from desktop.shared.widgets.list_search import DebouncedLineEditSearch, resolve_selection_row
 from desktop.theme.shell_layout import (
     CANDIDATE_LIST_MAX_WIDTH_PX,
     CANDIDATE_LIST_MIN_WIDTH_PX,
@@ -70,6 +74,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._session = session
         self._service = service or session.service
         self._on_watched_added = on_watched_added
+        self._data_language = get_persisted_data_language()
         self._all_candidates: list[dict] = []
         self._candidates: list[dict] = []
         self._selected_candidate: dict | None = None
@@ -79,7 +84,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._detail_entries: dict[str, tuple] = {}
         self._poster_request_seq = 0
         self._poster_worker = None
-        self._model = CandidateListModel(parent=None)
+        self._model = CandidateListModel(parent=None, data_language=self._data_language)
         self._delegate = None
 
         self._widget = QWidget()
@@ -93,13 +98,13 @@ class CandidateListView(CandidateListActionsMixin):
         )
         root_layout.setSpacing(CANDIDATE_ROOT_SPACING_PX)
 
-        sort_label = QLabel("Сортировка")
+        sort_label = QLabel(tr("common.sort"))
         sort_label.setObjectName("candidateSortLabel")
         self._sort_combo = QComboBox()
         self._sort_combo.setObjectName("candidateListSort")
         for mode in self._service.SEARCH_SORT_MODES:
             self._sort_combo.addItem(
-                self._service.SEARCH_SORT_MODE_LABELS[mode],
+                candidate_sort_mode_label(mode),
                 mode,
             )
         self._sort_combo.setCurrentIndex(0)
@@ -122,7 +127,7 @@ class CandidateListView(CandidateListActionsMixin):
 
         self._search_input = QLineEdit()
         self._search_input.setObjectName("candidateListSearch")
-        self._search_input.setPlaceholderText("Поиск по названию")
+        self._search_input.setPlaceholderText(tr("candidates.search.placeholder"))
         self._search_input.setClearButtonEnabled(True)
         self._debounced_search = DebouncedLineEditSearch(
             self._search_input,
@@ -146,7 +151,11 @@ class CandidateListView(CandidateListActionsMixin):
         self._results_list.setSpacing(CANDIDATE_LIST_ITEM_SPACING)
         self._results_list.setUniformItemSizes(True)
         self._results_list.setModel(self._model)
-        self._delegate = build_candidate_list_item_delegate(self._results_list, session.sort_mode)
+        self._delegate = build_candidate_list_item_delegate(
+            self._results_list,
+            session.sort_mode,
+            data_language=self._data_language,
+        )
         self._results_list.setItemDelegate(self._delegate)
         self._results_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self._results_list.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -163,7 +172,7 @@ class CandidateListView(CandidateListActionsMixin):
         detail_layout.setContentsMargins(0, 0, 0, 0)
         detail_layout.setSpacing(0)
 
-        self._detail_placeholder = QLabel("Сначала примените фильтры на вкладке «Фильтры»")
+        self._detail_placeholder = QLabel(tr("candidates.detail.apply_filters_hint"))
         self._detail_placeholder.setObjectName("candidateSearchDetailPlaceholder")
         self._detail_placeholder.setWordWrap(True)
         self._detail_placeholder.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -194,6 +203,7 @@ class CandidateListView(CandidateListActionsMixin):
         self.refresh()
 
     def on_tab_activated(self) -> None:
+        self._refresh_data_language()
         if self._session.has_results or self._session.is_loading:
             return
         self._clear_detail(show_filters_hint=False, loading=True)
@@ -207,9 +217,25 @@ class CandidateListView(CandidateListActionsMixin):
         mode = self._sort_combo.currentData()
         if mode in self._service.SEARCH_SORT_MODES:
             self._session.set_sort_mode(str(mode))
-            self._delegate = build_candidate_list_item_delegate(self._results_list, self._session.sort_mode)
-            self._results_list.setItemDelegate(self._delegate)
-            self._results_list.viewport().update()
+            self._rebuild_list_delegate()
+
+    def _rebuild_list_delegate(self) -> None:
+        self._delegate = build_candidate_list_item_delegate(
+            self._results_list,
+            self._session.sort_mode,
+            data_language=self._data_language,
+        )
+        self._results_list.setItemDelegate(self._delegate)
+        self._results_list.viewport().update()
+
+    def _refresh_data_language(self) -> None:
+        data_language = get_persisted_data_language()
+        if data_language == self._data_language:
+            return
+        self._data_language = data_language
+        self._detail_entries = {}
+        self._model.set_data_language(data_language)
+        self._rebuild_list_delegate()
 
     def _apply_visible_candidates(self) -> None:
         query = self._search_input.text()
@@ -249,20 +275,35 @@ class CandidateListView(CandidateListActionsMixin):
     def _update_counter_label(self, query: str) -> None:
         dup_note = ""
         if self._session.hidden_duplicates > 0:
-            dup_note = f" · дублей скрыто: {self._session.hidden_duplicates}"
+            dup_note = tr(
+                "candidates.counter.hidden_duplicates",
+                count=self._session.hidden_duplicates,
+            )
         visible = len(self._candidates)
         total = len(self._all_candidates)
         unique_total = self._pool_unique_total
         if query.strip():
             self._counter_label.setText(
-                f"Найдено {visible} из {total} · уникальных в pool: {unique_total}{dup_note}"
+                tr(
+                    "candidates.counter.found",
+                    visible=visible,
+                    total=total,
+                    unique_total=unique_total,
+                    dup_note=dup_note,
+                )
             )
         else:
             self._counter_label.setText(
-                f"Показано {visible} · уникальных в pool: {unique_total}{dup_note}"
+                tr(
+                    "candidates.counter.shown",
+                    visible=visible,
+                    unique_total=unique_total,
+                    dup_note=dup_note,
+                )
             )
 
     def refresh(self) -> None:
+        self._refresh_data_language()
         self._poster_request_seq += 1
         if not self._session.has_results:
             self._all_candidates = []
@@ -300,7 +341,7 @@ class CandidateListView(CandidateListActionsMixin):
                 self._clear_detail(show_filters_hint=not self._session.has_results)
             return
 
-        candidate = self._candidates[row]
+        candidate = self._candidate_with_current_language_poster(self._candidates[row])
         self._selected_candidate = candidate
         self._selected_identity = candidate_detail_identity(candidate)
         lookup_done = perf_counter()
@@ -310,7 +351,10 @@ class CandidateListView(CandidateListActionsMixin):
         request_seq = self._poster_request_seq
         entry = self._detail_entries.get(identity)
         if entry is None:
-            entry = build_candidate_readonly_detail_entry(candidate)
+            entry = build_candidate_readonly_detail_entry(
+                candidate,
+                data_language=self._data_language,
+            )
             self._detail_entries[identity] = entry
         build_done = perf_counter()
 
@@ -319,7 +363,10 @@ class CandidateListView(CandidateListActionsMixin):
         self._detail_card.show_entry(entry)
         render_done = perf_counter()
 
-        poster_url = candidate_poster_url_for_download(candidate)
+        poster_url = candidate_poster_url_for_download(
+            candidate,
+            data_language=self._data_language,
+        )
         if poster_url not in (None, ""):
             self._start_poster_download(poster_url, identity, request_seq)
 
@@ -334,9 +381,28 @@ class CandidateListView(CandidateListActionsMixin):
                 total_ms,
             )
 
+    def _candidate_with_current_language_poster(self, candidate: dict) -> dict:
+        try:
+            updated_candidate, changed = ensure_candidate_localized_poster(
+                candidate,
+                data_language=self._data_language,
+            )
+        except Exception:
+            return candidate
+
+        if changed is not True or not isinstance(updated_candidate, dict):
+            return candidate
+
+        identity = candidate_detail_identity(candidate)
+        candidate.clear()
+        candidate.update(updated_candidate)
+        self._detail_entries.pop(identity, None)
+        self._model.update_poster_path(identity, None)
+        return candidate
+
     def _on_loading_changed(self) -> None:
         if self._session.is_loading:
-            self._counter_label.setText("Загрузка кандидатов...")
+            self._counter_label.setText(tr("candidates.detail.loading"))
             self._clear_detail(show_filters_hint=False, loading=True)
 
     def _clear_detail(
@@ -349,17 +415,17 @@ class CandidateListView(CandidateListActionsMixin):
         self._poster_request_seq += 1
         self._detail_scroll.hide()
         if loading:
-            self._detail_placeholder.setText("Загрузка кандидатов...")
+            self._detail_placeholder.setText(tr("candidates.detail.loading"))
             self._detail_placeholder.show()
         elif show_filters_hint:
-            self._detail_placeholder.setText("Сначала примените фильтры на вкладке «Фильтры»")
+            self._detail_placeholder.setText(tr("candidates.detail.apply_filters_hint"))
             self._detail_placeholder.show()
         elif search_active:
-            self._detail_placeholder.setText("Ничего не найдено по запросу.")
+            self._detail_placeholder.setText(tr("candidates.detail.no_results_query"))
             self._detail_placeholder.show()
         elif self._session.has_results and len(self._candidates) == 0:
-            self._detail_placeholder.setText("Нет кандидатов после фильтра.")
+            self._detail_placeholder.setText(tr("candidates.detail.no_results"))
             self._detail_placeholder.show()
         else:
-            self._detail_placeholder.setText("Выберите кандидата из списка")
+            self._detail_placeholder.setText(tr("candidates.detail.select_candidate"))
             self._detail_placeholder.show()

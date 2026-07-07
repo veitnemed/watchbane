@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from desktop.i18n import tr
 from desktop.shared.detail.presenters import format_user_score_display, format_year_display
 from desktop.watched.model.filters import watched_filters_are_active
 
 
 def format_list_label(card: dict) -> str:
     """Compact label for the left-hand list."""
-    title = card.get("title") or "Без названия"
+    title = card.get("title") or tr("common.untitled")
     year = card.get("year")
     score_label = format_user_score_display(card.get("user_score"))
     parts = [title]
@@ -33,10 +34,10 @@ def format_watched_list_status(
     normalized = query.strip()
     has_filter = bool(normalized) or has_score_filter or has_year_filter or has_genre_filter
     if visible_count == 0:
-        return "Ничего не найдено" if has_filter else "Список пуст"
+        return tr("watched.status.no_results") if has_filter else tr("watched.status.empty")
     if has_filter:
-        return f"Показано {visible_count} из {total_count}"
-    return f"Всего {visible_count}"
+        return tr("watched.status.shown", visible=visible_count, total=total_count)
+    return tr("watched.status.total", visible=visible_count)
 
 
 def format_watched_list_counter(
@@ -51,10 +52,10 @@ def format_watched_list_counter(
     normalized = query.strip()
     has_filter = bool(normalized) or has_score_filter or has_year_filter or has_genre_filter
     if visible_count == 0:
-        return "Ничего не найдено" if has_filter else "Список пуст"
+        return tr("watched.status.no_results") if has_filter else tr("watched.status.empty")
     if has_filter or visible_count != total_count:
-        return f"{visible_count} из {total_count}"
-    return f"Всего {visible_count}"
+        return tr("watched.status.visible_total", visible=visible_count, total=total_count)
+    return tr("watched.status.total", visible=visible_count)
 
 
 def count_active_filters(
@@ -75,5 +76,5 @@ def format_watched_filters_label(
     """Build the watched filters toggle label for the sidebar."""
     arrow = "▾" if is_expanded else "▸"
     if watched_filters_are_active(has_score_filter, has_year_filter, has_genre_filter):
-        return f"{arrow} Фильтры активны"
-    return f"{arrow} Фильтры"
+        return f"{arrow} {tr('watched.filters.active')}"
+    return f"{arrow} {tr('watched.filters.toggle')}"

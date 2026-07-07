@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
+from desktop.i18n import tr
 from desktop.shared.detail.card_pills import clear_layout, make_pill_label
 from desktop.shared.detail.card_poster import (
     cover_crop_poster_pixmap_for_display,
@@ -69,7 +70,7 @@ class AddTitleCompactPreviewCard:
         summary_row.setContentsMargins(0, 0, 0, 0)
         summary_row.setSpacing(layout_px(ADD_TITLE_COMPACT_CONTENT_GAP))
 
-        self._poster_label = QLabel("Нет постера")
+        self._poster_label = QLabel(tr("detail.poster.none"))
         self._poster_label.setObjectName("addTitleCompactPoster")
         self._poster_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._poster_label.setFixedSize(self._poster_width, self._poster_height)
@@ -129,7 +130,7 @@ class AddTitleCompactPreviewCard:
 
     def show_entry(self, entry: DetailEntry) -> None:
         _, movie, card = entry
-        self._title_label.setText(str(card.get("title") or entry[0] or "Без названия"))
+        self._title_label.setText(str(card.get("title") or entry[0] or tr("common.untitled")))
         self._set_meta_text(build_title_meta_text(card))
         self._set_genres(build_detail_info_pill_labels(card))
         self._set_rating_items(build_meta_pill_items(card), build_final_score_star_item(card))
@@ -205,5 +206,5 @@ class AddTitleCompactPreviewCard:
                 return
 
         self._poster_label.setPixmap(QPixmap())
-        self._poster_label.setText("Нет постера")
+        self._poster_label.setText(tr("detail.poster.none"))
         self._poster_label.setStyleSheet(build_poster_placeholder_style())

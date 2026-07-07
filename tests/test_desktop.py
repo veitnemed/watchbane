@@ -1,6 +1,7 @@
 import copy
 import ast
 import inspect
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
@@ -65,6 +66,12 @@ def _flush_qt_deferred_deletes(qapp) -> None:
     qapp.processEvents()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_desktop_settings(monkeypatch, tmp_path):
+    settings_path = tmp_path / "data" / "settings.json"
+    monkeypatch.setattr(constant, "APP_SETTINGS_JSON", str(settings_path))
+
+
 def test_desktop_app_imports_without_window() -> None:
     import desktop.app as app_module
 
@@ -85,6 +92,695 @@ def test_desktop_app_icon_asset_loads(qapp) -> None:
 
     assert APP_ICON_PATH.exists()
     assert build_app_icon().isNull() is False
+
+
+def test_i18n_catalogs_have_same_keys() -> None:
+    from desktop.i18n import SUPPORTED_LANGUAGES, TRANSLATIONS
+
+    key_sets = {language: set(TRANSLATIONS[language]) for language in SUPPORTED_LANGUAGES}
+    assert key_sets["ru"] == key_sets["en"]
+
+
+def test_i18n_translator_defaults_and_fallbacks(monkeypatch) -> None:
+    from desktop.settings.app_settings import AppSettings
+    import desktop.i18n.translator as translator_module
+
+    monkeypatch.setattr(
+        translator_module,
+        "load_app_settings",
+        lambda: AppSettings(interface_language="ru", data_language="en"),
+    )
+
+    assert translator_module.tr("tabs.watched") == "Моё"
+
+    monkeypatch.setattr(
+        translator_module,
+        "load_app_settings",
+        lambda: AppSettings(interface_language="en", data_language="ru"),
+    )
+    monkeypatch.delitem(translator_module.TRANSLATIONS["en"], "tabs.watched")
+
+    assert translator_module.tr("tabs.watched") == "Моё"
+    assert translator_module.tr("missing.translation.key") == "missing.translation.key"
+
+
+def test_i18n_translator_respects_interface_language_env(monkeypatch) -> None:
+    import desktop.i18n.translator as translator_module
+
+    monkeypatch.setenv("WATCHBANE_INTERFACE_LANGUAGE", "en")
+
+    assert translator_module.get_interface_language() == "en"
+    assert translator_module.tr("tabs.watched") == "My library"
+
+
+def test_desktop_language_context_keeps_interface_and_data_independent(monkeypatch) -> None:
+    from desktop.language_context import load_desktop_language_context
+
+    monkeypatch.setenv("WATCHBANE_INTERFACE_LANGUAGE", "en")
+    monkeypatch.setenv("WATCHBANE_DATA_LANGUAGE", "ru")
+
+    context = load_desktop_language_context()
+
+    assert context.interface_language == "en"
+    assert context.data_language == "ru"
+    assert context.tmdb_locale == "ru-RU"
+    assert context.tr("tabs.settings") == "Settings"
+
+
+def test_english_ui_labels_cover_sort_and_chip_controls(qapp) -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    from desktop.candidates.presenters import candidate_sort_mode_label, format_candidate_metric_value
+    from desktop.shared.widgets.country_chip_selector import CountryChipSelector
+    from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
+    from desktop.watched.sidebar import _watched_sort_label
+
+    assert _watched_sort_label("user_score", "fallback") == "My rating"
+    assert candidate_sort_mode_label("final_score") == "Final"
+    assert format_candidate_metric_value({"final_score": 9.2}, "final_score") == "Final 9.2"
+
+    country_selector = CountryChipSelector([{"code": "US", "label": "United States"}])
+    genre_selector = GenreChipSelector()
+    genre_selector.set_options(["Drama"])
+
+    assert country_selector._count_label.text() == "All countries"
+    assert genre_selector._count_label.text() == "Selected: 0"
+
+
+def test_english_data_language_formats_detail_values() -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.shared.detail.additional_info import format_episode_runtime, format_seasons_episodes
+    from desktop.shared.detail.main_info import (
+        build_main_info_items,
+        build_title_meta_text,
+        format_air_date_display,
+        format_votes_display,
+        normalize_object_type,
+    )
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    assert normalize_object_type("series", data_language="en") == "Series"
+    assert format_air_date_display("2022-03-16", data_language="en") == "16 Mar 2022"
+    assert format_seasons_episodes(6, 63, data_language="en") == "6 seasons / 63 episodes"
+    assert format_episode_runtime([46], data_language="en") == "46 min"
+    assert format_votes_display(3456, data_language="en") == "3.5k"
+    assert build_title_meta_text(
+        {"year": 2015, "number_of_seasons": 6, "number_of_episodes": 63},
+        data_language="en",
+    ) == "2015 • 6 seasons / 63 episodes"
+
+    items = build_main_info_items(
+        {
+            "country": "US",
+            "object_type": "series",
+            "first_air_date": "2015-02-08",
+            "last_air_date": "2022-08-15",
+            "status": "Ended",
+        },
+        data_language="en",
+    )
+
+    assert {"label": "Type", "value": "Series"} in items
+    assert {"label": "Country", "value": "United States"} in items
+    assert {"label": "Premiere", "value": "8 Feb 2015"} in items
+    assert {"label": "Last episode", "value": "15 Aug 2022"} in items
+    assert {"label": "Status", "value": "Ended"} in items
+
+
+def test_interface_and_data_language_are_independent() -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_card
+    from desktop.i18n import tr
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+
+    candidate = {
+        "title": "Лучше звоните Солу",
+        "description": "Русское описание",
+        "localized": {
+            "ru": {"title": "Лучше звоните Солу", "overview": "Русское описание"},
+            "en": {"title": "Better Call Saul", "overview": "English overview"},
+        },
+    }
+
+    save_app_settings(AppSettings(interface_language="en", data_language="ru"))
+    assert tr("tabs.watched") == "My library"
+    assert build_candidate_readonly_card(candidate, data_language="ru")["title"] == "Лучше звоните Солу"
+
+    save_app_settings(AppSettings(interface_language="ru", data_language="en"))
+    assert tr("tabs.watched") == "Моё"
+    assert build_candidate_readonly_card(candidate, data_language="en")["title"] == "Better Call Saul"
+
+
+def test_english_country_display_and_add_title_country_combo(qapp) -> None:
+    from candidates.models.country_schema import candidate_country_for_display
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.watched.add_title.search_dialog import AddTitleSearchDialog
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    assert candidate_country_for_display({"country": "US"}, language="en") == "United States"
+
+    dialog = AddTitleSearchDialog(initial_country="US")
+
+    assert dialog._country_combo.itemText(0) == "Any country"
+    assert dialog._country_combo.currentText() == "United States"
+
+
+def test_add_title_resolve_uses_data_language_for_tmdb_locale() -> None:
+    from dataset.resolve import service as resolve_service
+
+    calls = {"search_language": None, "details_language": None}
+
+    def fake_search(title, *, language=None):
+        calls["search_language"] = language
+        return [{"id": 101, "name": title}]
+
+    def fake_details(tmdb_id, *, language=None, **kwargs):
+        calls["details_language"] = language
+        assert kwargs["append_to_response"] == resolve_service.api_tmdb.DEFAULT_TV_DETAIL_APPENDS
+        return {
+            "id": tmdb_id,
+            "name": "Better Call Saul",
+            "original_name": "Better Call Saul",
+            "first_air_date": "2015-02-08",
+            "origin_country": ["US"],
+            "production_countries": [{"iso_3166_1": "US", "name": "United States"}],
+            "genres": [{"id": 18, "name": "Drama"}],
+            "vote_average": 8.7,
+            "vote_count": 6000,
+            "popularity": 40.0,
+            "overview": "English overview",
+            "external_ids": {"imdb_id": "tt3032476"},
+        }
+
+    result = resolve_service.resolve_title_data_for_add(
+        "Better Call Saul",
+        "US",
+        data_language="en",
+        tmdb_search_func=fake_search,
+        tmdb_choose_func=lambda results, **_kwargs: results[0],
+        tmdb_details_func=fake_details,
+    )
+
+    assert calls == {"search_language": "en-US", "details_language": "en-US"}
+    assert result["tmdb_language"] == "en-US"
+    assert result["data_language"] == "en"
+    assert result["defaults"]["localized"]["en"]["title"] == "Better Call Saul"
+    assert result["defaults"]["localized"]["en"]["overview"] == "English overview"
+
+
+def test_add_title_resolve_fallback_search_keeps_english_naruto_title() -> None:
+    from dataset.resolve import service as resolve_service
+
+    search_calls = []
+    details_calls = []
+
+    def fake_search(title, *, language=None):
+        search_calls.append((title, language))
+        if title == "Naruto" and language == "en-US":
+            return [{"id": 46260, "name": "Naruto"}]
+        return []
+
+    def fake_details(tmdb_id, *, language=None, **kwargs):
+        details_calls.append((tmdb_id, language))
+        assert kwargs["append_to_response"] == resolve_service.api_tmdb.DEFAULT_TV_DETAIL_APPENDS
+        return {
+            "id": tmdb_id,
+            "name": "Naruto",
+            "original_name": "ナルト",
+            "first_air_date": "2002-10-03",
+            "origin_country": ["JP"],
+            "production_countries": [{"iso_3166_1": "JP", "name": "Japan"}],
+            "original_language": "ja",
+            "genres": [{"id": 10759, "name": "Action & Adventure"}],
+            "vote_average": 8.4,
+            "vote_count": 5600,
+            "popularity": 60.0,
+            "overview": "Naruto Uzumaki wants to become the strongest ninja in his village.",
+            "external_ids": {"imdb_id": "tt0409591"},
+        }
+
+    result = resolve_service.resolve_title_data_for_add(
+        "Наруто",
+        "JP",
+        data_language="en",
+        tmdb_search_func=fake_search,
+        tmdb_choose_func=lambda results, **_kwargs: results[0] if results else None,
+        tmdb_details_func=fake_details,
+    )
+
+    assert search_calls == [("Наруто", "en-US"), ("Наруто", "ru-RU"), ("Naruto", "en-US")]
+    assert details_calls == [(46260, "en-US")]
+    assert result["found"] is True
+    assert result["defaults"]["main_info"]["title"] == "Naruto"
+    assert result["defaults"]["localized"]["en"]["title"] == "Naruto"
+    assert result["defaults"]["localized"]["en"]["title"] != "ナルト"
+    assert result["defaults"]["localized"]["en"]["overview"].startswith("Naruto Uzumaki")
+
+
+def test_add_title_resolve_builds_ru_and_en_localized_blocks_from_tmdb_details() -> None:
+    from dataset.resolve import service as resolve_service
+
+    def fake_search(title, *, language=None):
+        assert language == "en-US"
+        return [{"id": 46260, "name": "Naruto"}]
+
+    def fake_details(tmdb_id, *, language=None, **kwargs):
+        assert tmdb_id == 46260
+        assert language == "en-US"
+        assert kwargs["append_to_response"] == resolve_service.api_tmdb.DEFAULT_TV_DETAIL_APPENDS
+        return {
+            "id": 46260,
+            "name": "Naruto",
+            "original_name": "\u30ca\u30eb\u30c8",
+            "first_air_date": "2002-10-03",
+            "origin_country": ["JP"],
+            "production_countries": [{"iso_3166_1": "JP", "name": "Japan"}],
+            "original_language": "ja",
+            "genres": [{"id": 10759, "name": "Action & Adventure"}],
+            "vote_average": 8.4,
+            "vote_count": 5600,
+            "overview": "English Naruto overview.",
+            "poster_path": "/naruto_en_top.jpg",
+            "translations": {
+                "translations": [
+                    {
+                        "iso_639_1": "ru",
+                        "iso_3166_1": "RU",
+                        "data": {
+                            "name": "\u041d\u0430\u0440\u0443\u0442\u043e",
+                            "overview": "\u0420\u0443\u0441\u0441\u043a\u043e\u0435 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u041d\u0430\u0440\u0443\u0442\u043e.",
+                        },
+                    },
+                    {
+                        "iso_639_1": "en",
+                        "iso_3166_1": "US",
+                        "data": {
+                            "name": "Naruto",
+                            "overview": "English Naruto overview.",
+                        },
+                    },
+                ],
+            },
+            "images": {
+                "posters": [
+                    {"file_path": "/naruto_ru.jpg", "iso_639_1": "ru", "vote_average": 8.0, "vote_count": 10},
+                    {"file_path": "/naruto_en.jpg", "iso_639_1": "en", "vote_average": 7.5, "vote_count": 8},
+                ],
+            },
+        }
+
+    result = resolve_service.resolve_title_data_for_add(
+        "\u041d\u0430\u0440\u0443\u0442\u043e",
+        "JP",
+        data_language="en",
+        tmdb_search_func=fake_search,
+        tmdb_choose_func=lambda results, **_kwargs: results[0],
+        tmdb_details_func=fake_details,
+    )
+
+    localized = result["defaults"]["localized"]
+    assert result["defaults"]["main_info"]["title"] == "Naruto"
+    assert localized["en"]["title"] == "Naruto"
+    assert localized["en"]["overview"] == "English Naruto overview."
+    assert localized["en"]["poster_path"] == "/naruto_en.jpg"
+    assert localized["ru"]["title"] == "\u041d\u0430\u0440\u0443\u0442\u043e"
+    assert localized["ru"]["overview"].startswith("\u0420\u0443\u0441\u0441\u043a\u043e\u0435")
+    assert localized["ru"]["poster_path"] == "/naruto_ru.jpg"
+
+
+def test_add_dataset_record_preserves_localized_payload(monkeypatch) -> None:
+    from dataset.records import add as add_module
+
+    raw_scores = {
+        "kp_score": 8.0,
+        "kp_votes": 1000,
+        "imdb_score": 8.1,
+        "imdb_votes": 1000,
+    }
+    payload = {
+        "main_info": {
+            "title": "Naruto",
+            "user_score": 8.5,
+            "year": 2002,
+            "country": "JP",
+        },
+        "raw_scores": raw_scores,
+        constant.TAGS_VIBE_SECTION: {feature: 0 for feature in constant.TAGS_VIBE},
+        constant.GENRE_SECTION: {feature: 0 for feature in constant.GENRE},
+        "localized": {
+            "ru": {
+                "title": "\u041d\u0430\u0440\u0443\u0442\u043e",
+                "overview": "\u0420\u0443\u0441\u0441\u043a\u043e\u0435 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435.",
+            },
+            "en": {
+                "title": "Naruto",
+                "overview": "English overview.",
+            },
+        },
+    }
+    saved = {}
+
+    monkeypatch.setattr(add_module, "load_dataset", lambda: {})
+    monkeypatch.setattr(add_module, "save_dataset", lambda data: saved.update(data))
+    monkeypatch.setattr(add_module, "get_meta_obj", lambda _title: {"raw_scores": raw_scores})
+    monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
+
+    result = add_module.add_dataset_record(payload)
+
+    assert result.ok is True
+    assert saved["Naruto"]["localized"]["ru"]["title"] == "\u041d\u0430\u0440\u0443\u0442\u043e"
+    assert saved["Naruto"]["localized"]["en"]["overview"] == "English overview."
+
+
+def test_tmdb_result_choice_matches_cyrillic_naruto_to_english_name() -> None:
+    from dataset.resolve.sources import choose_best_tmdb_result
+
+    selected = choose_best_tmdb_result(
+        [
+            {
+                "id": 46260,
+                "name": "Naruto",
+                "original_name": "ナルト",
+                "origin_country": ["JP"],
+                "vote_count": 100,
+                "popularity": 20.0,
+            },
+            {
+                "id": 31910,
+                "name": "Naruto Shippūden",
+                "original_name": "ナルト 疾風伝",
+                "origin_country": ["JP"],
+                "vote_count": 10000,
+                "popularity": 90.0,
+            },
+        ],
+        title="Наруто",
+        country="JP",
+    )
+
+    assert selected is not None
+    assert selected["id"] == 46260
+    assert selected["original_name"] == "ナルト"
+
+
+def test_live_tmdb_naruto_english_locale_uses_display_name_not_original_japanese() -> None:
+    if os.environ.get("WATCHBANE_RUN_TMDB_API_TESTS") != "1":
+        pytest.skip("Set WATCHBANE_RUN_TMDB_API_TESTS=1 to run live TMDb API smoke.")
+
+    from dataset.resolve import service as resolve_service
+
+    result = resolve_service.resolve_title_data_for_add("Наруто", "JP", data_language="en")
+
+    assert result["found"] is True
+    assert result["tmdb_language"] == "en-US"
+    assert result["defaults"]["main_info"]["title"] == "Naruto"
+    assert result["defaults"]["localized"]["en"]["title"] == "Naruto"
+    assert result["tmdb_data"]["original_title"] == "ナルト"
+
+
+def test_tmdb_localized_backfill_uses_locale_name_not_original_japanese() -> None:
+    from dataset.migrations.tmdb_localized import backfill_mapping_from_tmdb
+
+    calls = []
+
+    def fake_details(tmdb_id, *, language=None, **_kwargs):
+        calls.append((tmdb_id, language))
+        return {
+            "id": tmdb_id,
+            "name": "Naruto",
+            "original_name": "ナルト",
+            "overview": "Naruto Uzumaki wants to become the strongest ninja in his village.",
+        }
+
+    updated, report = backfill_mapping_from_tmdb(
+        {
+            "naruto": {
+                "tmdb_id": 46260,
+                "main_info": {"title": "Наруто", "year": 2002},
+            }
+        },
+        data_language="en",
+        details_func=fake_details,
+    )
+
+    assert calls == [(46260, "en-US")]
+    assert report["changed_records"] == 1
+    assert updated["naruto"]["localized"]["en"]["title"] == "Naruto"
+    assert updated["naruto"]["localized"]["en"]["title"] != "ナルト"
+    assert updated["naruto"]["localized"]["en"]["overview"].startswith("Naruto Uzumaki")
+
+
+def test_tmdb_localized_backfill_uses_translation_block_when_top_level_empty() -> None:
+    from dataset.migrations.tmdb_localized import localized_block_from_tmdb_details
+
+    block = localized_block_from_tmdb_details(
+        {
+            "name": "Fallback Name",
+            "overview": "",
+            "translations": {
+                "translations": [
+                    {
+                        "iso_3166_1": "US",
+                        "iso_639_1": "en",
+                        "data": {
+                            "name": "Translated Name",
+                            "overview": "Translated overview.",
+                        },
+                    }
+                ]
+            },
+        },
+        "en",
+    )
+
+    assert block == {
+        "title": "Translated Name",
+        "overview": "Translated overview.",
+    }
+
+
+def test_add_title_worker_passes_data_language(monkeypatch, qapp) -> None:
+    from types import SimpleNamespace
+
+    from desktop.watched.add_title.worker import AddTitleResolveWorker
+
+    captured = {}
+
+    def fake_resolve_title_for_add(title, country, *, on_progress=None, data_language="ru"):
+        captured["title"] = title
+        captured["country"] = country
+        captured["data_language"] = data_language
+        if on_progress is not None:
+            on_progress(1, 1, "done")
+        return SimpleNamespace(found=True)
+
+    monkeypatch.setattr(
+        "desktop.watched.add_title.worker.service.resolve_title_for_add",
+        fake_resolve_title_for_add,
+    )
+
+    results = []
+    worker = AddTitleResolveWorker("Trigger", "US", data_language="en")
+    worker.finished_with_result.connect(results.append)
+    worker.run()
+
+    assert captured == {"title": "Trigger", "country": "US", "data_language": "en"}
+    assert results[0].found is True
+
+
+def test_tmdb_builder_uses_passed_data_language_locale(monkeypatch) -> None:
+    from candidates.sources.tmdb import builder
+    from desktop.settings.app_settings import language_to_tmdb_locale
+
+    discover_languages = []
+    detail_languages = []
+
+    monkeypatch.setattr(builder.api_tmdb, "load_tmdb_token", lambda: "token")
+    monkeypatch.setattr(builder, "load_candidate_pool", lambda: {})
+    monkeypatch.setattr(builder, "remove_watched_discover", lambda items: (list(items), 0))
+    monkeypatch.setattr(
+        builder,
+        "build_discovery_slices",
+        lambda *args, **kwargs: [
+            {
+                "slice_name": "test",
+                "query": {"sort_by": "vote_count.desc", "with_origin_country": "US"},
+                "pages_per_slice": 1,
+            }
+        ],
+    )
+
+    def fake_tmdb_get(_path, params=None, token=None):
+        discover_languages.append((params or {}).get("language"))
+        return {
+            "page": 1,
+            "total_pages": 1,
+            "results": [
+                {
+                    "id": 3032476,
+                    "name": "Better Call Saul",
+                    "original_name": "Better Call Saul",
+                    "first_air_date": "2015-02-08",
+                    "vote_average": 8.7,
+                    "vote_count": 6000,
+                    "popularity": 40.0,
+                }
+            ],
+        }
+
+    def fake_details(tmdb_id, *, language=None, **_kwargs):
+        detail_languages.append(language)
+        return {
+            "id": tmdb_id,
+            "name": "Better Call Saul",
+            "original_name": "Better Call Saul",
+            "first_air_date": "2015-02-08",
+            "origin_country": ["US"],
+            "production_countries": [{"iso_3166_1": "US", "name": "United States"}],
+            "original_language": "en",
+            "genres": [{"id": 18, "name": "Drama"}],
+            "vote_average": 8.7,
+            "vote_count": 6000,
+            "popularity": 40.0,
+            "overview": "English overview",
+            "external_ids": {"imdb_id": "tt3032476"},
+            "aggregate_credits": {},
+            "keywords": {"results": []},
+        }
+
+    monkeypatch.setattr(builder.api_tmdb, "tmdb_get", fake_tmdb_get)
+    monkeypatch.setattr(builder.api_tmdb, "get_tv_details", fake_details)
+
+    locale = language_to_tmdb_locale("en")
+    result = builder.build_candidate_pool("US", pages=1, details_limit=1, language=locale)
+
+    assert discover_languages == ["en-US"]
+    assert detail_languages == ["en-US"]
+    assert result["query"]["language"] == "en-US"
+    assert result["settings"]["language"] == "en-US"
+    assert result["candidates"][0]["source_query"]["language"] == "en-US"
+    assert result["candidates"][0]["localized"]["en"]["title"] == "Better Call Saul"
+
+
+def test_data_language_migration_adds_localized_without_renaming_keys(tmp_path) -> None:
+    import json
+
+    from dataset.migrations.data_language import migrate_data_language_files
+
+    dataset_path = tmp_path / "watched" / "titles.json"
+    meta_path = tmp_path / "watched" / "meta.json"
+    pool_path = tmp_path / "candidates" / "pool.json"
+    dataset_path.parent.mkdir(parents=True)
+    pool_path.parent.mkdir(parents=True)
+
+    original_dataset = {
+        "Триггер": {
+            "main_info": {"title": "Триггер", "year": 2020, "user_score": 8.0},
+            "description": "Русское описание",
+            "original_title": "Trigger",
+        }
+    }
+    original_meta = {
+        "Триггер": {
+            "main_info": {"title": "Триггер"},
+            "description": "Описание из meta",
+        }
+    }
+    original_pool = {
+        "better-call-saul-2015": {
+            "title": "Лучше звоните Солу",
+            "original_title": "Better Call Saul",
+            "description": "Русское описание кандидата",
+            "overview_en": "English candidate overview",
+            "genre_keys": ["drama"],
+        }
+    }
+
+    dataset_path.write_text(json.dumps(original_dataset, ensure_ascii=False), encoding="utf-8")
+    meta_path.write_text(json.dumps(original_meta, ensure_ascii=False), encoding="utf-8")
+    pool_path.write_text(json.dumps(original_pool, ensure_ascii=False), encoding="utf-8")
+
+    report = migrate_data_language_files(
+        dataset_path=dataset_path,
+        meta_path=meta_path,
+        pool_path=pool_path,
+        timestamp="test",
+    )
+
+    migrated_dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+    migrated_pool = json.loads(pool_path.read_text(encoding="utf-8"))
+
+    assert list(migrated_dataset) == ["Триггер"]
+    assert migrated_dataset["Триггер"]["main_info"]["title"] == "Триггер"
+    assert migrated_dataset["Триггер"]["description"] == "Русское описание"
+    assert migrated_dataset["Триггер"]["localized"]["ru"]["title"] == "Триггер"
+    assert migrated_dataset["Триггер"]["localized"]["ru"]["overview"] == "Русское описание"
+    assert migrated_dataset["Триггер"]["localized"]["en"]["title"] == "Trigger"
+    assert "overview" not in migrated_dataset["Триггер"]["localized"]["en"]
+    assert list(migrated_pool) == ["better-call-saul-2015"]
+    assert migrated_pool["better-call-saul-2015"]["localized"]["en"]["title"] == "Better Call Saul"
+    assert migrated_pool["better-call-saul-2015"]["localized"]["en"]["overview"] == "English candidate overview"
+    assert Path(report["files"]["watched_dataset"]["backup_path"]).exists()
+    assert json.loads(Path(report["files"]["watched_dataset"]["backup_path"]).read_text(encoding="utf-8")) == original_dataset
+
+
+def test_candidate_migration_en_title_falls_back_to_title() -> None:
+    from dataset.migrations.data_language import migrate_candidate_record
+
+    migrated, changed = migrate_candidate_record({"title": "Только русский"})
+
+    assert changed is True
+    assert migrated["localized"]["ru"]["title"] == "Только русский"
+    assert migrated["localized"]["en"]["title"] == "Только русский"
+
+
+def test_data_language_helpers_choose_genre_labels() -> None:
+    from dataset.language import choose_genre_labels
+
+    assert choose_genre_labels(["has_drama"], "ru") == ["Драма"]
+    assert choose_genre_labels(["has_drama"], "en") == ["Drama"]
+    assert choose_genre_labels(["drama"], "en") == ["Drama"]
+    assert choose_genre_labels(["has_action"], "en") == ["Action", "Adventure"]
+    assert choose_genre_labels(["has_fantasy"], "en") == ["Sci-Fi", "Fantasy"]
+    assert choose_genre_labels(["action_adventure"], "en") == ["Action", "Adventure"]
+
+
+def test_candidate_filter_genre_labels_localize_to_data_language() -> None:
+    from candidates.models.genre_schema import normalize_genre_filter_list
+    from desktop.candidates.filters_view import _genre_labels_for_language
+
+    labels = _genre_labels_for_language(
+        ["Боевик/приключения", "Фантастика/фэнтези", "Драма"],
+        "en",
+    )
+
+    assert labels == ["Action", "Adventure", "Sci-Fi", "Fantasy", "Drama"]
+    assert normalize_genre_filter_list(labels) == ["action_adventure", "sci_fi_fantasy", "drama"]
+
+
+def test_chip_expand_control_uses_interface_language(qapp) -> None:
+    from PyQt6.QtWidgets import QPushButton
+
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.shared.widgets.collapsible_chip_helpers import ChipExpandControl
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    control = ChipExpandControl(visible_count=1)
+    button = control.create_button()
+    chips = [QPushButton("A"), QPushButton("B"), QPushButton("C")]
+
+    control.apply_visibility(chips)
+
+    assert button.text() == "Show more (2) ▼"
+
+    control.toggle()
+    control.apply_visibility(chips)
+
+    assert button.text() == "Collapse ▲"
 
 
 def test_apply_app_icon_sets_qapplication_icon(qapp) -> None:
@@ -121,14 +817,14 @@ def test_add_title_button_opens_wizard_dialog() -> None:
     preview_source = inspect.getsource(preview_module)
 
     assert "watchedAddTitle" in sidebar_source
-    assert "+ Добавить тайтл" in sidebar_source
+    assert 'tr("watched.add_title.button")' in sidebar_source
     assert "run_add_title_flow" in handler_source
     assert "reload_entries" in handler_source
     assert "_show_add_title_stub" not in handler_source
     assert "class AddTitleSearchDialog" in search_source
     assert "class AddTitlePreviewDialog" in preview_source
     assert "run_add_title_flow" in handler_source
-    assert "Искать другой" in preview_source
+    assert 'tr("add_title.search_again")' in preview_source
 
 
 def test_add_title_preview_dialog_uses_readonly_year_and_score_only_save() -> None:
@@ -200,6 +896,36 @@ def test_add_title_preview_dialog_uses_compact_preview_card(qapp) -> None:
     dialog.close()
 
 
+def test_add_title_preview_status_uses_interface_language(qapp) -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    dialog = AddTitlePreviewDialog(_make_add_title_preview_bundle())
+    dialog.show()
+    qapp.processEvents()
+
+    assert dialog._warning_label.text() == "TMDb API: found"
+
+    dialog.close()
+
+
+def test_add_title_preview_score_input_uses_english_locale(qapp) -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    dialog = AddTitlePreviewDialog(_make_add_title_preview_bundle())
+    dialog.show()
+    qapp.processEvents()
+
+    assert dialog._score_input.text() == "0.0"
+
+    dialog.close()
+
+
 def test_add_title_compact_preview_renders_only_summary_content(qapp) -> None:
     from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QLabel, QWidget
@@ -252,6 +978,22 @@ def test_add_title_compact_preview_dialog_centers_card_shell(qapp) -> None:
 
     assert abs(shell_center_x - dialog_center_x) <= 2
     assert shell.width() < dialog.width() - 20
+
+    dialog.close()
+
+
+def test_add_title_search_progress_uses_interface_language(qapp) -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.watched.add_title.search_dialog import AddTitleSearchDialog
+
+    save_app_settings(AppSettings(interface_language="en", data_language="en"))
+
+    dialog = AddTitleSearchDialog(initial_title="Naruto")
+    dialog._active_request_id = 1
+    dialog._set_search_active(True)
+    dialog._on_progress(1, 1, 4, "TMDb Search: Поиск")
+
+    assert dialog._status_label.text() == "TMDb Search: searching"
 
     dialog.close()
 
@@ -310,6 +1052,243 @@ def test_prepare_card_for_display_does_not_mutate_movie() -> None:
 
     assert movie == original
     assert card["title"] == "Mutation Check"
+
+
+def test_build_watched_movie_card_respects_data_language() -> None:
+    from common.cards import build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Триггер", "year": 2020, "user_score": 8.0},
+        "localized": {
+            "ru": {"title": "Триггер", "overview": "Русское описание"},
+            "en": {"title": "Trigger"},
+        },
+        "country_codes": ["RU"],
+        "genre": {"has_drama": 1},
+    }
+
+    ru_card = build_watched_movie_card(movie, poster_cache={}, data_language="ru")
+    en_card = build_watched_movie_card(movie, poster_cache={}, data_language="en")
+
+    assert ru_card["title"] == "Триггер"
+    assert ru_card["overview"] == "Русское описание"
+    assert ru_card["country"] == "Россия"
+    assert ru_card["genres"] == ["Драма"]
+    assert en_card["title"] == "Trigger"
+    assert en_card["overview"] == "Русское описание"
+    assert en_card["country"] == "Russia"
+    assert en_card["genres"] == ["Drama"]
+
+
+def test_build_watched_movie_card_switches_added_title_localized_both_ways() -> None:
+    from common.cards import build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5},
+        "localized": {
+            "ru": {
+                "title": "\u041d\u0430\u0440\u0443\u0442\u043e",
+                "overview": "\u0420\u0443\u0441\u0441\u043a\u043e\u0435 \u043e\u043f\u0438\u0441\u0430\u043d\u0438\u0435 \u041d\u0430\u0440\u0443\u0442\u043e.",
+            },
+            "en": {
+                "title": "Naruto",
+                "overview": "English Naruto overview.",
+            },
+        },
+        "country_codes": ["JP"],
+        "genre_keys": ["action_adventure"],
+    }
+
+    ru_card = build_watched_movie_card(movie, poster_cache={}, data_language="ru")
+    en_card = build_watched_movie_card(movie, poster_cache={}, data_language="en")
+
+    assert ru_card["title"] == "\u041d\u0430\u0440\u0443\u0442\u043e"
+    assert ru_card["overview"].startswith("\u0420\u0443\u0441\u0441\u043a\u043e\u0435")
+    assert en_card["title"] == "Naruto"
+    assert en_card["overview"] == "English Naruto overview."
+
+
+def test_build_watched_movie_card_uses_localized_poster_for_data_language(tmp_path) -> None:
+    from common.cards import build_watched_movie_card
+    from posters.cache import poster_identity_key
+
+    stale_local = tmp_path / "ru-poster.jpg"
+    stale_local.write_bytes(b"poster")
+    identity = poster_identity_key("Naruto", 2002)
+    movie = {
+        "main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5},
+        "poster_url": "https://image.tmdb.org/t/p/w342/naruto_ru.jpg",
+        "localized": {
+            "en": {
+                "title": "Naruto",
+                "poster_path": "/naruto_en.jpg",
+                "poster_url": "https://image.tmdb.org/t/p/w342/naruto_en.jpg",
+            }
+        },
+    }
+    poster_cache = {
+        identity: {
+            "status": "found",
+            "poster_url": "https://image.tmdb.org/t/p/w342/naruto_ru.jpg",
+            "local_path": str(stale_local),
+        }
+    }
+
+    card = build_watched_movie_card(movie, poster_cache=poster_cache, data_language="en")
+
+    assert card["poster_url"] == "https://image.tmdb.org/t/p/w342/naruto_en.jpg"
+    assert card["poster_src"] == "https://image.tmdb.org/t/p/w342/naruto_en.jpg"
+    assert card["poster_src"] != str(stale_local)
+
+
+def test_poster_cache_uses_localized_language_and_drops_stale_local_path(monkeypatch, tmp_path) -> None:
+    from posters import cache as poster_cache_module
+
+    monkeypatch.setattr(poster_cache_module, "DEFAULT_POSTER_IMAGES_DIR", tmp_path)
+    stale_local = tmp_path / "naruto-2002.jpg"
+    stale_local.write_bytes(b"old")
+    identity = poster_cache_module.poster_identity_key("Naruto", 2002)
+    cache = {
+        identity: {
+            "title": "Naruto",
+            "year": 2002,
+            "status": "found",
+            "poster_url": "https://image.tmdb.org/t/p/w342/naruto_ru.jpg",
+            "local_path": str(stale_local),
+        }
+    }
+    movie = {
+        "main_info": {"title": "Naruto", "year": 2002},
+        "localized": {
+            "en": {
+                "poster_path": "/naruto_en.jpg",
+                "poster_url": "https://image.tmdb.org/t/p/w342/naruto_en.jpg",
+            },
+        },
+    }
+
+    entry = poster_cache_module.sync_poster_cache_from_meta_and_sources(
+        "Naruto",
+        2002,
+        movie=movie,
+        cache=cache,
+        persist=False,
+        data_language="en",
+    )
+
+    assert entry["poster_url"] == "https://image.tmdb.org/t/p/w342/naruto_en.jpg"
+    assert entry["poster_path"] == "/naruto_en.jpg"
+    assert entry["local_path"] is None
+    assert stale_local.exists() is False
+
+
+def test_sync_poster_for_display_fetches_missing_language_poster_from_tmdb(monkeypatch, tmp_path) -> None:
+    from dataset.read_models import watched as watched_read_model
+    from posters import cache as poster_cache_module
+
+    monkeypatch.setattr(poster_cache_module, "DEFAULT_POSTER_IMAGES_DIR", tmp_path)
+    movie = {"main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5}}
+    meta_store = {
+        "Naruto": {
+            "tmdb_id": 46260,
+            "poster_url": "https://image.tmdb.org/t/p/w342/naruto_ru.jpg",
+        }
+    }
+    poster_cache = {
+        poster_cache_module.poster_identity_key("Naruto", 2002): {
+            "title": "Naruto",
+            "year": 2002,
+            "status": "found",
+            "poster_url": "https://image.tmdb.org/t/p/w342/naruto_ru.jpg",
+            "local_path": None,
+        }
+    }
+    details_calls = []
+    download_calls = []
+
+    monkeypatch.setattr(watched_read_model.storage_data, "get_meta_obj", lambda _title: meta_store["Naruto"])
+    monkeypatch.setattr(watched_read_model.storage_data, "load_meta", lambda: copy.deepcopy(meta_store))
+    monkeypatch.setattr(watched_read_model.storage_data, "save_meta", lambda meta: meta_store.update(meta))
+    monkeypatch.setattr(watched_read_model, "_get_poster_cache", lambda: poster_cache)
+    monkeypatch.setattr(watched_read_model, "reload_poster_cache", lambda: poster_cache)
+    monkeypatch.setattr(poster_cache_module, "load_poster_cache", lambda: poster_cache)
+    monkeypatch.setattr(poster_cache_module, "save_poster_cache", lambda cache: poster_cache.update(cache))
+
+    def fake_get_tv_details(tmdb_id, *, language=None, append_to_response=None, **_kwargs):
+        details_calls.append((tmdb_id, language, append_to_response))
+        return {
+            "id": 46260,
+            "name": "Naruto",
+            "overview": "English Naruto overview.",
+            "images": {
+                "posters": [
+                    {
+                        "file_path": "/naruto_en.jpg",
+                        "iso_639_1": "en",
+                        "vote_average": 8.0,
+                        "vote_count": 10,
+                    }
+                ],
+            },
+        }
+
+    def fake_download(title, year):
+        download_calls.append((title, year))
+        return {"ok": True, "reason": "downloaded", "local_path": str(tmp_path / "naruto.jpg")}
+
+    monkeypatch.setattr("apis.tmdb_api.get_tv_details", fake_get_tv_details)
+    monkeypatch.setattr("posters.download_images.download_poster_for_title", fake_download)
+
+    result = watched_read_model.sync_poster_for_display(movie, data_language="en")
+
+    assert result["meta_updated"] is True
+    assert details_calls[0][0:2] == (46260, "en-US")
+    assert meta_store["Naruto"]["localized"]["en"]["poster_path"] == "/naruto_en.jpg"
+    assert result["entry"]["poster_url"] == "https://image.tmdb.org/t/p/original/naruto_en.jpg"
+    assert download_calls == [("Naruto", 2002)]
+
+
+def test_build_watched_movie_card_uses_localized_meta_fallback_for_english() -> None:
+    from common.cards import build_watched_movie_card
+
+    movie = {
+        "main_info": {"title": "Наруто", "year": 2002, "user_score": 8.0},
+        "raw_scores": {},
+    }
+    meta = {
+        "localized": {
+            "en": {
+                "title": "Naruto",
+                "overview": "Naruto Uzumaki wants to become the strongest ninja in his village.",
+            }
+        },
+        "genre_keys": ["action_adventure", "sci_fi_fantasy"],
+        "country_codes": ["JP"],
+    }
+
+    card = build_watched_movie_card(
+        movie,
+        poster_cache={},
+        lookup_cache={"meta_by_title": {}, "pool_by_identity": {}},
+        meta_obj=meta,
+        data_language="en",
+    )
+
+    assert card["title"] == "Naruto"
+    assert card["overview"].startswith("Naruto Uzumaki")
+    assert card["genres"] == ["Action", "Adventure", "Sci-Fi", "Fantasy"]
+    assert card["country"] == "Japan"
+
+
+def test_prepare_card_for_display_accepts_data_language() -> None:
+    from desktop.watched import prepare_card_for_display
+
+    movie = _make_movie("Лучше звоните Солу", 9.0, 2015)
+    movie["original_title"] = "Better Call Saul"
+
+    card = prepare_card_for_display(movie, data_language="en")
+
+    assert card["title"] == "Better Call Saul"
 
 
 def test_watched_load_model_uses_dataset_read_facade_only() -> None:
@@ -381,10 +1360,11 @@ def test_watched_read_facade_returns_desktop_entry_shape(monkeypatch) -> None:
     poster_cache = {"Facade Shape": "poster.jpg"}
     lookup_cache = {"meta_by_title": {}, "pool_by_identity": {}}
 
-    def fake_build_card(movie_obj, *, poster_cache=None, lookup_cache=None):
+    def fake_build_card(movie_obj, *, poster_cache=None, lookup_cache=None, data_language="ru"):
         assert movie_obj is movie
         assert poster_cache is poster_cache_value
         assert lookup_cache is lookup_cache_value
+        assert data_language == "en"
         return {"title": movie_obj["main_info"]["title"], "year": 2021}
 
     poster_cache_value = poster_cache
@@ -394,7 +1374,7 @@ def test_watched_read_facade_returns_desktop_entry_shape(monkeypatch) -> None:
     monkeypatch.setattr(watched_read_model, "_get_lookup_cache", lambda: lookup_cache_value)
     monkeypatch.setattr(watched_read_model, "build_watched_movie_card", fake_build_card)
 
-    entries = watched_read_model.load_watched_entries()
+    entries = watched_read_model.load_watched_entries(data_language="en")
 
     assert entries == [("Facade Shape", movie, {"title": "Facade Shape", "year": 2021})]
 
@@ -1554,11 +2534,11 @@ def test_watched_layout_uses_collapsible_filters_and_rich_list() -> None:
     assert "watchedListCounter" in sidebar_source
     assert "watchedSortRow" in sidebar_source
     assert "watchedSortLabel" in sidebar_source
-    assert "Сортировка" in sidebar_source
+    assert 'tr("common.sort")' in sidebar_source
     assert "reset_all" in filters_source
     assert "watchedScoreReset" not in filters_source
     assert "watchedYearReset" not in filters_source
-    assert "Удалить запись" in actions_source
+    assert 'tr("watched.context.delete_record")' in actions_source
     assert "_delete_watched_entry" in actions_source
     assert "execute_watched_delete" in actions_source
 
@@ -2162,7 +3142,7 @@ def test_watched_detail_card_renders_main_info_block() -> None:
     show_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
     empty_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_empty)
 
-    assert "ОСНОВНАЯ ИНФОРМАЦИЯ" in layout_source
+    assert 'tr("detail.main_info.title")' in layout_source
     assert 'setObjectName("detailMainInfoSection")' in layout_source
     assert 'setObjectName("detailMainInfoPanel")' in layout_source
     assert 'setObjectName("detailMainInfoHeader")' in layout_source
@@ -3422,8 +4402,8 @@ def test_watched_detail_card_has_poster_context_menu() -> None:
     assert "_show_poster_context_menu" in layout_source
 
     menu_source = inspect.getsource(watched_view_module.WatchedDetailCard._show_poster_context_menu)
-    assert "Открыть постер" in menu_source
-    assert "Папка poster-cache" in menu_source
+    assert 'tr("detail.poster.open")' in menu_source
+    assert 'tr("detail.poster.cache_folder")' in menu_source
 
     show_source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
     assert "_set_local_poster_path" in show_source
@@ -3607,7 +4587,7 @@ def test_refresh_after_delete_wiring() -> None:
     import desktop.watched.tab as watched_tab_module
 
     source = inspect.getsource(watched_tab_module.WatchedTabView._refresh_after_delete)
-    assert "load_watched_entries" in source
+    assert "_load_entries_for_actions" in source
     assert "_filters.reload_genre_options" in source
     assert "_reload_watched_search_index" in source
     assert "resolve_selection_row" in source
@@ -3634,9 +4614,9 @@ def test_open_list_context_menu_includes_delete_action() -> None:
     import desktop.watched.tab as watched_tab_module
 
     source = inspect.getsource(watched_tab_module.WatchedTabView._open_list_context_menu)
-    assert "Удалить запись" in source
+    assert 'tr("watched.context.delete_record")' in source
     assert "_delete_watched_entry" in source
-    assert "Изменить оценку" in source
+    assert 'tr("watched.context.edit_score")' in source
 
 
 def test_format_candidate_list_label_shows_sort_metric() -> None:
@@ -3700,6 +4680,193 @@ def test_build_candidate_readonly_card_passes_main_info_fields(monkeypatch) -> N
     assert build_user_score_badge_item(card) is None
     assert "user_score_badge" not in card
     assert "imdb_votes" not in card
+
+
+def test_build_candidate_readonly_card_respects_data_language(monkeypatch) -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_card
+
+    monkeypatch.setattr(
+        "desktop.candidates.presenters.resolve_local_poster_path_for_candidate",
+        lambda candidate: None,
+    )
+
+    candidate = {
+        "title": "Лучше звоните Солу",
+        "original_title": "Better Call Saul",
+        "description": "Русское описание",
+        "overview_en": "English overview",
+        "genre_keys": ["drama"],
+        "year": 2015,
+    }
+
+    ru_card = build_candidate_readonly_card(candidate, data_language="ru")
+    en_card = build_candidate_readonly_card(candidate, data_language="en")
+
+    assert ru_card["title"] == "Лучше звоните Солу"
+    assert ru_card["overview"] == "Русское описание"
+    assert ru_card["genres"] == ["Драма"]
+    assert en_card["title"] == "Better Call Saul"
+    assert en_card["overview"] == "English overview"
+    assert en_card["genres"] == ["Drama"]
+
+
+def test_build_candidate_readonly_card_uses_localized_poster_for_data_language(monkeypatch) -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_card
+
+    monkeypatch.setattr(
+        "desktop.candidates.presenters.resolve_local_poster_path_for_candidate",
+        lambda candidate, data_language="ru": None,
+    )
+    candidate = {
+        "title": "Pool Show",
+        "year": 2020,
+        "poster_url": "https://image.tmdb.org/t/p/original/ru.jpg",
+        "localized": {
+            "en": {
+                "title": "Pool Show",
+                "poster_path": "/en.jpg",
+                "poster_url": "https://image.tmdb.org/t/p/original/en.jpg",
+            }
+        },
+    }
+
+    card = build_candidate_readonly_card(candidate, data_language="en")
+
+    assert card["poster_url"] == "https://image.tmdb.org/t/p/original/en.jpg"
+    assert card["poster_path"] == "/en.jpg"
+
+
+def test_candidate_poster_url_for_download_uses_data_language_localized_url(monkeypatch) -> None:
+    from desktop.candidates.presenters import candidate_poster_url_for_download
+
+    monkeypatch.setattr(
+        "desktop.candidates.presenters.resolve_local_poster_path_for_candidate",
+        lambda candidate, data_language="ru": None,
+    )
+    candidate = {
+        "title": "Pool Show",
+        "year": 2020,
+        "poster_url": "https://image.tmdb.org/t/p/original/ru.jpg",
+        "localized": {
+            "en": {
+                "poster_path": "/en.jpg",
+                "poster_url": "https://image.tmdb.org/t/p/original/en.jpg",
+            }
+        },
+    }
+
+    assert (
+        candidate_poster_url_for_download(candidate, data_language="en")
+        == "https://image.tmdb.org/t/p/original/en.jpg"
+    )
+
+
+def test_candidate_localized_poster_enrichment_persists_pool(monkeypatch) -> None:
+    from candidates.pool import localized_posters
+
+    pool = {
+        "pool show|2020": {
+            "pool_entry_key": "pool show|2020",
+            "title": "Pool Show",
+            "year": 2020,
+            "tmdb_id": 101,
+            "poster_url": "https://image.tmdb.org/t/p/original/ru.jpg",
+        }
+    }
+    saved = {}
+
+    monkeypatch.setattr(localized_posters.pool_repository, "load_candidate_pool", lambda: copy.deepcopy(pool))
+    monkeypatch.setattr(localized_posters.pool_repository, "save_candidate_pool", lambda data: saved.update(data))
+
+    def fake_details(tmdb_id, *, language=None, append_to_response=None):
+        assert (tmdb_id, language) == (101, "en-US")
+        return {
+            "id": 101,
+            "name": "Pool Show",
+            "images": {
+                "posters": [
+                    {
+                        "file_path": "/en.jpg",
+                        "iso_639_1": "en",
+                        "vote_average": 8.0,
+                        "vote_count": 10,
+                    }
+                ],
+            },
+        }
+
+    updated, changed = localized_posters.ensure_candidate_localized_poster(
+        pool["pool show|2020"],
+        data_language="en",
+        details_func=fake_details,
+    )
+
+    assert changed is True
+    assert updated["localized"]["en"]["poster_path"] == "/en.jpg"
+    assert saved["pool show|2020"]["localized"]["en"]["poster_url"] == "https://image.tmdb.org/t/p/original/en.jpg"
+
+
+def test_candidate_list_model_resets_poster_cache_on_data_language_change(monkeypatch, qapp) -> None:
+    from desktop.candidates.list_model import CandidateListModel
+
+    calls = []
+
+    def fake_resolve(candidate, data_language="ru"):
+        calls.append(data_language)
+        return f"{data_language}.jpg"
+
+    monkeypatch.setattr(
+        "desktop.candidates.list_model.resolve_local_poster_path_for_candidate",
+        fake_resolve,
+    )
+    candidate = {"title": "Pool Show", "year": 2020}
+    model = CandidateListModel([candidate], data_language="ru")
+
+    assert model.poster_path_for_candidate(candidate) == "ru.jpg"
+    assert model.poster_path_for_candidate(candidate) == "ru.jpg"
+    model.set_data_language("en")
+
+    assert model.poster_path_for_candidate(candidate) == "en.jpg"
+    assert calls == ["ru", "en"]
+
+
+def test_candidate_list_view_selection_enriches_missing_language_poster(monkeypatch) -> None:
+    from desktop.candidates.list_view import CandidateListView
+
+    candidate = {"title": "Pool Show", "year": 2020, "tmdb_id": 101}
+    view = CandidateListView.__new__(CandidateListView)
+    view._data_language = "en"
+    view._detail_entries = {"Pool Show": ("key", {}, {})}
+    calls = {}
+
+    class FakeModel:
+        def update_poster_path(self, identity, path):
+            calls["model"] = (identity, path)
+
+    def fake_ensure(candidate_arg, *, data_language="ru"):
+        calls["ensure"] = (candidate_arg, data_language)
+        return (
+            {
+                **candidate_arg,
+                "localized": {
+                    "en": {
+                        "poster_url": "https://image.tmdb.org/t/p/original/en.jpg",
+                    }
+                },
+            },
+            True,
+        )
+
+    view._model = FakeModel()
+    monkeypatch.setattr("desktop.candidates.list_view.ensure_candidate_localized_poster", fake_ensure)
+
+    updated = view._candidate_with_current_language_poster(candidate)
+
+    assert calls["ensure"] == (candidate, "en")
+    assert updated is candidate
+    assert candidate["localized"]["en"]["poster_url"].endswith("/en.jpg")
+    assert calls["model"] == ("Pool Show", None)
+    assert view._detail_entries == {}
 
 
 def test_build_candidate_readonly_card_normalizes_country_for_display(monkeypatch) -> None:
@@ -4126,10 +5293,10 @@ def test_candidate_filters_form_uses_grouped_sections() -> None:
     assert "add_divider" in source
     assert "candidateFilterSection" in source
     assert "candidateFilterDivider" in source
-    assert "Основные условия" in source
-    assert "Жанры" in source
-    assert "Пороги TMDb" in source
-    assert "Статус и видимость" in source
+    assert 'tr("candidates.filters.basic")' in source
+    assert 'tr("candidates.filters.genres")' in source
+    assert 'tr("candidates.filters.tmdb")' in source
+    assert 'tr("candidates.filters.visibility")' in source
 
 
 def test_candidate_filters_view_places_apply_button_in_top_bar() -> None:
@@ -4158,10 +5325,11 @@ def test_watched_window_includes_candidate_tabs() -> None:
     assert "CandidateFiltersView" in factory_source
     assert "CandidateListView" in factory_source
     assert "SettingsTabView" in factory_source
-    assert '"Фильтры"' in factory_source
-    assert '"Кандидаты"' in factory_source
-    assert '"Моё"' in factory_source
-    assert '"Настройки"' in factory_source
+    assert "load_desktop_language_context" in factory_source
+    assert 'languages.tr("tabs.filters")' in factory_source
+    assert 'languages.tr("tabs.candidates")' in factory_source
+    assert 'languages.tr("tabs.watched")' in factory_source
+    assert 'languages.tr("tabs.settings")' in factory_source
     assert '"Информация"' not in factory_source
     assert '"Watched"' not in factory_source
     assert '"Analytics"' not in factory_source
@@ -4176,6 +5344,8 @@ def test_watched_window_includes_candidate_tabs() -> None:
 def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     from PyQt6.QtWidgets import QTabWidget, QWidget
 
+    from desktop.settings.app_settings import AppSettings
+    import desktop.i18n.translator as translator_module
     import desktop.shell.tabs as tabs_module
 
     class FakeWatchedTabView:
@@ -4213,6 +5383,11 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     monkeypatch.setattr(tabs_module, "CandidateFiltersView", FakeSimpleTabView)
     monkeypatch.setattr(tabs_module, "CandidateListView", FakeCandidateListView)
     monkeypatch.setattr(tabs_module, "SettingsTabView", FakeSimpleTabView)
+    monkeypatch.setattr(
+        translator_module,
+        "load_app_settings",
+        lambda: AppSettings(interface_language="ru", data_language="ru"),
+    )
 
     tabs = QTabWidget()
     parent = QWidget()
@@ -4239,6 +5414,53 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
         registry.on_current_changed(index)
 
     assert registry._specs["candidates"].view.activation_count == 1
+
+
+def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> None:
+    from PyQt6.QtWidgets import QTabWidget, QWidget
+
+    from desktop.language_context import DesktopLanguageContext
+    import desktop.shell.tabs as tabs_module
+
+    class FakeWatchedTabView:
+        def __init__(self, *args, **kwargs) -> None:
+            self.widget = QWidget()
+            self.entries = []
+
+        def reload_entries(self, added_key: str | None = None) -> None:
+            return None
+
+    class FakeCandidateSearchSession:
+        pass
+
+    class FakeSimpleTabView:
+        def __init__(self, *args, **kwargs) -> None:
+            self.widget = QWidget()
+
+    monkeypatch.setattr(tabs_module, "WatchedTabView", FakeWatchedTabView)
+    monkeypatch.setattr(tabs_module, "CandidateSearchSession", FakeCandidateSearchSession)
+    monkeypatch.setattr(tabs_module, "CandidateFiltersView", FakeSimpleTabView)
+    monkeypatch.setattr(tabs_module, "CandidateListView", FakeSimpleTabView)
+    monkeypatch.setattr(tabs_module, "SettingsTabView", FakeSimpleTabView)
+    tabs = QTabWidget()
+    registry, _context = tabs_module.build_main_tabs(
+        tabs,
+        QWidget(),
+        on_status_message=lambda _message, _timeout_ms: None,
+        language_context=DesktopLanguageContext(
+            interface_language="en",
+            data_language="ru",
+            tmdb_locale="ru-RU",
+        ),
+    )
+
+    assert [tabs.tabText(index) for index in range(tabs.count())] == [
+        "My library",
+        "Filters",
+        "Candidates",
+        "Settings",
+    ]
+    assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
 
 
 def test_cross_tab_wiring_stays_in_shell_tabs() -> None:
@@ -4472,6 +5694,25 @@ def test_filter_candidates_by_title_matches_alternative_title() -> None:
     assert filter_candidates_by_title(candidates, "gamma")[0]["title"] == "Beta"
 
 
+def test_candidate_search_text_includes_both_localized_titles() -> None:
+    from desktop.candidates.presenters import candidate_search_text, filter_candidates_by_title
+
+    candidate = {
+        "title": "Better Call Saul",
+        "localized": {
+            "ru": {"title": "Лучше звоните Солу"},
+            "en": {"title": "Better Call Saul"},
+        },
+        "original_title": "Better Call Saul",
+    }
+
+    haystack = candidate_search_text(candidate)
+
+    assert "лучше звоните солу" in haystack
+    assert "better call saul" in haystack
+    assert filter_candidates_by_title([candidate], "лучше") == [candidate]
+
+
 def test_list_search_index_filters_with_precomputed_haystack() -> None:
     from desktop.shared.widgets.list_search import SearchIndex, SearchIndexItem, normalize_search_query, resolve_selection_row
 
@@ -4499,6 +5740,183 @@ def test_build_watched_search_index_matches_title() -> None:
     index = build_watched_search_index(entries)
     assert len(index.filter_by_query("show")) == 1
     assert index.filter_by_query("show")[0][0] == "Alpha"
+
+
+def test_watched_search_haystack_includes_localized_titles() -> None:
+    from desktop.watched.model.load import watched_entry_search_haystack
+
+    entry = (
+        "better-call-saul",
+        {
+            "main_info": {"title": "Лучше звоните Солу"},
+            "localized": {
+                "ru": {"title": "Лучше звоните Солу"},
+                "en": {"title": "Better Call Saul"},
+            },
+            "original_title": "Better Call Saul",
+        },
+        {"title": "Better Call Saul"},
+    )
+
+    haystack = watched_entry_search_haystack(entry)
+
+    assert "лучше звоните солу" in haystack
+    assert "better call saul" in haystack
+
+
+def test_watched_tab_reload_entries_rereads_data_language(monkeypatch, qapp) -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.watched.tab import WatchedTabView
+
+    calls = []
+
+    def fake_load_watched_entries(*, data_language="ru"):
+        calls.append(data_language)
+        return [
+            (
+                data_language,
+                {"main_info": {"title": data_language, "year": 2020, "user_score": 8.0}},
+                {"title": data_language, "year": 2020, "user_score": 8.0},
+            )
+        ]
+
+    monkeypatch.setattr("desktop.watched.tab.load_watched_entries", fake_load_watched_entries)
+    save_app_settings(AppSettings(interface_language="ru", data_language="ru"))
+
+    view = WatchedTabView(on_status_message=lambda _message, _timeout_ms=0: None)
+    assert calls[-1] == "ru"
+
+    save_app_settings(AppSettings(interface_language="ru", data_language="en"))
+    view.reload_entries()
+
+    assert calls[-1] == "en"
+
+
+def test_watched_tab_selection_lazily_syncs_current_language_poster(monkeypatch) -> None:
+    from desktop.watched.tab import WatchedTabView
+
+    movie = {"main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5}}
+    item_data = {}
+
+    class FakeItem:
+        def setData(self, role, value):
+            item_data["data"] = (role, value)
+
+        def setToolTip(self, value):
+            item_data["tooltip"] = value
+
+    class FakeListWidget:
+        def count(self):
+            return 1
+
+        def item(self, row):
+            return FakeItem() if row == 0 else None
+
+        def viewport(self):
+            return self
+
+        def update(self):
+            item_data["updated"] = True
+
+    view = WatchedTabView.__new__(WatchedTabView)
+    view._data_language = "en"
+    view._visible_entries = [("Naruto", movie, {"title": "Naruto", "poster_src": "ru.jpg"})]
+    view._entries = list(view._visible_entries)
+    view._list_widget = FakeListWidget()
+    calls = {}
+
+    def fake_sync(movie_arg, *, data_language="ru"):
+        calls["sync"] = (movie_arg, data_language)
+        return {"updated": True}
+
+    def fake_prepare(movie_arg, *, data_language="ru"):
+        calls["prepare"] = (movie_arg, data_language)
+        return {"title": "Naruto", "poster_src": "en.jpg"}
+
+    monkeypatch.setattr("desktop.watched.tab.sync_poster_for_display", fake_sync)
+    monkeypatch.setattr("desktop.watched.tab.prepare_card_for_display", fake_prepare)
+
+    updated = view._entry_with_current_language_poster(0)
+
+    assert calls["sync"] == (movie, "en")
+    assert calls["prepare"] == (movie, "en")
+    assert updated[2]["poster_src"] == "en.jpg"
+    assert view._visible_entries[0] == updated
+    assert view._entries[0] == updated
+    assert item_data["data"][1] == updated
+    assert item_data["updated"] is True
+
+
+def test_watched_tab_selection_clears_replaced_poster_pixmap_cache(monkeypatch) -> None:
+    from desktop.watched.tab import WatchedTabView
+
+    movie = {"main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5}}
+
+    class FakeItem:
+        def setData(self, _role, _value):
+            pass
+
+        def setToolTip(self, _value):
+            pass
+
+    class FakeListWidget:
+        def count(self):
+            return 1
+
+        def item(self, row):
+            return FakeItem() if row == 0 else None
+
+        def viewport(self):
+            return self
+
+        def update(self):
+            pass
+
+    view = WatchedTabView.__new__(WatchedTabView)
+    view._data_language = "en"
+    view._visible_entries = [("Naruto", movie, {"title": "Naruto", "poster_src": "ru.jpg"})]
+    view._entries = list(view._visible_entries)
+    view._list_widget = FakeListWidget()
+    cleared = []
+
+    monkeypatch.setattr(
+        "desktop.watched.tab.sync_poster_for_display",
+        lambda movie_arg, *, data_language="ru": {
+            "updated": True,
+            "download": {"local_path": "poster.jpg"},
+            "entry": {"local_path": "poster.jpg"},
+        },
+    )
+    monkeypatch.setattr(
+        "desktop.watched.tab.prepare_card_for_display",
+        lambda movie_arg, *, data_language="ru": {"title": "Naruto", "poster_src": "poster.jpg"},
+    )
+    monkeypatch.setattr(
+        "desktop.watched.tab.clear_detail_poster_source_cache",
+        lambda path=None: cleared.append(("detail", path)),
+    )
+    monkeypatch.setattr(
+        "desktop.watched.tab.clear_list_thumb_pixmap_cache",
+        lambda path=None: cleared.append(("list", path)),
+    )
+
+    view._entry_with_current_language_poster(0)
+
+    assert ("detail", "poster.jpg") in cleared
+    assert ("list", "poster.jpg") in cleared
+
+
+def test_poster_pixmap_cache_clear_helpers() -> None:
+    from desktop.shared.detail import card_poster, list_delegate
+
+    card_poster._detail_poster_source_cache["poster.jpg"] = object()
+    list_delegate._thumb_pixmap_cache["poster.jpg"] = object()
+
+    card_poster.clear_detail_poster_source_cache("poster.jpg")
+    list_delegate.clear_list_thumb_pixmap_cache("poster.jpg")
+
+    assert "poster.jpg" not in card_poster._detail_poster_source_cache
+    assert "poster.jpg" not in list_delegate._thumb_pixmap_cache
 
 
 def test_candidate_list_view_uses_list_search_module() -> None:

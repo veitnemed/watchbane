@@ -26,17 +26,17 @@
     },
     "has_melodrama": {
         "label": "Мелодрама",
-        "translation": "мелодрама",
+        "translation": "Melodrama",
         "source": "мелодрама"
     },
     "has_action": {
         "label": "Боевик",
-        "translation": "боевик",
+        "translation": "Action",
         "source": "боевик"
     },
     "has_fantasy": {
         "label": "Фантастика",
-        "translation": "фантастика",
+        "translation": "Sci-Fi",
         "source": "фантастика"
     },
     "has_romance": {

@@ -119,6 +119,15 @@ Not a hard contract:
 - Live apply is not required.
 - Bootstrap loads the setting once and calls `desktop.theme.scaling.set_ui_scale(...)`.
 
+## Interface Language
+
+- `interface_language` is an application setting for UI labels, buttons, messages, placeholders and tooltips.
+- Interface translation applies after app restart; no scale anchor requires dynamic full-window retranslate.
+- `data_language` is independent and must not be used by UI scale/layout checks.
+- Scale anchors must validate translated UI text for wrapping/visibility, not pixel-perfect coordinates.
+- Language-dependent text length must keep `wordWrap`, minimum sizes and key action visibility stable at `0.75`, `1.0` and `1.50`.
+- Do not add language-specific or scale-specific QSS to compensate for longer translated strings.
+
 ## Manual Smoke Checklist
 
 Run this checklist at each anchor: `ui_scale=0.75`, `ui_scale=1.0`, `ui_scale=1.50`.
@@ -127,7 +136,8 @@ Run this checklist at each anchor: `ui_scale=0.75`, `ui_scale=1.0`, `ui_scale=1.
 - Моё / Watched: expanded filters show score/year/genre controls, reset action is visible, collapse/expand state is stable.
 - Фильтры: intro copy wraps, Apply/Reset actions are visible, sliders and chip selectors keep usable height.
 - Кандидаты: list panel keeps usable min/max width, rows are readable, detail placeholder/card wraps long text and does not overlap the list.
-- Настройки: UI scale slider, value label, reset/save buttons and restart message remain visible and readable.
+- Настройки: UI scale slider, value label, language controls, reset/save buttons and restart message remain visible and readable.
+- Настройки: restart/reload messages for interface/data language changes wrap without clipping.
 - Add-title search dialog: title input, country combo, search action, progress/status text fit in inactive and active states.
 - Add-title preview dialog: preview card, warning text, score input and confirm/back actions remain visible without overlap.
 - Window/tab switching does not produce abrupt layout jumps or zero-sized panels.

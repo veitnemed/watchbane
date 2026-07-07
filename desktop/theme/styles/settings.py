@@ -38,6 +38,40 @@ QLabel#uiScaleLabel {{
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 600;
 }}
+QLabel#settingsLanguageTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SECTION)}px;
+    font-weight: 700;
+    margin-top: {px(6)}px;
+}}
+QLabel#interfaceLanguageLabel,
+QLabel#dataLanguageLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_BASE)}px;
+    font-weight: 600;
+}}
+QLabel#interfaceLanguageHint,
+QLabel#dataLanguageHint {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+}}
+QComboBox#interfaceLanguageCombo,
+QComboBox#dataLanguageCombo {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_BASE)}px;
+    padding: {px(6)}px {px(10)}px;
+    min-height: {px(28)}px;
+}}
+QComboBox#interfaceLanguageCombo:hover,
+QComboBox#dataLanguageCombo:hover {{
+    border-color: {COLOR_BORDER_HOVER};
+}}
 QLabel#uiScaleValueLabel {{
     background: transparent;
     color: {COLOR_TEXT};
