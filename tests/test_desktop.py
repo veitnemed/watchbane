@@ -4869,6 +4869,46 @@ def test_candidate_list_view_selection_enriches_missing_language_poster(monkeypa
     assert view._detail_entries == {}
 
 
+def test_candidate_detail_entry_resets_detail_scroll() -> None:
+    from desktop.candidates.list_view import CandidateListView
+
+    class FakeScrollBar:
+        def __init__(self) -> None:
+            self.value = 120
+
+        def minimum(self) -> int:
+            return 0
+
+        def setValue(self, value: int) -> None:
+            self.value = value
+
+    class FakeScrollArea:
+        def __init__(self, bar: FakeScrollBar) -> None:
+            self._bar = bar
+
+        def verticalScrollBar(self) -> FakeScrollBar:
+            return self._bar
+
+    class FakeDetailCard:
+        def __init__(self) -> None:
+            self.shown = None
+
+        def show_entry(self, entry) -> None:
+            self.shown = entry
+
+    entry = ("Candidate", {}, {"title": "Candidate"})
+    bar = FakeScrollBar()
+    detail = FakeDetailCard()
+    view = CandidateListView.__new__(CandidateListView)
+    view._detail_scroll = FakeScrollArea(bar)
+    view._detail_card = detail
+
+    view._show_detail_entry(entry)
+
+    assert detail.shown == entry
+    assert bar.value == 0
+
+
 def test_build_candidate_readonly_card_normalizes_country_for_display(monkeypatch) -> None:
     from desktop.candidates.presenters import build_candidate_readonly_card
 
@@ -5790,6 +5830,51 @@ def test_watched_tab_reload_entries_rereads_data_language(monkeypatch, qapp) -> 
     view.reload_entries()
 
     assert calls[-1] == "en"
+
+
+def test_watched_tab_selection_resets_detail_scroll() -> None:
+    from desktop.watched.tab import WatchedTabView
+
+    class FakeScrollBar:
+        def __init__(self) -> None:
+            self.value = 80
+
+        def minimum(self) -> int:
+            return 0
+
+        def setValue(self, value: int) -> None:
+            self.value = value
+
+    class FakeScrollArea:
+        def __init__(self, bar: FakeScrollBar) -> None:
+            self._bar = bar
+
+        def verticalScrollBar(self) -> FakeScrollBar:
+            return self._bar
+
+    class FakeDetailCard:
+        def __init__(self) -> None:
+            self.shown = None
+
+        def show_entry(self, entry) -> None:
+            self.shown = entry
+
+    entries = [
+        ("Alpha", {}, {"title": "Alpha"}),
+        ("Bravo", {}, {"title": "Bravo"}),
+    ]
+    bar = FakeScrollBar()
+    detail = FakeDetailCard()
+    view = WatchedTabView.__new__(WatchedTabView)
+    view._visible_entries = entries
+    view._detail_scroll = FakeScrollArea(bar)
+    view._detail_card = detail
+    view._entry_with_current_language_poster = lambda row: view._visible_entries[row]
+
+    view._on_selection_changed(1)
+
+    assert detail.shown == entries[1]
+    assert bar.value == 0
 
 
 def test_watched_tab_selection_lazily_syncs_current_language_poster(monkeypatch) -> None:
