@@ -7,6 +7,7 @@ from PyQt6.QtTest import QTest
 from PyQt6.QtWidgets import QDialog
 
 from dataset.add_flow.bundle import AddTitleResolveBundle
+from desktop.i18n import tr
 from desktop.watched.add_title.search_dialog import AddTitleSearchDialog
 
 
@@ -172,7 +173,12 @@ def test_failed_from_current_request_returns_dialog_to_idle_without_closing(qapp
 
     harness.workers[0].fail("network failed")
 
-    assert messages == [("Добавить тайтл", "Ошибка поиска:\nnetwork failed")]
+    assert messages == [
+        (
+            tr("add_title.header"),
+            tr("add_title.error.search_failed", message="network failed"),
+        )
+    ]
     assert dialog._worker is None
     assert dialog._title_input.isEnabled() is True
     assert dialog._search_button.isEnabled() is True

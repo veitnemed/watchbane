@@ -186,6 +186,29 @@ def test_english_data_language_formats_detail_values() -> None:
     assert {"label": "Status", "value": "Ended"} in items
 
 
+def test_interface_and_data_language_are_independent() -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_card
+    from desktop.i18n import tr
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+
+    candidate = {
+        "title": "Лучше звоните Солу",
+        "description": "Русское описание",
+        "localized": {
+            "ru": {"title": "Лучше звоните Солу", "overview": "Русское описание"},
+            "en": {"title": "Better Call Saul", "overview": "English overview"},
+        },
+    }
+
+    save_app_settings(AppSettings(interface_language="en", data_language="ru"))
+    assert tr("tabs.watched") == "My library"
+    assert build_candidate_readonly_card(candidate, data_language="ru")["title"] == "Лучше звоните Солу"
+
+    save_app_settings(AppSettings(interface_language="ru", data_language="en"))
+    assert tr("tabs.watched") == "Моё"
+    assert build_candidate_readonly_card(candidate, data_language="en")["title"] == "Better Call Saul"
+
+
 def test_english_country_display_and_add_title_country_combo(qapp) -> None:
     from candidates.models.country_schema import candidate_country_for_display
     from desktop.settings.app_settings import AppSettings, save_app_settings
@@ -199,6 +222,152 @@ def test_english_country_display_and_add_title_country_combo(qapp) -> None:
 
     assert dialog._country_combo.itemText(0) == "Any country"
     assert dialog._country_combo.currentText() == "United States"
+
+
+def test_add_title_resolve_uses_data_language_for_tmdb_locale() -> None:
+    from dataset.resolve import service as resolve_service
+
+    calls = {"search_language": None, "details_language": None}
+
+    def fake_search(title, *, language=None):
+        calls["search_language"] = language
+        return [{"id": 101, "name": title}]
+
+    def fake_details(tmdb_id, *, language=None, **kwargs):
+        calls["details_language"] = language
+        assert kwargs["append_to_response"] == resolve_service.api_tmdb.DEFAULT_TV_DETAIL_APPENDS
+        return {
+            "id": tmdb_id,
+            "name": "Better Call Saul",
+            "original_name": "Better Call Saul",
+            "first_air_date": "2015-02-08",
+            "origin_country": ["US"],
+            "production_countries": [{"iso_3166_1": "US", "name": "United States"}],
+            "genres": [{"id": 18, "name": "Drama"}],
+            "vote_average": 8.7,
+            "vote_count": 6000,
+            "popularity": 40.0,
+            "overview": "English overview",
+            "external_ids": {"imdb_id": "tt3032476"},
+        }
+
+    result = resolve_service.resolve_title_data_for_add(
+        "Better Call Saul",
+        "US",
+        data_language="en",
+        tmdb_search_func=fake_search,
+        tmdb_choose_func=lambda results, **_kwargs: results[0],
+        tmdb_details_func=fake_details,
+    )
+
+    assert calls == {"search_language": "en-US", "details_language": "en-US"}
+    assert result["tmdb_language"] == "en-US"
+    assert result["data_language"] == "en"
+    assert result["defaults"]["localized"]["en"]["title"] == "Better Call Saul"
+    assert result["defaults"]["localized"]["en"]["overview"] == "English overview"
+
+
+def test_add_title_worker_passes_data_language(monkeypatch, qapp) -> None:
+    from types import SimpleNamespace
+
+    from desktop.watched.add_title.worker import AddTitleResolveWorker
+
+    captured = {}
+
+    def fake_resolve_title_for_add(title, country, *, on_progress=None, data_language="ru"):
+        captured["title"] = title
+        captured["country"] = country
+        captured["data_language"] = data_language
+        if on_progress is not None:
+            on_progress(1, 1, "done")
+        return SimpleNamespace(found=True)
+
+    monkeypatch.setattr(
+        "desktop.watched.add_title.worker.service.resolve_title_for_add",
+        fake_resolve_title_for_add,
+    )
+
+    results = []
+    worker = AddTitleResolveWorker("Trigger", "US", data_language="en")
+    worker.finished_with_result.connect(results.append)
+    worker.run()
+
+    assert captured == {"title": "Trigger", "country": "US", "data_language": "en"}
+    assert results[0].found is True
+
+
+def test_tmdb_builder_uses_passed_data_language_locale(monkeypatch) -> None:
+    from candidates.sources.tmdb import builder
+    from desktop.settings.app_settings import language_to_tmdb_locale
+
+    discover_languages = []
+    detail_languages = []
+
+    monkeypatch.setattr(builder.api_tmdb, "load_tmdb_token", lambda: "token")
+    monkeypatch.setattr(builder, "load_candidate_pool", lambda: {})
+    monkeypatch.setattr(builder, "remove_watched_discover", lambda items: (list(items), 0))
+    monkeypatch.setattr(
+        builder,
+        "build_discovery_slices",
+        lambda *args, **kwargs: [
+            {
+                "slice_name": "test",
+                "query": {"sort_by": "vote_count.desc", "with_origin_country": "US"},
+                "pages_per_slice": 1,
+            }
+        ],
+    )
+
+    def fake_tmdb_get(_path, params=None, token=None):
+        discover_languages.append((params or {}).get("language"))
+        return {
+            "page": 1,
+            "total_pages": 1,
+            "results": [
+                {
+                    "id": 3032476,
+                    "name": "Better Call Saul",
+                    "original_name": "Better Call Saul",
+                    "first_air_date": "2015-02-08",
+                    "vote_average": 8.7,
+                    "vote_count": 6000,
+                    "popularity": 40.0,
+                }
+            ],
+        }
+
+    def fake_details(tmdb_id, *, language=None, **_kwargs):
+        detail_languages.append(language)
+        return {
+            "id": tmdb_id,
+            "name": "Better Call Saul",
+            "original_name": "Better Call Saul",
+            "first_air_date": "2015-02-08",
+            "origin_country": ["US"],
+            "production_countries": [{"iso_3166_1": "US", "name": "United States"}],
+            "original_language": "en",
+            "genres": [{"id": 18, "name": "Drama"}],
+            "vote_average": 8.7,
+            "vote_count": 6000,
+            "popularity": 40.0,
+            "overview": "English overview",
+            "external_ids": {"imdb_id": "tt3032476"},
+            "aggregate_credits": {},
+            "keywords": {"results": []},
+        }
+
+    monkeypatch.setattr(builder.api_tmdb, "tmdb_get", fake_tmdb_get)
+    monkeypatch.setattr(builder.api_tmdb, "get_tv_details", fake_details)
+
+    locale = language_to_tmdb_locale("en")
+    result = builder.build_candidate_pool("US", pages=1, details_limit=1, language=locale)
+
+    assert discover_languages == ["en-US"]
+    assert detail_languages == ["en-US"]
+    assert result["query"]["language"] == "en-US"
+    assert result["settings"]["language"] == "en-US"
+    assert result["candidates"][0]["source_query"]["language"] == "en-US"
+    assert result["candidates"][0]["localized"]["en"]["title"] == "Better Call Saul"
 
 
 def test_data_language_migration_adds_localized_without_renaming_keys(tmp_path) -> None:
@@ -530,6 +699,7 @@ def test_build_watched_movie_card_respects_data_language() -> None:
             "ru": {"title": "Триггер", "overview": "Русское описание"},
             "en": {"title": "Trigger"},
         },
+        "country_codes": ["RU"],
         "genre": {"has_drama": 1},
     }
 
@@ -538,9 +708,11 @@ def test_build_watched_movie_card_respects_data_language() -> None:
 
     assert ru_card["title"] == "Триггер"
     assert ru_card["overview"] == "Русское описание"
+    assert ru_card["country"] == "Россия"
     assert ru_card["genres"] == ["Драма"]
     assert en_card["title"] == "Trigger"
     assert en_card["overview"] == "Русское описание"
+    assert en_card["country"] == "Russia"
     assert en_card["genres"] == ["Drama"]
 
 
@@ -4800,6 +4972,25 @@ def test_filter_candidates_by_title_matches_alternative_title() -> None:
     assert filter_candidates_by_title(candidates, "gamma")[0]["title"] == "Beta"
 
 
+def test_candidate_search_text_includes_both_localized_titles() -> None:
+    from desktop.candidates.presenters import candidate_search_text, filter_candidates_by_title
+
+    candidate = {
+        "title": "Better Call Saul",
+        "localized": {
+            "ru": {"title": "Лучше звоните Солу"},
+            "en": {"title": "Better Call Saul"},
+        },
+        "original_title": "Better Call Saul",
+    }
+
+    haystack = candidate_search_text(candidate)
+
+    assert "лучше звоните солу" in haystack
+    assert "better call saul" in haystack
+    assert filter_candidates_by_title([candidate], "лучше") == [candidate]
+
+
 def test_list_search_index_filters_with_precomputed_haystack() -> None:
     from desktop.shared.widgets.list_search import SearchIndex, SearchIndexItem, normalize_search_query, resolve_selection_row
 
@@ -4827,6 +5018,56 @@ def test_build_watched_search_index_matches_title() -> None:
     index = build_watched_search_index(entries)
     assert len(index.filter_by_query("show")) == 1
     assert index.filter_by_query("show")[0][0] == "Alpha"
+
+
+def test_watched_search_haystack_includes_localized_titles() -> None:
+    from desktop.watched.model.load import watched_entry_search_haystack
+
+    entry = (
+        "better-call-saul",
+        {
+            "main_info": {"title": "Лучше звоните Солу"},
+            "localized": {
+                "ru": {"title": "Лучше звоните Солу"},
+                "en": {"title": "Better Call Saul"},
+            },
+            "original_title": "Better Call Saul",
+        },
+        {"title": "Better Call Saul"},
+    )
+
+    haystack = watched_entry_search_haystack(entry)
+
+    assert "лучше звоните солу" in haystack
+    assert "better call saul" in haystack
+
+
+def test_watched_tab_reload_entries_rereads_data_language(monkeypatch, qapp) -> None:
+    from desktop.settings.app_settings import AppSettings, save_app_settings
+    from desktop.watched.tab import WatchedTabView
+
+    calls = []
+
+    def fake_load_watched_entries(*, data_language="ru"):
+        calls.append(data_language)
+        return [
+            (
+                data_language,
+                {"main_info": {"title": data_language, "year": 2020, "user_score": 8.0}},
+                {"title": data_language, "year": 2020, "user_score": 8.0},
+            )
+        ]
+
+    monkeypatch.setattr("desktop.watched.tab.load_watched_entries", fake_load_watched_entries)
+    save_app_settings(AppSettings(interface_language="ru", data_language="ru"))
+
+    view = WatchedTabView(on_status_message=lambda _message, _timeout_ms=0: None)
+    assert calls[-1] == "ru"
+
+    save_app_settings(AppSettings(interface_language="ru", data_language="en"))
+    view.reload_entries()
+
+    assert calls[-1] == "en"
 
 
 def test_candidate_list_view_uses_list_search_module() -> None:

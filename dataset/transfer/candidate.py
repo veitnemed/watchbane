@@ -4,6 +4,7 @@ from config import constant
 from config import genre_tags
 from config import scheme
 from dataset.genres.mapping import candidate_genre_keys_to_dataset_genres
+from dataset.language import build_localized_block_from_legacy
 from dataset.meta.payload import build_candidate_meta_payload
 from dataset.resolve.countries import extract_country_value
 from dataset.resolve.genres import (
@@ -145,6 +146,9 @@ def build_candidate_transfer_payload(candidate: dict) -> dict:
         scheme.TAGS_VIBE: {},
         scheme.GENRE: build_candidate_transfer_genre_defaults(candidate),
     }
+    localized = build_localized_block_from_legacy(candidate)
+    if localized:
+        defaults["localized"] = localized
     meta_payload = build_candidate_meta_payload(candidate)
     return {
         "defaults": defaults,

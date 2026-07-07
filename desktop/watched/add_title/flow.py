@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import QDialog
 
 from dataset import service
 from diagnostics.gui_event_log import log_event
+from desktop.settings.app_settings import get_persisted_data_language
 from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
 from desktop.watched.add_title.search_dialog import AddTitleSearchDialog
 
@@ -14,7 +15,10 @@ def run_candidate_transfer_flow(parent, candidate: dict):
     """Open preview dialog for pool candidate transfer; returns save result or None."""
     if not isinstance(candidate, dict):
         return None
-    bundle = service.build_candidate_transfer_bundle(candidate)
+    bundle = service.build_candidate_transfer_bundle(
+        candidate,
+        data_language=get_persisted_data_language(),
+    )
     preview_dialog = AddTitlePreviewDialog(bundle, parent, transfer_mode=True)
     if preview_dialog.exec() == QDialog.DialogCode.Accepted:
         return preview_dialog.save_result

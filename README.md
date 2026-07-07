@@ -49,7 +49,7 @@ watched library
 
 - **My library**: browse watched titles with posters, your ratings, TMDb signals, metadata and detail cards.
 - **Candidates**: search a shared pool of possible next titles, hide noise, transfer good picks.
-- **Information**: inspect genre reports and build custom local charts without mutating your data.
+- **Settings**: choose UI scale plus independent interface/data languages for desktop display and future metadata requests.
 - **TMDb-only build flow**: discover candidates by country/mode, fetch TMDb Details, score them, import into the shared pool.
 - **Poster cache**: keep preview posters local and avoid waiting on CDN during normal browsing.
 - **Console tools**: maintenance, diagnostics, imports and longer-running operations stay available.
@@ -128,6 +128,14 @@ Desktop interface scale:
 - local component tuning is documented in [UI scaling](docs/ui-scaling.md);
 - `QT_SCALE_FACTOR` is a Qt testing/debug override and is not recommended for normal Watchbane use.
 
+Desktop language settings:
+
+- open `Настройки -> Интерфейс -> Язык`;
+- `interface_language` changes desktop labels, buttons and messages;
+- `data_language` changes displayed titles/descriptions/genres/countries when localized data exists and is used for desktop-initiated TMDb requests;
+- supported values are Russian and English;
+- language changes apply after restart or screen reload depending on the setting.
+
 Public setup for candidate discovery requires only `TMDB_TOKEN` in the environment, `.env.local`, or `tmdb.env`.
 
 No KP API token or local IMDb dataset is required for the public product.
@@ -159,9 +167,9 @@ Adding a watched title is also TMDb-only:
 
 KP API is not needed. A local IMDb dataset is not needed. IMDb rating/votes are not used. `imdb_id` may be stored only as an external id returned by TMDb.
 
-## Information And Charts
+## Analytics Helpers
 
-The Information tab is intentionally small:
+Analytics/chart helpers are internal and are not registered as a main desktop tab:
 
 - watched genre counts;
 - candidate pool genre counts;

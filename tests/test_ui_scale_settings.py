@@ -487,7 +487,8 @@ def test_settings_dialog_displays_current_scale(monkeypatch, tmp_path, qapp) -> 
 def test_settings_dialog_selecting_125_saves_ui_scale(monkeypatch, tmp_path, qapp) -> None:
     from PyQt6.QtWidgets import QLabel, QComboBox, QPushButton, QSlider
 
-    from desktop.settings.dialog import SettingsDialog, UI_SCALE_RESTART_MESSAGE
+    from desktop.i18n import TRANSLATIONS
+    from desktop.settings.dialog import SettingsDialog
 
     _use_settings_path(monkeypatch, tmp_path)
     save_app_settings(AppSettings(ui_scale=1.0, interface_language="ru", data_language="ru"))
@@ -509,9 +510,31 @@ def test_settings_dialog_selecting_125_saves_ui_scale(monkeypatch, tmp_path, qap
     assert settings.ui_scale == 1.25
     assert settings.interface_language == "en"
     assert settings.data_language == "en"
-    assert dialog.restart_message == UI_SCALE_RESTART_MESSAGE
-    assert message_label.text() == UI_SCALE_RESTART_MESSAGE
-    assert messages == [UI_SCALE_RESTART_MESSAGE]
+    expected_message = TRANSLATIONS["ru"]["settings.restart_message.both"]
+    assert dialog.restart_message == expected_message
+    assert message_label.text() == expected_message
+    assert messages == [expected_message]
+
+
+def test_settings_dialog_data_language_only_message(monkeypatch, tmp_path, qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QComboBox, QPushButton
+
+    from desktop.i18n import tr
+    from desktop.settings.dialog import SettingsDialog
+
+    _use_settings_path(monkeypatch, tmp_path)
+    save_app_settings(AppSettings(ui_scale=1.0, interface_language="ru", data_language="ru"))
+    dialog = SettingsDialog()
+    data_language_combo = dialog.findChild(QComboBox, "dataLanguageCombo")
+    save_button = dialog.findChild(QPushButton, "saveSettingsButton")
+    message_label = dialog.findChild(QLabel, "settingsRestartMessage")
+
+    data_language_combo.setCurrentIndex(data_language_combo.findData("en"))
+    save_button.click()
+
+    assert load_app_settings().data_language == "en"
+    assert dialog.restart_message == tr("settings.restart_message.data")
+    assert message_label.text() == tr("settings.restart_message.data")
 
 
 def test_settings_dialog_reset_prepares_and_saves_default_scale(monkeypatch, tmp_path, qapp) -> None:

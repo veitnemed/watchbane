@@ -191,6 +191,7 @@ def build_candidate_pool(
     without_genres: str | None = None,
     force_refresh: bool = False,
     skip_existing_pool: bool = True,
+    language: str | None = None,
 ) -> dict[str, Any]:
     country = normalize_country_code(country)
     if is_iso2_country_code(country) is False:
@@ -200,7 +201,7 @@ def build_candidate_pool(
     criteria_name = str(criteria_name or "").strip() or COMMON_POOL_CRITERIA_NAME
 
     token = api_tmdb.load_tmdb_token()
-    language = api_tmdb.DEFAULT_LANGUAGE
+    language = str(language or "").strip() or api_tmdb.DEFAULT_LANGUAGE
     slices = build_discovery_slices(
         country,
         year_min=year_min,
@@ -311,6 +312,7 @@ def build_candidate_pool(
             "with_genres": normalize_optional_tmdb_genre_filter(with_genres),
             "without_genres": normalize_optional_tmdb_genre_filter(without_genres),
             "skip_existing_pool": bool(skip_existing_pool),
+            "language": language,
         },
         "stats": stats,
         "candidates": candidates,

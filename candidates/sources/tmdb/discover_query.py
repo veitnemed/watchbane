@@ -19,13 +19,13 @@ def is_iso2_country_code(value: str | None) -> bool:
     return len(code) == 2 and code.isascii() and code.isalpha()
 
 
-def discover_defaults(country: str) -> dict[str, Any]:
+def discover_defaults(country: str, language: str = "ru-RU") -> dict[str, Any]:
     country = normalize_country_code(country)
     params: dict[str, Any] = {
         "country": country,
         "vote_average_gte": DEFAULT_VOTE_AVERAGE_GTE,
         "vote_count_gte": DEFAULT_VOTE_COUNT_GTE,
-        "language": "ru-RU",
+        "language": str(language or "").strip() or "ru-RU",
         "sort_by": "vote_count.desc",
     }
     if country == "KR":

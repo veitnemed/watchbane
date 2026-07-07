@@ -8,6 +8,10 @@ from typing import Any
 
 SUPPORTED_DATA_LANGUAGES = ("ru", "en")
 DATA_LANGUAGE_DEFAULT = "ru"
+DATA_LANGUAGE_TMDB_LOCALES = {
+    "ru": "ru-RU",
+    "en": "en-US",
+}
 
 
 def normalize_data_language(value) -> str:
@@ -18,6 +22,11 @@ def normalize_data_language(value) -> str:
     if text in SUPPORTED_DATA_LANGUAGES:
         return text
     return DATA_LANGUAGE_DEFAULT
+
+
+def tmdb_locale_for_data_language(value) -> str:
+    """Map supported data language to a TMDb locale."""
+    return DATA_LANGUAGE_TMDB_LOCALES[normalize_data_language(value)]
 
 
 def _as_dict(value) -> dict:

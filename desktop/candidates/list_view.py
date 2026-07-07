@@ -202,6 +202,7 @@ class CandidateListView(CandidateListActionsMixin):
         self.refresh()
 
     def on_tab_activated(self) -> None:
+        self._refresh_data_language()
         if self._session.has_results or self._session.is_loading:
             return
         self._clear_detail(show_filters_hint=False, loading=True)
@@ -215,13 +216,24 @@ class CandidateListView(CandidateListActionsMixin):
         mode = self._sort_combo.currentData()
         if mode in self._service.SEARCH_SORT_MODES:
             self._session.set_sort_mode(str(mode))
-            self._delegate = build_candidate_list_item_delegate(
-                self._results_list,
-                self._session.sort_mode,
-                data_language=self._data_language,
-            )
-            self._results_list.setItemDelegate(self._delegate)
-            self._results_list.viewport().update()
+            self._rebuild_list_delegate()
+
+    def _rebuild_list_delegate(self) -> None:
+        self._delegate = build_candidate_list_item_delegate(
+            self._results_list,
+            self._session.sort_mode,
+            data_language=self._data_language,
+        )
+        self._results_list.setItemDelegate(self._delegate)
+        self._results_list.viewport().update()
+
+    def _refresh_data_language(self) -> None:
+        data_language = get_persisted_data_language()
+        if data_language == self._data_language:
+            return
+        self._data_language = data_language
+        self._detail_entries = {}
+        self._rebuild_list_delegate()
 
     def _apply_visible_candidates(self) -> None:
         query = self._search_input.text()
@@ -289,6 +301,7 @@ class CandidateListView(CandidateListActionsMixin):
             )
 
     def refresh(self) -> None:
+        self._refresh_data_language()
         self._poster_request_seq += 1
         if not self._session.has_results:
             self._all_candidates = []

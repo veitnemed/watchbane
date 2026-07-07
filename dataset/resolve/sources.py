@@ -141,10 +141,12 @@ def search_tmdb_defaults_data(
     choose_func=None,
     details_func=None,
     normalizer=None,
+    language: str | None = None,
 ) -> dict:
     """Search TMDb and return normalized add-flow data without KP/IMDb rating fields."""
     search_func = search_func or api_tmdb.search_tv_by_name
     details_func = details_func or api_tmdb.get_tv_details
+    resolved_language = str(language or api_tmdb.DEFAULT_LANGUAGE).strip() or api_tmdb.DEFAULT_LANGUAGE
     last_error = None
 
     for query in _unique_queries(queries):
@@ -153,7 +155,10 @@ def search_tmdb_defaults_data(
             continue
 
         try:
-            results = search_func(title)
+            try:
+                results = search_func(title, language=resolved_language)
+            except TypeError:
+                results = search_func(title)
             choose = choose_func or choose_best_tmdb_result
             try:
                 selected = choose(
@@ -168,10 +173,17 @@ def search_tmdb_defaults_data(
                 last_error = _tmdb_error("not_found", f"TMDb не нашёл объект: {title}")
                 continue
 
-            details = details_func(
-                int(selected["id"]),
-                append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
-            )
+            try:
+                details = details_func(
+                    int(selected["id"]),
+                    language=resolved_language,
+                    append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
+                )
+            except TypeError:
+                details = details_func(
+                    int(selected["id"]),
+                    append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
+                )
             return {
                 "data": _normalizer_payload(details, normalizer),
                 "error": None,

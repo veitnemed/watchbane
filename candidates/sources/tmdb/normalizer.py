@@ -7,6 +7,7 @@ from typing import Any
 from apis import tmdb_api
 from candidates.models import genre_schema
 from candidates.models.schema import compute_completeness, strip_external_rating_fields
+from dataset.language import build_localized_block_from_legacy, normalize_data_language
 
 
 def _unique_non_empty(values) -> list:
@@ -63,6 +64,14 @@ def _source_trace(source_trace) -> list:
     if isinstance(source_trace, list):
         return list(source_trace)
     return [source_trace]
+
+
+def _data_language_from_source_query(source_query) -> str:
+    if isinstance(source_query, dict):
+        language = str(source_query.get("language") or "").strip().casefold()
+        if language.startswith("en"):
+            return "en"
+    return normalize_data_language("ru")
 
 
 def prepare_tmdb_candidate(
@@ -123,6 +132,13 @@ def prepare_tmdb_candidate(
     }
     if country is not None:
         candidate["target_country"] = str(country or "").strip().upper()
+
+    localized = build_localized_block_from_legacy(
+        candidate,
+        default_language=_data_language_from_source_query(source_query),
+    )
+    if localized:
+        candidate["localized"] = localized
 
     candidate = strip_external_rating_fields(candidate)
     completeness = compute_completeness(candidate)

@@ -29,17 +29,19 @@ def resolve_title_for_add(
     country: str = "",
     *,
     on_progress=None,
+    data_language: str = "ru",
 ) -> AddTitleResolveBundle:
     """Resolve title through SQL/KP/TMDb and build preview card data."""
     resolved = title_resolve.resolve_title_data_for_add(
         title,
         country,
         on_progress=on_progress,
+        data_language=data_language,
     )
-    return build_add_title_resolve_bundle(resolved)
+    return build_add_title_resolve_bundle(resolved, data_language=data_language)
 
 
-def build_add_title_resolve_bundle(resolved: dict) -> AddTitleResolveBundle:
+def build_add_title_resolve_bundle(resolved: dict, data_language: str = "ru") -> AddTitleResolveBundle:
     """Build preview/save bundle from resolve_title_data_for_add result."""
     defaults = resolved.get("defaults")
     if defaults is None:
@@ -53,6 +55,7 @@ def build_add_title_resolve_bundle(resolved: dict) -> AddTitleResolveBundle:
         resolved=resolved,
         meta_payload=meta_payload,
         poster_hints=poster_hints,
+        data_language=data_language,
     )
 
     return AddTitleResolveBundle(

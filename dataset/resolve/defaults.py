@@ -2,6 +2,7 @@
 
 from config import constant
 from config import scheme
+from dataset.language import build_localized_block_from_legacy
 from dataset.resolve.countries import extract_country_value
 from dataset.resolve.genres import build_genre_defaults, extract_tmdb_genres
 
@@ -91,12 +92,12 @@ def merge_defaults(base: dict, extra: dict) -> dict:
     return merged
 
 
-def build_tmdb_add_defaults(series: dict, genres: list | None = None) -> dict:
+def build_tmdb_add_defaults(series: dict, genres: list | None = None, data_language: str = "ru") -> dict:
     """Build add-title defaults from a normalized TMDb object."""
     if genres is None:
         genres = extract_tmdb_genres(series)
 
-    return {
+    defaults = {
         scheme.MAIN_INFO: {
             "title": extract_tmdb_title(series),
             "user_score": None,
@@ -107,6 +108,12 @@ def build_tmdb_add_defaults(series: dict, genres: list | None = None) -> dict:
         scheme.TAGS_VIBE: {},
         scheme.GENRE: build_genre_defaults(genres),
     }
+    localized_source = dict(series or {})
+    localized_source["main_info"] = defaults[scheme.MAIN_INFO]
+    localized = build_localized_block_from_legacy(localized_source, default_language=data_language)
+    if localized:
+        defaults["localized"] = localized
+    return defaults
 
 
 build_api_defaults = build_tmdb_add_defaults

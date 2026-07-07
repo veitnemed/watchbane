@@ -91,7 +91,14 @@ def candidate_search_text(candidate: dict) -> str:
         candidate.get("alternativeName"),
         candidate.get("enName"),
         candidate.get("original_title"),
+        candidate.get("original_name"),
     ]
+    localized = candidate.get("localized")
+    if isinstance(localized, dict):
+        for language in ("ru", "en"):
+            block = localized.get(language)
+            if isinstance(block, dict):
+                parts.append(block.get("title"))
     return " ".join(str(part).strip() for part in parts if part not in (None, "")).casefold()
 
 

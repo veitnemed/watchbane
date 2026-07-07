@@ -24,7 +24,7 @@ from common import valid
 from dataset import service
 from diagnostics.gui_event_log import log_event
 from desktop.i18n import tr
-from desktop.settings.app_settings import get_persisted_interface_language
+from desktop.settings.app_settings import get_persisted_data_language, get_persisted_interface_language
 from desktop.watched.add_title.constants import (
     ADD_TITLE_DIALOG_STYLE,
     SEARCH_DIALOG_HEIGHT,
@@ -51,6 +51,7 @@ class AddTitleSearchDialog(QDialog):
         self._worker: AddTitleResolveWorker | None = None
         self._worker_factory = worker_factory or AddTitleResolveWorker
         self._interface_language = get_persisted_interface_language()
+        self._data_language = get_persisted_data_language()
         self._request_seq = 0
         self._active_request_id = 0
         self._cancel_after_worker = False
@@ -226,7 +227,15 @@ class AddTitleSearchDialog(QDialog):
         self._progress.setValue(0)
         self._progress.setMaximum(7)
 
-        worker = self._worker_factory(title, self.last_country, self)
+        try:
+            worker = self._worker_factory(
+                title,
+                self.last_country,
+                self,
+                data_language=self._data_language,
+            )
+        except TypeError:
+            worker = self._worker_factory(title, self.last_country, self)
         worker.progress.connect(
             lambda current, total, message, rid=request_id: self._on_progress(rid, current, total, message)
         )

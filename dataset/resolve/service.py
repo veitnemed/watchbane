@@ -6,6 +6,7 @@ from typing import Any
 
 from apis import tmdb_api as api_tmdb
 from config import scheme
+from dataset.language import build_localized_block_from_legacy, normalize_data_language, tmdb_locale_for_data_language
 from dataset.resolve.countries import extract_country_value
 from dataset.resolve.defaults import build_empty_add_defaults
 from dataset.resolve.genres import build_genre_defaults, extract_tmdb_genres
@@ -68,7 +69,13 @@ def _clean_tmdb_data(data: dict[str, Any]) -> dict[str, Any]:
     return cleaned
 
 
-def _build_tmdb_add_defaults(input_title: str, country: str, tmdb_data: dict[str, Any]) -> dict:
+def _build_tmdb_add_defaults(
+    input_title: str,
+    country: str,
+    tmdb_data: dict[str, Any],
+    *,
+    data_language: str = "ru",
+) -> dict:
     defaults = build_empty_add_defaults(input_title)
     genres = extract_tmdb_genres(tmdb_data)
     defaults[scheme.MAIN_INFO]["title"] = tmdb_data.get("title") or input_title
@@ -80,6 +87,14 @@ def _build_tmdb_add_defaults(input_title: str, country: str, tmdb_data: dict[str
         if tmdb_data.get(key) not in (None, "")
     }
     defaults[scheme.GENRE] = build_genre_defaults(genres)
+    localized_source = dict(tmdb_data or {})
+    localized_source["main_info"] = defaults[scheme.MAIN_INFO]
+    localized = build_localized_block_from_legacy(
+        localized_source,
+        default_language=normalize_data_language(data_language),
+    )
+    if localized:
+        defaults["localized"] = localized
     return defaults
 
 
@@ -116,6 +131,7 @@ def search_tmdb_title_for_add(
     choose_func=None,
     details_func=None,
     normalizer=None,
+    language: str | None = None,
 ) -> dict[str, Any]:
     """Search TMDb and return normalized add-flow data without KP/IMDb ratings."""
     result = search_tmdb_defaults_data(
@@ -124,6 +140,7 @@ def search_tmdb_title_for_add(
         choose_func=choose_func,
         details_func=details_func,
         normalizer=normalizer,
+        language=language,
     )
     if result["data"] is not None:
         result["data"] = _clean_tmdb_data(result["data"])
@@ -135,6 +152,8 @@ def resolve_title_data_for_add(
     country: str = "Россия",
     *,
     on_progress=None,
+    data_language: str = "ru",
+    tmdb_language: str | None = None,
     tmdb_search_func=None,
     tmdb_choose_func=None,
     tmdb_details_func=None,
@@ -143,6 +162,8 @@ def resolve_title_data_for_add(
     """Resolve add-title defaults through TMDb only."""
     title = _normalize_text(title)
     country = _normalize_text(country)
+    normalized_data_language = normalize_data_language(data_language)
+    resolved_tmdb_language = str(tmdb_language or "").strip() or tmdb_locale_for_data_language(normalized_data_language)
 
     _report_add_progress(on_progress, 1, "TMDb Search", "Поиск")
     tmdb_result = search_tmdb_title_for_add(
@@ -152,6 +173,7 @@ def resolve_title_data_for_add(
         choose_func=tmdb_choose_func,
         details_func=tmdb_details_func,
         normalizer=tmdb_normalizer,
+        language=resolved_tmdb_language,
     )
     tmdb_data = tmdb_result["data"]
     tmdb_error = tmdb_result["error"]
@@ -170,12 +192,19 @@ def resolve_title_data_for_add(
             "sources": {},
             "source_values": {},
             "statuses": {"tmdb_api": tmdb_status},
+            "data_language": normalized_data_language,
+            "tmdb_language": resolved_tmdb_language,
             "found": False,
         }
 
     _report_add_progress(on_progress, 2, "TMDb Details", "Успешно")
     _report_add_progress(on_progress, 3, "Подготовка defaults", "TMDb")
-    defaults = _build_tmdb_add_defaults(title, country, tmdb_data)
+    defaults = _build_tmdb_add_defaults(
+        title,
+        country,
+        tmdb_data,
+        data_language=normalized_data_language,
+    )
     sources = _build_tmdb_sources(tmdb_data)
     source_values = _build_tmdb_source_values(tmdb_data)
     _report_add_progress(on_progress, 4, "Готово", "найдено")
@@ -189,6 +218,8 @@ def resolve_title_data_for_add(
         "sources": sources,
         "source_values": source_values,
         "statuses": {"tmdb_api": tmdb_status},
+        "data_language": normalized_data_language,
+        "tmdb_language": resolved_tmdb_language,
         "found": True,
     }
 

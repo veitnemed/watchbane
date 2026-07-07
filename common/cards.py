@@ -149,11 +149,12 @@ def _resolve_poster_fields(movie: dict, poster_cache: dict | None = None) -> dic
     }
 
 
-def _country(movie: dict) -> str | None:
+def _country(movie: dict, data_language: str = "ru") -> str | None:
+    language = normalize_data_language(data_language)
     display = _first_text(movie, "country_display")
     if display is not None:
         codes = country_schema.normalize_country_filter_list(display)
-        return country_schema.build_country_display(codes) or display
+        return country_schema.build_country_display(codes, language=language) or display
 
     for field_name in (
         "country_codes",
@@ -162,7 +163,7 @@ def _country(movie: dict) -> str | None:
         "tmdb_origin_countries",
     ):
         codes = country_schema.normalize_country_filter_list(movie.get(field_name))
-        display = country_schema.build_country_display(codes)
+        display = country_schema.build_country_display(codes, language=language)
         if display is not None:
             return display
 
@@ -170,7 +171,8 @@ def _country(movie: dict) -> str | None:
         values = _list_text_values(movie.get(field_name))
         if len(values) > 0:
             display = country_schema.build_country_display(
-                country_schema.normalize_country_filter_list(values)
+                country_schema.normalize_country_filter_list(values),
+                language=language,
             )
             return display or ", ".join(values)
 
@@ -178,7 +180,8 @@ def _country(movie: dict) -> str | None:
     if country is None:
         return None
     display = country_schema.build_country_display(
-        country_schema.normalize_country_filter_list(country)
+        country_schema.normalize_country_filter_list(country),
+        language=language,
     )
     return display or country
 
@@ -286,20 +289,27 @@ def _compute_watched_tmdb_scores(
     }
 
 
-def _resolve_country(movie: dict, title: str, year, lookup_cache: dict | None = None, meta_obj=None) -> str | None:
-    country = _country(movie)
+def _resolve_country(
+    movie: dict,
+    title: str,
+    year,
+    lookup_cache: dict | None = None,
+    meta_obj=None,
+    data_language: str = "ru",
+) -> str | None:
+    country = _country(movie, data_language=data_language)
     if country is not None:
         return country
 
     resolved_meta = _meta_obj_for_title(title, lookup_cache, meta_obj=meta_obj)
     if isinstance(resolved_meta, dict):
-        country = _country(resolved_meta)
+        country = _country(resolved_meta, data_language=data_language)
         if country is not None:
             return country
 
     pool_candidate = _pool_candidate_for_title(title, year, lookup_cache)
     if isinstance(pool_candidate, dict):
-        country = _country(pool_candidate)
+        country = _country(pool_candidate, data_language=data_language)
         if country is not None:
             return country
 
@@ -422,7 +432,14 @@ def build_watched_movie_card(
     resolved_meta = _meta_obj_for_title(legacy_title, lookup_cache, meta_obj=meta_obj)
     pool_candidate = _pool_candidate_for_title(legacy_title, year, lookup_cache)
     tmdb_sections = _tmdb_score_sections(movie, raw_scores, resolved_meta, pool_candidate)
-    country = _resolve_country(movie, legacy_title, year, lookup_cache=lookup_cache, meta_obj=resolved_meta)
+    country = _resolve_country(
+        movie,
+        legacy_title,
+        year,
+        lookup_cache=lookup_cache,
+        meta_obj=resolved_meta,
+        data_language=language,
+    )
     computed_tmdb_scores = _compute_watched_tmdb_scores(movie, tmdb_sections, country, language)
     quality_score = _first_number("quality_score", tmdb_sections, _to_float)
     final_score = _first_number("final_score", tmdb_sections, _to_float)

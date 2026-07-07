@@ -53,7 +53,6 @@ class UiScaleControlPanel(QWidget):
         super().__init__(parent)
         self.setObjectName("uiScaleControlPanel")
         self._restart_message = ""
-        self._restart_message_template = tr("settings.restart_message")
 
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
@@ -190,18 +189,35 @@ class UiScaleControlPanel(QWidget):
         self.set_ui_scale(APP_UI_SCALE_DEFAULT)
 
     def _save(self) -> None:
-        save_app_settings(
-            AppSettings(
-                ui_scale=self.selected_ui_scale(),
-                interface_language=self.selected_interface_language(),
-                data_language=self.selected_data_language(),
-            )
+        previous_settings = load_app_settings()
+        next_settings = AppSettings(
+            ui_scale=self.selected_ui_scale(),
+            interface_language=self.selected_interface_language(),
+            data_language=self.selected_data_language(),
         )
-        message = self._restart_message_template
+        message = self._settings_saved_message(previous_settings, next_settings)
+        save_app_settings(
+            next_settings
+        )
         self._restart_message = message
         self._message_label.setText(message)
         self._message_label.setVisible(True)
         self.settingsSaved.emit(message)
+
+    def _settings_saved_message(self, previous: AppSettings, current: AppSettings) -> str:
+        interface_changed = (
+            normalize_language(previous.interface_language)
+            != normalize_language(current.interface_language)
+        )
+        data_changed = (
+            normalize_language(previous.data_language)
+            != normalize_language(current.data_language)
+        )
+        if interface_changed and data_changed:
+            return tr("settings.restart_message.both")
+        if data_changed:
+            return tr("settings.restart_message.data")
+        return tr("settings.restart_message")
 
     def _populate_language_combo(self, combo: QComboBox) -> None:
         for label_key, language in LANGUAGE_OPTIONS:

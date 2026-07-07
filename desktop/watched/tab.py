@@ -112,6 +112,7 @@ class WatchedTabView(WatchedTabActionsMixin):
 
     def reload_entries(self, added_key: str | None = None) -> None:
         """Refresh watched list after an external add (e.g. candidate transfer)."""
+        self._data_language = get_persisted_data_language()
         previous_key = None
         current_row = self._list_widget.currentRow()
         if 0 <= current_row < len(self._visible_entries):
