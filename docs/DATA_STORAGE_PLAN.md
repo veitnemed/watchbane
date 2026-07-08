@@ -80,3 +80,10 @@ TMDb-only candidate migration/refresh reports:
 - `apis/sql_title_aliases.json`.
 
 Локальные runtime data в `data/` игнорируются: SQLite DB, WAL/SHM, legacy JSON, exports, backups и caches не коммитятся.
+
+## Approved Legacy JSON Writers
+
+Direct writes to migrated JSON files are allowed only in compatibility wrappers,
+legacy migration/import/export scripts, explicit backup/restore code and tests.
+Feature code, UI, desktop, console and service views must route writes through
+storage/domain APIs so the active backend can remain SQLite-first.
