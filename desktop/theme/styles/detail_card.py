@@ -200,6 +200,15 @@ QLabel#detailMainInfoLabel {{
     font-size: {font_px(FONT_DETAIL_MAIN_INFO_LABEL)}px;
     padding: 0;
 }}
+QLabel#detailMainInfoIcon {{
+    background: transparent;
+}}
+QFrame#detailMainInfoRowDivider {{
+    background-color: {FILM_BORDER_WEAK};
+    min-height: {detail_px(1)}px;
+    max-height: {detail_px(1)}px;
+    border: none;
+}}
 QLabel#mainInfoValue,
 QLabel#detailMainInfoValue {{
     background: transparent;

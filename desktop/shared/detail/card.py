@@ -6,6 +6,7 @@ from typing import Any
 
 from desktop.i18n import tr
 from desktop.shared.detail import profiles as detail_profiles
+from desktop.shared.detail.action_icons import make_detail_metadata_pixmap
 from desktop.shared.detail.card_layout import build_detail_card_layout
 from desktop.shared.detail.card_pills import clear_layout, fill_detail_chip_rows, make_meta_pill
 from desktop.shared.detail.card_poster import DetailCardPosterMixin
@@ -34,6 +35,8 @@ MEDIA_THEME_OBJECT_NAMES = {
     "genrePill",
     "detailMainInfoPanel",
     "detailMainInfoHeaderDivider",
+    "detailMainInfoIcon",
+    "detailMainInfoRowDivider",
     "detailOverviewDivider",
 }
 
@@ -301,6 +304,17 @@ class DetailCard(DetailCardPosterMixin):
             self._profile.detail_user_score_badge_height,
         )
 
+    def _main_info_icon_kind(self, label: str) -> str:
+        label_to_icon = {
+            tr("detail.info.type"): "type",
+            tr("detail.info.country"): "country",
+            tr("detail.info.premiere"): "date",
+            tr("detail.info.last_episode"): "date",
+            tr("detail.info.watch_where"): "watch",
+            tr("detail.info.tmdb_votes"): "votes",
+        }
+        return label_to_icon.get(str(label), "info")
+
     def _set_info_grid_items(
         self,
         grid,
@@ -311,14 +325,41 @@ class DetailCard(DetailCardPosterMixin):
         value_object_name: str,
     ) -> None:
         from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import QLabel, QSizePolicy
+        from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+        from desktop.theme import FILM_TEXT_MUTED, TRANSPARENT_STYLE
 
         clear_layout(grid)
         compact_row_height = min(
             self._profile.detail_main_info_row_height,
             self._profile.detail_main_info_compact_row_height,
         )
+        icon_size = max(16, min(22, compact_row_height // 2))
         for row, item in enumerate(items):
+            row_widget = QWidget()
+            row_widget.setObjectName("detailMainInfoRow")
+            row_widget.setStyleSheet(TRANSPARENT_STYLE)
+            row_layout = QVBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(0)
+
+            content_widget = QWidget()
+            content_widget.setStyleSheet(TRANSPARENT_STYLE)
+            content_layout = QHBoxLayout(content_widget)
+            content_layout.setContentsMargins(0, 0, 0, 0)
+            content_layout.setSpacing(self._profile.detail_small_spacing)
+
+            icon = QLabel()
+            icon.setObjectName("detailMainInfoIcon")
+            icon.setFixedSize(icon_size + self._profile.detail_small_spacing, compact_row_height)
+            icon.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            icon.setPixmap(
+                make_detail_metadata_pixmap(
+                    self._main_info_icon_kind(str(item.get("label", ""))),
+                    FILM_TEXT_MUTED,
+                    icon_size,
+                )
+            )
+
             label = QLabel(str(item.get("label", "")))
             label.setObjectName(label_object_name)
             label.setFixedWidth(self._profile.detail_main_info_label_width)
@@ -334,8 +375,20 @@ class DetailCard(DetailCardPosterMixin):
             value.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             value.setToolTip(str(item.get("tooltip") or value_text))
 
-            grid.addWidget(label, row, 0)
-            grid.addWidget(value, row, 1)
+            content_layout.addWidget(icon)
+            content_layout.addWidget(label)
+            content_layout.addWidget(value, stretch=1)
+            row_layout.addWidget(content_widget)
+
+            if row < len(items) - 1:
+                divider = QFrame()
+                divider.setObjectName("detailMainInfoRowDivider")
+                divider.setFrameShape(QFrame.Shape.HLine)
+                divider.setFixedHeight(self._profile.detail_divider_height)
+                divider.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+                row_layout.addWidget(divider)
+
+            grid.addWidget(row_widget, row, 0, 1, 2)
 
         section.setVisible(len(items) > 0)
 

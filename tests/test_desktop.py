@@ -3291,6 +3291,8 @@ def test_detail_main_info_panel_renders_known_rows(qapp) -> None:
     panel = detail.widget.findChild(QFrame, "detailMainInfoPanel")
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
     values = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoValue")]
+    icons = panel.findChildren(QLabel, "detailMainInfoIcon")
+    row_dividers = panel.findChildren(QFrame, "detailMainInfoRowDivider")
 
     assert section is not None
     assert section.isHidden() is False
@@ -3299,6 +3301,9 @@ def test_detail_main_info_panel_renders_known_rows(qapp) -> None:
     assert section.layout().spacing() == DETAIL_CARD_LAYOUT_PROFILE.detail_main_info_header_panel_gap
     assert panel is not None
     assert panel.layout().verticalSpacing() == DETAIL_CARD_LAYOUT_PROFILE.detail_main_info_row_gap
+    assert len(icons) == len(labels)
+    assert len(row_dividers) == len(labels) - 1
+    assert all(icon.pixmap() is not None for icon in icons)
     assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
     assert "Сериал" in values
     assert "США" in values
@@ -4460,6 +4465,7 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     assert f"background-color: {tokens.FILM_BORDER_WEAK};" in style
     assert f"color: {tokens.FILM_TEXT};" in style
     assert f"color: {tokens.FILM_TEXT_SUBTLE};" in style
+    assert "QFrame#detailMainInfoRowDivider" in style
 
 
 def test_detail_card_movie_mode_sets_film_theme_properties(qapp) -> None:
