@@ -184,19 +184,18 @@ QLabel#detailMainInfoHeader {{
     padding: 0;
 }}
 QPushButton#detailMainInfoToggleButton {{
-    background-color: {COLOR_DETAIL_ACTION_BG};
-    border: 1px solid {COLOR_DETAIL_HERO_BORDER};
+    background-color: transparent;
+    border: none;
     border-radius: {detail_px(RADIUS_BUTTON_SMALL)}px;
-    color: {COLOR_TEXT_SECONDARY};
+    color: {FILM_TEXT_MUTED};
     font-size: {font_px(FONT_SMALL)}px;
     font-weight: 600;
-    padding: {detail_px(3)}px {detail_px(8)}px;
-    min-height: {detail_px(24)}px;
+    padding: {detail_px(2)}px 0;
+    min-height: {detail_px(20)}px;
 }}
 QPushButton#detailMainInfoToggleButton:hover {{
-    border-color: {COLOR_BORDER_ACTIVE};
-    color: {COLOR_TEXT};
-    background-color: {COLOR_DETAIL_ACTION_BG_HOVER};
+    color: {FILM_TEXT_SUBTLE};
+    background-color: transparent;
 }}
 QLabel#mainInfoLabel,
 QLabel#detailMainInfoLabel {{
