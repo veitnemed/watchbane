@@ -4416,6 +4416,9 @@ def test_film_theme_tokens_match_visual_brief() -> None:
         "movie_badge_bg": "#0B2542",
         "movie_badge_border": "#2EA8FF",
         "movie_badge_text": "#EAF6FF",
+        "series_badge_bg": "#082F3A",
+        "series_badge_border": "#35D7F2",
+        "series_badge_text": "#E7FCFF",
         "rating_track": "#17314F",
         "rating_value": "#2EA8FF",
         "star_on": "#35AFFF",
@@ -4429,6 +4432,7 @@ def test_film_theme_tokens_match_visual_brief() -> None:
     assert theme.FILM_WINDOW_BG == expected["window_bg"]
     assert theme.FILM_ACCENT == expected["accent"]
     assert theme.FILM_STAR_ON == expected["star_on"]
+    assert theme.FILM_SERIES_BADGE_BORDER == expected["series_badge_border"]
 
 
 def test_detail_card_style_uses_requested_font_sizes() -> None:
@@ -4461,6 +4465,10 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     assert f"background-color: {tokens.FILM_CHIP_BG};" in style
     assert f"border: 1px solid {tokens.FILM_CHIP_BORDER};" in style
     assert f"color: {tokens.FILM_CHIP_TEXT};" in style
+    assert 'QLabel#detailMediaTypeBadge[mediaType="tv"]' in style
+    assert f"background-color: {tokens.FILM_SERIES_BADGE_BG};" in style
+    assert f"border: 1px solid {tokens.FILM_SERIES_BADGE_BORDER};" in style
+    assert f"color: {tokens.FILM_SERIES_BADGE_TEXT};" in style
     assert "QFrame#detailScoreSummaryTopDivider" in style
     assert f"background-color: {tokens.FILM_BORDER_WEAK};" in style
     assert f"color: {tokens.FILM_TEXT};" in style

@@ -70,6 +70,11 @@ QLabel#detailMediaTypeBadge {{
     padding: {detail_px(5)}px {detail_px(14)}px;
     min-height: {detail_px(28)}px;
 }}
+QLabel#detailMediaTypeBadge[mediaType="tv"] {{
+    background-color: {FILM_SERIES_BADGE_BG};
+    border: 1px solid {FILM_SERIES_BADGE_BORDER};
+    color: {FILM_SERIES_BADGE_TEXT};
+}}
 QLabel#detailTitle {{
     background: transparent;
     color: {COLOR_DETAIL_TITLE};
@@ -131,11 +136,6 @@ QLabel#genrePill {{
     color: {FILM_CHIP_TEXT};
     font-size: {font_px(DETAIL_CHIP_FONT_SIZE)}px;
     font-weight: 600;
-}}
-QLabel#genrePill[mediaType="movie"] {{
-    background-color: {FILM_CHIP_BG};
-    border: 1px solid {FILM_CHIP_BORDER};
-    color: {FILM_CHIP_TEXT};
 }}
 QLabel#detailFinalScoreStarsLabel {{
     background: transparent;
