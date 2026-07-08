@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import sqlite3
 
 from storage.sqlite.connection import connect
+from storage.sqlite.schema import apply_v1
 
 
 MigrationFunc = Callable[[sqlite3.Connection], None]
@@ -20,7 +21,9 @@ class Migration:
     apply: MigrationFunc
 
 
-MIGRATIONS: tuple[Migration, ...] = ()
+MIGRATIONS: tuple[Migration, ...] = (
+    Migration(1, "initial_schema_v1", apply_v1),
+)
 
 
 def ensure_schema_migrations_table(conn: sqlite3.Connection) -> None:
@@ -86,4 +89,3 @@ def apply_migrations(
     finally:
         if owned:
             active_conn.close()
-
