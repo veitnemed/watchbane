@@ -1,5 +1,7 @@
 """Tests for candidates.service read-path contract."""
 
+import json
+
 import pytest
 
 from candidates import service as candidate_service
@@ -92,3 +94,37 @@ def test_service_format_candidate_description_delegates_without_recursion() -> N
     )
 
     assert description == "A l..."
+
+
+def test_metadata_diagnostics_skips_non_object_pool_entries(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    pool_path = tmp_path / "candidate_pool.json"
+    payload = {
+        "broken": "not a candidate",
+        "incomplete": {"title": "Missing fields", "criteria_name": "pool"},
+        "complete": {
+            "title": "Complete",
+            "year": 2020,
+            "tmdb_id": 123,
+            "tmdb_score": 7.5,
+            "tmdb_votes": 200,
+            "genres_tmdb": ["Drama"],
+            "country_codes": ["US"],
+            "criteria_name": "pool",
+        },
+    }
+    pool_path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(
+        "candidates.repositories.pool_repository.constant.CANDIDATE_POOL_JSON",
+        str(pool_path),
+    )
+
+    before = pool_path.read_text(encoding="utf-8")
+    view = candidate_service.get_metadata_diagnostics_view()
+
+    assert view["is_empty"] is False
+    assert view["incomplete_count"] == 1
+    assert view["incomplete_candidates"] == [payload["incomplete"]]
+    assert pool_path.read_text(encoding="utf-8") == before
