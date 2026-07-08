@@ -52,10 +52,13 @@ def save_candidate_pool_dict(
     *,
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
+    purge_watched: bool = True,
 ) -> None:
     """Persist candidate pool with the same normalization as JSON write-path."""
     active, owned = _connection(conn, path)
-    normalized = purge_watched_from_pool(normalize_storage_pool(data))
+    normalized = normalize_storage_pool(data)
+    if purge_watched:
+        normalized = purge_watched_from_pool(normalized)
     try:
         with active:
             active.execute("DELETE FROM candidate_records")
