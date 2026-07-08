@@ -7,7 +7,12 @@ from storage import data as storage_data
 
 
 def _use_sqlite(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    data_dir = tmp_path / "data"
+    watched_dir = data_dir / "watched"
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(data_dir))
+    monkeypatch.setattr("config.constant.WATCHED_DIR", str(watched_dir))
+    monkeypatch.setattr("config.constant.FILE_NAME", str(watched_dir / "titles.json"))
+    monkeypatch.setattr("config.constant.META_JSON", str(watched_dir / "meta.json"))
     monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "sqlite")
 
 
@@ -48,6 +53,15 @@ def test_sqlite_backend_routes_save_and_clean_dataset_meta(tmp_path, monkeypatch
 
     storage_data.clean_meta()
     assert storage_data.load_meta() == {}
+
+
+def test_sqlite_dataset_save_does_not_export_legacy_json(tmp_path, monkeypatch) -> None:
+    _use_sqlite(tmp_path, monkeypatch)
+
+    storage_data.save_dataset({"Alpha": _movie("Alpha")})
+
+    assert storage_data.load_dataset()["Alpha"]["main_info"]["title"] == "Alpha"
+    assert (tmp_path / "data" / "watched" / "titles.json").exists() is False
 
 
 def test_sqlite_backend_rename_updates_dataset_and_meta(tmp_path, monkeypatch) -> None:

@@ -51,3 +51,17 @@ The initial audit used:
 
 The remaining matches are expected at this stage. Later prompts should reduce
 runtime matches while preserving explicit legacy import/export and backup paths.
+
+## Metrics Baseline
+
+Captured before runtime JSON deletion with:
+
+```powershell
+py scripts\json_cleanup_metrics.py --json
+```
+
+| Metric | Baseline |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15805 |
+| Product JSON runtime reference count | 135 |
+| Product backend switch reference count | 45 |
