@@ -4,6 +4,7 @@ from config import constant
 from config import genre_tags
 from config import scheme
 from common import valid
+from dataset.models.media_type import normalize_media_type
 
 
 LEGACY_TAG_FIELDS = {
@@ -58,6 +59,7 @@ def normalize_csv_row(row: dict) -> dict:
     for feature in constant.GENRE:
         normalized.setdefault(feature, "0")
     normalized.setdefault("country", "")
+    normalized["media_type"] = normalize_media_type(main_info.get("media_type"))
     return normalized
 
 
@@ -79,6 +81,7 @@ def normalize_main_info(main_info: dict) -> dict:
             normalized[feature] = str(main_info.get(feature, "") or "").strip()
         else:
             normalized[feature] = valid.parse_float(main_info[feature])
+    normalized["media_type"] = normalize_media_type(main_info.get("media_type"))
     return normalized
 
 

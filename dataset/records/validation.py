@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from config import constant
 from common import valid
 from dataset.models.identity import duplicate_title_exists
+from dataset.models.media_type import normalize_media_type
 from dataset.models.results import AddRecordResult, UpdateRecordResult
 from storage.normalize import (
     is_valid_genre_tags,
@@ -26,6 +27,7 @@ class ParsedAddPayload:
     tags_vibe: dict
     genre_tags: dict
     year: object
+    media_type: str
 
 
 def validate_add_record_payload(record_payload: dict, *, data: dict) -> AddRecordResult | ParsedAddPayload:
@@ -55,6 +57,7 @@ def validate_add_record_payload(record_payload: dict, *, data: dict) -> AddRecor
         genre_tags = normalize_genre_tags(record_payload.get(constant.GENRE_SECTION, {}))
         user_score = main_info["user_score"]
         year = main_info["year"]
+        media_type = normalize_media_type(main_info.get("media_type"))
     except (KeyError, TypeError, ValueError):
         return AddRecordResult(
             ok=False,
@@ -71,7 +74,7 @@ def validate_add_record_payload(record_payload: dict, *, data: dict) -> AddRecor
             reason="empty_title",
         )
 
-    if duplicate_title_exists(data, title):
+    if duplicate_title_exists(data, title, year=year, media_type=media_type):
         return AddRecordResult(
             ok=False,
             title=title,
@@ -126,6 +129,7 @@ def validate_add_record_payload(record_payload: dict, *, data: dict) -> AddRecor
         tags_vibe=tags_vibe,
         genre_tags=genre_tags,
         year=year,
+        media_type=media_type,
     )
 
 

@@ -5,6 +5,7 @@ from copy import deepcopy
 from config import constant
 from common import valid
 from dataset.meta.merge import extract_extra_meta
+from dataset.models.identity import build_dataset_record_key
 from dataset.models.results import AddRecordResult
 from dataset.records.features import build_computed_scores, build_feature_vector
 from dataset.records.side_effects import run_after_add_side_effects
@@ -37,6 +38,8 @@ def add_dataset_record(
     tags_vibe = parsed.tags_vibe
     genre_tags = parsed.genre_tags
     year = parsed.year
+    media_type = parsed.media_type
+    dataset_key = build_dataset_record_key(data, title, year=year, media_type=media_type)
 
     extra_meta = extract_extra_meta(meta_payload)
     meta_obj = None
@@ -45,7 +48,7 @@ def add_dataset_record(
     ):
         meta_obj = meta_payload
     else:
-        meta_obj = get_meta_obj(title)
+        meta_obj = get_meta_obj(dataset_key if dataset_key != title else title)
     if meta_obj is None:
         if valid.is_valid_raw_meta(input_raw_scores) is False:
             return AddRecordResult(
@@ -56,7 +59,8 @@ def add_dataset_record(
             )
 
         raw_scores = normalize_raw_scores(input_raw_scores)
-        if add_movies_to_meta(main_info, raw_scores, extra_meta=extra_meta) is False:
+        meta_kwargs = {"meta_key": dataset_key} if dataset_key != title else {}
+        if add_movies_to_meta(main_info, raw_scores, extra_meta=extra_meta, **meta_kwargs) is False:
             return AddRecordResult(
                 ok=False,
                 title=title,
@@ -105,7 +109,7 @@ def add_dataset_record(
     if isinstance(localized, dict):
         new_movie["localized"] = deepcopy(localized)
 
-    data[title] = new_movie
+    data[dataset_key] = new_movie
     try:
         save_dataset(data)
     except Exception as error:
@@ -126,7 +130,7 @@ def add_dataset_record(
     )
     return AddRecordResult(
         ok=True,
-        title=title,
+        title=dataset_key,
         message="Новая запись добавлена!",
         reason="saved",
         side_effects=side_effects,

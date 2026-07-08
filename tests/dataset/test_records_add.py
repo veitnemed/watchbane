@@ -40,6 +40,7 @@ def test_add_dataset_record_returns_side_effects(monkeypatch) -> None:
     assert result.ok is True
     assert result.side_effects == [{"type": "poster_cache_sync", "ok": True}]
     assert "New Title" in saved
+    assert saved["New Title"]["main_info"]["media_type"] == "tv"
 
 
 def test_add_dataset_record_rejects_duplicate(monkeypatch) -> None:
@@ -52,6 +53,47 @@ def test_add_dataset_record_rejects_duplicate(monkeypatch) -> None:
 
     assert result.ok is False
     assert result.reason == "duplicate_title"
+
+
+def test_add_dataset_record_allows_same_title_with_different_media_type(monkeypatch) -> None:
+    from dataset.records import add as add_module
+    from dataset.records.add import add_dataset_record
+
+    saved = {}
+    meta_calls = []
+    existing = {
+        "Watchmen": {
+            "main_info": {
+                "title": "Watchmen",
+                "user_score": 8.0,
+                "year": 2019,
+                "country": "US",
+                "media_type": "tv",
+            }
+        }
+    }
+
+    monkeypatch.setattr(add_module, "load_dataset", lambda: dict(existing))
+    monkeypatch.setattr(add_module, "save_dataset", lambda data: saved.update(data))
+    monkeypatch.setattr(add_module, "get_meta_obj", lambda _title: None)
+    monkeypatch.setattr(
+        add_module,
+        "add_movies_to_meta",
+        lambda _main, _raw, extra_meta=None, **kwargs: meta_calls.append(kwargs) or True,
+    )
+    monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
+
+    payload = _valid_add_payload("Watchmen")
+    payload["main_info"]["year"] = 2009
+    payload["main_info"]["media_type"] = "movie"
+
+    result = add_dataset_record(payload)
+
+    assert result.ok is True
+    assert result.title == "Watchmen (2009, movie)"
+    assert saved["Watchmen (2009, movie)"]["main_info"]["title"] == "Watchmen"
+    assert saved["Watchmen (2009, movie)"]["main_info"]["media_type"] == "movie"
+    assert meta_calls == [{"meta_key": "Watchmen (2009, movie)"}]
 
 
 def test_add_dataset_record_accepts_tmdb_only_raw_scores(monkeypatch) -> None:

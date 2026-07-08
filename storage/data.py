@@ -93,7 +93,7 @@ def clean_meta():
     dump_json_atomic(constant.META_JSON, {})
 
 
-def add_movies_to_meta(main_info: dict, raw: dict, extra_meta: dict | None = None) -> bool:
+def add_movies_to_meta(main_info: dict, raw: dict, extra_meta: dict | None = None, *, meta_key: str | None = None) -> bool:
     """Добавляет постоянные raw-данные фильма в meta."""
     title = str(main_info["title"]).strip()
     meta = load_meta()
@@ -118,7 +118,7 @@ def add_movies_to_meta(main_info: dict, raw: dict, extra_meta: dict | None = Non
             if key in {"main_info", "raw_scores"}:
                 continue
             meta_obj[key] = value
-    meta[title] = meta_obj
+    meta[meta_key or title] = meta_obj
 
     save_meta(meta)
     return True
