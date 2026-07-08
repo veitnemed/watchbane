@@ -4,6 +4,7 @@ import json
 
 from config import constant
 from common import valid
+from storage.backend import is_sqlite_backend
 from storage.files import dump_json_atomic, is_json_exists
 from storage.normalize import normalize_main_info, normalize_movie_tags, normalize_raw_scores
 
@@ -16,6 +17,11 @@ def init_dataset():
 
 def load_dataset() -> dict:
     """Загружает датасет из JSON-файла."""
+    if is_sqlite_backend():
+        from storage.sqlite.watched_repository import load_dataset_dict
+
+        return load_dataset_dict()
+
     init_dataset()
     with open(constant.FILE_NAME, 'r', encoding='utf-8-sig') as file:
         data = json.load(file)
@@ -41,6 +47,11 @@ def clean_dataset():
 
 def is_origin_title(new_title: str) -> bool:
     """Проверяет, что такого названия еще нет."""
+    if is_sqlite_backend():
+        from storage.sqlite.watched_repository import is_origin_title as sqlite_is_origin_title
+
+        return sqlite_is_origin_title(new_title)
+
     data = load_dataset()
 
     for title in data.keys():
@@ -56,6 +67,11 @@ def get_all_titles() -> list:
 
 def find_exact_title(title: str) -> str | None:
     """Возвращает фактический ключ записи по названию без учета регистра."""
+    if is_sqlite_backend():
+        from storage.sqlite.watched_repository import find_exact_title as sqlite_find_exact_title
+
+        return sqlite_find_exact_title(title)
+
     expected = str(title).strip().lower()
     for current_title in load_dataset().keys():
         if current_title.strip().lower() == expected:
@@ -71,6 +87,11 @@ def init_meta():
 
 def load_meta() -> dict:
     """Загружает meta из JSON-файла."""
+    if is_sqlite_backend():
+        from storage.sqlite.watched_repository import load_meta_dict
+
+        return load_meta_dict()
+
     init_meta()
     with open(constant.META_JSON, 'r', encoding='utf-8-sig') as file:
         data = json.load(file)
@@ -126,6 +147,9 @@ def add_movies_to_meta(main_info: dict, raw: dict, extra_meta: dict | None = Non
 
 def title_in_meta(title: str) -> bool:
     """Проверяет наличие названия в meta."""
+    if is_sqlite_backend():
+        return get_meta_obj(title) is not None
+
     title = title.strip()
     meta = load_meta()
 
@@ -134,6 +158,11 @@ def title_in_meta(title: str) -> bool:
 
 def get_meta_obj(title: str) -> dict:
     """Возвращает запись meta по названию."""
+    if is_sqlite_backend():
+        from storage.sqlite.watched_repository import get_meta_obj as sqlite_get_meta_obj
+
+        return sqlite_get_meta_obj(title)
+
     title = title.strip()
     meta = load_meta()
 
