@@ -38,6 +38,7 @@ from desktop.shared.detail import (
 )
 from desktop.watched.model import (
     GENRE_FILTER_ALL,
+    MEDIA_FILTER_OPTIONS,
     SORT_OPTIONS,
     USER_SCORE_MAX,
     USER_SCORE_MIN,
@@ -53,6 +54,7 @@ from desktop.watched.model import (
     count_active_filters,
     filter_by_title,
     filter_entries_by_genre,
+    filter_entries_by_media_type,
     filter_entries_by_user_score,
     filter_entries_by_year,
     format_list_label,
@@ -64,6 +66,8 @@ from desktop.watched.model import (
     get_available_genres,
     get_user_score_spin_value,
     load_watched_entries,
+    media_type_filter_is_active,
+    normalize_media_type_filter,
     normalize_user_score_value,
     prepare_card_for_display,
     reload_poster_cache,
@@ -80,6 +84,7 @@ from desktop.watched.model import (
 
 __all__ = [
     "GENRE_FILTER_ALL",
+    "MEDIA_FILTER_OPTIONS",
     "SORT_OPTIONS",
     "USER_SCORE_MAX",
     "USER_SCORE_MIN",
@@ -104,6 +109,7 @@ __all__ = [
     "count_active_filters",
     "filter_by_title",
     "filter_entries_by_genre",
+    "filter_entries_by_media_type",
     "filter_entries_by_user_score",
     "filter_entries_by_year",
     "format_genre_pill_label",
@@ -127,6 +133,8 @@ __all__ = [
     "get_user_score_spin_value",
     "has_overview_text",
     "load_watched_entries",
+    "media_type_filter_is_active",
+    "normalize_media_type_filter",
     "normalize_user_score_value",
     "normalize_object_type",
     "normalize_final_score",

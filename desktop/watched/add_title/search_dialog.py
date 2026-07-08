@@ -104,14 +104,18 @@ class AddTitleSearchDialog(QDialog):
 
         self._country_combo = QComboBox()
         self._country_combo.setObjectName("addTitleCountryCombo")
+        self._country_combo.setMinimumContentsLength(8)
+        self._country_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         for label, value in add_title_country_combo_options():
             self._country_combo.addItem(self._country_display_label(label, value), value)
         self._set_country_selection(initial_country)
 
         self._media_type_combo = QComboBox()
         self._media_type_combo.setObjectName("addTitleMediaTypeCombo")
-        self._media_type_combo.addItem("Series", MEDIA_TYPE_TV)
-        self._media_type_combo.addItem("Movie", MEDIA_TYPE_MOVIE)
+        self._media_type_combo.setMinimumContentsLength(6)
+        self._media_type_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self._media_type_combo.addItem(tr("media_type.tv"), MEDIA_TYPE_TV)
+        self._media_type_combo.addItem(tr("media_type.movie"), MEDIA_TYPE_MOVIE)
 
         self._search_button = QPushButton(tr("add_title.search.button"))
         self._search_button.setObjectName("addTitleSearchButton")
@@ -119,7 +123,7 @@ class AddTitleSearchDialog(QDialog):
         self._search_button.setDefault(False)
         self._search_button.clicked.connect(lambda: self._start_search(trigger="button"))
 
-        search_layout.addWidget(self._title_input, stretch=3)
+        search_layout.addWidget(self._title_input, stretch=4)
         search_layout.addWidget(self._media_type_combo, stretch=1)
         search_layout.addWidget(self._country_combo, stretch=1)
         search_layout.addWidget(self._search_button)

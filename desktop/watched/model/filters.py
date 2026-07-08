@@ -5,6 +5,13 @@ from __future__ import annotations
 from datetime import date
 
 from desktop.watched.model.load import WatchedEntry
+from dataset.models.media_type import (
+    MOVIE_MEDIA_TYPE_ALIASES,
+    TV_MEDIA_TYPE_ALIASES,
+    MEDIA_TYPE_MOVIE,
+    MEDIA_TYPE_TV,
+    normalize_media_type,
+)
 
 SORT_OPTIONS: tuple[tuple[str, str], ...] = (
     ("user_score", "Моя оценка"),
@@ -24,6 +31,12 @@ YEAR_FILTER_DEFAULT_FROM = 2000
 YEAR_FILTER_DEFAULT_TO = date.today().year
 
 GENRE_FILTER_ALL = "Все жанры"
+
+MEDIA_FILTER_OPTIONS: tuple[tuple[str, str | None], ...] = (
+    ("watched.filters.media_all", None),
+    ("watched.filters.media_tv", MEDIA_TYPE_TV),
+    ("watched.filters.media_movie", MEDIA_TYPE_MOVIE),
+)
 
 
 def filter_by_title(entries: list[WatchedEntry], query: str) -> list[WatchedEntry]:
@@ -157,6 +170,41 @@ def filter_entries_by_genre(entries: list[WatchedEntry], genre: str | None = Non
     return result
 
 
+def normalize_media_type_filter(media_type: str | None) -> str | None:
+    """Return a supported media_type filter value, or None for all titles."""
+    if media_type in (None, ""):
+        return None
+    text = str(media_type).strip().casefold()
+    if text in TV_MEDIA_TYPE_ALIASES:
+        return MEDIA_TYPE_TV
+    if text in MOVIE_MEDIA_TYPE_ALIASES:
+        return MEDIA_TYPE_MOVIE
+    return None
+
+
+def _entry_media_type(entry: WatchedEntry) -> str:
+    _key, movie, card = entry
+    card_media_type = card.get("media_type") if isinstance(card, dict) else None
+    if card_media_type not in (None, ""):
+        return normalize_media_type(card_media_type)
+    if isinstance(movie, dict):
+        main_info = movie.get("main_info") if isinstance(movie.get("main_info"), dict) else {}
+        media_type = main_info.get("media_type") or movie.get("media_type")
+        return normalize_media_type(media_type)
+    return normalize_media_type(None)
+
+
+def filter_entries_by_media_type(
+    entries: list[WatchedEntry],
+    media_type: str | None = None,
+) -> list[WatchedEntry]:
+    """Return entries matching an explicit series/movie filter."""
+    selected = normalize_media_type_filter(media_type)
+    if selected is None:
+        return list(entries)
+    return [entry for entry in entries if _entry_media_type(entry) == selected]
+
+
 def sort_entries(entries: list[WatchedEntry], sort_key: str) -> list[WatchedEntry]:
     """Return a sorted copy of entries without mutating source data."""
     items = list(entries)
@@ -193,6 +241,7 @@ def apply_view(
     year_from: int | None = None,
     year_to: int | None = None,
     genre: str | None = None,
+    media_type: str | None = None,
     title_index=None,
 ) -> list[WatchedEntry]:
     """Filter and sort entries for display."""
@@ -203,6 +252,7 @@ def apply_view(
     filtered = filter_entries_by_user_score(filtered, min_score, max_score)
     filtered = filter_entries_by_year(filtered, year_from, year_to)
     filtered = filter_entries_by_genre(filtered, genre)
+    filtered = filter_entries_by_media_type(filtered, media_type)
     return sort_entries(filtered, sort_key)
 
 
@@ -224,13 +274,19 @@ def genre_filter_is_active(genre: str | None) -> bool:
     return selected != "" and selected != GENRE_FILTER_ALL
 
 
+def media_type_filter_is_active(media_type: str | None) -> bool:
+    """Return True when series/movie filter is set to a specific type."""
+    return normalize_media_type_filter(media_type) is not None
+
+
 def watched_filters_are_active(
     has_score_filter: bool = False,
     has_year_filter: bool = False,
     has_genre_filter: bool = False,
+    has_media_type_filter: bool = False,
 ) -> bool:
-    """Return True when at least one score/year/genre filter is active."""
-    return bool(has_score_filter or has_year_filter or has_genre_filter)
+    """Return True when at least one watched-list filter is active."""
+    return bool(has_score_filter or has_year_filter or has_genre_filter or has_media_type_filter)
 
 
 def watched_filters_are_active_from_ranges(
@@ -239,10 +295,12 @@ def watched_filters_are_active_from_ranges(
     year_from: int = YEAR_FILTER_DEFAULT_FROM,
     year_to: int = YEAR_FILTER_DEFAULT_TO,
     genre: str | None = None,
+    media_type: str | None = None,
 ) -> bool:
-    """Return True when any filter range/genre differs from defaults."""
+    """Return True when any filter differs from defaults."""
     return (
         score_filter_is_active(min_score, max_score)
         or year_filter_is_active(year_from, year_to)
         or genre_filter_is_active(genre)
+        or media_type_filter_is_active(media_type)
     )

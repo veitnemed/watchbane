@@ -5,6 +5,7 @@ from __future__ import annotations
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language
 from dataset.language import normalize_data_language
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, normalize_media_type
 
 from typing import Any
 
@@ -13,19 +14,25 @@ TMDB_STATUS_LABELS_RU = {
     "returning series": "Продолжается",
     "planned": "Запланирован",
     "in production": "В производстве",
+    "post production": "Постпроизводство",
+    "released": "Выпущен",
     "ended": "Завершен",
     "canceled": "Отменен",
     "cancelled": "Отменен",
     "pilot": "Пилот",
+    "rumored": "По слухам",
 }
 TMDB_STATUS_LABELS_EN = {
     "returning series": "Returning series",
     "planned": "Planned",
     "in production": "In production",
+    "post production": "Post production",
+    "released": "Released",
     "ended": "Ended",
     "canceled": "Canceled",
     "cancelled": "Canceled",
     "pilot": "Pilot",
+    "rumored": "Rumored",
 }
 
 # Backward-compatible public constant.
@@ -138,6 +145,26 @@ def format_episode_runtime(value: Any, data_language: str | None = None) -> str 
     return ", ".join(f"{item} {unit}" for item in minutes[:3])
 
 
+def format_runtime_minutes(value: Any, data_language: str | None = None) -> str | None:
+    """Return a compact movie runtime label from a minute value."""
+    language = _resolve_data_language(data_language)
+    minutes = _to_int(value)
+    if minutes is None or minutes <= 0:
+        return None
+    hours, remainder = divmod(minutes, 60)
+    if language == "en":
+        if hours > 0 and remainder > 0:
+            return f"{hours}h {remainder}m"
+        if hours > 0:
+            return f"{hours}h"
+        return f"{remainder} min"
+    if hours > 0 and remainder > 0:
+        return f"{hours} ч {remainder} мин"
+    if hours > 0:
+        return f"{hours} ч"
+    return f"{remainder} мин"
+
+
 def format_watch_providers(value: Any) -> str | None:
     providers = _list_text_values(value)
     return ", ".join(providers[:6]) if providers else None
@@ -156,6 +183,21 @@ def format_tmdb_status(status: Any, in_production: Any = None, data_language: st
     return None
 
 
+def _is_movie_card(card: dict) -> bool:
+    if normalize_media_type(card.get("media_type")) == MEDIA_TYPE_MOVIE:
+        return True
+    text = _clean_text(card.get("object_type"))
+    return text is not None and text.casefold() in {"movie", "film", "tvmovie", "tv movie", "фильм"}
+
+
+def _movie_runtime_value(card: dict) -> Any:
+    for field_name in ("runtime", "runtime_minutes", "imdb_runtime_minutes"):
+        value = card.get(field_name)
+        if value not in (None, ""):
+            return value
+    return None
+
+
 def build_additional_info_items(card: dict, data_language: str | None = None) -> list[dict[str, str]]:
     """Build compact rows for the title additional-info block."""
     items: list[dict[str, str]] = []
@@ -169,11 +211,16 @@ def build_additional_info_items(card: dict, data_language: str | None = None) ->
     if status is not None:
         items.append({"label": tr("detail.info.status"), "value": status})
 
-    runtime = format_episode_runtime(
-        card.get("episode_run_time") or card.get("runtime_minutes"),
-        data_language=language,
-    )
-    if runtime is not None:
-        items.append({"label": tr("detail.info.runtime"), "value": runtime})
+    if _is_movie_card(card):
+        movie_runtime = format_runtime_minutes(_movie_runtime_value(card), data_language=language)
+        if movie_runtime is not None:
+            items.append({"label": tr("detail.info.movie_runtime"), "value": movie_runtime})
+    else:
+        runtime = format_episode_runtime(
+            card.get("episode_run_time") or card.get("runtime_minutes"),
+            data_language=language,
+        )
+        if runtime is not None:
+            items.append({"label": tr("detail.info.runtime"), "value": runtime})
 
     return [item for item in items if _has_value(item.get("value"))]

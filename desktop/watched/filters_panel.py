@@ -10,6 +10,7 @@ from desktop.i18n import tr
 from desktop.shared.widgets.range_slider import RangeSlider
 from desktop.theme.scaling import layout_px
 from desktop.watched.model import (
+    MEDIA_FILTER_OPTIONS,
     USER_SCORE_MAX,
     USER_SCORE_MIN,
     USER_SCORE_STEP,
@@ -21,6 +22,7 @@ from desktop.watched.model import (
     format_watched_filters_label,
     genre_filter_is_active,
     get_available_genres,
+    media_type_filter_is_active,
     score_filter_is_active,
     watched_filters_are_active,
     year_filter_is_active,
@@ -56,13 +58,15 @@ class WatchedFiltersPanel:
         score_active = self.score_filter_active()
         year_active = self.year_filter_active()
         genre_active = self.genre_filter_active()
-        filters_active = watched_filters_are_active(score_active, year_active, genre_active)
+        media_type_active = self.media_type_filter_active()
+        filters_active = watched_filters_are_active(score_active, year_active, genre_active, media_type_active)
         self.toggle.setText(
             format_watched_filters_label(
                 score_active,
                 year_active,
                 genre_active,
-                self._expanded,
+                is_expanded=self._expanded,
+                has_media_type_filter=media_type_active,
             )
         )
         self.toggle.setProperty("watchedFiltersActive", "true" if filters_active else "false")
@@ -84,6 +88,10 @@ class WatchedFiltersPanel:
         self._genre_combo.blockSignals(True)
         self._genre_combo.setCurrentIndex(0)
         self._genre_combo.blockSignals(False)
+
+        self._media_type_combo.blockSignals(True)
+        self._media_type_combo.setCurrentIndex(0)
+        self._media_type_combo.blockSignals(False)
 
         self._update_score_range_label()
         self._update_year_range_label()
@@ -115,6 +123,10 @@ class WatchedFiltersPanel:
         genre = self._genre_combo.currentData()
         return genre if isinstance(genre, str) else None
 
+    def selected_media_type(self) -> str | None:
+        media_type = self._media_type_combo.currentData()
+        return media_type if isinstance(media_type, str) else None
+
     def score_filter_active(self) -> bool:
         min_score, max_score = self.score_filter_range()
         return score_filter_is_active(min_score, max_score)
@@ -125,6 +137,9 @@ class WatchedFiltersPanel:
 
     def genre_filter_active(self) -> bool:
         return genre_filter_is_active(self.selected_genre())
+
+    def media_type_filter_active(self) -> bool:
+        return media_type_filter_is_active(self.selected_media_type())
 
     def _build_panel(self) -> QWidget:
         frame = QFrame()
@@ -140,6 +155,7 @@ class WatchedFiltersPanel:
 
         layout.addWidget(self._build_score_filter_panel())
         layout.addWidget(self._build_year_filter_panel())
+        layout.addWidget(self._build_media_type_filter_panel())
         layout.addWidget(self._build_genre_filter_panel())
 
         reset_all_button = QPushButton(tr("watched.filters.reset_all"))
@@ -220,6 +236,30 @@ class WatchedFiltersPanel:
         self._year_slider.rangeChanged.connect(self._on_year_range_changed)
         layout.addWidget(self._year_slider)
         self._update_year_range_label()
+        return frame
+
+    def _build_media_type_filter_panel(self) -> QWidget:
+        frame = QFrame()
+        frame.setObjectName("watchedMediaTypeFilter")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(
+            layout_px(12),
+            layout_px(10),
+            layout_px(12),
+            layout_px(12),
+        )
+        layout.setSpacing(layout_px(10))
+
+        title = QLabel(tr("watched.filters.media_type"))
+        title.setObjectName("watchedMediaTypeFilterTitle")
+        layout.addWidget(title)
+
+        self._media_type_combo = QComboBox()
+        self._media_type_combo.setObjectName("watchedMediaType")
+        for label_key, value in MEDIA_FILTER_OPTIONS:
+            self._media_type_combo.addItem(tr(label_key), value)
+        self._media_type_combo.currentIndexChanged.connect(self._on_filters_changed)
+        layout.addWidget(self._media_type_combo)
         return frame
 
     def _build_genre_filter_panel(self) -> QWidget:

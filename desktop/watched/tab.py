@@ -202,6 +202,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         min_score, max_score = self._filters.score_filter_range()
         year_from, year_to = self._filters.year_filter_range()
         genre = self._filters.selected_genre()
+        media_type = self._filters.selected_media_type()
         self._visible_entries = apply_view(
             self._entries,
             query,
@@ -211,6 +212,7 @@ class WatchedTabView(WatchedTabActionsMixin):
             year_from,
             year_to,
             genre,
+            media_type,
             title_index=self._watched_search_index,
         )
 
@@ -235,6 +237,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         score_active = self._filters.score_filter_active()
         year_active = self._filters.year_filter_active()
         genre_active = self._filters.genre_filter_active()
+        media_type_active = self._filters.media_type_filter_active()
         self._list_counter_label.setText(
             format_watched_list_counter(
                 visible,
@@ -243,6 +246,7 @@ class WatchedTabView(WatchedTabActionsMixin):
                 score_active,
                 year_active,
                 genre_active,
+                media_type_active,
             )
         )
         self._show_status(
@@ -253,6 +257,7 @@ class WatchedTabView(WatchedTabActionsMixin):
                 score_active,
                 year_active,
                 genre_active,
+                media_type_active,
             )
         )
         self._filters.update_toggle_label()

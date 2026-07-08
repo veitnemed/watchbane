@@ -2478,6 +2478,7 @@ def test_count_active_filters() -> None:
     assert count_active_filters() == 0
     assert count_active_filters(True, False, False) == 1
     assert count_active_filters(True, True, True) == 3
+    assert count_active_filters(has_media_type_filter=True) == 1
 
 
 def test_score_filter_is_active() -> None:
@@ -2535,6 +2536,8 @@ def test_watched_filters_are_active_from_ranges() -> None:
     assert watched_filters_are_active_from_ranges(8.0, USER_SCORE_MAX) is True
     assert watched_filters_are_active_from_ranges(year_from=2015, year_to=current_year) is True
     assert watched_filters_are_active_from_ranges(genre="Триллер") is True
+    assert watched_filters_are_active_from_ranges(media_type="movie") is True
+    assert watched_filters_are_active_from_ranges(media_type="unexpected") is False
     assert (
         watched_filters_are_active_from_ranges(
             8.0,
@@ -2555,6 +2558,7 @@ def test_format_watched_filters_label() -> None:
     assert format_watched_filters_label(has_score_filter=True) == "▸ Фильтры активны"
     assert format_watched_filters_label(has_year_filter=True, is_expanded=True) == "▾ Фильтры активны"
     assert format_watched_filters_label(has_genre_filter=True) == "▸ Фильтры активны"
+    assert format_watched_filters_label(has_media_type_filter=True) == "▸ Фильтры активны"
     assert " (" not in format_watched_filters_label(has_score_filter=True)
 
 

@@ -177,7 +177,7 @@ class AddTitlePreviewDialog(QDialog):
         title = str(card.get("title") or "").strip() or tr("common.untitled")
         year = card.get("year")
         media_type = normalize_media_type(card.get("media_type"))
-        type_label = "Movie" if media_type == MEDIA_TYPE_MOVIE else "Series"
+        type_label = tr("media_type.movie") if media_type == MEDIA_TYPE_MOVIE else tr("media_type.tv")
         if year not in (None, ""):
             return f"{title} ({year}) · {type_label}"
         return f"{title} · {type_label}"

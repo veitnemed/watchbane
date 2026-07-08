@@ -187,7 +187,7 @@ QFrame#addTitleSearchPanel {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_CARD_LARGE)}px;
 }}
-QLineEdit#addTitleSearchInput, QComboBox#addTitleCountryCombo {{
+QLineEdit#addTitleSearchInput, QComboBox#addTitleCountryCombo, QComboBox#addTitleMediaTypeCombo {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_BUTTON)}px;
@@ -196,7 +196,7 @@ QLineEdit#addTitleSearchInput, QComboBox#addTitleCountryCombo {{
     padding: {px(7)}px {px(SPACING_MEDIUM)}px;
     min-height: {px(18)}px;
 }}
-QLineEdit#addTitleSearchInput:focus, QComboBox#addTitleCountryCombo:focus {{
+QLineEdit#addTitleSearchInput:focus, QComboBox#addTitleCountryCombo:focus, QComboBox#addTitleMediaTypeCombo:focus {{
     border: 1px solid {COLOR_FOCUS_BORDER};
 }}
 QPushButton#addTitleSearchButton {{

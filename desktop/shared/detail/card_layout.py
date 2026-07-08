@@ -424,16 +424,17 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
 
     owner._main_info_title_label = QLabel(tr("detail.main_info.title"))
     owner._main_info_title_label.setObjectName("detailMainInfoHeader")
-    owner._main_info_title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+    owner._main_info_title_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
 
     owner._main_info_toggle_button = QPushButton(tr("detail.show_more"))
     owner._main_info_toggle_button.setObjectName("detailMainInfoToggleButton")
+    owner._main_info_toggle_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
     owner._main_info_toggle_button.setAutoDefault(False)
     owner._main_info_toggle_button.setDefault(False)
     owner._main_info_toggle_button.clicked.connect(owner._toggle_main_info_expanded)
     owner._main_info_toggle_button.hide()
 
-    main_info_header_layout.addWidget(owner._main_info_title_label)
+    main_info_header_layout.addWidget(owner._main_info_title_label, stretch=1)
     main_info_header_layout.addWidget(owner._main_info_toggle_button)
     main_info_header_layout.addWidget(owner._main_info_divider, stretch=1)
 

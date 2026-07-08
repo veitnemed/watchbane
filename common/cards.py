@@ -268,7 +268,13 @@ def _first_existing(field_name: str, sections: list[dict]):
 
 
 def _tmdb_score_sections(movie: dict, raw_scores: dict, meta_obj: dict | None, pool_candidate: dict | None) -> list[dict]:
-    sections = [raw_scores, movie]
+    sections = [
+        raw_scores,
+        _as_dict(movie.get("source_values")),
+        _as_dict(movie.get("tmdb_data")),
+        _as_dict(movie.get("meta")),
+        movie,
+    ]
     if isinstance(meta_obj, dict):
         sections.extend([_as_dict(meta_obj.get("raw_scores")), meta_obj])
     if isinstance(pool_candidate, dict):
@@ -516,6 +522,8 @@ def build_watched_movie_card(
     computed_tmdb_scores = _compute_watched_tmdb_scores(movie, tmdb_sections, country, language)
     quality_score = _first_number("quality_score", tmdb_sections, _to_float)
     final_score = _first_number("final_score", tmdb_sections, _to_float)
+    runtime_sections = [main_info, *tmdb_sections]
+    media_type = normalize_media_type(main_info.get("media_type") or movie.get("media_type"))
 
     return {
         "title": title,
@@ -528,7 +536,7 @@ def build_watched_movie_card(
         "final_score": final_score if final_score is not None else computed_tmdb_scores.get("final_score"),
         "genres": _resolve_genres(movie, resolved_meta, pool_candidate, language),
         "country": country,
-        "media_type": normalize_media_type(main_info.get("media_type") or movie.get("media_type")),
+        "media_type": media_type,
         "object_type": _object_type(movie, default="series"),
         "overview": _resolve_overview(
             movie,
@@ -545,6 +553,9 @@ def build_watched_movie_card(
         "number_of_seasons": _first_number("number_of_seasons", tmdb_sections, _to_int),
         "number_of_episodes": _first_number("number_of_episodes", tmdb_sections, _to_int),
         "episode_run_time": _first_existing("episode_run_time", tmdb_sections),
+        "runtime": _first_number("runtime", runtime_sections, _to_int),
+        "runtime_minutes": _first_number("runtime_minutes", runtime_sections, _to_int),
+        "imdb_runtime_minutes": _first_number("imdb_runtime_minutes", runtime_sections, _to_int),
         "first_air_date": _first_existing("first_air_date", tmdb_sections),
         "last_air_date": _first_existing("last_air_date", tmdb_sections),
         "last_episode_to_air": _first_existing("last_episode_to_air", tmdb_sections),

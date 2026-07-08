@@ -27,6 +27,7 @@ Hardening steps:
 - `108-hardening-tmdb-client-cache.md`
 - `109-hardening-read-model-display.md`
 - `110-hardening-docs-and-developer-experience.md`
+- `116-russian-movie-ui-filters-duration.md`
 
 Final verification:
 

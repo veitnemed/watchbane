@@ -19,7 +19,7 @@ def format_list_label(card: dict) -> str:
         parts.append(f"({year_label})")
     if "media_type" in card:
         media_type = normalize_media_type(card.get("media_type"))
-        type_label = "Movie" if media_type == MEDIA_TYPE_MOVIE else "Series"
+        type_label = tr("media_type.movie") if media_type == MEDIA_TYPE_MOVIE else tr("media_type.tv")
         parts.append(f"· {type_label}")
     label = " ".join(parts)
     if score_label != "—":
@@ -34,10 +34,11 @@ def format_watched_list_status(
     has_score_filter: bool = False,
     has_year_filter: bool = False,
     has_genre_filter: bool = False,
+    has_media_type_filter: bool = False,
 ) -> str:
     """Status bar text for watched list filter results."""
     normalized = query.strip()
-    has_filter = bool(normalized) or has_score_filter or has_year_filter or has_genre_filter
+    has_filter = bool(normalized) or has_score_filter or has_year_filter or has_genre_filter or has_media_type_filter
     if visible_count == 0:
         return tr("watched.status.no_results") if has_filter else tr("watched.status.empty")
     if has_filter:
@@ -52,10 +53,11 @@ def format_watched_list_counter(
     has_score_filter: bool = False,
     has_year_filter: bool = False,
     has_genre_filter: bool = False,
+    has_media_type_filter: bool = False,
 ) -> str:
     """Compact counter shown above the watched list."""
     normalized = query.strip()
-    has_filter = bool(normalized) or has_score_filter or has_year_filter or has_genre_filter
+    has_filter = bool(normalized) or has_score_filter or has_year_filter or has_genre_filter or has_media_type_filter
     if visible_count == 0:
         return tr("watched.status.no_results") if has_filter else tr("watched.status.empty")
     if has_filter or visible_count != total_count:
@@ -67,9 +69,10 @@ def count_active_filters(
     has_score_filter: bool = False,
     has_year_filter: bool = False,
     has_genre_filter: bool = False,
+    has_media_type_filter: bool = False,
 ) -> int:
-    """Return the number of active score/year/genre filters (search excluded)."""
-    return int(has_score_filter) + int(has_year_filter) + int(has_genre_filter)
+    """Return the number of active watched filters (search excluded)."""
+    return int(has_score_filter) + int(has_year_filter) + int(has_genre_filter) + int(has_media_type_filter)
 
 
 def format_watched_filters_label(
@@ -77,9 +80,10 @@ def format_watched_filters_label(
     has_year_filter: bool = False,
     has_genre_filter: bool = False,
     is_expanded: bool = False,
+    has_media_type_filter: bool = False,
 ) -> str:
     """Build the watched filters toggle label for the sidebar."""
     arrow = "▾" if is_expanded else "▸"
-    if watched_filters_are_active(has_score_filter, has_year_filter, has_genre_filter):
+    if watched_filters_are_active(has_score_filter, has_year_filter, has_genre_filter, has_media_type_filter):
         return f"{arrow} {tr('watched.filters.active')}"
     return f"{arrow} {tr('watched.filters.toggle')}"

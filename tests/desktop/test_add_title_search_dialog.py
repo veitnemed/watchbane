@@ -106,6 +106,15 @@ def test_media_type_selector_passes_movie_to_worker(qapp) -> None:
     assert harness.workers[0].media_type == "movie"
 
 
+def test_search_dialog_uses_generic_title_placeholder_and_local_media_labels(qapp) -> None:
+    dialog = _dialog()
+
+    assert dialog._title_input.placeholderText() == tr("add_title.search.input_placeholder")
+    assert dialog._title_input.placeholderText() == "Введите название"
+    assert dialog._media_type_combo.itemText(0) == tr("media_type.tv")
+    assert dialog._media_type_combo.itemText(1) == tr("media_type.movie")
+
+
 def test_search_dialog_has_no_cancel_button(qapp) -> None:
     from PyQt6.QtWidgets import QPushButton
 

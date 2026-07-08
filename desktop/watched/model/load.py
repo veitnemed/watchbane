@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from common.cards import build_watched_movie_card
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, normalize_media_type
 from dataset.read_models import watched as watched_read_model
 from dataset.read_models.watched import (
     WatchedEntry,
@@ -68,6 +69,11 @@ def watched_entry_search_haystack(entry: WatchedEntry) -> str:
             block = localized.get(language)
             if isinstance(block, dict):
                 parts.append(block.get("title"))
+    media_type = normalize_media_type(card.get("media_type"))
+    if media_type == MEDIA_TYPE_MOVIE:
+        parts.extend(["movie", "film", "фильм", "фильмы"])
+    else:
+        parts.extend(["tv", "series", "сериал", "сериалы"])
     return " ".join(str(part).strip() for part in parts if part not in (None, "")).casefold()
 
 

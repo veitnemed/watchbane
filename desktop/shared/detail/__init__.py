@@ -4,6 +4,7 @@ from desktop.shared.detail.card import DetailCard, WatchedDetailCard
 from desktop.shared.detail.additional_info import (
     build_additional_info_items,
     format_episode_runtime,
+    format_runtime_minutes,
     format_seasons_episodes,
     format_tmdb_status,
     format_watch_providers,
@@ -109,6 +110,7 @@ __all__ = [
     "format_poster_path_display",
     "format_rating_score_display",
     "format_episode_runtime",
+    "format_runtime_minutes",
     "format_seasons_episodes",
     "format_tmdb_status",
     "format_user_score_display",

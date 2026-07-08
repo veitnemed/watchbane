@@ -79,6 +79,13 @@ ENGLISH_COUNTRY_NAME_BY_ISO2 = {
     "SU": "Soviet Union",
 }
 
+US_COUNTRY_ALIASES = (
+    "United States of America",
+    "USA",
+    "U.S.A.",
+    "U.S.",
+)
+
 SU_COUNTRY_ALIASES = (
     "USSR",
     "U.S.S.R.",
@@ -120,6 +127,7 @@ def _register_country_aliases(canonical: str, *aliases: str) -> None:
 def _init_country_alias_map() -> None:
     for iso2, name in COUNTRY_NAME_BY_ISO2.items():
         _register_country_aliases(iso2, iso2, name, ENGLISH_COUNTRY_NAME_BY_ISO2.get(iso2, ""))
+    _register_country_aliases("US", *US_COUNTRY_ALIASES)
     _register_country_aliases("KR", *KR_COUNTRY_ALIASES)
     _register_country_aliases("SU", *SU_COUNTRY_ALIASES)
 
