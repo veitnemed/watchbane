@@ -22,6 +22,7 @@ from candidates.models import country_schema
 from candidates.sources.tmdb.country_options import add_title_country_combo_options
 from common import valid
 from dataset import service
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, MEDIA_TYPE_TV, normalize_media_type
 from diagnostics.gui_event_log import log_event
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language, get_persisted_interface_language
@@ -58,6 +59,7 @@ class AddTitleSearchDialog(QDialog):
         self._cancel_after_worker = False
         self.last_title = initial_title.strip()
         self.last_country = initial_country
+        self.last_media_type = MEDIA_TYPE_TV
 
         self.setObjectName("addTitleSearchDialog")
         self.setWindowTitle(tr("add_title.window.search"))
@@ -106,6 +108,11 @@ class AddTitleSearchDialog(QDialog):
             self._country_combo.addItem(self._country_display_label(label, value), value)
         self._set_country_selection(initial_country)
 
+        self._media_type_combo = QComboBox()
+        self._media_type_combo.setObjectName("addTitleMediaTypeCombo")
+        self._media_type_combo.addItem("Series", MEDIA_TYPE_TV)
+        self._media_type_combo.addItem("Movie", MEDIA_TYPE_MOVIE)
+
         self._search_button = QPushButton(tr("add_title.search.button"))
         self._search_button.setObjectName("addTitleSearchButton")
         self._search_button.setAutoDefault(False)
@@ -113,6 +120,7 @@ class AddTitleSearchDialog(QDialog):
         self._search_button.clicked.connect(lambda: self._start_search(trigger="button"))
 
         search_layout.addWidget(self._title_input, stretch=3)
+        search_layout.addWidget(self._media_type_combo, stretch=1)
         search_layout.addWidget(self._country_combo, stretch=1)
         search_layout.addWidget(self._search_button)
         root_layout.addWidget(search_frame)
@@ -167,8 +175,12 @@ class AddTitleSearchDialog(QDialog):
             return ""
         return str(country).strip()
 
+    def _selected_media_type(self) -> str:
+        return normalize_media_type(self._media_type_combo.currentData())
+
     def _set_search_active(self, active: bool) -> None:
         self._title_input.setEnabled(not active)
+        self._media_type_combo.setEnabled(not active)
         self._country_combo.setEnabled(not active)
         self._search_button.setEnabled(not active)
         self._progress.setVisible(active)
@@ -211,6 +223,7 @@ class AddTitleSearchDialog(QDialog):
 
         self.last_title = title
         self.last_country = self._selected_country()
+        self.last_media_type = self._selected_media_type()
         self._bundle = None
         self._request_seq += 1
         self._active_request_id = self._request_seq
@@ -222,6 +235,7 @@ class AddTitleSearchDialog(QDialog):
             request_id=request_id,
             title=title,
             country=self.last_country,
+            media_type=self.last_media_type,
         )
         self._set_search_active(True)
         self._status_label.setText(tr("add_title.status.searching"))
@@ -234,9 +248,18 @@ class AddTitleSearchDialog(QDialog):
                 self.last_country,
                 self,
                 data_language=self._data_language,
+                media_type=self.last_media_type,
             )
         except TypeError:
-            worker = self._worker_factory(title, self.last_country, self)
+            try:
+                worker = self._worker_factory(
+                    title,
+                    self.last_country,
+                    self,
+                    media_type=self.last_media_type,
+                )
+            except TypeError:
+                worker = self._worker_factory(title, self.last_country, self)
         worker.progress.connect(
             lambda current, total, message, rid=request_id: self._on_progress(rid, current, total, message)
         )
@@ -247,7 +270,13 @@ class AddTitleSearchDialog(QDialog):
         worker.finished.connect(worker.deleteLater)
         self._worker = worker
         worker.start()
-        log_event("add_title.worker.started", request_id=request_id, title=title, country=self.last_country)
+        log_event(
+            "add_title.worker.started",
+            request_id=request_id,
+            title=title,
+            country=self.last_country,
+            media_type=self.last_media_type,
+        )
 
     def _is_current_request(self, request_id: int) -> bool:
         return request_id == self._active_request_id

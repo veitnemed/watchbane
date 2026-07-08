@@ -15,26 +15,44 @@ class AddTitleResolveWorker(QThread):
     finished_with_result = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, title: str, country: str, parent=None, *, data_language: str = "ru") -> None:
+    def __init__(
+        self,
+        title: str,
+        country: str,
+        parent=None,
+        *,
+        data_language: str = "ru",
+        media_type: str = "tv",
+    ) -> None:
         super().__init__(parent)
         self._title = title
         self._country = country
         self._data_language = data_language
+        self._media_type = media_type
 
     def run(self) -> None:
-        log_event("add_title.worker.run.begin", title=self._title, country=self._country)
+        log_event("add_title.worker.run.begin", title=self._title, country=self._country, media_type=self._media_type)
         try:
-            bundle = service.resolve_title_for_add(
-                self._title,
-                self._country,
-                on_progress=self._on_progress,
-                data_language=self._data_language,
-            )
+            try:
+                bundle = service.resolve_title_for_add(
+                    self._title,
+                    self._country,
+                    on_progress=self._on_progress,
+                    data_language=self._data_language,
+                    media_type=self._media_type,
+                )
+            except TypeError:
+                bundle = service.resolve_title_for_add(
+                    self._title,
+                    self._country,
+                    on_progress=self._on_progress,
+                    data_language=self._data_language,
+                )
         except Exception as error:  # noqa: BLE001 - surface to dialog
-            log_exception("add_title.worker.run.error", error, title=self._title, country=self._country)
+            log_exception("add_title.worker.run.error", error, title=self._title, country=self._country, media_type=self._media_type)
             self.failed.emit(str(error))
             return
-        log_event("add_title.worker.run.end", title=self._title, country=self._country, found=bundle.found)
+        log_event("add_title.worker.run.end", title=self._title, country=self._country, media_type=self._media_type, found=bundle.found)
         self.finished_with_result.emit(bundle)
 
     def _on_progress(self, current: int, total: int, message: str) -> None:

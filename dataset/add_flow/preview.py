@@ -4,6 +4,7 @@ from config import constant
 from config import scheme
 from common.cards import build_watched_movie_card
 from dataset.language import choose_genre_labels
+from dataset.models.media_type import normalize_media_type
 
 
 def build_preview_movie_from_defaults(defaults: dict) -> dict:
@@ -38,6 +39,8 @@ def build_preview_card_from_defaults(
         meta_obj=meta_obj or None,
         data_language=data_language,
     )
+    preview_main_info = preview_movie.get(scheme.MAIN_INFO, {})
+    card["media_type"] = normalize_media_type(preview_main_info.get("media_type"))
 
     genre_section = _normalized_genre(defaults)
     genre_keys = [

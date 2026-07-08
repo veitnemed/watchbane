@@ -14,6 +14,7 @@ from dataset.language import (
     choose_genre_labels,
     normalize_data_language,
 )
+from dataset.models.media_type import normalize_media_type
 from posters.cache import lookup_poster_cache_entry
 
 
@@ -527,6 +528,7 @@ def build_watched_movie_card(
         "final_score": final_score if final_score is not None else computed_tmdb_scores.get("final_score"),
         "genres": _resolve_genres(movie, resolved_meta, pool_candidate, language),
         "country": country,
+        "media_type": normalize_media_type(main_info.get("media_type") or movie.get("media_type")),
         "object_type": _object_type(movie, default="series"),
         "overview": _resolve_overview(
             movie,

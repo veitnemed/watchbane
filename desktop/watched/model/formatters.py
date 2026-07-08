@@ -5,6 +5,7 @@ from __future__ import annotations
 from desktop.i18n import tr
 from desktop.shared.detail.presenters import format_user_score_display, format_year_display
 from desktop.watched.model.filters import watched_filters_are_active
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, normalize_media_type
 
 
 def format_list_label(card: dict) -> str:
@@ -16,6 +17,10 @@ def format_list_label(card: dict) -> str:
     year_label = format_year_display(year)
     if year_label:
         parts.append(f"({year_label})")
+    if "media_type" in card:
+        media_type = normalize_media_type(card.get("media_type"))
+        type_label = "Movie" if media_type == MEDIA_TYPE_MOVIE else "Series"
+        parts.append(f"· {type_label}")
     label = " ".join(parts)
     if score_label != "—":
         label = f"{label}  ·  {score_label}"

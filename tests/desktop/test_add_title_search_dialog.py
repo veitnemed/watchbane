@@ -15,8 +15,8 @@ from desktop.watched.add_title.search_dialog import AddTitleSearchDialog
 class WorkerHarness:
     workers: list["FakeResolveWorker"]
 
-    def factory(self, title: str, country: str, parent=None):
-        worker = FakeResolveWorker(title, country, parent)
+    def factory(self, title: str, country: str, parent=None, *, media_type: str = "tv"):
+        worker = FakeResolveWorker(title, country, parent, media_type=media_type)
         self.workers.append(worker)
         return worker
 
@@ -27,10 +27,11 @@ class FakeResolveWorker(QObject):
     failed = pyqtSignal(str)
     finished = pyqtSignal()
 
-    def __init__(self, title: str, country: str, parent=None) -> None:
+    def __init__(self, title: str, country: str, parent=None, *, media_type: str = "tv") -> None:
         super().__init__(parent)
         self.title = title
         self.country = country
+        self.media_type = media_type
         self.started = False
         self.interrupted = False
         self.deleted = False
@@ -92,6 +93,17 @@ def test_enter_in_title_input_starts_search_and_does_not_reject(qapp) -> None:
     assert harness.workers[0].started is True
     assert dialog.result() == 0
     assert dialog.resolve_bundle is None
+
+
+def test_media_type_selector_passes_movie_to_worker(qapp) -> None:
+    harness = WorkerHarness([])
+    dialog = _dialog(harness)
+    dialog._media_type_combo.setCurrentIndex(1)
+
+    dialog._start_search(trigger="button")
+
+    assert len(harness.workers) == 1
+    assert harness.workers[0].media_type == "movie"
 
 
 def test_search_dialog_has_no_cancel_button(qapp) -> None:

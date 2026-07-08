@@ -20,6 +20,7 @@ from common import valid
 from config import constant
 from config import scheme
 from dataset import service
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, normalize_media_type
 from diagnostics.gui_event_log import log_event
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_interface_language
@@ -175,9 +176,11 @@ class AddTitlePreviewDialog(QDialog):
     def _format_preview_header(card: dict) -> str:
         title = str(card.get("title") or "").strip() or tr("common.untitled")
         year = card.get("year")
+        media_type = normalize_media_type(card.get("media_type"))
+        type_label = "Movie" if media_type == MEDIA_TYPE_MOVIE else "Series"
         if year not in (None, ""):
-            return f"{title} ({year})"
-        return title
+            return f"{title} ({year}) · {type_label}"
+        return f"{title} · {type_label}"
 
     def _format_resolved_year(self, bundle: service.AddTitleResolveBundle) -> str:
         year = self._resolved_year(bundle)
