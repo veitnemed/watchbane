@@ -725,6 +725,12 @@ def test_is_dataset_title_match_ignores_year() -> None:
     assert is_dataset_title_match(candidate, dataset_keys) is True
 
 
+def test_is_dataset_title_match_accepts_legacy_name_only_candidate() -> None:
+    dataset_keys = {"legacy show"}
+    candidate = {"name": "Legacy Show", "year": 2018}
+    assert is_dataset_title_match(candidate, dataset_keys) is True
+
+
 def test_purge_dataset_title_matches_from_pool(monkeypatch) -> None:
     from candidates.repositories import pool_repository
 

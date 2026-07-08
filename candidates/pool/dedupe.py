@@ -57,7 +57,14 @@ def candidate_pool_key(candidate: dict) -> str:
 
 def candidate_title(candidate: dict) -> str:
     """Возвращает лучшее доступное название кандидата."""
-    return candidate.get("title") or candidate.get("alternative_title") or ""
+    return (
+        candidate.get("title")
+        or candidate.get("alternative_title")
+        or candidate.get("name")
+        or candidate.get("alternativeName")
+        or candidate.get("enName")
+        or ""
+    )
 
 
 def candidates_are_same(candidate: dict, other_candidate: dict, include_criteria: bool = True) -> bool:

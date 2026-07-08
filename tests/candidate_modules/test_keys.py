@@ -13,5 +13,10 @@ def test_pool_entry_key_matches_title_identity() -> None:
     assert pool_entry_key(candidate) == title_identity_key(candidate)
 
 
+def test_title_identity_key_prefers_canonical_title_over_legacy_name() -> None:
+    candidate = {"title": "Canonical Show", "name": "Legacy Show", "year": 2018}
+    assert title_identity_key(candidate) == "canonical show|2018"
+
+
 def test_normalize_key_part_handles_russian_yo_and_quotes() -> None:
     assert normalize_key_part("\u00abНадёжный метод\u00bb!") == "надежный метод"
