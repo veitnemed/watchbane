@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from contextlib import nullcontext
 from pathlib import Path
 import sqlite3
 from typing import Any
@@ -28,6 +29,10 @@ def _connection(conn: sqlite3.Connection | None, path: str | Path | None):
     active = connect(path)
     apply_migrations(active)
     return active, True
+
+
+def _transaction(active: sqlite3.Connection, owned: bool):
+    return active if owned else nullcontext(active)
 
 
 def _upsert_watched_row(
@@ -130,7 +135,7 @@ def save_dataset_dict(
         if isinstance(movie, dict)
     }
     try:
-        with active:
+        with _transaction(active, owned):
             existing_meta = {
                 row["dataset_key"]: loads_json(row["meta_json"], None)
                 for row in active.execute(
@@ -211,7 +216,7 @@ def save_meta_dict(
         if isinstance(meta_obj, dict)
     }
     try:
-        with active:
+        with _transaction(active, owned):
             for dataset_key, meta_obj in normalized.items():
                 _upsert_meta_only_row(active, dataset_key, meta_obj)
 
@@ -280,7 +285,7 @@ def delete_watched(
     """Delete a watched payload while preserving meta compatibility."""
     active, owned = _connection(conn, path)
     try:
-        with active:
+        with _transaction(active, owned):
             row = active.execute(
                 "SELECT meta_json FROM watched_records WHERE dataset_key = ?",
                 (dataset_key,),

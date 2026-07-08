@@ -36,12 +36,24 @@ def load_dataset() -> dict:
 
 def save_dataset(data: dict):
     """Сохраняет датасет в JSON-файл."""
+    if is_sqlite_backend():
+        from storage.sqlite.watched_repository import save_dataset_dict
+
+        save_dataset_dict(data)
+        return
+
     normalized = {title: normalize_movie_tags(movie) for title, movie in data.items()}
     dump_json_atomic(constant.FILE_NAME, normalized)
 
 
 def clean_dataset():
     """Очищает датасет."""
+    if is_sqlite_backend():
+        from storage.sqlite.watched_repository import save_dataset_dict
+
+        save_dataset_dict({})
+        return
+
     dump_json_atomic(constant.FILE_NAME, {})
 
 
@@ -106,11 +118,23 @@ def load_meta() -> dict:
 
 def save_meta(meta: dict):
     """Сохраняет meta в JSON-файл."""
+    if is_sqlite_backend():
+        from storage.sqlite.watched_repository import save_meta_dict
+
+        save_meta_dict(meta)
+        return
+
     dump_json_atomic(constant.META_JSON, meta)
 
 
 def clean_meta():
     """Очищает meta."""
+    if is_sqlite_backend():
+        from storage.sqlite.watched_repository import save_meta_dict
+
+        save_meta_dict({})
+        return
+
     dump_json_atomic(constant.META_JSON, {})
 
 
@@ -174,6 +198,9 @@ def get_meta_obj(title: str) -> dict:
 
 def rename_movie_title(old_title: str, new_title: str) -> bool:
     """Безопасно переименовывает запись в dataset и meta."""
+    if is_sqlite_backend():
+        return _rename_movie_title_sqlite(old_title, new_title)
+
     old_exact = find_exact_title(old_title)
     if old_exact is None:
         return False
@@ -211,5 +238,62 @@ def rename_movie_title(old_title: str, new_title: str) -> bool:
         save_meta(meta)
 
     return True
+
+
+def _rename_movie_title_sqlite(old_title: str, new_title: str) -> bool:
+    from storage.sqlite.connection import connect
+    from storage.sqlite.migrations import apply_migrations
+    from storage.sqlite.watched_repository import (
+        find_exact_title as sqlite_find_exact_title,
+        is_origin_title as sqlite_is_origin_title,
+        load_dataset_dict,
+        load_meta_dict,
+        save_dataset_dict,
+        save_meta_dict,
+    )
+
+    conn = connect()
+    try:
+        apply_migrations(conn)
+        with conn:
+            old_exact = sqlite_find_exact_title(old_title, conn=conn)
+            if old_exact is None:
+                return False
+
+            new_title = str(new_title).strip()
+            if valid.is_correct_title(new_title) is False:
+                return False
+
+            if old_exact.strip().lower() != new_title.lower() and sqlite_is_origin_title(new_title, conn=conn) is False:
+                return False
+
+            dataset = load_dataset_dict(conn=conn)
+            movie = dataset.pop(old_exact)
+            movie["main_info"] = normalize_main_info({
+                **movie["main_info"],
+                "title": new_title,
+            })
+            dataset[new_title] = movie
+
+            meta = load_meta_dict(conn=conn)
+            old_meta_title = None
+            for meta_title in meta.keys():
+                if meta_title.strip().lower() == old_exact.strip().lower():
+                    old_meta_title = meta_title
+                    break
+
+            if old_meta_title is not None:
+                meta_obj = meta.pop(old_meta_title)
+                meta_obj["main_info"] = normalize_main_info({
+                    **meta_obj["main_info"],
+                    "title": new_title,
+                })
+                meta[new_title] = meta_obj
+
+            save_dataset_dict(dataset, conn=conn)
+            save_meta_dict(meta, conn=conn)
+            return True
+    finally:
+        conn.close()
 
 
