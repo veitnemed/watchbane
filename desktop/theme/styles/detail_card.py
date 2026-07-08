@@ -155,13 +155,17 @@ QWidget#detailMainInfoSection {{
 }}
 QFrame#mainInfoPanel,
 QFrame#detailMainInfoPanel {{
-    background-color: {COLOR_DETAIL_GLASS};
-    border: 1px solid {COLOR_DETAIL_HERO_BORDER_SOFT};
-    border-radius: {detail_px(DETAIL_MAIN_INFO_PANEL_RADIUS)}px;
+    background-color: transparent;
+    border: none;
+    border-radius: 0;
 }}
 QFrame#detailMainInfoPanel[mediaType="movie"] {{
-    background-color: {FILM_SURFACE_1};
-    border: 1px solid {FILM_BORDER};
+    background-color: transparent;
+    border: none;
+}}
+QFrame#detailMainInfoPanel[mediaType="tv"] {{
+    background-color: transparent;
+    border: none;
 }}
 QFrame#mainInfoDivider,
 QFrame#detailMainInfoHeaderDivider {{
