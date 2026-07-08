@@ -153,3 +153,14 @@ After prompt 15 SQLite diagnostics:
 | Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15595 |
 | Product JSON runtime reference count | 77 |
 | Product backend switch reference count | 0 |
+
+After prompt 16 SQLite-first test cleanup:
+
+| Metric | Prompt 16 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15734 |
+| Product JSON runtime reference count | 84 |
+| Product backend switch reference count | 0 |
+
+Prompt 16 JSON reference count includes read-only SQLite diagnostics that report
+legacy JSON files as non-canonical artifacts.

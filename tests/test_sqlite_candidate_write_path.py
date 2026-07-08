@@ -41,7 +41,7 @@ def _watched_movie(title: str, year: int) -> dict:
     }
 
 
-def test_sqlite_backend_candidate_pool_save_dedupes_and_loads(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_candidate_pool_save_dedupes_and_loads(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
 
     pool_repository.save_candidate_pool(
@@ -56,7 +56,7 @@ def test_sqlite_backend_candidate_pool_save_dedupes_and_loads(tmp_path, monkeypa
     assert loaded["dark|2017"]["final_score"] == 9.0
 
 
-def test_sqlite_backend_candidate_pool_save_purges_watched(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_candidate_pool_save_purges_watched(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     storage_data.save_dataset({"Dark": _watched_movie("Dark", 2017)})
 
@@ -70,7 +70,7 @@ def test_sqlite_backend_candidate_pool_save_purges_watched(tmp_path, monkeypatch
     assert list(pool_repository.load_candidate_pool()) == ["severance|2022"]
 
 
-def test_sqlite_backend_criteria_save_patch_and_clear_pool(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_criteria_save_patch_and_clear_pool(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     pool_repository.save_candidate_pool({"dark": _candidate("Dark", 2017)})
     criteria_repository.save_candidate_criteria(
@@ -92,7 +92,7 @@ def test_sqlite_backend_criteria_save_patch_and_clear_pool(tmp_path, monkeypatch
     assert pool_repository.load_candidate_pool() == {}
 
 
-def test_sqlite_backend_delete_criteria_and_candidates(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_delete_criteria_and_candidates(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     criteria_repository.save_candidate_criteria({"custom": {"count": 10}})
     pool_repository.save_candidate_pool(

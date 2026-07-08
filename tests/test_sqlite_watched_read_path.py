@@ -4,7 +4,7 @@ from storage import data as storage_data
 from storage.sqlite import watched_repository
 
 
-def test_sqlite_backend_routes_watched_read_path(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_routes_watched_read_path(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(data_dir))
     watched_repository.save_dataset_dict(
@@ -30,7 +30,7 @@ def test_sqlite_backend_routes_watched_read_path(tmp_path, monkeypatch) -> None:
     assert storage_data.is_origin_title("Метод") is False
 
 
-def test_sqlite_backend_routes_watched_meta_read_path(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_routes_watched_meta_read_path(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(data_dir))
     watched_repository.save_meta_dict({"Метод": {"raw_scores": {"tmdb_id": 693}}})

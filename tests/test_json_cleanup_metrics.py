@@ -13,4 +13,4 @@ def test_json_cleanup_metrics_reports_cleanup_baseline() -> None:
     }
     assert metrics["python_loc_storage_candidates_dataset_app_core"] > 0
     assert metrics["json_runtime_reference_count"] > 0
-    assert metrics["backend_switch_reference_count"] >= 0
+    assert metrics["backend_switch_reference_count"] == 0

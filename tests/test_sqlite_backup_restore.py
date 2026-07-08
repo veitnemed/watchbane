@@ -27,7 +27,7 @@ def _movie(title: str) -> dict:
     }
 
 
-def test_create_backup_includes_sqlite_db_when_backend_is_sqlite(tmp_path, monkeypatch) -> None:
+def test_create_backup_includes_sqlite_runtime_db(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     storage_data.save_dataset({"Alpha": _movie("Alpha")})
 

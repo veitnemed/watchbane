@@ -27,7 +27,7 @@ def _candidate(title: str, year: int, score: float) -> dict:
     }
 
 
-def test_sqlite_backend_routes_candidate_repository_reads(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_routes_candidate_repository_reads(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     candidate_repository.save_candidate_pool_dict(
         {"dark": _candidate("Dark", 2017, 9.0)},
@@ -39,7 +39,7 @@ def test_sqlite_backend_routes_candidate_repository_reads(tmp_path, monkeypatch)
     assert criteria_repository.load_candidate_criteria() == {"pool": {"min_tmdb_score": 8.0}}
 
 
-def test_sqlite_backend_candidate_service_views_use_pool_and_criteria(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_candidate_service_views_use_pool_and_criteria(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     candidate_repository.save_candidate_pool_dict(
         {

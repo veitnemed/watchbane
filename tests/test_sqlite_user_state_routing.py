@@ -11,7 +11,7 @@ def _use_sqlite(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
 
 
-def test_sqlite_backend_routes_hidden_and_watchlist_actions(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_routes_hidden_and_watchlist_actions(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     candidate = {"title": "Метод", "year": 2015}
 
@@ -25,7 +25,7 @@ def test_sqlite_backend_routes_hidden_and_watchlist_actions(tmp_path, monkeypatc
     assert action_repository.load_action_identities(action_repository.ACTION_HIDDEN) == {"метод|2015"}
 
 
-def test_sqlite_backend_routes_app_settings(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_routes_app_settings(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
 
     save_app_settings(AppSettings(ui_scale=1.25, interface_language="en", data_language="ru"))
@@ -34,7 +34,7 @@ def test_sqlite_backend_routes_app_settings(tmp_path, monkeypatch) -> None:
     assert settings_repository.load_settings_dict()["ui_scale"] == 1.25
 
 
-def test_sqlite_backend_routes_poster_cache_metadata(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_routes_poster_cache_metadata(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
 
     entry = poster_cache.upsert_poster_cache_entry(

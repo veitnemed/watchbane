@@ -39,7 +39,7 @@ def _movie(title: str = "Метод", *, user_score: float = 8.0, year: int = 20
     }
 
 
-def test_sqlite_backend_routes_save_and_clean_dataset_meta(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_routes_save_and_clean_dataset_meta(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
 
     storage_data.save_dataset({"Метод": _movie()})
@@ -65,7 +65,7 @@ def test_sqlite_dataset_save_does_not_export_legacy_json(tmp_path, monkeypatch) 
     assert (tmp_path / "data" / "watched" / "titles.json").exists() is False
 
 
-def test_sqlite_backend_rename_updates_dataset_and_meta(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_rename_updates_dataset_and_meta(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     storage_data.save_dataset({"Old": _movie("Old")})
     storage_data.save_meta({"Old": {"main_info": _movie("Old")["main_info"], "raw_scores": {}}})
@@ -78,7 +78,7 @@ def test_sqlite_backend_rename_updates_dataset_and_meta(tmp_path, monkeypatch) -
     assert storage_data.load_meta()["New"]["main_info"]["title"] == "New"
 
 
-def test_sqlite_backend_rename_rolls_back_dataset_when_meta_save_fails(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_rename_rolls_back_dataset_when_meta_save_fails(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     storage_data.save_dataset({"Old": _movie("Old")})
     storage_data.save_meta({"Old": {"main_info": _movie("Old")["main_info"], "raw_scores": {}}})
@@ -103,7 +103,7 @@ def test_sqlite_backend_rename_rolls_back_dataset_when_meta_save_fails(tmp_path,
     assert storage_data.load_meta()["Old"]["main_info"]["title"] == "Old"
 
 
-def test_sqlite_backend_add_update_delete_watched_record(tmp_path, monkeypatch) -> None:
+def test_sqlite_runtime_add_update_delete_watched_record(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     from dataset.records import add as add_module
     from dataset.records.add import add_dataset_record
