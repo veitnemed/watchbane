@@ -11,7 +11,12 @@ from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
 from candidates.models.schema import EXTERNAL_RATING_FIELDS, normalize_candidate_for_storage, strip_external_rating_fields
 from candidates.pool.dataset_overlap import build_dataset_title_keys
 from candidates.pool.normalization import normalize_storage_pool
-from candidates.pool.storage import candidate_storage_key, find_candidate_storage_match
+from candidates.pool.storage import (
+    build_tmdb_id_index,
+    candidate_storage_key,
+    candidate_tmdb_identity,
+    find_candidate_storage_match,
+)
 from candidates.pool.watched_cleanup import build_watched_signatures, is_watched_candidate
 from candidates.repositories.criteria_repository import load_candidate_criteria, save_named_criteria
 from candidates.repositories.pool_repository import load_candidate_pool, save_candidate_pool
@@ -171,6 +176,7 @@ def import_tmdb_candidates_to_common_pool(
     resolved_criteria_name = resolve_tmdb_import_criteria_name(result_metadata, criteria_name)
     raw_pool = load_candidate_pool()
     pool = normalize_storage_pool(raw_pool)
+    tmdb_id_index = build_tmdb_id_index(pool)
     watched_signatures = build_watched_signatures()
     dataset_title_keys = build_dataset_title_keys()
     stats = _base_import_stats(len(candidates), resolved_criteria_name, len(pool))
@@ -197,9 +203,17 @@ def import_tmdb_candidates_to_common_pool(
             stats["skipped_watched"] += 1
             continue
 
-        matched_key, _match_reason = find_candidate_storage_match(pool, candidate)
+        matched_key, _match_reason = find_candidate_storage_match(
+            pool,
+            candidate,
+            tmdb_id_index=tmdb_id_index,
+        )
         if matched_key is None:
-            pool[candidate_storage_key(candidate)] = candidate
+            storage_key = candidate_storage_key(candidate)
+            pool[storage_key] = candidate
+            tmdb_identity = candidate_tmdb_identity(candidate)
+            if tmdb_identity is not None and tmdb_identity not in tmdb_id_index:
+                tmdb_id_index[tmdb_identity] = storage_key
             stats["added"] += 1
             continue
 
@@ -207,6 +221,9 @@ def import_tmdb_candidates_to_common_pool(
         stats["stripped_external_rating_fields"] += _count_external_rating_fields(raw_pool.get(matched_key) or {})
         if candidate_sort_score(candidate) > candidate_sort_score(matched_candidate):
             pool[matched_key] = candidate
+            tmdb_identity = candidate_tmdb_identity(candidate)
+            if tmdb_identity is not None:
+                tmdb_id_index[tmdb_identity] = matched_key
             stats["updated"] += 1
         else:
             stats["duplicates"] += 1

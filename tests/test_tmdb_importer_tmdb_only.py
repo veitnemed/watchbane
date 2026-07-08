@@ -131,6 +131,29 @@ def test_same_tmdb_id_different_media_type_is_added_as_distinct_candidate(monkey
     assert saved["pool"]["movie|2021"]["media_type"] == "movie"
 
 
+def test_import_builds_tmdb_id_index_once_for_large_batch(monkeypatch) -> None:
+    saved = {}
+    calls = []
+    real_build_index = importer.build_tmdb_id_index
+
+    def fake_build_index(pool):
+        calls.append(len(pool))
+        return real_build_index(pool)
+
+    candidates = [
+        _candidate(title=f"Show {index}", year=2020 + index, tmdb_id=1000 + index)
+        for index in range(25)
+    ]
+    _patch_importer(monkeypatch, {}, saved)
+    monkeypatch.setattr(importer, "build_tmdb_id_index", fake_build_index)
+
+    stats = importer.import_tmdb_candidates_to_common_pool(candidates, criteria_name="pool")
+
+    assert stats["added"] == 25
+    assert len(saved["pool"]) == 25
+    assert calls == [0]
+
+
 def test_candidate_with_imdb_id_but_no_imdb_score_saved_correctly(monkeypatch) -> None:
     saved = {}
     _patch_importer(monkeypatch, {}, saved)

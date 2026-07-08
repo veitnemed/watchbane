@@ -17,7 +17,7 @@ def coerce_tmdb_id(value) -> int | None:
         return None
 
 
-def _tmdb_identity(candidate: dict[str, Any]) -> tuple[str, int] | None:
+def candidate_tmdb_identity(candidate: dict[str, Any]) -> tuple[str, int] | None:
     tmdb_id = coerce_tmdb_id(candidate.get("tmdb_id"))
     if tmdb_id is None:
         return None
@@ -29,18 +29,24 @@ def build_tmdb_id_index(pool: dict[str, Any]) -> dict[tuple[str, int], str]:
     for key, candidate in (pool or {}).items():
         if isinstance(candidate, dict) is False:
             continue
-        identity = _tmdb_identity(candidate)
+        identity = candidate_tmdb_identity(candidate)
         if identity is None or identity in index:
             continue
         index[identity] = key
     return index
 
 
-def find_candidate_storage_match(pool: dict[str, Any], candidate: dict[str, Any]) -> tuple[str | None, str | None]:
+def find_candidate_storage_match(
+    pool: dict[str, Any],
+    candidate: dict[str, Any],
+    *,
+    tmdb_id_index: dict[tuple[str, int], str] | None = None,
+) -> tuple[str | None, str | None]:
     """Finds existing candidate by primary media_type/tmdb_id, then title/year storage key."""
-    tmdb_identity = _tmdb_identity(candidate)
+    tmdb_identity = candidate_tmdb_identity(candidate)
     if tmdb_identity is not None:
-        matched_key = build_tmdb_id_index(pool).get(tmdb_identity)
+        index = tmdb_id_index if tmdb_id_index is not None else build_tmdb_id_index(pool)
+        matched_key = index.get(tmdb_identity)
         if matched_key is not None:
             return matched_key, "tmdb_id"
 

@@ -268,3 +268,15 @@ After prompt 25 TMDb/API SQLite boundary hardening:
 Aligned in-memory TMDb candidate matching with SQLite uniqueness by matching
 existing candidate records on `(media_type, tmdb_id)` instead of `tmdb_id`
 alone.
+
+After prompt 26 performance and large-data hardening:
+
+| Metric | Prompt 26 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15878 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
+
+Changed TMDb common import to build the candidate `(media_type, tmdb_id)` index
+once per import run and incrementally update it, avoiding repeated full-pool
+index rebuilds for large batches.
