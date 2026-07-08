@@ -44,6 +44,21 @@ def test_export_sqlite_to_legacy_json_preserves_file_names(tmp_path) -> None:
         assert (output_dir / relative_path).is_file()
 
 
+def test_export_sqlite_to_legacy_json_writes_complete_json_files(tmp_path) -> None:
+    db_path = tmp_path / "watchbane.sqlite3"
+    output_dir = tmp_path / "export"
+    from storage.sqlite import settings_repository
+
+    settings_repository.save_settings_dict({"ui_scale": 1.25}, path=db_path)
+
+    export_sqlite_to_legacy_json(output_dir=output_dir, db_path=db_path)
+
+    settings_path = output_dir / "settings.json"
+    assert settings_path.read_text(encoding="utf-8").endswith("\n")
+    assert _read_json(settings_path) == {"ui_scale": 1.25}
+    assert (output_dir / "settings.json.tmp").exists() is False
+
+
 def test_import_then_export_matches_canonicalized_legacy_data(tmp_path) -> None:
     base = tmp_path / "data"
     db_path = tmp_path / "watchbane.sqlite3"
