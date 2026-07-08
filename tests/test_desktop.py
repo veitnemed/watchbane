@@ -3885,7 +3885,13 @@ def test_watched_user_score_badge_has_readable_background() -> None:
     import inspect
 
     import desktop.shared.detail.card_layout as card_layout_module
-    from desktop.theme import COLOR_TEXT, COLOR_TEXT_INVERTED, FILM_MOVIE_BADGE_BG, FILM_MOVIE_BADGE_BORDER
+    from desktop.theme import (
+        COLOR_TEXT,
+        COLOR_TEXT_INVERTED,
+        FILM_MOVIE_BADGE_BG,
+        FILM_MOVIE_BADGE_BORDER,
+        FILM_SERIES_BADGE_BORDER,
+    )
     from desktop.theme.styles.detail_card import build_detail_card_style
 
     style = build_detail_card_style()
@@ -3899,9 +3905,8 @@ def test_watched_user_score_badge_has_readable_background() -> None:
     assert f"border: 1px solid {FILM_MOVIE_BADGE_BORDER}" in style
     assert "class UserScoreBadgeLabel(QLabel)" in layout_source
     assert "drawRoundedRect" in layout_source
-    assert "border_color = COLOR_TEXT" in layout_source
-    assert "fill_color = COLOR_TEXT" in layout_source
     assert "border_color = FILM_MOVIE_BADGE_BORDER" in layout_source
+    assert "border_color = FILM_SERIES_BADGE_BORDER" in layout_source
     assert "fill_color = FILM_MOVIE_BADGE_BG" in layout_source
 
 
@@ -4465,6 +4470,7 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     assert f"background-color: {tokens.FILM_CHIP_BG};" in style
     assert f"border: 1px solid {tokens.FILM_CHIP_BORDER};" in style
     assert f"color: {tokens.FILM_CHIP_TEXT};" in style
+    assert 'QLabel#detailUserScoreBadge[mediaType="tv"]' in style
     assert 'QLabel#detailMediaTypeBadge[mediaType="tv"]' in style
     assert f"background-color: {tokens.FILM_SERIES_BADGE_BG};" in style
     assert f"border: 1px solid {tokens.FILM_SERIES_BADGE_BORDER};" in style

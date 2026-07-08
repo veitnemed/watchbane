@@ -14,6 +14,7 @@ from desktop.theme import (
     COLOR_TEXT_SECONDARY,
     FILM_MOVIE_BADGE_BG,
     FILM_MOVIE_BADGE_BORDER,
+    FILM_SERIES_BADGE_BORDER,
     TRANSPARENT_STYLE,
     build_detail_card_style,
     build_poster_placeholder_style,
@@ -109,8 +110,8 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
                 border_color = FILM_MOVIE_BADGE_BORDER
                 fill_color = FILM_MOVIE_BADGE_BG
             else:
-                border_color = COLOR_TEXT
-                fill_color = COLOR_TEXT
+                border_color = FILM_SERIES_BADGE_BORDER
+                fill_color = FILM_MOVIE_BADGE_BG
             painter.setPen(QPen(QColor(border_color), 1))
             painter.setBrush(QColor(fill_color))
             painter.drawRoundedRect(rect, radius, radius)

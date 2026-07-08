@@ -59,6 +59,11 @@ QLabel#detailUserScoreBadge[mediaType="movie"] {{
     border: 1px solid {FILM_MOVIE_BADGE_BORDER};
     color: {FILM_MOVIE_BADGE_TEXT};
 }}
+QLabel#detailUserScoreBadge[mediaType="tv"] {{
+    background-color: {FILM_MOVIE_BADGE_BG};
+    border: 1px solid {FILM_SERIES_BADGE_BORDER};
+    color: {FILM_SERIES_BADGE_TEXT};
+}}
 QLabel#detailMediaTypeBadge {{
     background-color: {FILM_MOVIE_BADGE_BG};
     border: 1px solid {FILM_MOVIE_BADGE_BORDER};

@@ -293,6 +293,7 @@ class DetailCard(DetailCardPosterMixin):
         self._resize_user_score_badge()
         self._user_score_badge.show()
         self._user_score_badge.raise_()
+        self._apply_media_theme_properties()
 
     def _resize_user_score_badge(self) -> None:
         badge_width = max(
