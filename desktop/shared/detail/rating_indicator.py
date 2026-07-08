@@ -10,14 +10,14 @@ from desktop.theme import (
     COLOR_ACCENT,
     COLOR_BORDER,
     COLOR_RATING,
-    COLOR_STAR_ACTIVE,
-    COLOR_STAR_INACTIVE,
     COLOR_SURFACE,
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
     FILM_ACCENT_HOVER,
     FILM_RATING_TRACK,
     FILM_RATING_VALUE,
+    FILM_STAR_OFF,
+    FILM_STAR_ON,
     FILM_SURFACE_0,
     FILM_TEXT,
     FILM_TEXT_SUBTLE,
@@ -245,6 +245,8 @@ class StarRatingIndicator:
                 self._label: str = ""
                 self._custom_star_size = star_size
                 self._custom_star_gap = star_gap
+                self._fill_color = FILM_STAR_ON
+                self._empty_color = FILM_STAR_OFF
                 self.setFixedSize(self._resolve_width(), self._resolve_height())
                 self.setStyleSheet(TRANSPARENT_STYLE)
                 self.hide()
@@ -299,8 +301,8 @@ class StarRatingIndicator:
                 total_width = 5 * star_size + 4 * gap
                 start_x = 0.0
                 center_y = self.height() / 2
-                empty_color = QColor(COLOR_STAR_INACTIVE)
-                fill_color = QColor(COLOR_STAR_ACTIVE)
+                empty_color = QColor(self._empty_color)
+                fill_color = QColor(self._fill_color)
 
                 for index in range(5):
                     x = start_x + index * (star_size + gap)

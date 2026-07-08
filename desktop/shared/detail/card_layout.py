@@ -50,6 +50,7 @@ class DetailCardHandles:
     tmdb_ring_slot: Any
     tmdb_ring_layout: Any
     final_score_stars_block: Any
+    final_score_stars_label: Any
     final_score_stars_layout: Any
     rating_stars_widget: Any
     final_score_stars_lane: Any
@@ -328,12 +329,21 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._final_score_stars_block.setStyleSheet(TRANSPARENT_STYLE)
     owner._final_score_stars_block.setFixedWidth(final_stars_width)
     owner._final_score_stars_block.setMinimumHeight(
-        profile.detail_star_size + profile.detail_small_spacing
+        profile.detail_star_size + (2 * profile.detail_small_spacing)
     )
     owner._final_score_stars_block.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
-    owner._final_score_stars_layout = QHBoxLayout(owner._final_score_stars_block)
+    owner._final_score_stars_layout = QVBoxLayout(owner._final_score_stars_block)
     owner._final_score_stars_layout.setContentsMargins(0, 0, 0, 0)
-    owner._final_score_stars_layout.setSpacing(0)
+    owner._final_score_stars_layout.setSpacing(profile.detail_small_spacing)
+
+    owner._final_score_stars_label = QLabel(tr("add_title.field.score"))
+    owner._final_score_stars_label.setObjectName("detailFinalScoreStarsLabel")
+    owner._final_score_stars_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    owner._final_score_stars_label.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Minimum,
+    )
+    owner._final_score_stars_layout.addWidget(owner._final_score_stars_label)
 
     owner._rating_stars_widget = StarRatingIndicator(
         star_size=profile.detail_star_size,
@@ -342,7 +352,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._rating_stars_widget.setObjectName("detailFinalScoreStarsWidget")
     owner._final_score_stars_layout.addWidget(
         owner._rating_stars_widget,
-        alignment=Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+        alignment=Qt.AlignmentFlag.AlignHCenter,
     )
 
     owner._final_score_stars_lane = QWidget()
@@ -596,6 +606,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         tmdb_ring_slot=owner._tmdb_ring_slot,
         tmdb_ring_layout=owner._tmdb_ring_layout,
         final_score_stars_block=owner._final_score_stars_block,
+        final_score_stars_label=owner._final_score_stars_label,
         final_score_stars_layout=owner._final_score_stars_layout,
         rating_stars_widget=owner._rating_stars_widget,
         final_score_stars_lane=owner._final_score_stars_lane,

@@ -1952,6 +1952,7 @@ def test_meta_pill_does_not_render_final_text_under_circle(qapp) -> None:
 
 def test_star_rating_indicator_accepts_stars(qapp) -> None:
     from desktop.shared.detail.rating_indicator import StarRatingIndicator
+    from desktop.theme import FILM_STAR_OFF, FILM_STAR_ON
 
     stars = StarRatingIndicator()
 
@@ -1960,6 +1961,8 @@ def test_star_rating_indicator_accepts_stars(qapp) -> None:
     assert stars._stars == 4.5
     assert stars.toolTip() == "Итог 90"
     assert stars.isVisible()
+    assert stars._fill_color == FILM_STAR_ON
+    assert stars._empty_color == FILM_STAR_OFF
 
 
 def test_build_genre_pill_labels_hides_empty() -> None:
@@ -3663,8 +3666,9 @@ def test_watched_detail_card_does_not_render_my_score_ring() -> None:
 
 
 def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
-    from PyQt6.QtWidgets import QWidget
+    from PyQt6.QtWidgets import QLabel, QWidget
 
+    from desktop.i18n import tr
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
     detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
@@ -3686,10 +3690,13 @@ def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
     score_row = detail.widget.findChild(QWidget, "detailScoreSummaryRow")
     tmdb_ring = detail.widget.findChild(QWidget, "detailTmdbScoreRing")
     stars_block = detail.widget.findChild(QWidget, "detailFinalScoreStars")
+    stars_label = detail.widget.findChild(QLabel, "detailFinalScoreStarsLabel")
 
     assert score_row is not None
     assert tmdb_ring is not None
     assert stars_block is not None
+    assert stars_label is not None
+    assert stars_label.text() == tr("add_title.field.score")
     assert tmdb_ring.parent() is not stars_block
     assert stars_block.isHidden() is False
     assert getattr(tmdb_ring, "_display_label") == "TMDb"

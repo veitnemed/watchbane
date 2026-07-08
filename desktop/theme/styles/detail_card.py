@@ -123,6 +123,13 @@ QLabel#genrePill[mediaType="movie"] {{
     border: 1px solid {FILM_CHIP_BORDER};
     color: {FILM_CHIP_TEXT};
 }}
+QLabel#detailFinalScoreStarsLabel {{
+    background: transparent;
+    color: {FILM_TEXT_MUTED};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 500;
+    padding: 0;
+}}
 QWidget#mainInfoSection,
 QWidget#detailMainInfoSection {{
     background: transparent;
