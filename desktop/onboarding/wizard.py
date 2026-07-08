@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+import re
 from typing import Any
 
 from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, Qt, pyqtSignal
@@ -695,6 +696,82 @@ class OnboardingAutofillDialog(QDialog):
         if hasattr(self, "_plan_summary_label"):
             self._plan_summary_label.setText(self._format_plan_summary())
 
+    def _format_actual_line(self, label_ru: str, label_en: str, key: str, planned: dict, actual: dict) -> str:
+        planned_counts = planned.get(key) if isinstance(planned.get(key), dict) else {}
+        actual_counts = actual.get(key) if isinstance(actual.get(key), dict) else {}
+        keys = list(planned_counts)
+        for value in actual_counts:
+            if value not in keys:
+                keys.append(value)
+        parts = [
+            f"{value}: {int(actual_counts.get(value, 0))}/{int(planned_counts.get(value, 0))}"
+            for value in keys
+        ]
+        label = self._text(label_ru, label_en)
+        return f"{label}: {', '.join(parts) if parts else '-'}"
+
+    def _localized_warning_text(self, warning: str) -> str:
+        if self._ui_language != "ru":
+            return warning
+        lines = []
+        for line in str(warning or "").splitlines():
+            text = line.strip()
+            match = re.fullmatch(r"Starter pool underfilled: created (\d+) of (\d+)\.", text)
+            if match:
+                lines.append(f"Стартовый пул собран не полностью: {match.group(1)} из {match.group(2)}.")
+                continue
+            match = re.fullmatch(r"Only (\d+) candidates collected; the pool can be topped up later\.", text)
+            if match:
+                lines.append(f"Собрано только {match.group(1)} кандидатов; пул можно пополнить позже.")
+                continue
+            match = re.fullmatch(r"Media quota underfilled: ([^ ]+) planned (\d+), actual (\d+)\.", text)
+            if match:
+                lines.append(f"Недобор media-квоты: {match.group(1)} план {match.group(2)}, факт {match.group(3)}.")
+                continue
+            match = re.fullmatch(r"Origin quota underfilled: ([^ ]+) planned (\d+), actual (\d+)\.", text)
+            if match:
+                lines.append(f"Недобор origin-квоты: {match.group(1)} план {match.group(2)}, факт {match.group(3)}.")
+                continue
+            match = re.fullmatch(r"Rejected future/unreleased titles: (\d+)\.", text)
+            if match:
+                lines.append(f"Отклонено будущих/невышедших релизов: {match.group(1)}.")
+                continue
+            lines.append(text)
+        return "\n".join(line for line in lines if line)
+
+    def _format_result_summary(self, data: dict[str, Any], *, created: int, failed: bool) -> str:
+        planned = data.get("planned_counts") if isinstance(data.get("planned_counts"), dict) else {}
+        actual = data.get("actual_counts") if isinstance(data.get("actual_counts"), dict) else {}
+        api_requests = int(data.get("api_requests") or 0)
+        rejected_future = int(data.get("rejected_future_count") or 0)
+        if failed or created == 0:
+            lines = [
+                self._text(
+                    "Кандидаты не добавлены. Можно открыть приложение без стартового пула или повторить сборку.",
+                    "No candidates were added. You can open the app without a starter pool or retry.",
+                )
+            ]
+        else:
+            lines = [
+                self._text(
+                    f"Добавлено кандидатов: {created}. Следующий шаг — открыть вкладку кандидатов.",
+                    f"Candidates added: {created}. Next step: open the Candidates tab.",
+                )
+            ]
+        if planned or actual:
+            lines.append(self._format_actual_line("Факт/план media", "Actual/planned media", "media_type", planned, actual))
+            if self._ui_language == "ru":
+                lines.append(self._format_actual_line("Факт/план origin", "Actual/planned origin", "origin", planned, actual))
+        details = self._text(
+            f"API-запросов: {api_requests}, отклонено будущих релизов: {rejected_future}",
+            f"API requests: {api_requests}, future releases rejected: {rejected_future}",
+        )
+        lines.append(details)
+        warning = str(data.get("warning") or "").strip()
+        if warning:
+            lines.append(self._localized_warning_text(warning))
+        return "\n".join(lines)
+
     def _rebuild_dots(self) -> None:
         while self._dots_layout.count():
             item = self._dots_layout.takeAt(0)
@@ -855,7 +932,7 @@ class OnboardingAutofillDialog(QDialog):
             self._status_label.setText(self._text(f"Готово. Кандидатов: {created}", f"Done. Candidates: {created}"))
         warning = data.get("warning")
         if warning:
-            self._warning_label.setText(str(warning))
+            self._warning_label.setText(self._localized_warning_text(str(warning)))
             self._warning_label.setVisible(True)
         self._skip_button.setVisible(False)
         self._open_button.setVisible(True)
@@ -874,24 +951,13 @@ class OnboardingAutofillDialog(QDialog):
 
     def _show_final_result(self, data: dict[str, Any], *, failed: bool) -> None:
         created = int(data.get("created_count") or 0)
-        warning = str(data.get("warning") or "").strip()
         if failed or created == 0:
             self._final_title.setText(self._text("Пул не собран", "Pool was not built"))
             self._retry_button.setVisible(True)
-            summary = self._text(
-                "Кандидаты не добавлены. Можно открыть приложение без стартового пула или повторить сборку.",
-                "No candidates were added. You can open the app without a starter pool or retry.",
-            )
         else:
             self._final_title.setText(self._text("Пул кандидатов готов", "Candidate pool is ready"))
             self._retry_button.setVisible(False)
-            summary = self._text(
-                f"Добавлено кандидатов: {created}. Следующий шаг — открыть вкладку кандидатов.",
-                f"Candidates added: {created}. Next step: open the Candidates tab.",
-            )
-        if warning:
-            summary = f"{summary}\n{warning}"
-        self._final_summary.setText(summary)
+        self._final_summary.setText(self._format_result_summary(data, created=created, failed=failed))
         self._set_page(self._final_index())
 
     def _skip(self) -> None:

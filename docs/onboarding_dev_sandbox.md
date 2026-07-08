@@ -26,19 +26,14 @@ If either flag is enabled:
 
 ## Local Launcher
 
-For manual visual work:
+For isolated pool rebuild checks without touching the active profile:
 
 ```powershell
-.\.codex-onboarding-fullscreen\local_scripts\launch-main-empty-runtime.ps1 -Repo .
+py scripts\run_onboarding_pool_rebuild.py --mock --all --output docs\onboarding_pool_mock_report.md
+py scripts\run_onboarding_pool_rebuild.py --live --all --require-live --output docs\onboarding_pool_live_report_after_quota_fixes.md
 ```
 
-Useful smoke mode:
-
-```powershell
-.\.codex-onboarding-fullscreen\local_scripts\launch-main-empty-runtime.ps1 -Repo . -AutoCloseSeconds 8
-```
-
-The launcher creates a backup in `%TEMP%\watchbane-onboarding-backups\...`, empties the active profile runtime, sets the dev flags, and starts `py start_app.py`.
+The scenario runner writes each scenario into a temporary SQLite database and does not print TMDb credentials.
 
 ## Console GUI Mode
 

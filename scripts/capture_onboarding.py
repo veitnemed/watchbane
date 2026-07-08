@@ -67,7 +67,24 @@ def _prepare_step(dialog, step: str) -> None:
         dialog._status_label.setText(dialog._text("Собираем фильмы · лёгкий вайб", "Building movies · light vibe"))
         return
     if step == "final":
-        dialog._show_final_result({"created_count": 120, "warning": None, "ok": True}, failed=False)
+        dialog._show_final_result(
+            {
+                "created_count": 99,
+                "warning": "Starter pool underfilled: created 99 of 120.",
+                "ok": True,
+                "api_requests": 180,
+                "rejected_future_count": 0,
+                "planned_counts": {
+                    "media_type": {"movie": 60, "tv": 60},
+                    "origin": {"domestic": 60, "foreign": 60},
+                },
+                "actual_counts": {
+                    "media_type": {"movie": 49, "tv": 50},
+                    "origin": {"domestic": 39, "foreign": 60},
+                },
+            },
+            failed=False,
+        )
         return
     raise ValueError(f"Unsupported step: {step}")
 

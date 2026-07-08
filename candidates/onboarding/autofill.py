@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import math
 from pathlib import Path
 from typing import Any, Callable, Protocol
@@ -28,7 +28,7 @@ from storage.sqlite.onboarding_repository import (
 
 STARTER_POOL_TARGET = 120
 STARTER_POOL_MIN_ACCEPTABLE = 80
-MAX_TMDB_REQUESTS = 60
+MAX_TMDB_REQUESTS = 180
 RESULTS_PER_TMDB_PAGE = 20
 
 ERA_TOP_ALL_TIME = "top_all_time"
@@ -181,6 +181,10 @@ class AutofillResult:
     cancelled: bool
     warning: str | None
     candidates: list[dict[str, Any]]
+    warnings: list[str]
+    planned_counts: dict[str, dict[str, int]]
+    actual_counts: dict[str, dict[str, int]]
+    rejected_future_count: int = 0
 
 
 def _choice(value: Any, allowed: set[str], default: str) -> str:
@@ -355,6 +359,24 @@ def _current_year() -> int:
     return datetime.now(timezone.utc).year
 
 
+def _current_date() -> date:
+    return datetime.now(timezone.utc).date()
+
+
+def _parse_iso_date(value: Any) -> date | None:
+    text = str(value or "").strip()
+    if len(text) < 10:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _date_lte_field(media_type: str) -> str:
+    return "primary_release_date.lte" if media_type == MEDIA_MOVIE else "first_air_date.lte"
+
+
 def _genre_name_map(items: list[dict[str, Any]]) -> dict[str, int]:
     result: dict[str, int] = {}
     for item in items:
@@ -520,6 +542,25 @@ def _vote_count_for_fallback(bucket: CandidateFetchBucket, fallback: str) -> int
     return 100 if bucket.media_type == MEDIA_MOVIE else 50
 
 
+def _is_hard_origin_bucket(profile: OnboardingTasteProfile, bucket: CandidateFetchBucket) -> bool:
+    return (
+        str(profile.ui_language or "").strip().casefold() == "ru"
+        and bucket.origin in {ORIGIN_DOMESTIC, ORIGIN_FOREIGN}
+    )
+
+
+def _fallback_order_for_bucket(profile: OnboardingTasteProfile, bucket: CandidateFetchBucket) -> tuple[str, ...]:
+    if _is_hard_origin_bucket(profile, bucket):
+        return tuple(fallback for fallback in FALLBACK_ORDER if fallback != FALLBACK_RELAX_ORIGIN)
+    return FALLBACK_ORDER
+
+
+def _domestic_filter_for_fallback(fallback: str) -> dict[str, str]:
+    if fallback in {FALLBACK_RELAX_VOTES_LOW, FALLBACK_RELAX_ERA, FALLBACK_POPULAR}:
+        return {"with_origin_country": "RU"}
+    return dict(DOMESTIC_FILTER)
+
+
 def _years_for_bucket(bucket: CandidateFetchBucket, current_year: int) -> list[int]:
     if bucket.era == ERA_CLASSIC_SWEEP:
         return list(range(CLASSIC_START_YEAR, CLASSIC_END_YEAR + 1))
@@ -535,11 +576,14 @@ def build_discover_request(
     fallback: str,
     request_index: int,
     current_year: int | None = None,
+    current_date: date | None = None,
 ) -> tuple[str, dict[str, Any]]:
     current_year = current_year or _current_year()
+    current_date = current_date or _current_date()
     params: dict[str, Any] = {
         "include_adult": False,
         "language": _ui_language_to_tmdb_locale(profile.ui_language),
+        _date_lte_field(bucket.media_type): current_date.isoformat(),
     }
 
     effective_popular = fallback == FALLBACK_POPULAR
@@ -551,7 +595,7 @@ def build_discover_request(
         FALLBACK_RELAX_ERA,
         FALLBACK_POPULAR,
     }
-    effective_any_origin = fallback != FALLBACK_BASE
+    effective_any_origin = fallback == FALLBACK_RELAX_ORIGIN and not _is_hard_origin_bucket(profile, bucket)
 
     years = [] if effective_relax_era else _years_for_bucket(bucket, current_year)
     if years:
@@ -573,7 +617,7 @@ def build_discover_request(
 
     if effective_any_origin is False:
         if bucket.origin == ORIGIN_DOMESTIC:
-            params.update(DOMESTIC_FILTER)
+            params.update(_domestic_filter_for_fallback(fallback))
         elif bucket.origin == ORIGIN_FOREIGN and bucket.original_language:
             params["with_original_language"] = bucket.original_language
 
@@ -616,6 +660,58 @@ def _result_number(result: dict[str, Any], key: str) -> float | None:
         return None
 
 
+def candidate_rejection_reason(
+    result: dict[str, Any],
+    bucket: CandidateFetchBucket,
+    *,
+    existing_index: dict[str, Any],
+    accepted_identities: set[tuple[str, int]],
+    hidden_or_rejected_identities: set[str],
+    watched_signatures: set[str],
+    dataset_title_keys: set[str],
+    current_date: date | None = None,
+) -> str | None:
+    current_date = current_date or _current_date()
+    tmdb_id = result.get("id")
+    if tmdb_id in (None, ""):
+        return "missing_id"
+    try:
+        normalized_tmdb_id = int(tmdb_id)
+    except (TypeError, ValueError):
+        return "bad_id"
+    if result.get("poster_path") in (None, ""):
+        return "missing_poster"
+    release_date = _parse_iso_date(result.get(_date_field(bucket.media_type)))
+    result_year = _result_year(result, bucket.media_type)
+    if release_date is not None and release_date > current_date:
+        return "future"
+    if result_year is not None and result_year > current_date.year:
+        return "future"
+    vote_average = _result_number(result, "vote_average")
+    vote_count = _result_number(result, "vote_count")
+    if vote_average is None or vote_count is None:
+        return "missing_votes"
+    if vote_average < 5.8:
+        return "low_score"
+    if bucket.era == ERA_TOP_ALL_TIME and vote_count < _base_vote_count(bucket):
+        return "low_votes"
+    if (bucket.media_type, normalized_tmdb_id) in accepted_identities:
+        return "duplicate_batch"
+    if discover_item_existing_reason(result, existing_index, media_type=bucket.media_type) is not None:
+        return "existing"
+
+    candidate_stub = _discover_candidate_stub(result, bucket.media_type)
+    if is_watched_candidate(
+        candidate_stub,
+        watched_signatures=watched_signatures,
+        dataset_title_keys=dataset_title_keys,
+    ):
+        return "watched"
+    if title_identity_key(candidate_stub) in hidden_or_rejected_identities:
+        return "hidden_or_rejected"
+    return None
+
+
 def accept_candidate(
     result: dict[str, Any],
     bucket: CandidateFetchBucket,
@@ -625,39 +721,18 @@ def accept_candidate(
     hidden_or_rejected_identities: set[str],
     watched_signatures: set[str],
     dataset_title_keys: set[str],
+    current_date: date | None = None,
 ) -> bool:
-    tmdb_id = result.get("id")
-    if tmdb_id in (None, ""):
-        return False
-    try:
-        normalized_tmdb_id = int(tmdb_id)
-    except (TypeError, ValueError):
-        return False
-    if result.get("poster_path") in (None, ""):
-        return False
-    vote_average = _result_number(result, "vote_average")
-    vote_count = _result_number(result, "vote_count")
-    if vote_average is None or vote_count is None:
-        return False
-    if vote_average < 5.8:
-        return False
-    if bucket.era == ERA_TOP_ALL_TIME and vote_count < _base_vote_count(bucket):
-        return False
-    if (bucket.media_type, normalized_tmdb_id) in accepted_identities:
-        return False
-    if discover_item_existing_reason(result, existing_index, media_type=bucket.media_type) is not None:
-        return False
-
-    candidate_stub = _discover_candidate_stub(result, bucket.media_type)
-    if is_watched_candidate(
-        candidate_stub,
+    return candidate_rejection_reason(
+        result,
+        bucket,
+        existing_index=existing_index,
+        accepted_identities=accepted_identities,
+        hidden_or_rejected_identities=hidden_or_rejected_identities,
         watched_signatures=watched_signatures,
         dataset_title_keys=dataset_title_keys,
-    ):
-        return False
-    if title_identity_key(candidate_stub) in hidden_or_rejected_identities:
-        return False
-    return True
+        current_date=current_date,
+    ) is None
 
 
 def _genre_lookup_by_id(client: TmdbClientProtocol) -> dict[str, dict[int, str]]:
@@ -707,6 +782,7 @@ def build_candidate_record_from_result(
     profile_id: int,
     candidate_score: float,
     fetch_rank: int,
+    fallback: str = FALLBACK_BASE,
 ) -> dict[str, Any]:
     title_key, original_title_key = _title_field(bucket.media_type)
     date_key = _date_field(bucket.media_type)
@@ -726,6 +802,7 @@ def build_candidate_record_from_result(
         "source_provider": "tmdb",
         "source_version": 3,
         "source_bucket_id": bucket.bucket_id,
+        "origin_bucket": bucket.origin,
         "onboarding_profile_id": int(profile_id),
         "candidate_score": candidate_score,
         "fetch_rank": int(fetch_rank),
@@ -756,6 +833,7 @@ def build_candidate_record_from_result(
             "vibe": bucket.vibe,
             "origin": bucket.origin,
             "original_language": bucket.original_language,
+            "fallback": fallback,
         },
         "signals": ["onboarding_autofill"],
     }
@@ -784,16 +862,95 @@ def _pool_snapshot(path: str | Path | None = None) -> dict[str, dict[str, Any]]:
     return data if isinstance(data, dict) else {}
 
 
+def planned_counts_for_profile(
+    profile: OnboardingTasteProfile,
+    *,
+    target: int = STARTER_POOL_TARGET,
+    genre_ids: dict[str, dict[str, tuple[int, ...]]] | None = None,
+) -> dict[str, dict[str, int]]:
+    buckets = build_fetch_buckets(profile.normalized(), genre_ids=genre_ids, target=target)
+
+    def totals(field: str) -> dict[str, int]:
+        counter: Counter[str] = Counter()
+        for bucket in buckets:
+            value = getattr(bucket, field)
+            if value is not None:
+                counter[str(value)] += int(bucket.quota)
+        return dict(counter)
+
+    return {
+        "media_type": totals("media_type"),
+        "release": totals("era"),
+        "vibe": totals("vibe"),
+        "origin": totals("origin"),
+        "original_language": totals("original_language"),
+    }
+
+
+def actual_counts_for_candidates(candidates: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    counters = {
+        "media_type": Counter(),
+        "release": Counter(),
+        "vibe": Counter(),
+        "origin": Counter(),
+        "original_language": Counter(),
+        "fallback": Counter(),
+    }
+    for candidate in candidates:
+        source_query = candidate.get("source_query") if isinstance(candidate.get("source_query"), dict) else {}
+        media_type = candidate.get("media_type") or source_query.get("media_type")
+        if media_type:
+            counters["media_type"][str(media_type)] += 1
+        release = source_query.get("era")
+        if release:
+            counters["release"][str(release)] += 1
+        vibe = source_query.get("vibe")
+        if vibe:
+            counters["vibe"][str(vibe)] += 1
+        origin = candidate.get("origin_bucket") or source_query.get("origin")
+        if origin:
+            counters["origin"][str(origin)] += 1
+        language = source_query.get("original_language") or candidate.get("original_language")
+        if language:
+            counters["original_language"][str(language)] += 1
+        fallback = source_query.get("fallback")
+        if fallback:
+            counters["fallback"][str(fallback)] += 1
+    return {name: dict(counter) for name, counter in counters.items()}
+
+
 def should_start_onboarding_autofill(*, path: str | Path | None = None) -> bool:
     if has_completed_onboarding_profile(path=path):
         return False
     return len(_pool_snapshot(path=path)) == 0
 
 
-def _warning_for_count(created_count: int) -> str | None:
-    if created_count >= STARTER_POOL_MIN_ACCEPTABLE:
-        return None
-    return f"Удалось собрать только {created_count} кандидатов. Можно пополнить пул позже."
+def _build_warnings(
+    *,
+    profile: OnboardingTasteProfile,
+    planned_counts: dict[str, dict[str, int]],
+    actual_counts: dict[str, dict[str, int]],
+    created_count: int,
+    rejected_future_count: int,
+) -> list[str]:
+    warnings: list[str] = []
+    if created_count < STARTER_POOL_TARGET:
+        warnings.append(f"Starter pool underfilled: created {created_count} of {STARTER_POOL_TARGET}.")
+    if created_count < STARTER_POOL_MIN_ACCEPTABLE:
+        warnings.append(f"Only {created_count} candidates collected; the pool can be topped up later.")
+    for media_type, planned in sorted(planned_counts.get("media_type", {}).items()):
+        actual = int(actual_counts.get("media_type", {}).get(media_type, 0))
+        if actual < int(planned):
+            warnings.append(f"Media quota underfilled: {media_type} planned {planned}, actual {actual}.")
+    if str(profile.ui_language or "").strip().casefold() == "ru":
+        for origin in (ORIGIN_DOMESTIC, ORIGIN_FOREIGN):
+            planned = int(planned_counts.get("origin", {}).get(origin, 0))
+            actual = int(actual_counts.get("origin", {}).get(origin, 0))
+            if planned > 0 and actual < planned:
+                warnings.append(f"Origin quota underfilled: {origin} planned {planned}, actual {actual}.")
+    if rejected_future_count > 0:
+        warnings.append(f"Rejected future/unreleased titles: {rejected_future_count}.")
+    return warnings
 
 
 def _save_pool_incremental(
@@ -822,6 +979,7 @@ def run_onboarding_autofill(
     profile = profile.normalized()
     client = client or TmdbAutofillClient()
     current_year = current_year or _current_year()
+    current_date = date(current_year, 12, 31) if current_year != _current_year() else _current_date()
     cancelled = False
     profile_id = create_onboarding_profile(profile.as_repository_dict(), path=path)
     pool = _pool_snapshot(path=path)
@@ -841,9 +999,11 @@ def run_onboarding_autofill(
     genre_lookup = _genre_lookup_by_id(client)
     _emit(progress_callback, stage=2, message="Собираем жанровые направления", profile_id=profile_id)
     buckets = build_fetch_buckets(profile, genre_ids=genre_ids)
+    planned_counts = planned_counts_for_profile(profile, genre_ids=genre_ids)
     states = [_BucketState(bucket=bucket) for bucket in sorted(buckets, key=lambda item: bucket_priority_key(item, profile))]
     api_requests = 0
     fetch_rank = 0
+    rejected_future_count = 0
 
     def is_cancelled() -> bool:
         return bool(cancel_checker is not None and cancel_checker())
@@ -859,6 +1019,8 @@ def run_onboarding_autofill(
                     break
                 if state.filled >= state.bucket.quota or state.exhausted:
                     continue
+                if fallback not in _fallback_order_for_bucket(profile, state.bucket):
+                    continue
                 if is_cancelled():
                     cancelled = True
                     break
@@ -869,6 +1031,7 @@ def run_onboarding_autofill(
                     fallback=fallback,
                     request_index=state.request_index,
                     current_year=current_year,
+                    current_date=current_date,
                 )
                 message = f"Собираем {'фильмы' if bucket.media_type == MEDIA_MOVIE else 'сериалы'} · {'лёгкий вайб' if bucket.vibe == VIBE_LIGHT else 'мрачный вайб'}"
                 if bucket.era == ERA_NEW_SWEEP:
@@ -901,7 +1064,9 @@ def run_onboarding_autofill(
                     for index_on_page, result in enumerate(results):
                         if len(created_candidates) + len(accepted_batch) >= STARTER_POOL_TARGET:
                             break
-                        if accept_candidate(
+                        if state.filled + len(accepted_batch) >= state.bucket.quota:
+                            break
+                        rejection_reason = candidate_rejection_reason(
                             result,
                             bucket,
                             existing_index=existing_index,
@@ -909,7 +1074,11 @@ def run_onboarding_autofill(
                             hidden_or_rejected_identities=hidden_or_rejected,
                             watched_signatures=watched_signatures,
                             dataset_title_keys=dataset_title_keys,
-                        ) is False:
+                            current_date=current_date,
+                        )
+                        if rejection_reason is not None:
+                            if rejection_reason == "future":
+                                rejected_future_count += 1
                             rejected_count += 1
                             continue
                         fetch_rank += 1
@@ -926,6 +1095,7 @@ def run_onboarding_autofill(
                             profile_id=profile_id,
                             candidate_score=candidate_score,
                             fetch_rank=fetch_rank,
+                            fallback=fallback,
                         )
                         accepted_batch.append(candidate)
                         accepted_identities.add((bucket.media_type, int(result["id"])))
@@ -944,7 +1114,7 @@ def run_onboarding_autofill(
                             "onboarding_profile_id": profile_id,
                             "bucket_id": bucket.bucket_id,
                             "endpoint": endpoint,
-                            "params": params,
+                            "params": {**params, "_fallback": fallback},
                             "page": page,
                             "status": status,
                             "accepted_count": len(accepted_batch),
@@ -969,7 +1139,15 @@ def run_onboarding_autofill(
             break
 
     complete_onboarding_profile(profile_id, path=path)
-    warning = _warning_for_count(len(created_candidates))
+    actual_counts = actual_counts_for_candidates(created_candidates)
+    warnings = _build_warnings(
+        profile=profile,
+        planned_counts=planned_counts,
+        actual_counts=actual_counts,
+        created_count=len(created_candidates),
+        rejected_future_count=rejected_future_count,
+    )
+    warning = "\n".join(warnings) if warnings else None
     _emit(
         progress_callback,
         stage=6,
@@ -989,4 +1167,8 @@ def run_onboarding_autofill(
         cancelled=cancelled,
         warning=warning,
         candidates=created_candidates,
+        warnings=warnings,
+        planned_counts=planned_counts,
+        actual_counts=actual_counts,
+        rejected_future_count=rejected_future_count,
     )

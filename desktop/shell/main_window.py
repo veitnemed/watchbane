@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QTabWidget
 
 from candidates import service as candidate_service
+from diagnostics.gui_event_log import log_event
 from desktop.onboarding import OnboardingAutofillDialog
 from desktop.settings.app_settings import get_persisted_interface_language
 from desktop.shell.app_icon import build_app_icon
@@ -74,16 +75,23 @@ class WatchedMoviesWindow(QMainWindow):
         onboarding.setModal(False)
         onboarding.setWindowFlag(Qt.WindowType.Widget, True)
 
+        def mark_candidate_pool_changed(_result: object) -> None:
+            self._tabs_context.candidate_session.invalidate_pool_cache()
+            log_event("onboarding.view.completed")
+
         def finish_onboarding(_code: int) -> None:
+            self._tabs_context.candidate_session.invalidate_pool_cache()
             self._root_stack.setCurrentWidget(self._main_tabs)
             self._tabs_context.focus_candidates()
+            log_event("onboarding.view.finished", result_code=_code)
             self._root_stack.removeWidget(onboarding)
             onboarding.deleteLater()
             self._onboarding_view = None
 
-        onboarding.completed.connect(lambda _result: self._tabs_context.focus_candidates())
+        onboarding.completed.connect(mark_candidate_pool_changed)
         onboarding.finished.connect(finish_onboarding)
         self._onboarding_view = onboarding
         self._root_stack.addWidget(onboarding)
         self._root_stack.setCurrentWidget(onboarding)
         onboarding.show()
+        log_event("onboarding.view.shown")

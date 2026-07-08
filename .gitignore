@@ -30,6 +30,10 @@ data/logs/
 data/backups/
 data/exports/
 data/**/*.backup*
+data/profiles/*/backups/
+data/profiles/*/cache/
+data/profiles/*/logs/
+data/profiles/*/exports/
 
 # Large local datasets and generated outputs
 datasets/

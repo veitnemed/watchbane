@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Callable
 
 from candidates import service as candidate_service
 from desktop.candidates.workers.search_worker import CandidateSearchWorker
+from diagnostics.gui_event_log import log_event
 
 DEFAULT_SORT_MODE = "final_score"
 
@@ -44,6 +46,7 @@ class CandidateSearchSession:
         self._loading_listeners: list[Callable[[], None]] = []
         self._request_id = 0
         self._workers: list[CandidateSearchWorker] = []
+        self._request_started_at: dict[int, float] = {}
 
     def add_listener(self, callback: Callable[[], None]) -> None:
         if callback not in self._listeners:
@@ -182,6 +185,14 @@ class CandidateSearchSession:
         request_id = self._request_id
         self.last_error = None
         self._set_loading(True)
+        self._request_started_at[request_id] = perf_counter()
+        log_event(
+            "candidates.search.async.begin",
+            request_id=request_id,
+            has_cached_overview=self._overview_cache is not None,
+            cached_overview_empty=bool((self._overview_cache or {}).get("is_empty")),
+            sort_mode=self.sort_mode,
+        )
         worker = CandidateSearchWorker(
             request_id=request_id,
             service=self.service,
@@ -203,8 +214,19 @@ class CandidateSearchSession:
     def _on_async_result(self, request_id: int, filters: dict, result: dict) -> None:
         if request_id != self._request_id:
             return
+        started = self._request_started_at.pop(request_id, None)
         self._set_loading(False)
-        self._apply_search_result(filters, result)
+        applied = self._apply_search_result(filters, result)
+        elapsed_ms = None if started is None else round((perf_counter() - started) * 1000, 1)
+        log_event(
+            "candidates.search.async.end",
+            request_id=request_id,
+            ok=applied.get("ok"),
+            is_empty_pool=applied.get("is_empty_pool"),
+            filtered_count=applied.get("filtered_count"),
+            elapsed_ms=elapsed_ms,
+            error=applied.get("error"),
+        )
 
     def set_sort_mode(self, sort_mode: str) -> None:
         if sort_mode in self.service.SEARCH_SORT_MODES:

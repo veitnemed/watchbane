@@ -246,6 +246,10 @@ def build_onboarding_candidate_pool(
         "api_requests": result.api_requests,
         "cancelled": result.cancelled,
         "warning": result.warning,
+        "warnings": result.warnings,
+        "planned_counts": result.planned_counts,
+        "actual_counts": result.actual_counts,
+        "rejected_future_count": result.rejected_future_count,
         "candidates": result.candidates,
     }
 

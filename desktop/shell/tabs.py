@@ -51,6 +51,7 @@ class MainTabRegistry:
     def focus(self, tab_id: str) -> None:
         spec = self._specs[tab_id]
         self._tabs.setCurrentWidget(spec.view.widget)
+        activate_tab_view(spec.view)
 
     def on_current_changed(self, index: int) -> None:
         if index < 0:

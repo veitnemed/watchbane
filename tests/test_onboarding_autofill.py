@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import date
 
 from candidates.onboarding import autofill
 from candidates.onboarding.autofill import (
@@ -111,6 +112,43 @@ class EmptyTmdbClient(FakeTmdbClient):
         return {"results": [], "total_pages": 1}
 
 
+class ScarceTvTmdbClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        if endpoint == "/discover/tv":
+            self.calls.append((endpoint, dict(params)))
+            return {"results": [], "total_pages": 1}
+        return super().discover(endpoint, params)
+
+
+class FutureTmdbClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        self.calls.append((endpoint, dict(params)))
+        media = MEDIA_MOVIE if endpoint == "/discover/movie" else MEDIA_TV
+        date_key = "release_date" if media == MEDIA_MOVIE else "first_air_date"
+        title_key = "title" if media == MEDIA_MOVIE else "name"
+        original_title_key = "original_title" if media == MEDIA_MOVIE else "original_name"
+        results = []
+        for index in range(20):
+            tmdb_id = len(self.calls) * 1000 + index
+            results.append(
+                {
+                    "id": tmdb_id,
+                    title_key: f"Future {tmdb_id}",
+                    original_title_key: f"Future {tmdb_id}",
+                    date_key: "2027-01-01",
+                    "poster_path": f"/f{tmdb_id}.jpg",
+                    "overview": "Overview",
+                    "genre_ids": [35],
+                    "vote_average": 7.2,
+                    "vote_count": 1200,
+                    "popularity": 50,
+                    "original_language": params.get("with_original_language") or "en",
+                    "origin_country": ["RU"] if params.get("with_origin_country") == "RU" else ["US"],
+                }
+            )
+        return {"results": results, "total_pages": 1}
+
+
 def _profile(**overrides) -> OnboardingTasteProfile:
     data = {
         "media_preference": "both",
@@ -145,11 +183,11 @@ def test_release_preferences_create_required_era_buckets_and_year_order() -> Non
     classic_buckets = build_fetch_buckets(_profile(release_preference="classic"))
     assert {bucket.era for bucket in classic_buckets} == {"top_all_time", "classic_sweep"}
     classic = next(bucket for bucket in classic_buckets if bucket.era == "classic_sweep")
-    endpoint, params = build_discover_request(classic, profile=_profile(release_preference="classic"), fallback="base", request_index=0, current_year=2026)
+    endpoint, params = build_discover_request(classic, profile=_profile(release_preference="classic"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert endpoint in {"/discover/movie", "/discover/tv"}
     assert (params.get("primary_release_year") or params.get("first_air_date_year")) == 2005
     new = next(bucket for bucket in build_fetch_buckets(_profile(release_preference="new")) if bucket.era == "new_sweep")
-    _endpoint, params = build_discover_request(new, profile=_profile(release_preference="new"), fallback="base", request_index=0, current_year=2026)
+    _endpoint, params = build_discover_request(new, profile=_profile(release_preference="new"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert (params.get("primary_release_year") or params.get("first_air_date_year")) == 2026
 
 
@@ -187,21 +225,23 @@ def test_tmdb_genre_ids_are_resolved_from_genre_lists_and_joined_with_pipe() -> 
     assert genre_ids[MEDIA_MOVIE]["light"] == (35, 10749, 14, 10751, 12)
     assert genre_ids[MEDIA_TV]["dark"] == (18, 80, 9648, 10759, 10768)
     bucket = next(bucket for bucket in build_fetch_buckets(_profile(vibe_preference="light"), genre_ids=genre_ids) if bucket.vibe == "light")
-    _endpoint, params = build_discover_request(bucket, profile=_profile(vibe_preference="light"), fallback="base", request_index=0, current_year=2026)
+    _endpoint, params = build_discover_request(bucket, profile=_profile(vibe_preference="light"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert "," not in params["with_genres"]
     assert "|" in params["with_genres"]
 
 
 def test_discover_params_use_media_specific_contract() -> None:
     movie = next(bucket for bucket in build_fetch_buckets(_profile(media_preference="movie", release_preference="new")) if bucket.media_type == MEDIA_MOVIE and bucket.era == "new_sweep")
-    endpoint, params = build_discover_request(movie, profile=_profile(media_preference="movie", release_preference="new"), fallback="base", request_index=0, current_year=2026)
+    endpoint, params = build_discover_request(movie, profile=_profile(media_preference="movie", release_preference="new"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert endpoint == "/discover/movie"
     assert params["primary_release_year"] == 2026
+    assert params["primary_release_date.lte"] == "2026-07-08"
     assert params["include_adult"] is False
     tv = next(bucket for bucket in build_fetch_buckets(_profile(media_preference="tv", release_preference="new")) if bucket.media_type == MEDIA_TV and bucket.era == "new_sweep")
-    endpoint, params = build_discover_request(tv, profile=_profile(media_preference="tv", release_preference="new"), fallback="base", request_index=0, current_year=2026)
+    endpoint, params = build_discover_request(tv, profile=_profile(media_preference="tv", release_preference="new"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert endpoint == "/discover/tv"
     assert params["first_air_date_year"] == 2026
+    assert params["first_air_date.lte"] == "2026-07-08"
 
 
 def test_fallback_order_relaxes_origin_before_genres_and_votes() -> None:
@@ -210,13 +250,19 @@ def test_fallback_order_relaxes_origin_before_genres_and_votes() -> None:
     profile = _profile(ui_language="ru", origin_preference="domestic", vibe_preference="light")
     genre_ids = resolve_tmdb_genre_ids(FakeTmdbClient())
     bucket = next(bucket for bucket in build_fetch_buckets(profile, genre_ids=genre_ids) if bucket.origin == "domestic" and bucket.genre_ids)
-    _endpoint, base = build_discover_request(bucket, profile=profile, fallback="base", request_index=0, current_year=2026)
-    _endpoint, relaxed_origin = build_discover_request(bucket, profile=profile, fallback="relax_origin", request_index=0, current_year=2026)
-    _endpoint, relaxed_genres = build_discover_request(bucket, profile=profile, fallback="relax_genres", request_index=0, current_year=2026)
+    _endpoint, base = build_discover_request(bucket, profile=profile, fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, relaxed_origin = build_discover_request(bucket, profile=profile, fallback="relax_origin", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, relaxed_genres = build_discover_request(bucket, profile=profile, fallback="relax_genres", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, relaxed_era = build_discover_request(bucket, profile=profile, fallback="relax_era", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert base["with_origin_country"] == "RU"
-    assert "with_origin_country" not in relaxed_origin
+    assert relaxed_origin["with_origin_country"] == "RU"
+    assert relaxed_origin["with_original_language"] == "ru"
     assert "with_genres" in relaxed_origin
+    assert relaxed_genres["with_origin_country"] == "RU"
+    assert relaxed_genres["with_original_language"] == "ru"
     assert "with_genres" not in relaxed_genres
+    assert relaxed_era["with_origin_country"] == "RU"
+    assert "with_original_language" not in relaxed_era
 
 
 def test_onboarding_wizard_origin_question_depends_on_ui_language(qapp) -> None:
@@ -254,8 +300,8 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
         assert profile_count == 1
         assert request_count == result.api_requests
         assert candidate_count == autofill.STARTER_POOL_TARGET
-        assert media_counts[MEDIA_MOVIE] > 0
-        assert media_counts[MEDIA_TV] > 0
+        assert media_counts[MEDIA_MOVIE] == 60
+        assert media_counts[MEDIA_TV] == 60
         row = conn.execute("SELECT source, source_bucket_id, onboarding_profile_id, candidate_score, fetch_rank FROM candidate_records LIMIT 1").fetchone()
         assert row["source"] == "onboarding_autofill"
         assert row["source_bucket_id"]
@@ -264,6 +310,54 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
         assert row["fetch_rank"] > 0
     finally:
         conn.close()
+
+
+def test_run_autofill_keeps_tv_quota_when_tv_is_preferred(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    db_path = tmp_path / "watchbane.sqlite3"
+    result = run_onboarding_autofill(
+        _profile(media_preference="tv"),
+        client=FakeTmdbClient(),
+        path=db_path,
+        current_year=2026,
+    )
+
+    assert result.created_count == autofill.STARTER_POOL_TARGET
+    assert result.planned_counts["media_type"] == {MEDIA_MOVIE: 36, MEDIA_TV: 84}
+    assert result.actual_counts["media_type"] == {MEDIA_MOVIE: 36, MEDIA_TV: 84}
+    assert result.warning is None
+
+
+def test_run_autofill_underfills_scarce_tv_without_movie_overfill(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    db_path = tmp_path / "watchbane.sqlite3"
+    result = run_onboarding_autofill(
+        _profile(media_preference="tv"),
+        client=ScarceTvTmdbClient(),
+        path=db_path,
+        current_year=2026,
+    )
+
+    assert result.planned_counts["media_type"] == {MEDIA_MOVIE: 36, MEDIA_TV: 84}
+    assert result.actual_counts["media_type"].get(MEDIA_MOVIE) == 36
+    assert result.actual_counts["media_type"].get(MEDIA_TV, 0) == 0
+    assert result.created_count == 36
+    assert "Media quota underfilled: tv planned 84, actual 0." in result.warnings
+
+
+def test_future_or_unreleased_results_are_rejected(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    db_path = tmp_path / "watchbane.sqlite3"
+    result = run_onboarding_autofill(
+        _profile(media_preference="movie", release_preference="new"),
+        client=FutureTmdbClient(),
+        path=db_path,
+        current_year=2026,
+    )
+
+    assert result.created_count == 0
+    assert result.rejected_future_count > 0
+    assert any(warning.startswith("Rejected future/unreleased titles:") for warning in result.warnings)
 
 
 def test_onboarding_plan_view_has_target_quotas_without_api_calls() -> None:

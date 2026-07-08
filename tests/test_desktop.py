@@ -5901,6 +5901,97 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     assert registry._specs["candidates"].view.activation_count == 1
 
 
+def test_main_tab_registry_focus_activates_current_view(qapp) -> None:
+    from PyQt6.QtWidgets import QTabWidget, QWidget
+
+    from desktop.shell.tabs import MainTabRegistry, ShellTabSpec
+
+    class FakeTabView:
+        def __init__(self) -> None:
+            self.widget = QWidget()
+            self.activation_count = 0
+
+        def on_tab_activated(self) -> None:
+            self.activation_count += 1
+
+    tabs = QTabWidget()
+    registry = MainTabRegistry(tabs)
+    first_view = FakeTabView()
+    candidate_view = FakeTabView()
+    registry.register(ShellTabSpec("watched", "Watched", first_view))
+    registry.register(ShellTabSpec("candidates", "Candidates", candidate_view))
+
+    registry.focus("candidates")
+    registry.focus("candidates")
+
+    assert tabs.currentWidget() is candidate_view.widget
+    assert candidate_view.activation_count == 2
+
+
+def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch, qapp) -> None:
+    from types import SimpleNamespace
+
+    from PyQt6.QtCore import pyqtSignal
+    from PyQt6.QtWidgets import QWidget
+
+    import desktop.shell.main_window as main_window_module
+
+    class FakeOnboarding(QWidget):
+        completed = pyqtSignal(object)
+        finished = pyqtSignal(int)
+
+        def __init__(self, *args, **kwargs) -> None:
+            parent = kwargs.get("parent")
+            super().__init__(parent)
+
+        def setModal(self, _value: bool) -> None:
+            return None
+
+        def setWindowFlag(self, *_args, **_kwargs) -> None:
+            return None
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.invalidated = False
+            self.invalidate_calls = 0
+
+        def invalidate_pool_cache(self) -> None:
+            self.invalidated = True
+            self.invalidate_calls += 1
+
+    session = FakeSession()
+    calls = {"focus": 0}
+
+    def focus_candidates() -> None:
+        assert session.invalidated is True
+        calls["focus"] += 1
+
+    def fake_build_main_tabs(tabs, parent, *, on_status_message):
+        del tabs, parent, on_status_message
+        return object(), SimpleNamespace(candidate_session=session, focus_candidates=focus_candidates)
+
+    monkeypatch.setattr(main_window_module.candidate_service, "should_show_onboarding_autofill", lambda: True)
+    monkeypatch.setattr(main_window_module, "build_main_tabs", fake_build_main_tabs)
+    monkeypatch.setattr(main_window_module, "OnboardingAutofillDialog", FakeOnboarding)
+
+    window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
+    try:
+        window.maybe_show_onboarding_autofill()
+        onboarding = window._onboarding_view
+        assert onboarding is not None
+
+        onboarding.completed.emit({"created_count": 120})
+        assert calls["focus"] == 0
+        assert session.invalidate_calls == 1
+
+        onboarding.finished.emit(1)
+        assert calls["focus"] == 1
+        assert session.invalidate_calls == 2
+        assert window._root_stack.currentWidget() is window._main_tabs
+    finally:
+        window.close()
+
+
 def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> None:
     from PyQt6.QtWidgets import QTabWidget, QWidget
 
