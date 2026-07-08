@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from storage import data as storage_data
 
 
@@ -84,3 +86,41 @@ def test_load_meta_skips_non_object_records_without_writing(monkeypatch, tmp_pat
 
     assert storage_data.load_meta() == {"Valid": {"tmdb_id": 101}}
     assert meta_path.read_text(encoding="utf-8") == before
+
+
+def test_save_dataset_preserves_existing_file_when_atomic_replace_fails(monkeypatch, tmp_path) -> None:
+    _patch_storage_paths(monkeypatch, tmp_path)
+    dataset_path = tmp_path / "watched" / "titles.json"
+    dataset_path.parent.mkdir(parents=True, exist_ok=True)
+    original = {"Existing": {"main_info": {"title": "Existing"}}}
+    dataset_path.write_text(json.dumps(original), encoding="utf-8")
+
+    def fail_replace(source, target):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(storage_data.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        storage_data.save_dataset({"New": {"main_info": {"title": "New"}, "genre": {}}})
+
+    assert json.loads(dataset_path.read_text(encoding="utf-8")) == original
+    assert not dataset_path.with_name(f"{dataset_path.name}.tmp").exists()
+
+
+def test_save_meta_preserves_existing_file_when_atomic_replace_fails(monkeypatch, tmp_path) -> None:
+    _patch_storage_paths(monkeypatch, tmp_path)
+    meta_path = tmp_path / "watched" / "meta.json"
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    original = {"Existing": {"tmdb_id": 101}}
+    meta_path.write_text(json.dumps(original), encoding="utf-8")
+
+    def fail_replace(source, target):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(storage_data.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        storage_data.save_meta({"New": {"tmdb_id": 202}})
+
+    assert json.loads(meta_path.read_text(encoding="utf-8")) == original
+    assert not meta_path.with_name(f"{meta_path.name}.tmp").exists()
