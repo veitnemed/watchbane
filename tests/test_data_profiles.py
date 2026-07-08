@@ -30,7 +30,6 @@ def isolated_profiles(monkeypatch, tmp_path):
     original_constants = {name: getattr(constant, name) for name in constant_attrs}
     module_attrs = []
     for module_name, attr_names in {
-        "app.core.storage": ("WATCHLIST_JSON", "HIDDEN_JSON"),
         "posters.cache": (
             "DEFAULT_POSTER_CACHE_DIR",
             "DEFAULT_POSTER_CACHE_JSON",

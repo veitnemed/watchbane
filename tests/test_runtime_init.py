@@ -46,11 +46,6 @@ def test_ensure_runtime_data_layout_initializes_sqlite_without_runtime_json(monk
         ),
     )
 
-    from app.core import storage as app_storage
-
-    monkeypatch.setattr(app_storage, "WATCHLIST_JSON", str(watchlist_json))
-    monkeypatch.setattr(app_storage, "HIDDEN_JSON", str(hidden_json))
-
     result = runtime.ensure_runtime_data_layout()
 
     assert result["ok"] is True

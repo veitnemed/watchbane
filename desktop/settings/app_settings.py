@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-import json
 import math
 import os
-from pathlib import Path
 import re
 
 from config import app_settings_store
-from config import constant
 
 APP_UI_SCALE_DEFAULT = 1.0
 APP_UI_SCALE_MIN = 0.50
@@ -71,10 +68,6 @@ def language_to_tmdb_locale(language: str) -> str:
     }[normalize_language(language)]
 
 
-def _settings_path() -> Path:
-    return Path(constant.APP_SETTINGS_JSON)
-
-
 def _settings_from_payload(payload) -> AppSettings:
     if isinstance(payload, dict) is False:
         return AppSettings()
@@ -87,41 +80,17 @@ def _settings_from_payload(payload) -> AppSettings:
 
 def load_app_settings() -> AppSettings:
     """Load persisted desktop settings, falling back to defaults on invalid input."""
-    if app_settings_store.is_sqlite_settings_backend():
-        return _settings_from_payload(app_settings_store.load_sqlite_settings_dict())
-
-    path = _settings_path()
-    if path.exists() is False:
-        return AppSettings()
-
-    try:
-        with path.open("r", encoding="utf-8-sig") as file:
-            payload = json.load(file)
-    except (OSError, json.JSONDecodeError):
-        return AppSettings()
-
-    return _settings_from_payload(payload)
+    return _settings_from_payload(app_settings_store.load_sqlite_settings_dict())
 
 
 def save_app_settings(settings: AppSettings) -> None:
-    """Persist desktop settings with an atomic replace."""
+    """Persist desktop settings in SQLite."""
     normalized = AppSettings(
         ui_scale=normalize_ui_scale(settings.ui_scale),
         interface_language=normalize_language(settings.interface_language),
         data_language=normalize_language(settings.data_language),
     )
-    if app_settings_store.is_sqlite_settings_backend():
-        app_settings_store.save_sqlite_settings_dict(asdict(normalized))
-        return
-
-    path = _settings_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    temp_path = path.with_name(f"{path.name}.tmp")
-    with temp_path.open("w", encoding="utf-8") as file:
-        json.dump(asdict(normalized), file, ensure_ascii=False, indent=4)
-        file.write("\n")
-    os.replace(temp_path, path)
+    app_settings_store.save_sqlite_settings_dict(asdict(normalized))
 
 
 def get_persisted_ui_scale() -> float:

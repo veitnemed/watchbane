@@ -22,7 +22,6 @@ JSON_RUNTIME_PATTERNS = (
     "posters.json",
     "dump_json" + "_atomic",
     "is_json_exists",
-    "APP_SETTINGS_JSON",
     "FILE_NAME",
     "CANDIDATE_POOL_JSON",
     "CRITERIA_POOL_JSON",

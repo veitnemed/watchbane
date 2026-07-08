@@ -56,7 +56,6 @@ def _reset_ui_scale():
 def _use_settings_path(monkeypatch, tmp_path):
     data_dir = tmp_path / "data"
     monkeypatch.setattr(constant, "APP_DATA_DIR", str(data_dir))
-    monkeypatch.setattr(constant, "APP_SETTINGS_JSON", str(data_dir / "settings.json"))
     return data_dir / "watchbane.sqlite3"
 
 

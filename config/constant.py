@@ -10,7 +10,6 @@ CANDIDATES_DIR = 'data/candidates'
 CACHE_DIR = 'data/cache'
 EXPORTS_DIR = 'data/exports'
 LOGS_DIR = 'data/logs'
-APP_SETTINGS_JSON = APP_DATA_DIR + '/settings.json'
 
 DATA_DIR = WATCHED_DIR
 FILE_NAME = WATCHED_DIR + '/titles.json'

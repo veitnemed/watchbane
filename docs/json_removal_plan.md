@@ -11,9 +11,9 @@ runtime dependencies after the SQLite migration and orders their deletion.
 | Runtime backend selector | `storage/backend.py`, `WATCHBANE_STORAGE_BACKEND`, `BACKEND_JSON`, `get_storage_backend()`, `is_sqlite_backend()` | DELETE | Remove env-driven runtime switch. Replace call sites with direct SQLite paths or explicit legacy utility calls. |
 | Watched runtime facade | `storage/data.py` JSON branches, `constant.FILE_NAME`, `constant.META_JSON`, `dump_json_atomic`, `is_json_exists` | DELETE | Keep facade API if useful, but make implementation SQLite-only. Move JSON reads/writes to legacy import/export. |
 | Candidate runtime repositories | `candidates/repositories/pool_repository.py`, `criteria_repository.py`, deleted `json_io.py` | DELETE | Active repositories are SQLite-only. Runtime JSON persistence helper was removed; remaining JSON references are legacy import/export or later cleanup targets. |
-| Search lists | `app/core/storage.py`, `watchlist.json`, `hidden.json` | DELETE | Route watchlist/hidden through SQLite action repository only. Keep JSON names only in legacy export/import mappings. |
+| Search lists | `app/core/storage.py`, legacy `watchlist.json`, `hidden.json` | DELETE | Watchlist/hidden route through SQLite action repository only. JSON names remain only in legacy export/import mappings and docs/tests that assert absence. |
 | Poster runtime cache | `posters/cache.py`, `DEFAULT_POSTER_CACHE_JSON`, `posters.json` | DELETE/MOVE | Runtime metadata should use SQLite. Keep JSON file path only for explicit legacy import/export. |
-| Settings runtime | `desktop/settings/app_settings.py`, `config/app_settings_store.py`, `settings.json` | DELETE/MOVE | Runtime settings should use SQLite. Keep JSON handling only for legacy import/export or explicitly documented local config if still required. |
+| Settings runtime | `desktop/settings/app_settings.py`, `config/app_settings_store.py`, legacy `settings.json` | DELETE/MOVE | Runtime settings use SQLite. JSON handling remains only in legacy import/export compatibility. |
 | Startup initialization | `storage/runtime.py`, `tests/test_runtime_init.py`, JSON file creation expectations | DELETE | Startup creates/applies SQLite DB only. Existing legacy JSON requires explicit import and runtime must not initialize JSON files. |
 | Backup/restore | `storage/files.py`, `create_backup()`, `restore_backup()` | KEEP/MOVE | Keep user-facing backup/restore. SQLite backup is runtime path; JSON backup restore stays legacy-only. |
 | Legacy import/export | `storage/legacy_json/importer.py`, `storage/legacy_json/exporter.py`, `scripts/migrate_json_to_sqlite.py`, `scripts/export_sqlite_to_json.py` | KEEP/MOVE | Keep behind explicit `storage/legacy_json/` namespace. Runtime startup does not call it automatically. Deprecated `storage/sqlite/*_legacy.py` shims exist only for compatibility during cleanup. |
@@ -96,4 +96,12 @@ After prompt 07 candidate JSON helper deletion:
 | --- | ---: |
 | Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15499 |
 | Product JSON runtime reference count | 92 |
+| Product backend switch reference count | 0 |
+
+After prompt 08 settings and search-list cleanup:
+
+| Metric | Prompt 08 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15478 |
+| Product JSON runtime reference count | 83 |
 | Product backend switch reference count | 0 |

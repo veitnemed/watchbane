@@ -2,22 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
-from config import constant
-
-
-WATCHLIST_JSON = os.path.join(constant.CANDIDATES_DIR, "watchlist.json")
-HIDDEN_JSON = os.path.join(constant.CANDIDATES_DIR, "hidden.json")
-
-
-def _watchlist_json() -> str:
-    return os.path.join(constant.CANDIDATES_DIR, "watchlist.json")
-
-
-def _hidden_json() -> str:
-    return os.path.join(constant.CANDIDATES_DIR, "hidden.json")
-
 
 def init_search_lists() -> None:
     """Ensure SQLite schema for local search lists exists."""

@@ -68,8 +68,7 @@ def _flush_qt_deferred_deletes(qapp) -> None:
 
 @pytest.fixture(autouse=True)
 def _isolate_desktop_settings(monkeypatch, tmp_path):
-    settings_path = tmp_path / "data" / "settings.json"
-    monkeypatch.setattr(constant, "APP_SETTINGS_JSON", str(settings_path))
+    monkeypatch.setattr(constant, "APP_DATA_DIR", str(tmp_path / "data"))
 
 
 def test_desktop_app_imports_without_window() -> None:

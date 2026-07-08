@@ -9,7 +9,7 @@ Do not use `QT_SCALE_FACTOR` for normal Watchbane UI scaling. Qt already handles
 The persisted user setting is:
 
 - `ui_scale`
-- stored in `data/settings.json`
+- stored in the SQLite app settings table
 - default `1.0`
 - clamped to `0.50..2.00`
 

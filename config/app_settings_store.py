@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 
-def is_sqlite_settings_backend() -> bool:
-    return True
-
-
 def load_sqlite_settings_dict() -> dict:
     from storage.sqlite.settings_repository import load_settings_dict
 

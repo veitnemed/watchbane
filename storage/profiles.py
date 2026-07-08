@@ -255,11 +255,6 @@ def _with_sep(path: Path) -> str:
 
 
 def _apply_module_level_path_caches(data_dir: Path) -> None:
-    app_storage = sys.modules.get("app.core.storage")
-    if app_storage is not None:
-        app_storage.WATCHLIST_JSON = str(data_dir / "candidates" / "watchlist.json")
-        app_storage.HIDDEN_JSON = str(data_dir / "candidates" / "hidden.json")
-
     poster_cache = sys.modules.get("posters.cache")
     if poster_cache is not None:
         poster_cache.DEFAULT_POSTER_CACHE_DIR = data_dir / "cache" / "posters"
