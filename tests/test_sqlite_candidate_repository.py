@@ -89,3 +89,24 @@ def test_clear_candidate_pool_keeps_criteria(tmp_path, monkeypatch) -> None:
 
     assert candidate_repository.load_candidate_pool_dict(path=db_path) == {}
     assert candidate_repository.load_candidate_criteria_dict(path=db_path) == {"pool": {"count": 10}}
+
+
+def test_candidate_pool_save_respects_external_transaction(tmp_path, monkeypatch) -> None:
+    from storage.sqlite.connection import connect
+    from storage.sqlite.migrations import apply_migrations
+
+    _empty_watched(monkeypatch)
+    db_path = tmp_path / "watchbane.sqlite3"
+    conn = connect(db_path)
+    apply_migrations(conn)
+    try:
+        conn.execute("BEGIN")
+        candidate_repository.save_candidate_pool_dict(
+            {"k": {"title": "Dark", "year": 2017}},
+            conn=conn,
+        )
+        conn.rollback()
+    finally:
+        conn.close()
+
+    assert candidate_repository.load_candidate_pool_dict(path=db_path) == {}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
@@ -25,6 +26,10 @@ def _connection(conn: sqlite3.Connection | None, path: str | Path | None):
     active = connect(path)
     apply_migrations(active)
     return active, True
+
+
+def _transaction(active: sqlite3.Connection, owned: bool):
+    return active if owned else nullcontext(active)
 
 
 def load_candidate_pool_dict(
@@ -61,7 +66,7 @@ def save_candidate_pool_dict(
     if purge_watched:
         normalized = purge_watched_from_pool(normalized)
     try:
-        with active:
+        with _transaction(active, owned):
             active.execute("DELETE FROM candidate_records")
             timestamp = _now()
             for pool_key, candidate in normalized.items():
@@ -107,7 +112,7 @@ def clear_candidate_pool(
 ) -> None:
     active, owned = _connection(conn, path)
     try:
-        with active:
+        with _transaction(active, owned):
             active.execute("DELETE FROM candidate_records")
     finally:
         if owned:
@@ -145,7 +150,7 @@ def save_candidate_criteria_dict(
     active, owned = _connection(conn, path)
     criteria_data = data if isinstance(data, dict) else {}
     try:
-        with active:
+        with _transaction(active, owned):
             active.execute("DELETE FROM candidate_criteria")
             timestamp = _now()
             for criteria_name, criteria in criteria_data.items():
