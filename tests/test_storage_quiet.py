@@ -1,3 +1,5 @@
+import json
+
 from storage import data as storage_data
 
 
@@ -31,3 +33,54 @@ def test_rename_movie_title_returns_false_without_printing(monkeypatch, tmp_path
 
     assert result is False
     assert capsys.readouterr().out == ""
+
+
+def test_load_dataset_returns_empty_dict_for_non_object_json_without_writing(monkeypatch, tmp_path) -> None:
+    _patch_storage_paths(monkeypatch, tmp_path)
+    dataset_path = tmp_path / "watched" / "titles.json"
+    dataset_path.parent.mkdir(parents=True, exist_ok=True)
+    dataset_path.write_text(json.dumps(["not", "a", "dataset"]), encoding="utf-8")
+    before = dataset_path.read_text(encoding="utf-8")
+
+    assert storage_data.load_dataset() == {}
+    assert dataset_path.read_text(encoding="utf-8") == before
+
+
+def test_load_dataset_skips_non_object_records_without_writing(monkeypatch, tmp_path) -> None:
+    _patch_storage_paths(monkeypatch, tmp_path)
+    dataset_path = tmp_path / "watched" / "titles.json"
+    dataset_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "Valid": {"main_info": {"title": "Valid"}, "genre": {}},
+        "Broken": "not a movie",
+    }
+    dataset_path.write_text(json.dumps(payload), encoding="utf-8")
+    before = dataset_path.read_text(encoding="utf-8")
+
+    loaded = storage_data.load_dataset()
+
+    assert set(loaded) == {"Valid"}
+    assert dataset_path.read_text(encoding="utf-8") == before
+
+
+def test_load_meta_returns_empty_dict_for_non_object_json_without_writing(monkeypatch, tmp_path) -> None:
+    _patch_storage_paths(monkeypatch, tmp_path)
+    meta_path = tmp_path / "watched" / "meta.json"
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    meta_path.write_text(json.dumps(["not", "meta"]), encoding="utf-8")
+    before = meta_path.read_text(encoding="utf-8")
+
+    assert storage_data.load_meta() == {}
+    assert meta_path.read_text(encoding="utf-8") == before
+
+
+def test_load_meta_skips_non_object_records_without_writing(monkeypatch, tmp_path) -> None:
+    _patch_storage_paths(monkeypatch, tmp_path)
+    meta_path = tmp_path / "watched" / "meta.json"
+    meta_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"Valid": {"tmdb_id": 101}, "Broken": "not meta"}
+    meta_path.write_text(json.dumps(payload), encoding="utf-8")
+    before = meta_path.read_text(encoding="utf-8")
+
+    assert storage_data.load_meta() == {"Valid": {"tmdb_id": 101}}
+    assert meta_path.read_text(encoding="utf-8") == before

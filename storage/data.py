@@ -22,9 +22,13 @@ def load_dataset() -> dict:
     init_dataset()
     with open(constant.FILE_NAME, 'r', encoding='utf-8-sig') as file:
         data = json.load(file)
-    for movie in data.values():
-        normalize_movie_tags(movie)
-    return data
+    if isinstance(data, dict) is False:
+        return {}
+    normalized = {}
+    for title, movie in data.items():
+        if isinstance(movie, dict):
+            normalized[title] = normalize_movie_tags(movie)
+    return normalized
 
 
 def save_dataset(data: dict):
@@ -76,7 +80,14 @@ def load_meta() -> dict:
     """Загружает meta из JSON-файла."""
     init_meta()
     with open(constant.META_JSON, 'r', encoding='utf-8-sig') as file:
-        return json.load(file)
+        data = json.load(file)
+    if isinstance(data, dict) is False:
+        return {}
+    return {
+        title: meta_obj
+        for title, meta_obj in data.items()
+        if isinstance(meta_obj, dict)
+    }
 
 
 def save_meta(meta: dict):

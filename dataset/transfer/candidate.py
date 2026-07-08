@@ -15,9 +15,19 @@ from dataset.resolve.genres import (
 TMDB_TRANSFER_SCORE_FIELDS = ("tmdb_score", "tmdb_votes", "tmdb_popularity")
 
 
+def _coerce_year(value):
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        return None
+    return year
+
+
 def _candidate_year(candidate: dict):
-    year = candidate.get("year")
-    if year not in (None, ""):
+    year = _coerce_year(candidate.get("year"))
+    if year is not None:
         return year
     first_air_date = str(candidate.get("first_air_date") or "").strip()
     if len(first_air_date) >= 4 and first_air_date[:4].isdigit():
