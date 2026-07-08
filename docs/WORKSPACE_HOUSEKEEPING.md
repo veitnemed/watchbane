@@ -22,7 +22,8 @@ These paths are intentionally ignored and should not be committed:
 - `data/cache/` - rebuildable API/cache data.
 - `data/backups/` - local backup snapshots.
 - `data/exports/` - generated export archives and candidate-pool outputs.
-- `data/candidates/*.json*` and `data/watched/*.json*` - local user/runtime data.
+- `data/watchbane.sqlite3*` - local SQLite runtime data.
+- `data/candidates/*.json*` and `data/watched/*.json*` - legacy import/export or old local data.
 - `reports/` and `data/diagnostics/` - generated diagnostics.
 
 The public desktop and candidate flows are TMDb-only. A local IMDb sqlite
@@ -40,5 +41,6 @@ Safe cleanup targets when the workspace gets large:
 - rebuildable TMDb cache files under `data/cache/tmdb/`;
 - local IMDb sqlite databases under `datasets/`.
 
-Do not delete active runtime JSON such as `data/candidates/pool.json` or
-`data/watched/titles.json` unless you intentionally reset local data.
+Do not delete `data/watchbane.sqlite3` unless you intentionally reset local
+data or have restored a backup. Legacy JSON files are not canonical runtime
+storage after the SQLite cutover.

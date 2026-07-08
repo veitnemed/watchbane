@@ -40,7 +40,7 @@ common <- config <- storage <- dataset / apis <- candidates <- ui
 - нижние слои не импортируют UI;
 - `apis` только получают внешние данные и не пишут в dataset/pool;
 - `candidates` не вызывает `input()` и `print()`, прогресс отдает наверх;
-- UI не пишет JSON напрямую, а вызывает сервисы.
+- UI не пишет storage напрямую, а вызывает сервисы. Legacy JSON доступен только через explicit import/export/backup.
 
 ## Runtime-поток
 
@@ -114,7 +114,7 @@ Watched dataset: добавление, обновление, удаление, m
 
 - [candidates/service.py](../candidates/service.py) - facade для UI.
 - [candidates/models/](../candidates/models/) - schema, keys, country/genre schema.
-- [candidates/repositories/](../candidates/repositories/) - load/save pool и criteria JSON.
+- [candidates/repositories/](../candidates/repositories/) - SQLite-backed facade для load/save pool и criteria.
 - [candidates/pool/](../candidates/pool/) - dedupe, queries, stats, diagnostics, search helpers.
 - [candidates/sources/tmdb/](../candidates/sources/tmdb/) - TMDb Discover/Details build, scoring и import.
 - [candidates/genres.py](../candidates/genres.py) - runtime genre aliases для saved pool.
@@ -124,7 +124,7 @@ Watched dataset: добавление, обновление, удаление, m
 - один общий pool; `criteria_name` в записи = `"pool"`;
 - `pool_entry_key = normalized_title|year`;
 - `title_identity_key = normalized_title|year`;
-- stats показывают `unique_total` и, при наличии, лишние записи в JSON;
+- stats показывают `unique_total` и физическое число записей в SQLite pool;
 - read-path не удаляет watched;
 - write-path очищает watched-кандидатов из pool;
 - runtime-фильтры не пересобирают сохраненный pool;
@@ -144,8 +144,10 @@ Watched dataset: добавление, обновление, удаление, m
 Низкоуровневое хранение и нормализация.
 
 - [storage/data.py](../storage/data.py) - dataset/meta: load/save/init, rename title.
-- [storage/files.py](../storage/files.py) - файлы, каталоги, backup.
-- [storage/runtime.py](../storage/runtime.py) - единая инициализация runtime-каталогов и JSON.
+- [storage/files.py](../storage/files.py) - файлы, каталоги, SQLite backup/restore и legacy backup helpers.
+- [storage/runtime.py](../storage/runtime.py) - единая инициализация runtime-каталогов и SQLite schema.
+- [storage/sqlite/](../storage/sqlite/) - SQLite connection, migrations, repositories, diagnostics.
+- [storage/legacy_json/](../storage/legacy_json/) - explicit import/export compatibility for old JSON layouts.
 - [storage/normalize.py](../storage/normalize.py) - нормализация `main_info`, `raw_scores`, `tags_vibe`, `genre`.
 
 ### `config/`

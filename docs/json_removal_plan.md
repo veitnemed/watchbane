@@ -164,3 +164,14 @@ After prompt 16 SQLite-first test cleanup:
 
 Prompt 16 JSON reference count includes read-only SQLite diagnostics that report
 legacy JSON files as non-canonical artifacts.
+
+After prompt 17 final docs cleanup:
+
+| Metric | Prompt 17 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15734 |
+| Product JSON runtime reference count | 84 |
+| Product backend switch reference count | 0 |
+
+Prompt 17 updated public docs to describe SQLite as canonical runtime storage
+and legacy JSON as explicit import/export/backup compatibility.

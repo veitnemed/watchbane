@@ -233,6 +233,13 @@ py scripts/migrate_json_to_sqlite.py --dry-run
 py scripts/export_sqlite_to_json.py --output-dir data/exports/legacy-json
 ```
 
+SQLite recovery path:
+
+1. Stop the app.
+2. Restore a known-good `*.sqlite3` backup from `data/backups/` to `data/watchbane.sqlite3`.
+3. Start the app; schema migrations run on startup.
+4. Use `storage.sqlite.diagnostics.build_sqlite_diagnostics()` for read-only integrity checks.
+
 ## ML / LLM Experimentation Direction
 
 Watchbane is not an ML product yet. It is a foundation for recommendation experiments built on clean local data, explicit candidate sources, transparent scoring and regression tests.

@@ -75,34 +75,16 @@ queries plus canonical JSON payload columns to preserve compatibility.
 All app connections must enable `PRAGMA foreign_keys=ON`, WAL mode, a busy
 timeout, and `sqlite3.Row` row factory.
 
-## Migration Phases
+## Cleanup Status
 
-1. Add the migration contract document.
-2. Add SQLite connection helpers and idempotent migration runner.
-3. Add schema v1 and schema/index tests.
-4. Add JSON extraction and identity helpers.
-5. Add watched repository with legacy-compatible shapes.
-6. Add candidate repository with legacy-compatible shapes.
-7. Add action, settings, and poster metadata repositories.
-8. Add idempotent JSON to SQLite importer with dry-run and backups.
-9. Add SQLite to JSON exporter.
-10. Add backend selection flag with JSON default.
-11. Route watched reads through backend adapter.
-12. Route watched writes through backend adapter.
-13. Route candidate reads through backend adapter.
-14. Route candidate writes through backend adapter.
-15. Route actions, settings, and poster metadata through backend adapter.
-16. Add safe startup migration flow for SQLite backend.
-17. Flip default backend to SQLite with JSON override.
-18. Add indexed query methods and performance tests.
-19. Add SQLite-aware backup/restore safety.
-20. Update user and contributor documentation.
-21. Add guardrails against direct JSON writes to migrated user data.
-22. Run final regression and cleanup.
-
-After these phases, run ten small hardening cycles. Each cycle inspects the new
-SQLite architecture, identifies two weak spots, fixes one, adds or updates
-tests, and commits the result.
+- SQLite is now the canonical runtime storage.
+- The runtime backend selector was removed; JSON is not selectable at runtime.
+- Watched, candidate pool/criteria, settings, actions, and poster metadata are
+  routed through SQLite repositories.
+- Legacy JSON import/export lives under `storage/legacy_json/`.
+- Startup creates/applies the SQLite schema and does not create runtime JSON
+  files.
+- Tests are SQLite-first and keep explicit legacy import/export/backup coverage.
 
 ## Legacy JSON Export Plan
 
@@ -111,6 +93,25 @@ tests, and commits the result.
 - Restore a SQLite backup if the database file is damaged.
 - Legacy JSON files are never deleted automatically, so first-run import is
   non-destructive.
+
+Commands:
+
+```powershell
+py scripts/migrate_json_to_sqlite.py --dry-run
+py scripts/migrate_json_to_sqlite.py --apply
+py scripts/export_sqlite_to_json.py --output-dir data/exports/legacy-json
+```
+
+## Rollback / Recovery
+
+1. Stop the desktop/console app.
+2. Copy a known-good `*.sqlite3` backup from `data/backups/` back to
+   `data/watchbane.sqlite3`.
+3. Keep `watchbane.sqlite3-wal` and `watchbane.sqlite3-shm` out of the restore
+   copy unless they belong to the same backup snapshot.
+4. Start the app; startup will apply any missing schema migrations.
+5. Run `storage.sqlite.diagnostics.build_sqlite_diagnostics()` from a Python
+   shell if manual inspection is needed.
 
 ## Test Plan
 
@@ -133,7 +134,7 @@ Important coverage areas:
 - Hidden/watchlist identity persistence.
 - Settings and poster metadata roundtrip.
 - JSON import/export idempotency and canonical equivalence.
-- Startup import-once behavior.
+- Startup SQLite initialization without runtime JSON creation.
 - SQLite-aware backup/restore.
 - Guardrails preventing direct JSON writes outside approved modules.
 

@@ -28,7 +28,7 @@ py start_console.py
 - UI code lives in `desktop/`, `ui/`, `web/`, `app/`.
 - Domain logic lives in `dataset/`, `candidates/`, `posters/`.
 - Infra lives in `apis/`, `storage/`, `config/`, `common/`.
-- UI should call services instead of writing `data/*.json` directly.
+- UI should call services instead of writing SQLite, legacy JSON, or files under `data/` directly.
 - Domain modules must not import `desktop`, `ui` or `web`.
 - Scripts should stay thin. Move reusable logic into Domain or Infra.
 

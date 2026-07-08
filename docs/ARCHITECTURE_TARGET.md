@@ -121,18 +121,10 @@ scripts    -> любой активный слой как ручной entrypoin
 
 ```text
 data/
-  watched/
-    titles.json        # пользовательские записи
-    meta.json          # enrichment/meta по watched-записям
-
-  candidates/
-    pool.json          # общий candidate pool
-    criteria.json      # сохраненные критерии/дефолты
-    watchlist.json     # позже: посмотреть
-    hidden.json        # скрытые кандидаты
+  watchbane.sqlite3    # canonical runtime DB
 
   cache/
-    posters/
+    posters/           # image files
     tmdb/
 
   exports/
@@ -151,11 +143,13 @@ data/
 - `config/genre_tags.json`;
 - `apis/sql_title_aliases.json`.
 
-Runtime JSON из `data/` не коммитятся. Их можно бэкапить, мигрировать и чистить отдельно от кода.
+Runtime SQLite DB, WAL/SHM, legacy JSON exports and generated files from
+`data/` are not committed. Legacy JSON can be imported/exported explicitly but
+is not runtime storage.
 
 ## Watched-База
 
-Watched-запись хранится в `data/watched/titles.json`.
+Watched-запись хранится в `data/watchbane.sqlite3` (`watched_records`).
 
 Минимальная модель:
 
@@ -181,7 +175,7 @@ genre:
   has_* жанровые признаки
 ```
 
-`data/watched/meta.json` хранит внешнее enrichment:
+`watched_records.meta_json` хранит внешнее enrichment:
 
 - `tmdb_id`;
 - `imdb_id`;
@@ -194,7 +188,7 @@ genre:
 
 ## Candidate Pool
 
-`data/candidates/pool.json` - общий пул потенциальных тайтлов.
+`candidate_records` в `data/watchbane.sqlite3` - общий пул потенциальных тайтлов.
 
 Цель pool:
 
@@ -318,7 +312,7 @@ UI не должен:
 Проект считается близким к целевой структуре, когда:
 
 - в корне нет случайных `.py`-скриптов, кроме entrypoints;
-- runtime JSON лежат только в `data/` и игнорируются git;
+- runtime SQLite DB and generated/legacy compatibility files live under `data/` and are ignored by git;
 - active tests проходят без старых external paths;
 - UI не пишет JSON напрямую;
 - candidate pool работает через `candidates.service`;

@@ -20,7 +20,7 @@ Done
 - Candidate pool maintenance and diagnostics moved from `interface_funcs.py` to `ui/console/candidate_pool_tools.py`.
 - TMDb candidate pool build/import flow moved from `interface_funcs.py` to `ui/console/tmdb_pool_tools.py`.
 - Console navigation is now maintenance-first: `maintenance_menu`, `watched_menu`, `pool_menu`, `search_hub_menu`, and `reference_menu` own the top-level sections.
-- `storage.runtime.ensure_runtime_data_layout()` centralizes runtime directory and JSON initialization.
+- `storage.runtime.ensure_runtime_data_layout()` centralizes runtime directories and SQLite schema initialization.
 - [REFACTORING_CHECKLIST.md](REFACTORING_CHECKLIST.md) documents the required checks for structural changes.
 
 Current structure
@@ -34,5 +34,5 @@ Next transfers
 
 - Move remaining watched actions from `ui/console/interface_funcs.py` into `ui/console/watched_tools.py`.
 - Move remaining domain-layer `print()`/`input()` behavior into UI or `scripts/` wrappers.
-- Extend `storage.runtime` into a migration/check layer for invalid runtime JSON structures.
+- Extend `storage.sqlite.diagnostics` and startup checks for invalid SQLite or legacy-compatibility states.
 - Decide later whether to convert runtime imports and module layout to a package namespace `series_list/`.

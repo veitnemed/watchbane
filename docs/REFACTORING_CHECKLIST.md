@@ -13,7 +13,7 @@
 - UI-слои (`ui/console`, `desktop`) могут печатать, спрашивать ввод и показывать сообщения.
 - Нижние слои (`storage`, `dataset`, `candidates`, `apis`, `posters`) должны возвращать данные, result-объекты или исключения, а не управлять пользовательским выводом.
 - Compatibility wrappers допустимы временно, но новые сценарии должны идти через service/facade API.
-- Read-path не должен писать runtime JSON. Write-path должен быть явно назван и покрыт тестом.
+- Read-path не должен писать runtime storage. Write-path должен быть явно назван и покрыт тестом.
 - Не переносить ручные scripts в runtime. Если script стал обычным сценарием приложения, доменную логику вынести в активный слой, а script оставить CLI-оберткой.
 
 ## Проверки
@@ -35,7 +35,7 @@ py -m pytest
 ## Красные флаги
 
 - Публичная service-функция импортирует реализацию с тем же именем и вызывает себя.
-- Новый код в `ui/console` напрямую пишет JSON или обходит service layer.
+- Новый код в `ui/console` напрямую пишет storage/legacy JSON или обходит service layer.
 - Новый код в `dataset` или `candidates` вызывает `input()`.
-- Новый read-only view меняет `data/candidates/pool.json`, `data/watched/titles.json` или `data/watched/meta.json`.
+- Новый read-only view меняет SQLite runtime DB или legacy JSON compatibility files.
 - Тест проходит только при исключении одного файла.

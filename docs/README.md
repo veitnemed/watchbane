@@ -6,7 +6,7 @@
 
 ## Что умеет проект
 
-- хранить watched/dataset и meta-данные в JSON;
+- хранить watched/dataset, meta, candidate pool, settings, actions и poster metadata в локальной SQLite-базе;
 - добавлять записи через безопасный путь `dataset.storage_movie.add_movie() -> dataset.dataset_records.add_dataset_record()`;
 - подтягивать defaults из локальных/внешних источников перед сохранением watched-записи;
 - поддерживать жанры, vibe-теги, оценки и постеры;
@@ -51,7 +51,7 @@ py start_app.py
 - `candidates/` - общий candidate pool и TMDb pipeline.
 - `posters/` - poster-cache и загрузка постеров.
 - `web/` - read-only экспорт карточек watched/add-title.
-- `storage/` - низкоуровневое хранение, backup, файлы, нормализация.
+- `storage/` - SQLite runtime storage, legacy JSON import/export, backup, файлы, нормализация.
 - `apis/` - внешние и локальные источники данных.
 - `common/` - чистые утилиты.
 - `config/` - константы, схемы, каталоги тегов/жанров.
@@ -126,7 +126,7 @@ py -m pytest
 | Назначение | Путь |
 | --- | --- |
 | SQLite runtime DB | `data/watchbane.sqlite3` |
-| Legacy JSON import/export | `data/watched/`, `data/candidates/`, `data/settings.json`, `data/cache/posters/posters.json` |
+| Legacy JSON import/export only | `data/watched/`, `data/candidates/`, `data/settings.json`, `data/cache/posters/posters.json` |
 | API log | `data/logs/api_requests.log` |
 | Backup | `data/backups/` |
 | Excel/export | `data/exports/` |
@@ -145,9 +145,23 @@ py -m pytest
 - [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) - roadmap desktop GUI.
 - [TMDB_ONLY_CANDIDATE_FLOW.md](TMDB_ONLY_CANDIDATE_FLOW.md) - public TMDb-only candidate flow, contract, migration, refresh and scoring.
 
+## Legacy JSON import/export
+
+SQLite is canonical runtime storage. Legacy JSON is explicit compatibility only:
+
+```powershell
+py scripts/migrate_json_to_sqlite.py --dry-run
+py scripts/migrate_json_to_sqlite.py --apply
+py scripts/export_sqlite_to_json.py --output-dir data/exports/legacy-json
+```
+
+For recovery, restore a SQLite backup from `data/backups/` first. Legacy JSON
+exports are useful for inspection, migration, and compatibility, not as an
+active backend.
+
 ## Важно
 
-- `candidate_pool.json` не должен меняться от runtime-фильтра перед top prediction.
+- SQLite candidate pool не должен меняться от runtime-фильтра перед top prediction.
 - Обычный top prediction работает только по ready/complete-кандидатам.
 - TMDb import и перенос кандидата в dataset - разные шаги.
 - Финальное сообщение об успешном добавлении печатает UI-слой, а не storage.
