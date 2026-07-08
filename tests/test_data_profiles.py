@@ -1,5 +1,4 @@
 import inspect
-import json
 import sys
 from pathlib import Path
 
@@ -75,13 +74,25 @@ def test_main_profile_is_active_by_default(isolated_profiles) -> None:
     assert profiles.get_active_data_dir() == isolated_profiles
 
 
-def test_create_sandbox_profile_creates_separate_empty_files(isolated_profiles) -> None:
+def test_create_sandbox_profile_creates_layout_without_runtime_json_files(isolated_profiles) -> None:
     profiles.create_sandbox_profile()
 
     sandbox_dir = profiles.get_profile_data_dir(profiles.SANDBOX_PROFILE)
 
     assert sandbox_dir == isolated_profiles / "profiles" / "sandbox"
     assert sandbox_dir != isolated_profiles
+    for directory in (
+        sandbox_dir,
+        sandbox_dir / "watched",
+        sandbox_dir / "candidates",
+        sandbox_dir / "cache",
+        sandbox_dir / "cache" / "posters",
+        sandbox_dir / "cache" / "posters" / "images",
+        sandbox_dir / "exports",
+        sandbox_dir / "logs",
+        sandbox_dir / "backups",
+    ):
+        assert directory.is_dir()
     for path in (
         sandbox_dir / "watched" / "titles.json",
         sandbox_dir / "watched" / "meta.json",
@@ -91,8 +102,8 @@ def test_create_sandbox_profile_creates_separate_empty_files(isolated_profiles) 
         sandbox_dir / "candidates" / "hidden.json",
         sandbox_dir / "cache" / "posters" / "posters.json",
     ):
-        assert path.is_file()
-        assert json.loads(path.read_text(encoding="utf-8")) == {}
+        assert path.exists() is False
+    assert (sandbox_dir / "profile.json").is_file()
 
 
 def test_switch_sandbox_changes_active_profile_and_paths(isolated_profiles) -> None:

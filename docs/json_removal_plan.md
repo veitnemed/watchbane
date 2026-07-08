@@ -78,6 +78,14 @@ After prompt 04 legacy JSON namespace move:
 
 | Metric | Prompt 04 |
 | --- | ---: |
-| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15314 |
-| Product JSON runtime reference count | 78 |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15529 |
+| Product JSON runtime reference count | 96 |
+| Product backend switch reference count | 0 |
+
+After prompt 05 runtime JSON initialization cleanup:
+
+| Metric | Prompt 05 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15518 |
+| Product JSON runtime reference count | 96 |
 | Product backend switch reference count | 0 |

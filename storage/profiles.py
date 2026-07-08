@@ -93,12 +93,6 @@ def _write_json(path: Path, payload: dict) -> None:
     os.replace(tmp_path, path)
 
 
-def _write_empty_json(path: Path) -> None:
-    if path.is_file():
-        return
-    _write_json(path, {})
-
-
 def _profile_exists(name: str) -> bool:
     profile = _clean_profile_name(name)
     if profile == MAIN_PROFILE:
@@ -164,12 +158,9 @@ def _ensure_profile_layout(data_dir: Path) -> None:
     ):
         directory.mkdir(parents=True, exist_ok=True)
 
-    for path in _empty_profile_paths(data_dir).values():
-        _write_empty_json(path)
-
 
 def create_sandbox_profile(name: str = SANDBOX_PROFILE) -> None:
-    """Create a sandbox profile with empty data files when missing."""
+    """Create a sandbox profile layout without legacy runtime JSON files."""
     profile = _clean_profile_name(name)
     if profile == MAIN_PROFILE:
         raise ProfileSafetyError("Main profile cannot be created as a sandbox.")
