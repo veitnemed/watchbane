@@ -5960,15 +5960,23 @@ def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch,
             self.invalidate_calls += 1
 
     session = FakeSession()
-    calls = {"focus": 0}
+    calls = {"focus": 0, "refresh": 0}
 
     def focus_candidates() -> None:
         assert session.invalidated is True
         calls["focus"] += 1
 
+    def refresh_candidate_filters() -> None:
+        assert session.invalidated is True
+        calls["refresh"] += 1
+
     def fake_build_main_tabs(tabs, parent, *, on_status_message):
         del tabs, parent, on_status_message
-        return object(), SimpleNamespace(candidate_session=session, focus_candidates=focus_candidates)
+        return object(), SimpleNamespace(
+            candidate_session=session,
+            refresh_candidate_filters=refresh_candidate_filters,
+            focus_candidates=focus_candidates,
+        )
 
     monkeypatch.setattr(main_window_module.candidate_service, "should_show_onboarding_autofill", lambda: True)
     monkeypatch.setattr(main_window_module, "build_main_tabs", fake_build_main_tabs)
@@ -5982,10 +5990,12 @@ def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch,
 
         onboarding.completed.emit({"created_count": 120})
         assert calls["focus"] == 0
+        assert calls["refresh"] == 1
         assert session.invalidate_calls == 1
 
         onboarding.finished.emit(1)
         assert calls["focus"] == 1
+        assert calls["refresh"] == 2
         assert session.invalidate_calls == 2
         assert window._root_stack.currentWidget() is window._main_tabs
     finally:

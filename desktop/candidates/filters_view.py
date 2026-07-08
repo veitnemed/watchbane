@@ -280,6 +280,49 @@ class CandidateFiltersView:
         update_score_range_label(self._tmdb_score_slider, self._tmdb_score_range_label)
         update_votes_range_label(self._tmdb_votes_slider, self._tmdb_votes_range_label)
 
+    def _refresh_chip_options(self, *, include_selected=None, exclude_selected=None, country_selected=None) -> None:
+        chip_view = self._service.get_search_filter_chip_options_view()
+        raw_genre_labels = [
+            str(item.get("label") or "").strip()
+            for item in chip_view.get("genres") or []
+            if str(item.get("label") or "").strip()
+        ]
+        genre_labels = _genre_labels_for_language(raw_genre_labels, self._data_language)
+        self._genre_options = genre_labels
+        self._include_genre_selector.set_options(
+            genre_labels,
+            _genre_labels_for_language(include_selected or [], self._data_language),
+        )
+        self._exclude_genre_selector.set_options(
+            genre_labels,
+            _genre_labels_for_language(exclude_selected or [], self._data_language),
+        )
+
+        country_options = [
+            {
+                "code": str(item.get("code") or "").strip(),
+                "label": (
+                    country_schema.build_country_display(
+                        [str(item.get("code") or "").strip().upper()],
+                        language=self._data_language,
+                    )
+                    or str(item.get("label") or "").strip()
+                ),
+            }
+            for item in chip_view.get("countries") or []
+            if str(item.get("code") or "").strip()
+        ]
+        self._country_selector.set_options(country_options, country_selected)
+
+    def refresh_filter_options(self) -> None:
+        """Reload genre/country chips after candidate pool mutations."""
+        self._data_language = get_persisted_data_language()
+        self._refresh_chip_options(
+            include_selected=self._include_genre_selector.selected_genres(),
+            exclude_selected=self._exclude_genre_selector.selected_genres(),
+            country_selected=self._country_selector.selected_country_codes(),
+        )
+
     def _set_year_slider_from_defaults(self, year_min, year_max) -> None:
         lower = CANDIDATE_YEAR_MIN
         upper = self._year_max
@@ -311,38 +354,11 @@ class CandidateFiltersView:
     def _apply_filter_defaults(self) -> None:
         defaults_view = self._service.get_search_filter_defaults_view()
         defaults = defaults_view.get("defaults") or {}
-        chip_view = self._service.get_search_filter_chip_options_view()
-        raw_genre_labels = [
-            str(item.get("label") or "").strip()
-            for item in chip_view.get("genres") or []
-            if str(item.get("label") or "").strip()
-        ]
-        genre_labels = _genre_labels_for_language(raw_genre_labels, self._data_language)
-        self._genre_options = genre_labels
-        self._include_genre_selector.set_options(
-            genre_labels,
-            _genre_labels_for_language(defaults.get("include_genres") or [], self._data_language),
+        self._refresh_chip_options(
+            include_selected=defaults.get("include_genres") or [],
+            exclude_selected=defaults.get("exclude_genres") or [],
+            country_selected=defaults.get("country"),
         )
-        self._exclude_genre_selector.set_options(
-            genre_labels,
-            _genre_labels_for_language(defaults.get("exclude_genres") or [], self._data_language),
-        )
-
-        country_options = [
-            {
-                "code": str(item.get("code") or "").strip(),
-                "label": (
-                    country_schema.build_country_display(
-                        [str(item.get("code") or "").strip().upper()],
-                        language=self._data_language,
-                    )
-                    or str(item.get("label") or "").strip()
-                ),
-            }
-            for item in chip_view.get("countries") or []
-            if str(item.get("code") or "").strip()
-        ]
-        self._country_selector.set_options(country_options, defaults.get("country"))
         self._set_media_type_from_default(defaults.get("media_type"))
 
         self._set_year_slider_from_defaults(defaults.get("year_min"), defaults.get("year_max"))

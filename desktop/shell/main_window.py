@@ -77,10 +77,12 @@ class WatchedMoviesWindow(QMainWindow):
 
         def mark_candidate_pool_changed(_result: object) -> None:
             self._tabs_context.candidate_session.invalidate_pool_cache()
+            self._tabs_context.refresh_candidate_filters()
             log_event("onboarding.view.completed")
 
         def finish_onboarding(_code: int) -> None:
             self._tabs_context.candidate_session.invalidate_pool_cache()
+            self._tabs_context.refresh_candidate_filters()
             self._root_stack.setCurrentWidget(self._main_tabs)
             self._tabs_context.focus_candidates()
             log_event("onboarding.view.finished", result_code=_code)

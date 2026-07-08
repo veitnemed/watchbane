@@ -32,6 +32,7 @@ class AppTabsContext:
     watched_tab_view: WatchedTabView
     settings_tab_view: SettingsTabView
     candidate_session: CandidateSearchSession
+    refresh_candidate_filters: Callable[[], None]
     focus_candidates: Callable[[], None]
 
 
@@ -114,6 +115,7 @@ def build_main_tabs(
         watched_tab_view=watched_tab_view,
         settings_tab_view=settings_tab_view,
         candidate_session=candidate_session,
+        refresh_candidate_filters=candidate_filters_view.refresh_filter_options,
         focus_candidates=lambda: registry.focus("candidates"),
     )
     return registry, context

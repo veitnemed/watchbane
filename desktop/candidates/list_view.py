@@ -79,6 +79,8 @@ class CandidateListView(CandidateListActionsMixin):
         self._candidates: list[dict] = []
         self._selected_candidate: dict | None = None
         self._selected_identity: str | None = None
+        self._reset_selection_on_next_refresh = False
+        self._rendered_sort_mode = session.sort_mode
         self._search_index = build_candidate_search_index([])
         self._pool_unique_total = 0
         self._detail_entries: dict[str, tuple] = {}
@@ -218,6 +220,8 @@ class CandidateListView(CandidateListActionsMixin):
     def _on_sort_changed(self, _index: int) -> None:
         mode = self._sort_combo.currentData()
         if mode in self._service.SEARCH_SORT_MODES:
+            if str(mode) != self._session.sort_mode:
+                self._reset_selection_on_next_refresh = True
             self._session.set_sort_mode(str(mode))
             self._rebuild_list_delegate()
 
@@ -241,7 +245,9 @@ class CandidateListView(CandidateListActionsMixin):
 
     def _apply_visible_candidates(self) -> None:
         query = self._search_input.text()
-        previous_identity = self._selected_identity
+        reset_selection = self._reset_selection_on_next_refresh
+        self._reset_selection_on_next_refresh = False
+        previous_identity = None if reset_selection else self._selected_identity
         self._candidates = self._search_index.filter_by_query(query)
 
         self._results_list.blockSignals(True)
@@ -273,6 +279,8 @@ class CandidateListView(CandidateListActionsMixin):
             self._results_list.setCurrentIndex(self._model.index(row, 0))
         elif selected_identity != self._selected_identity:
             self._on_result_selected(self._model.index(row, 0), QModelIndex())
+        if reset_selection:
+            self._results_list.scrollToTop()
 
     def _update_counter_label(self, query: str) -> None:
         dup_note = ""
@@ -306,6 +314,9 @@ class CandidateListView(CandidateListActionsMixin):
 
     def refresh(self) -> None:
         self._refresh_data_language()
+        if self._rendered_sort_mode != self._session.sort_mode:
+            self._reset_selection_on_next_refresh = True
+            self._rendered_sort_mode = self._session.sort_mode
         self._poster_request_seq += 1
         if not self._session.has_results:
             self._all_candidates = []

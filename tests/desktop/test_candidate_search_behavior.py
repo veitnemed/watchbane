@@ -56,6 +56,7 @@ class FakeCandidateService:
         self.hidden_candidates: list[dict] = []
         self.applied_filters: list[dict] = []
         self.overview_calls = 0
+        self.chip_options = {"genres": [], "countries": []}
 
     def get_search_overview_view(self) -> dict:
         self.overview_calls += 1
@@ -83,8 +84,14 @@ class FakeCandidateService:
         return {"candidates": filtered, "filtered_count": len(filtered)}
 
     def sort_search_candidates(self, candidates: list[dict], sort_mode: str) -> dict:
+        if sort_mode == "tmdb_score":
+            sorted_candidates = sorted(list(candidates), key=lambda item: item.get("tmdb_score") or 0, reverse=True)
+        elif sort_mode == "final_score":
+            sorted_candidates = sorted(list(candidates), key=lambda item: item.get("final_score") or 0, reverse=True)
+        else:
+            sorted_candidates = sorted(list(candidates), key=lambda item: item.get("title") or "")
         return {
-            "candidates": sorted(list(candidates), key=lambda item: item.get("title") or ""),
+            "candidates": sorted_candidates,
             "sort_mode": sort_mode,
             "hidden_duplicates": 0,
         }
@@ -106,7 +113,7 @@ class FakeCandidateService:
         return {"defaults": dict(DEFAULT_BROWSE_FILTERS)}
 
     def get_search_filter_chip_options_view(self) -> dict:
-        return {"genres": [], "countries": []}
+        return deepcopy(self.chip_options)
 
     def hide_candidate(self, candidate: dict) -> dict:
         self.hidden_candidates.append(deepcopy(candidate))
@@ -220,6 +227,22 @@ def test_filter_change_updates_candidate_list(qtbot) -> None:
     assert _listed_titles(list_widget) == ["Predict Ready"]
 
 
+def test_filter_options_refresh_after_pool_rebuild(qtbot) -> None:
+    service, _session, filters_view, _list_view = _build_views(qtbot)
+
+    assert filters_view._include_genre_selector._genres == []
+
+    service.chip_options = {
+        "genres": [{"label": "Драма"}, {"label": "Комедия"}],
+        "countries": [{"code": "US", "label": "United States"}],
+    }
+    filters_view.refresh_filter_options()
+
+    assert filters_view._include_genre_selector._genres == ["Драма", "Комедия"]
+    assert filters_view._exclude_genre_selector._genres == ["Драма", "Комедия"]
+    assert filters_view._country_selector._codes_in_order == ["US"]
+
+
 def test_media_type_filter_updates_candidate_list(qtbot) -> None:
     service = FakeCandidateService(
         [
@@ -245,6 +268,47 @@ def test_media_type_filter_updates_candidate_list(qtbot) -> None:
 
     qtbot.waitUntil(lambda: _listed_titles(list_widget) == ["Ready Movie"])
     assert service.applied_filters[-1]["media_type"] == "movie"
+
+
+def test_sort_change_resets_candidate_selection_to_first_row(qtbot) -> None:
+    service = FakeCandidateService(
+        [
+            {
+                **_predict_ready_candidate(),
+                "pool_entry_key": "a|2024",
+                "title": "Alpha",
+                "final_score": 1.0,
+                "tmdb_score": 9.0,
+            },
+            {
+                **_predict_ready_candidate(),
+                "pool_entry_key": "b|2024",
+                "title": "Bravo",
+                "final_score": 3.0,
+                "tmdb_score": 7.0,
+            },
+            {
+                **_predict_ready_candidate(),
+                "pool_entry_key": "c|2024",
+                "title": "Charlie",
+                "final_score": 2.0,
+                "tmdb_score": 8.0,
+            },
+        ]
+    )
+    _service, session, _filters_view, list_view = _build_views(qtbot, service)
+    list_widget = _candidate_list(list_view)
+
+    session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": False})
+    qtbot.waitUntil(lambda: _listed_titles(list_widget) == ["Bravo", "Charlie", "Alpha"])
+    list_widget.setCurrentIndex(list_widget.model().index(1, 0))
+    qtbot.waitUntil(lambda: list_widget.currentIndex().row() == 1)
+
+    session.set_sort_mode("tmdb_score")
+
+    qtbot.waitUntil(lambda: _listed_titles(list_widget) == ["Alpha", "Charlie", "Bravo"])
+    assert list_widget.currentIndex().row() == 0
+    assert list_widget.model().data(list_widget.currentIndex(), CandidateListRoles.CandidateRole)["title"] == "Alpha"
 
 
 def test_filter_reset_button_clears_and_applies_all_filters(qtbot) -> None:
