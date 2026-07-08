@@ -4,6 +4,7 @@ from pathlib import Path
 
 from storage import data as storage_data
 from storage.files import create_backup, restore_backup
+from storage.sqlite.backup import backup_sqlite_database
 
 
 def _use_sqlite(tmp_path, monkeypatch) -> None:
@@ -36,6 +37,19 @@ def test_create_backup_includes_sqlite_db_when_backend_is_sqlite(tmp_path, monke
     assert isinstance(backup_path, Path)
     assert backup_path.suffix == ".sqlite3"
     assert backup_path.is_file()
+
+
+def test_backup_sqlite_database_requires_existing_source(tmp_path) -> None:
+    missing_db = tmp_path / "missing.sqlite3"
+
+    try:
+        backup_sqlite_database(db_path=missing_db, backup_dir=tmp_path / "backups")
+    except FileNotFoundError as exc:
+        assert str(missing_db) in str(exc)
+    else:
+        raise AssertionError("backup_sqlite_database should reject a missing source database")
+
+    assert missing_db.exists() is False
 
 
 def test_restore_backup_restores_sqlite_database(tmp_path, monkeypatch) -> None:

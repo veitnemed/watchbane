@@ -29,6 +29,9 @@ def backup_sqlite_database(
 ) -> Path:
     """Create a consistent SQLite database backup and return its path."""
     source = Path(db_path) if db_path is not None else get_db_path()
+    if source.is_file() is False:
+        raise FileNotFoundError(f"SQLite database does not exist: {source}")
+
     target_dir = Path(backup_dir) if backup_dir is not None else Path(constant.BACKUP_DIR)
     target_dir.mkdir(parents=True, exist_ok=True)
     stamp = timestamp or datetime.now().strftime("%d-%m-%Y %H-%M-%S-%f")
@@ -68,4 +71,3 @@ def restore_sqlite_database(
             target_conn.close()
     finally:
         source_conn.close()
-
