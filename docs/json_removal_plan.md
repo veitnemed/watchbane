@@ -187,3 +187,14 @@ After prompt 18 final dead-code sweep:
 Deleted dead compatibility shims from `storage/sqlite/` and kept legacy JSON
 behind `storage/legacy_json/`, `storage/files.py` backup/restore compatibility,
 and explicit migration/repair scripts.
+
+After prompt 19 storage/service boundary hardening:
+
+| Metric | Prompt 19 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15703 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
+
+Moved app-core local action routing behind `storage/actions.py` so `app/core`
+does not import SQLite internals directly.

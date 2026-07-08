@@ -1,3 +1,2 @@
-"""Низкоуровневое файловое хранение: чтение/запись JSON, инициализация, backup."""
-
+"""Storage facades, runtime initialization, normalization, backup and profiles."""
 
