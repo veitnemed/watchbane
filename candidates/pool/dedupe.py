@@ -16,13 +16,7 @@ def candidate_key(movie: dict) -> str:
 
 def normalized_title_key(title: str) -> str:
     """Нормализует название для дедупликации кандидатов."""
-    title = str(title or "").strip().casefold()
-    title = title.replace("ё", "е")
-    for char in [".", ",", "!", "?", ":", ";", "\"", "'", "`", "«", "»", "(", ")", "[", "]"]:
-        title = title.replace(char, " ")
-    while "  " in title:
-        title = title.replace("  ", " ")
-    return title.strip()
+    return normalize_key_part(title)
 
 
 def compact_title_key(title: str) -> str:

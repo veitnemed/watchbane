@@ -97,7 +97,12 @@ def coerce_candidate_number(value: Any) -> int | float | None:
     if "/" in text:
         return None
 
-    normalized = text
+    normalized = (
+        text
+        .replace("\u00a0", "")
+        .replace("\u202f", "")
+        .replace(" ", "")
+    )
     if "," in normalized and "." not in normalized:
         left, right = normalized.split(",", 1)
         if right.isdigit() and len(right) <= 2:
