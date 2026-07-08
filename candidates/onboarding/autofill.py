@@ -84,6 +84,20 @@ SOURCE_STAGE_QUALITY_SEED = "quality_seed"
 SOURCE_STAGE_FOCUSED = "focused"
 SOURCE_STAGE_FALLBACK = "fallback"
 
+STRATEGY_BASELINE_QUOTA_FIX = "baseline_quota_fix"
+STRATEGY_BROAD_TOP_SEED = "broad_top_seed"
+STRATEGY_FOCUSED_FIRST = "focused_first"
+STRATEGY_HYBRID_QUALITY_FOCUSED = "hybrid_quality_focused"
+STRATEGY_STRICT_UNDERFILL = "strict_underfill"
+DEFAULT_AUTOFILL_STRATEGY = STRATEGY_BROAD_TOP_SEED
+SUPPORTED_AUTOFILL_STRATEGIES = (
+    STRATEGY_BASELINE_QUOTA_FIX,
+    STRATEGY_BROAD_TOP_SEED,
+    STRATEGY_FOCUSED_FIRST,
+    STRATEGY_HYBRID_QUALITY_FOCUSED,
+    STRATEGY_STRICT_UNDERFILL,
+)
+
 FALLBACK_ORDER = (
     FALLBACK_BASE,
     FALLBACK_RELAX_ORIGIN,
@@ -183,6 +197,7 @@ class _BucketState:
 @dataclass(frozen=True)
 class AutofillResult:
     ok: bool
+    strategy: str
     profile_id: int
     created_count: int
     pool_size: int
@@ -194,6 +209,7 @@ class AutofillResult:
     planned_counts: dict[str, dict[str, int]]
     actual_counts: dict[str, dict[str, int]]
     source_stats: dict[str, int]
+    rejection_counts: dict[str, int]
     rejected_future_count: int = 0
 
 
@@ -585,6 +601,39 @@ def _query_stage_allowed_for_bucket(
     if query_stage == SEED_QUALITY:
         return True
     return query_stage in _fallback_order_for_bucket(profile, bucket)
+
+
+def normalize_autofill_strategy(strategy: str | None) -> str:
+    text = str(strategy or DEFAULT_AUTOFILL_STRATEGY).strip().casefold()
+    if text in SUPPORTED_AUTOFILL_STRATEGIES:
+        return text
+    return DEFAULT_AUTOFILL_STRATEGY
+
+
+def _is_mixed_profile(profile: OnboardingTasteProfile) -> bool:
+    normalized = profile.normalized()
+    values = [
+        normalized.media_preference,
+        normalized.release_preference,
+        normalized.vibe_preference,
+        normalized.origin_preference if normalized.ui_language == "ru" else "mixed",
+    ]
+    return sum(value in {"both", "mixed", None} for value in values) >= 3
+
+
+def query_stage_order_for_strategy(profile: OnboardingTasteProfile, strategy: str | None) -> tuple[str, ...]:
+    normalized_strategy = normalize_autofill_strategy(strategy)
+    if normalized_strategy == STRATEGY_BASELINE_QUOTA_FIX:
+        return FALLBACK_ORDER
+    if normalized_strategy == STRATEGY_FOCUSED_FIRST:
+        return (FALLBACK_BASE, *SEED_ORDER, *FALLBACK_ORDER[1:])
+    if normalized_strategy == STRATEGY_HYBRID_QUALITY_FOCUSED:
+        if _is_mixed_profile(profile):
+            return (*SEED_ORDER, *FALLBACK_ORDER)
+        return (FALLBACK_BASE, *SEED_ORDER, *FALLBACK_ORDER[1:])
+    if normalized_strategy == STRATEGY_STRICT_UNDERFILL:
+        return (FALLBACK_BASE,)
+    return (*SEED_ORDER, *FALLBACK_ORDER)
 
 
 def _domestic_filter_for_fallback(fallback: str) -> dict[str, str]:
@@ -1066,8 +1115,10 @@ def run_onboarding_autofill(
     progress_callback: ProgressCallback | None = None,
     cancel_checker: CancelChecker | None = None,
     current_year: int | None = None,
+    strategy: str | None = None,
 ) -> AutofillResult:
     profile = profile.normalized()
+    strategy = normalize_autofill_strategy(strategy)
     client = client or TmdbAutofillClient()
     current_year = current_year or _current_year()
     current_date = date(current_year, 12, 31) if current_year != _current_year() else _current_date()
@@ -1095,11 +1146,12 @@ def run_onboarding_autofill(
     api_requests = 0
     fetch_rank = 0
     rejected_future_count = 0
+    rejection_counts: Counter[str] = Counter()
 
     def is_cancelled() -> bool:
         return bool(cancel_checker is not None and cancel_checker())
 
-    for query_stage in (*SEED_ORDER, *FALLBACK_ORDER):
+    for query_stage in query_stage_order_for_strategy(profile, strategy):
         for state in states:
             state.request_index = 0
             state.exhausted = False
@@ -1150,6 +1202,7 @@ def run_onboarding_autofill(
                     total_buckets=len(states),
                     fallback=query_stage,
                     source_stage=source_stage,
+                    strategy=strategy,
                 )
                 accepted_batch: list[dict[str, Any]] = []
                 rejected_count = 0
@@ -1174,6 +1227,7 @@ def run_onboarding_autofill(
                             profile=profile,
                             seed_stage=query_stage,
                         ):
+                            rejection_counts["quota_mismatch"] += 1
                             rejected_count += 1
                             continue
                         rejection_reason = candidate_rejection_reason(
@@ -1187,6 +1241,7 @@ def run_onboarding_autofill(
                             current_date=current_date,
                         )
                         if rejection_reason is not None:
+                            rejection_counts[rejection_reason] += 1
                             if rejection_reason == "future":
                                 rejected_future_count += 1
                             rejected_count += 1
@@ -1235,6 +1290,8 @@ def run_onboarding_autofill(
                         path=path,
                     )
                 state.request_index += 1
+                if query_stage in SEED_ORDER and state.request_index >= 1:
+                    state.exhausted = True
                 progressed = True
                 if accepted_batch:
                     _emit(progress_callback, stage=4, message="Убираем повторы", profile_id=profile_id)
@@ -1269,9 +1326,11 @@ def run_onboarding_autofill(
         api_requests=api_requests,
         cancelled=cancelled,
         warning=warning,
+        strategy=strategy,
     )
     return AutofillResult(
         ok=cancelled is False,
+        strategy=strategy,
         profile_id=profile_id,
         created_count=len(created_candidates),
         pool_size=len(_pool_snapshot(path=path)),
@@ -1283,5 +1342,6 @@ def run_onboarding_autofill(
         planned_counts=planned_counts,
         actual_counts=actual_counts,
         source_stats=source_stats,
+        rejection_counts=dict(rejection_counts),
         rejected_future_count=rejected_future_count,
     )

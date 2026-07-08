@@ -1,0 +1,481 @@
+{
+  "mode": "live",
+  "strategies": [
+    "broad_top_seed"
+  ],
+  "tmdb_credentials_present": true,
+  "tmp_root": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-rlla__pt",
+  "results": [
+    {
+      "scenario": "en-tv-new-dark",
+      "mode": "live",
+      "strategy": "broad_top_seed",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-rlla__pt\\broad_top_seed_en-tv-new-dark.sqlite3",
+      "profile": {
+        "media_preference": "tv",
+        "release_preference": "new",
+        "vibe_preference": "dark",
+        "origin_preference": null,
+        "ui_language": "en"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 37,
+      "elapsed_ms": 15410.4,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 36,
+        "tv": 84
+      },
+      "actual_media": {
+        "tv": 84,
+        "movie": 36
+      },
+      "planned_origin": {
+        "any": 120
+      },
+      "actual_origin": {
+        "any": 120
+      },
+      "source_contributions": {
+        "quality_seed": 39,
+        "focused": 81
+      },
+      "fallbacks": {
+        "quality_seed": 39,
+        "base": 81
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 0,
+      "duplicate_rejected": 133,
+      "top_languages": {
+        "en": 74,
+        "ja": 21,
+        "ko": 10,
+        "zh": 5,
+        "es": 3,
+        "th": 2,
+        "hi": 1,
+        "zu": 1
+      },
+      "rejection_counts": {
+        "low_votes": 34,
+        "duplicate_batch": 133,
+        "low_score": 1
+      },
+      "planned_counts": {
+        "media_type": {
+          "movie": 36,
+          "tv": 84
+        },
+        "release": {
+          "new_sweep": 84,
+          "top_all_time": 36
+        },
+        "vibe": {
+          "dark": 84,
+          "light": 36
+        },
+        "origin": {
+          "any": 120
+        },
+        "original_language": {}
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 84,
+          "movie": 36
+        },
+        "release": {
+          "new_sweep": 84,
+          "top_all_time": 36
+        },
+        "vibe": {
+          "dark": 84,
+          "light": 36
+        },
+        "origin": {
+          "any": 120
+        },
+        "original_language": {
+          "th": 2,
+          "en": 74,
+          "ko": 10,
+          "zh": 5,
+          "ja": 21,
+          "hi": 1,
+          "zu": 1,
+          "es": 3,
+          "ru": 1,
+          "it": 1,
+          "tl": 1
+        },
+        "fallback": {
+          "quality_seed": 39,
+          "base": 81
+        },
+        "source_stage": {
+          "quality_seed": 39,
+          "focused": 81
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "quality_seed": 39,
+        "base": 81
+      },
+      "candidate_media_counts": {
+        "tv": 84,
+        "movie": 36
+      },
+      "candidate_origin_counts": {
+        "any": 120
+      }
+    },
+    {
+      "scenario": "ru-balanced",
+      "mode": "live",
+      "strategy": "broad_top_seed",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-rlla__pt\\broad_top_seed_ru-balanced.sqlite3",
+      "profile": {
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "mixed",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 91,
+      "created_count": 91,
+      "pool_count": 91,
+      "pool_size": 91,
+      "api_requests": 180,
+      "elapsed_ms": 59339.3,
+      "quota_integrity": false,
+      "underfill": true,
+      "planned_media": {
+        "movie": 60,
+        "tv": 60
+      },
+      "actual_media": {
+        "tv": 42,
+        "movie": 49
+      },
+      "planned_origin": {
+        "domestic": 60,
+        "foreign": 60
+      },
+      "actual_origin": {
+        "domestic": 31,
+        "foreign": 60
+      },
+      "source_contributions": {
+        "origin_top_seed": 12,
+        "quality_seed": 20,
+        "focused": 34,
+        "fallback": 25
+      },
+      "fallbacks": {
+        "origin_top_seed": 12,
+        "quality_seed": 20,
+        "base": 34,
+        "relax_genres": 2,
+        "relax_votes_mid": 1,
+        "relax_votes_low": 6,
+        "relax_era": 16
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 412,
+      "duplicate_rejected": 176,
+      "top_languages": {
+        "en": 32,
+        "ru": 28,
+        "ko": 7,
+        "ja": 7,
+        "fr": 5,
+        "es": 5,
+        "de": 4,
+        "it": 3
+      },
+      "rejection_counts": {
+        "watched": 32,
+        "low_votes": 746,
+        "duplicate_batch": 176,
+        "quota_mismatch": 412,
+        "low_score": 82
+      },
+      "planned_counts": {
+        "media_type": {
+          "movie": 60,
+          "tv": 60
+        },
+        "release": {
+          "classic_sweep": 36,
+          "new_sweep": 36,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 60,
+          "light": 60
+        },
+        "origin": {
+          "domestic": 60,
+          "foreign": 60
+        },
+        "original_language": {
+          "de": 3,
+          "en": 30,
+          "es": 5,
+          "it": 3,
+          "fr": 5,
+          "ja": 7,
+          "ko": 7
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 42,
+          "movie": 49
+        },
+        "release": {
+          "new_sweep": 33,
+          "classic_sweep": 33,
+          "top_all_time": 25
+        },
+        "vibe": {
+          "light": 47,
+          "dark": 44
+        },
+        "origin": {
+          "domestic": 31,
+          "foreign": 60
+        },
+        "original_language": {
+          "ru": 28,
+          "de": 4,
+          "ko": 7,
+          "ja": 7,
+          "en": 32,
+          "fr": 5,
+          "es": 5,
+          "it": 3
+        },
+        "fallback": {
+          "origin_top_seed": 12,
+          "quality_seed": 20,
+          "base": 34,
+          "relax_genres": 2,
+          "relax_votes_mid": 1,
+          "relax_votes_low": 6,
+          "relax_era": 16
+        },
+        "source_stage": {
+          "origin_top_seed": 12,
+          "quality_seed": 20,
+          "focused": 34,
+          "fallback": 25
+        }
+      },
+      "warnings": [
+        "Starter pool underfilled: created 91 of 120.",
+        "Media quota underfilled: movie planned 60, actual 49.",
+        "Media quota underfilled: tv planned 60, actual 42.",
+        "Origin quota underfilled: domestic planned 60, actual 31."
+      ],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "origin_top_seed": 12,
+        "quality_seed": 20,
+        "base": 34,
+        "relax_genres": 2,
+        "relax_votes_mid": 1,
+        "relax_votes_low": 6,
+        "relax_era": 16
+      },
+      "candidate_media_counts": {
+        "tv": 42,
+        "movie": 49
+      },
+      "candidate_origin_counts": {
+        "domestic": 31,
+        "foreign": 60
+      }
+    },
+    {
+      "scenario": "ru-domestic-movie-classic-light",
+      "mode": "live",
+      "strategy": "broad_top_seed",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-rlla__pt\\broad_top_seed_ru-domestic-movie-classic-light.sqlite3",
+      "profile": {
+        "media_preference": "movie",
+        "release_preference": "classic",
+        "vibe_preference": "light",
+        "origin_preference": "domestic",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 88,
+      "created_count": 88,
+      "pool_count": 88,
+      "pool_size": 88,
+      "api_requests": 180,
+      "elapsed_ms": 55498.2,
+      "quota_integrity": false,
+      "underfill": true,
+      "planned_media": {
+        "movie": 84,
+        "tv": 36
+      },
+      "actual_media": {
+        "movie": 62,
+        "tv": 26
+      },
+      "planned_origin": {
+        "domestic": 84,
+        "foreign": 36
+      },
+      "actual_origin": {
+        "domestic": 52,
+        "foreign": 36
+      },
+      "source_contributions": {
+        "origin_top_seed": 22,
+        "quality_seed": 14,
+        "focused": 15,
+        "fallback": 37
+      },
+      "fallbacks": {
+        "origin_top_seed": 22,
+        "quality_seed": 14,
+        "base": 15,
+        "relax_genres": 6,
+        "relax_votes_low": 4,
+        "relax_era": 24,
+        "popular": 3
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 322,
+      "duplicate_rejected": 119,
+      "top_languages": {
+        "ru": 49,
+        "en": 20,
+        "ko": 4,
+        "ja": 4,
+        "de": 3,
+        "fr": 3,
+        "es": 3,
+        "it": 2
+      },
+      "rejection_counts": {
+        "low_votes": 1193,
+        "duplicate_batch": 119,
+        "watched": 18,
+        "quota_mismatch": 322,
+        "low_score": 382,
+        "missing_poster": 28
+      },
+      "planned_counts": {
+        "media_type": {
+          "movie": 84,
+          "tv": 36
+        },
+        "release": {
+          "classic_sweep": 72,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 36,
+          "light": 84
+        },
+        "origin": {
+          "domestic": 84,
+          "foreign": 36
+        },
+        "original_language": {
+          "en": 18,
+          "es": 3,
+          "fr": 3,
+          "ja": 4,
+          "ko": 4,
+          "de": 2,
+          "it": 2
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "movie": 62,
+          "tv": 26
+        },
+        "release": {
+          "classic_sweep": 72,
+          "top_all_time": 16
+        },
+        "vibe": {
+          "light": 62,
+          "dark": 26
+        },
+        "origin": {
+          "domestic": 52,
+          "foreign": 36
+        },
+        "original_language": {
+          "ru": 49,
+          "de": 3,
+          "en": 20,
+          "ko": 4,
+          "ja": 4,
+          "fr": 3,
+          "it": 2,
+          "es": 3
+        },
+        "fallback": {
+          "origin_top_seed": 22,
+          "quality_seed": 14,
+          "base": 15,
+          "relax_genres": 6,
+          "relax_votes_low": 4,
+          "relax_era": 24,
+          "popular": 3
+        },
+        "source_stage": {
+          "origin_top_seed": 22,
+          "quality_seed": 14,
+          "focused": 15,
+          "fallback": 37
+        }
+      },
+      "warnings": [
+        "Starter pool underfilled: created 88 of 120.",
+        "Media quota underfilled: movie planned 84, actual 62.",
+        "Media quota underfilled: tv planned 36, actual 26.",
+        "Origin quota underfilled: domestic planned 84, actual 52."
+      ],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "origin_top_seed": 22,
+        "quality_seed": 14,
+        "base": 15,
+        "relax_genres": 6,
+        "relax_votes_low": 4,
+        "relax_era": 24,
+        "popular": 3
+      },
+      "candidate_media_counts": {
+        "movie": 62,
+        "tv": 26
+      },
+      "candidate_origin_counts": {
+        "domestic": 52,
+        "foreign": 36
+      }
+    }
+  ]
+}

@@ -67,6 +67,9 @@ ONBOARDING_SCALE_PRESETS: tuple[tuple[float, str], ...] = (
     (1.15, "115%"),
     (1.30, "130%"),
 )
+ONBOARDING_SOURCE_LIVE_TMDB = "live_tmdb"
+ONBOARDING_SOURCE_SKIP = "skip"
+ONBOARDING_DEFAULT_STRATEGY = "broad_top_seed"
 
 
 @dataclass(frozen=True)
@@ -274,6 +277,8 @@ class OnboardingAutofillDialog(QDialog):
         self._ui_language = "en" if str(ui_language or "").casefold().startswith("en") else "ru"
         self._ui_scale = normalize_ui_scale(get_ui_scale())
         self._answers: dict[str, str] = {}
+        self._source_mode = ONBOARDING_SOURCE_LIVE_TMDB
+        self._strategy = ONBOARDING_DEFAULT_STRATEGY
         self._question_pages: list[tuple[_Question, QWidget, QButtonGroup]] = []
         self._worker: OnboardingAutofillWorker | None = None
         self._fade_animation: QPropertyAnimation | None = None
@@ -313,6 +318,8 @@ class OnboardingAutofillDialog(QDialog):
         self._stack.addWidget(self._setup_page)
         for question in self._active_questions():
             self._add_question_page(question)
+        self._source_page = self._build_source_page()
+        self._stack.addWidget(self._source_page)
         self._plan_page = self._build_plan_page()
         self._stack.addWidget(self._plan_page)
         self._loading_page = self._build_loading_page()
@@ -367,8 +374,11 @@ class OnboardingAutofillDialog(QDialog):
     def _question_start_index(self) -> int:
         return 1
 
-    def _plan_index(self) -> int:
+    def _source_index(self) -> int:
         return self._question_start_index() + len(self._question_pages)
+
+    def _plan_index(self) -> int:
+        return self._source_index() + 1
 
     def _loading_index(self) -> int:
         return self._plan_index() + 1
@@ -502,6 +512,8 @@ class OnboardingAutofillDialog(QDialog):
         self._question_pages.clear()
         for question in self._active_questions():
             self._add_question_page(question)
+        self._source_page = self._build_source_page()
+        self._stack.addWidget(self._source_page)
         self._plan_page = self._build_plan_page()
         self._stack.addWidget(self._plan_page)
         self._loading_page = self._build_loading_page()
@@ -552,6 +564,71 @@ class OnboardingAutofillDialog(QDialog):
 
         self._stack.addWidget(page)
         self._question_pages.append((question, page, group))
+
+    def _build_source_page(self) -> QWidget:
+        page = QWidget()
+        page.setObjectName("onboardingPage")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(scale_px(SPACING_LARGE))
+
+        eyebrow = QLabel(self._text("Источник кандидатов", "Candidate source"))
+        eyebrow.setObjectName("onboardingEyebrow")
+        layout.addWidget(eyebrow)
+
+        title = QLabel(self._text("Выберите, как собрать первый пул", "Choose how to build the first pool"))
+        title.setObjectName("onboardingTitle")
+        title.setWordWrap(True)
+        layout.addWidget(title)
+
+        subtitle = QLabel(self._text(
+            "Сейчас доступен свежий сбор через TMDb. Локальный стартовый каталог отмечен как следующий продуктовый шаг.",
+            "Fresh TMDb discovery is available now. The local starter catalog is marked as a planned product step.",
+        ))
+        subtitle.setObjectName("onboardingSubtitle")
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
+
+        self._source_group = QButtonGroup(self)
+        self._source_group.setExclusive(True)
+        self._source_group.buttonClicked.connect(self._on_source_selected)
+
+        options_layout = QVBoxLayout()
+        options_layout.setContentsMargins(0, scale_px(SPACING_SMALL), 0, 0)
+        options_layout.setSpacing(scale_px(SPACING_MEDIUM))
+        options = (
+            ("local_planned", "Быстрый локальный старт — запланировано", "Quick local starter — planned", False),
+            (ONBOARDING_SOURCE_LIVE_TMDB, "Live TMDb — свежие кандидаты", "Live TMDb — fresh candidates", True),
+            (ONBOARDING_SOURCE_SKIP, "Пропустить пока", "Skip for now", True),
+        )
+        for value, label_ru, label_en, enabled in options:
+            button = QPushButton(self._text(label_ru, label_en))
+            button.setObjectName("onboardingOption")
+            button.setCheckable(True)
+            button.setEnabled(enabled)
+            button.setProperty("answer", value)
+            button.setMinimumHeight(scale_px(58))
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            button.setChecked(value == self._source_mode)
+            self._source_group.addButton(button)
+            options_layout.addWidget(button)
+        layout.addLayout(options_layout)
+
+        note = QLabel(self._text(
+            "Если результатов под выбранные условия мало, Watchbane сохранит меньше кандидатов и покажет предупреждение, а не заменит их неподходящими фильмами или сериалами.",
+            "If there are not enough matching results, Watchbane will save fewer candidates and show a warning instead of replacing them with unrelated movies or series.",
+        ))
+        note.setObjectName("onboardingPlanSummary")
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        layout.addStretch(1)
+        return page
+
+    def _on_source_selected(self, button: QPushButton) -> None:
+        value = str(button.property("answer") or "").strip()
+        if value in {ONBOARDING_SOURCE_LIVE_TMDB, ONBOARDING_SOURCE_SKIP}:
+            self._source_mode = value
+        self._sync_controls()
 
     def _build_plan_page(self) -> QWidget:
         page = QWidget()
@@ -678,6 +755,10 @@ class OnboardingAutofillDialog(QDialog):
         release = quotas.get("release") or {}
         vibe = quotas.get("vibe") or {}
         origin = quotas.get("origin") or {}
+        source_lines = [
+            self._text("Источник: Live TMDb", "Source: Live TMDb"),
+            self._text("Стратегия: топ качества + точные совпадения", "Strategy: broad top seed + focused matches"),
+        ]
         lines = [
             self._text(f"Цель: {plan.get('target')} кандидатов", f"Target: {plan.get('target')} candidates"),
             self._text(f"Фильмы: {media.get('movie', 0)}, сериалы: {media.get('tv', 0)}", f"Movies: {media.get('movie', 0)}, series: {media.get('tv', 0)}"),
@@ -687,9 +768,14 @@ class OnboardingAutofillDialog(QDialog):
             ),
             self._text(f"Лёгкий вайб: {vibe.get('light', 0)}, мрачный: {vibe.get('dark', 0)}", f"Light vibe: {vibe.get('light', 0)}, dark: {vibe.get('dark', 0)}"),
         ]
+        lines[1:1] = source_lines
         if self._ui_language == "ru":
             lines.append(f"Отечественное: {origin.get('domestic', 0)}, зарубежное: {origin.get('foreign', 0)}")
         lines.append(self._text(f"Срезов поиска: {plan.get('bucket_count')}", f"Search slices: {plan.get('bucket_count')}"))
+        lines.append(self._text(
+            "Если подходящих тайтлов мало, пул будет меньше плана с честным предупреждением.",
+            "If matching titles are scarce, the pool will be smaller and the result will show a clear warning.",
+        ))
         return "\n".join(lines)
 
     def _update_plan_summary(self) -> None:
@@ -704,11 +790,51 @@ class OnboardingAutofillDialog(QDialog):
             if value not in keys:
                 keys.append(value)
         parts = [
-            f"{value}: {int(actual_counts.get(value, 0))}/{int(planned_counts.get(value, 0))}"
+            f"{self._display_count_key(str(value))}: {int(actual_counts.get(value, 0))}/{int(planned_counts.get(value, 0))}"
             for value in keys
         ]
         label = self._text(label_ru, label_en)
         return f"{label}: {', '.join(parts) if parts else '-'}"
+
+    def _display_count_key(self, value: str) -> str:
+        if self._ui_language != "ru":
+            return value
+        return {
+            "movie": "фильмы",
+            "tv": "сериалы",
+            "domestic": "отечественное",
+            "foreign": "зарубежное",
+        }.get(value, value)
+
+    def _display_strategy(self, strategy: str) -> str:
+        if self._ui_language != "ru":
+            return strategy
+        return {
+            "broad_top_seed": "топ качества + точные совпадения",
+            "baseline_quota_fix": "точные совпадения + расширение",
+            "focused_first": "сначала точные совпадения",
+            "hybrid_quality_focused": "гибрид качества и точности",
+            "strict_underfill": "строгий недобор",
+        }.get(strategy, strategy)
+
+    def _format_source_stats(self, data: dict[str, Any]) -> str | None:
+        stats = data.get("source_stats") if isinstance(data.get("source_stats"), dict) else {}
+        if not stats:
+            return None
+        labels = {
+            "origin_top_seed": self._text("топ RU", "RU top"),
+            "quality_seed": self._text("топ качества", "quality top"),
+            "focused": self._text("точные совпадения", "focused"),
+            "fallback": self._text("расширенный поиск", "fallback"),
+        }
+        parts = [
+            f"{labels.get(str(key), str(key))}: {int(value)}"
+            for key, value in stats.items()
+            if int(value or 0) > 0
+        ]
+        if not parts:
+            return None
+        return self._text("Источники: ", "Sources: ") + ", ".join(parts)
 
     def _localized_warning_text(self, warning: str) -> str:
         if self._ui_language != "ru":
@@ -744,6 +870,7 @@ class OnboardingAutofillDialog(QDialog):
         actual = data.get("actual_counts") if isinstance(data.get("actual_counts"), dict) else {}
         api_requests = int(data.get("api_requests") or 0)
         rejected_future = int(data.get("rejected_future_count") or 0)
+        strategy = str(data.get("strategy") or self._strategy)
         if failed or created == 0:
             lines = [
                 self._text(
@@ -762,6 +889,13 @@ class OnboardingAutofillDialog(QDialog):
             lines.append(self._format_actual_line("Факт/план media", "Actual/planned media", "media_type", planned, actual))
             if self._ui_language == "ru":
                 lines.append(self._format_actual_line("Факт/план origin", "Actual/planned origin", "origin", planned, actual))
+        lines.append(self._text(
+            f"Источник: Live TMDb, стратегия: {self._display_strategy(strategy)}",
+            f"Source: Live TMDb, strategy: {strategy}",
+        ))
+        source_stats = self._format_source_stats(data)
+        if source_stats:
+            lines.append(source_stats)
         details = self._text(
             f"API-запросов: {api_requests}, отклонено будущих релизов: {rejected_future}",
             f"API requests: {api_requests}, future releases rejected: {rejected_future}",
@@ -849,14 +983,18 @@ class OnboardingAutofillDialog(QDialog):
         self._back_button.setEnabled(index > 0 and not loading_or_final)
         current = self._current_question()
         on_setup = index == 0
+        on_source = index == self._source_index()
         on_plan = index == self._plan_index()
         self._next_button.setEnabled(
             on_setup
+            or on_source
             or on_plan
             or (current is not None and self._selected_answer(current[1]) is not None)
         )
         if on_plan:
             self._next_button.setText(self._text("Собрать пул", "Build pool"))
+        elif on_source and self._source_mode == ONBOARDING_SOURCE_SKIP:
+            self._next_button.setText(self._text("Пропустить", "Skip"))
         else:
             self._next_button.setText(self._text("Далее", "Next"))
 
@@ -872,6 +1010,12 @@ class OnboardingAutofillDialog(QDialog):
             return
         if index == self._plan_index():
             self._start_autofill()
+            return
+        if index == self._source_index():
+            if self._source_mode == ONBOARDING_SOURCE_SKIP:
+                self.reject()
+                return
+            self._set_page(self._plan_index())
             return
         current = self._current_question()
         if current is None:
@@ -900,7 +1044,7 @@ class OnboardingAutofillDialog(QDialog):
         self._status_label.setText(self._text("Настраиваем вкус", "Configuring taste"))
         self._skip_button.setVisible(True)
         self._open_button.setVisible(False)
-        self._worker = OnboardingAutofillWorker(self._profile(), self)
+        self._worker = OnboardingAutofillWorker(self._profile(), strategy=self._strategy, parent=self)
         self._worker.progress.connect(self._on_progress)
         self._worker.finished_with_result.connect(self._on_finished)
         self._worker.failed.connect(self._on_failed)
@@ -969,7 +1113,12 @@ class OnboardingAutofillDialog(QDialog):
         self.reject()
 
     def _finish(self) -> None:
-        self.completed.emit({"profile": self._profile(), "result": dict(self._last_result)})
+        self.completed.emit({
+            "profile": self._profile(),
+            "source_mode": self._source_mode,
+            "strategy": self._strategy,
+            "result": dict(self._last_result),
+        })
         self.accept()
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override

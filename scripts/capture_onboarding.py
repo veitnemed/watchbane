@@ -18,7 +18,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 
-STEP_NAMES = ("welcome", "scale", "taste", "plan", "loading", "final")
+STEP_NAMES = ("welcome", "scale", "taste", "source", "plan", "loading", "final")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -58,6 +58,9 @@ def _prepare_step(dialog, step: str) -> None:
         dialog._set_page(1)
         return
     _select_first_options(dialog)
+    if step == "source":
+        dialog._set_page(dialog._source_index())
+        return
     if step == "plan":
         dialog._set_page(dialog._plan_index())
         return
@@ -82,6 +85,8 @@ def _prepare_step(dialog, step: str) -> None:
                     "media_type": {"movie": 49, "tv": 50},
                     "origin": {"domestic": 39, "foreign": 60},
                 },
+                "source_stats": {"origin_top_seed": 20, "quality_seed": 35, "focused": 44},
+                "strategy": "broad_top_seed",
             },
             failed=False,
         )

@@ -232,6 +232,30 @@ class MovieShapedTvBroadSeedClient(FakeTmdbClient):
         return {"results": results, "total_pages": 1}
 
 
+class MultiPageEmptySeedClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        if _is_quality_seed_params(params):
+            self.calls.append((endpoint, dict(params)))
+            results = []
+            for index in range(20):
+                tmdb_id = len(self.calls) * 1000 + index
+                results.append(
+                    {
+                        "id": tmdb_id,
+                        "title": f"Seed Without Poster {tmdb_id}",
+                        "original_title": f"Seed Without Poster {tmdb_id}",
+                        "release_date": "2024-01-01",
+                        "genre_ids": [18],
+                        "vote_average": 7.2,
+                        "vote_count": 1200,
+                        "popularity": 50,
+                        "original_language": "en",
+                    }
+                )
+            return {"results": results, "total_pages": 99}
+        return super().discover(endpoint, params)
+
+
 def _profile(**overrides) -> OnboardingTasteProfile:
     data = {
         "media_preference": "both",
@@ -346,6 +370,64 @@ def test_fallback_order_relaxes_origin_before_genres_and_votes() -> None:
     assert "with_genres" not in relaxed_genres
     assert relaxed_era["with_origin_country"] == "RU"
     assert "with_original_language" not in relaxed_era
+
+
+def test_strategy_order_switches_seed_and_focused_stages() -> None:
+    profile = _profile(media_preference="movie")
+
+    assert autofill.query_stage_order_for_strategy(profile, "baseline_quota_fix")[0] == "base"
+    assert "quality_seed" not in autofill.query_stage_order_for_strategy(profile, "baseline_quota_fix")
+    assert autofill.query_stage_order_for_strategy(profile, "broad_top_seed")[:2] == ("origin_top_seed", "quality_seed")
+    assert autofill.query_stage_order_for_strategy(profile, "focused_first")[:3] == ("base", "origin_top_seed", "quality_seed")
+
+
+def test_run_autofill_accepts_strategy_param_and_reports_source_stats(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    baseline = run_onboarding_autofill(
+        _profile(media_preference="both"),
+        client=FakeTmdbClient(),
+        path=tmp_path / "baseline.sqlite3",
+        current_year=2026,
+        strategy="baseline_quota_fix",
+    )
+    broad = run_onboarding_autofill(
+        _profile(media_preference="both"),
+        client=FakeTmdbClient(),
+        path=tmp_path / "broad.sqlite3",
+        current_year=2026,
+        strategy="broad_top_seed",
+    )
+
+    assert baseline.strategy == "baseline_quota_fix"
+    assert broad.strategy == "broad_top_seed"
+    assert baseline.actual_counts["media_type"] == baseline.planned_counts["media_type"]
+    assert broad.actual_counts["media_type"] == broad.planned_counts["media_type"]
+    assert "quality_seed" not in baseline.source_stats
+    assert "origin_top_seed" not in baseline.source_stats
+    assert broad.source_stats
+
+
+def test_broad_seed_pages_do_not_starve_focused_queries(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = MultiPageEmptySeedClient()
+    result = run_onboarding_autofill(
+        _profile(media_preference="movie", release_preference="classic", vibe_preference="light"),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+        strategy="broad_top_seed",
+    )
+
+    focused_calls = [
+        params
+        for _endpoint, params in client.calls
+        if params.get("with_genres") or params.get("primary_release_year") or params.get("first_air_date_year")
+    ]
+    assert focused_calls
+    for media_type, actual in result.actual_counts["media_type"].items():
+        assert actual <= result.planned_counts["media_type"][media_type]
+    assert result.created_count < autofill.STARTER_POOL_TARGET
+    assert result.warnings
 
 
 def test_onboarding_wizard_origin_question_depends_on_ui_language(qapp) -> None:

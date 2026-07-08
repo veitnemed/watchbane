@@ -221,6 +221,7 @@ def build_onboarding_candidate_pool(
     *,
     progress_callback=None,
     cancel_checker=None,
+    strategy: str | None = None,
 ) -> dict:
     """Run deterministic onboarding autofill through the service boundary."""
     if isinstance(profile, OnboardingTasteProfile):
@@ -237,9 +238,11 @@ def build_onboarding_candidate_pool(
         taste_profile,
         progress_callback=progress_callback,
         cancel_checker=cancel_checker,
+        strategy=strategy,
     )
     return {
         "ok": result.ok,
+        "strategy": result.strategy,
         "profile_id": result.profile_id,
         "created_count": result.created_count,
         "pool_size": result.pool_size,
@@ -250,6 +253,7 @@ def build_onboarding_candidate_pool(
         "planned_counts": result.planned_counts,
         "actual_counts": result.actual_counts,
         "source_stats": result.source_stats,
+        "rejection_counts": result.rejection_counts,
         "rejected_future_count": result.rejected_future_count,
         "candidates": result.candidates,
     }

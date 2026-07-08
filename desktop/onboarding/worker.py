@@ -15,9 +15,10 @@ class OnboardingAutofillWorker(QThread):
     finished_with_result = pyqtSignal(object)
     failed = pyqtSignal(str)
 
-    def __init__(self, profile: dict, parent=None) -> None:
+    def __init__(self, profile: dict, *, strategy: str | None = None, parent=None) -> None:
         super().__init__(parent)
         self._profile = dict(profile)
+        self._strategy = strategy
         self._cancelled = False
 
     def cancel(self) -> None:
@@ -30,6 +31,7 @@ class OnboardingAutofillWorker(QThread):
                 self._profile,
                 progress_callback=self.progress.emit,
                 cancel_checker=lambda: self._cancelled,
+                strategy=self._strategy,
             )
         except Exception as error:  # noqa: BLE001 - surface to wizard
             log_exception("onboarding.autofill.worker.error", error)
@@ -42,6 +44,8 @@ class OnboardingAutofillWorker(QThread):
             cancelled=result.get("cancelled"),
             planned_counts=result.get("planned_counts"),
             actual_counts=result.get("actual_counts"),
+            source_stats=result.get("source_stats"),
+            strategy=result.get("strategy"),
             warning=result.get("warning"),
         )
         self.finished_with_result.emit(result)

@@ -152,8 +152,36 @@ def _counter(candidates: list[dict[str, Any]], key: str) -> dict[str, int]:
     return dict(counter)
 
 
-def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_root: Path) -> dict[str, Any]:
-    db_path = tmp_root / f"{name}.sqlite3"
+def _top_counter(candidates: list[dict[str, Any]], key: str, *, limit: int = 8) -> dict[str, int]:
+    counter: Counter[str] = Counter()
+    for candidate in candidates:
+        value = candidate.get(key)
+        if value not in (None, ""):
+            counter[str(value)] += 1
+    return dict(counter.most_common(limit))
+
+
+def _quota_integrity_pass(result: Any) -> bool:
+    planned = result.planned_counts
+    actual = result.actual_counts
+    for media_type, count in planned.get("media_type", {}).items():
+        if int(actual.get("media_type", {}).get(media_type, 0)) != int(count):
+            return False
+    for origin, count in planned.get("origin", {}).items():
+        if origin in {"domestic", "foreign"} and int(actual.get("origin", {}).get(origin, 0)) != int(count):
+            return False
+    return True
+
+
+def run_scenario(
+    name: str,
+    profile_data: dict[str, Any],
+    *,
+    live: bool,
+    tmp_root: Path,
+    strategy: str,
+) -> dict[str, Any]:
+    db_path = tmp_root / f"{strategy}_{name}.sqlite3"
     profile = OnboardingTasteProfile(**profile_data)
     client = None if live else MockTmdbClient()
     started_at = datetime.now(timezone.utc)
@@ -162,20 +190,39 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         client=client,
         path=db_path,
         current_year=started_at.year,
+        strategy=strategy,
     )
     finished_at = datetime.now(timezone.utc)
     elapsed_ms = round((finished_at - started_at).total_seconds() * 1000, 1)
     candidates = result.candidates
+    rejection_counts = result.rejection_counts
     return {
         "scenario": name,
         "mode": "live" if live else "mock",
+        "strategy": result.strategy,
+        "target": autofill.STARTER_POOL_TARGET,
         "db_path": str(db_path),
         "profile": profile.normalized().as_repository_dict(),
         "ok": result.ok,
+        "created": result.created_count,
         "created_count": result.created_count,
+        "pool_count": result.pool_size,
         "pool_size": result.pool_size,
         "api_requests": result.api_requests,
         "elapsed_ms": elapsed_ms,
+        "quota_integrity": _quota_integrity_pass(result),
+        "underfill": result.created_count < autofill.STARTER_POOL_TARGET,
+        "planned_media": result.planned_counts.get("media_type", {}),
+        "actual_media": result.actual_counts.get("media_type", {}),
+        "planned_origin": result.planned_counts.get("origin", {}),
+        "actual_origin": result.actual_counts.get("origin", {}),
+        "source_contributions": result.source_stats,
+        "fallbacks": result.actual_counts.get("fallback", {}),
+        "future_rejected": result.rejected_future_count,
+        "quota_mismatch_rejected": int(rejection_counts.get("quota_mismatch", 0)),
+        "duplicate_rejected": int(rejection_counts.get("duplicate_batch", 0)) + int(rejection_counts.get("existing", 0)),
+        "top_languages": _top_counter(candidates, "original_language"),
+        "rejection_counts": rejection_counts,
         "planned_counts": result.planned_counts,
         "actual_counts": result.actual_counts,
         "warnings": result.warnings,
@@ -199,18 +246,23 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
     for result in results:
         lines.extend(
             [
-                f"## {result['scenario']}",
+                f"## {result['strategy']} / {result['scenario']}",
                 "",
                 f"- Profile: `{json.dumps(result['profile'], ensure_ascii=False)}`",
-                f"- Created/pool: {result['created_count']} / {result['pool_size']}",
+                f"- Created/pool: {result['created']} / {result['pool_count']}",
+                f"- Quota integrity: {result['quota_integrity']}",
                 f"- API requests: {result['api_requests']}",
                 f"- Elapsed ms: {result['elapsed_ms']}",
-                f"- Planned media: `{result['planned_counts'].get('media_type', {})}`",
-                f"- Actual media: `{result['actual_counts'].get('media_type', {})}`",
-                f"- Planned origin: `{result['planned_counts'].get('origin', {})}`",
-                f"- Actual origin: `{result['actual_counts'].get('origin', {})}`",
-                f"- Fallbacks: `{result['top_fallback_counts']}`",
-                f"- Future rejected: {result['rejected_future_count']}",
+                f"- Planned media: `{result['planned_media']}`",
+                f"- Actual media: `{result['actual_media']}`",
+                f"- Planned origin: `{result['planned_origin']}`",
+                f"- Actual origin: `{result['actual_origin']}`",
+                f"- Source contributions: `{result['source_contributions']}`",
+                f"- Fallbacks: `{result['fallbacks']}`",
+                f"- Future rejected: {result['future_rejected']}",
+                f"- Quota mismatch rejected: {result['quota_mismatch_rejected']}",
+                f"- Duplicate rejected: {result['duplicate_rejected']}",
+                f"- Top languages: `{result['top_languages']}`",
                 f"- Warnings: `{result['warnings']}`",
                 "",
             ]
@@ -225,6 +277,13 @@ def main() -> int:
     mode.add_argument("--live", action="store_true", help="Use live TMDb API credentials from env/.env.local.")
     parser.add_argument("--all", action="store_true", help="Run all built-in scenarios.")
     parser.add_argument("--scenario", choices=sorted(SCENARIOS), help="Run one built-in scenario.")
+    parser.add_argument(
+        "--strategy",
+        choices=autofill.SUPPORTED_AUTOFILL_STRATEGIES,
+        default=autofill.DEFAULT_AUTOFILL_STRATEGY,
+        help="Autofill strategy to run.",
+    )
+    parser.add_argument("--strategy-matrix", action="store_true", help="Run every supported strategy for selected scenarios.")
     parser.add_argument("--require-live", action="store_true", help="Fail if live mode has no TMDb credentials.")
     parser.add_argument("--output", type=Path, help="Markdown report path.")
     parser.add_argument("--json-output", type=Path, help="JSON report path.")
@@ -242,10 +301,16 @@ def main() -> int:
     names = sorted(SCENARIOS) if args.all else [args.scenario]
     tmp_root = args.tmp_root or Path(tempfile.mkdtemp(prefix="watchbane-onboarding-pool-"))
     tmp_root.mkdir(parents=True, exist_ok=True)
-    results = [run_scenario(name, SCENARIOS[name], live=args.live, tmp_root=tmp_root) for name in names]
+    strategies = list(autofill.SUPPORTED_AUTOFILL_STRATEGIES) if args.strategy_matrix else [args.strategy]
+    results = [
+        run_scenario(name, SCENARIOS[name], live=args.live, tmp_root=tmp_root, strategy=strategy)
+        for strategy in strategies
+        for name in names
+    ]
 
     payload = {
         "mode": "live" if args.live else "mock",
+        "strategies": strategies,
         "tmdb_credentials_present": credentials_present,
         "tmp_root": str(tmp_root),
         "results": results,

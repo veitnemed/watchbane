@@ -1,0 +1,2131 @@
+{
+  "mode": "mock",
+  "strategies": [
+    "baseline_quota_fix",
+    "broad_top_seed",
+    "focused_first",
+    "hybrid_quality_focused",
+    "strict_underfill"
+  ],
+  "tmdb_credentials_present": true,
+  "tmp_root": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim",
+  "results": [
+    {
+      "scenario": "en-tv-new-dark",
+      "mode": "mock",
+      "strategy": "baseline_quota_fix",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\baseline_quota_fix_en-tv-new-dark.sqlite3",
+      "profile": {
+        "media_preference": "tv",
+        "release_preference": "new",
+        "vibe_preference": "dark",
+        "origin_preference": null,
+        "ui_language": "en"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 33,
+      "elapsed_ms": 4015.0,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 36,
+        "tv": 84
+      },
+      "actual_media": {
+        "tv": 84,
+        "movie": 36
+      },
+      "planned_origin": {
+        "any": 120
+      },
+      "actual_origin": {
+        "any": 120
+      },
+      "source_contributions": {
+        "focused": 63,
+        "fallback": 57
+      },
+      "fallbacks": {
+        "base": 63,
+        "relax_origin": 31,
+        "relax_genres": 14,
+        "relax_votes_mid": 7,
+        "relax_votes_low": 4,
+        "relax_era": 1
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 0,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "en": 120
+      },
+      "rejection_counts": {},
+      "planned_counts": {
+        "media_type": {
+          "movie": 36,
+          "tv": 84
+        },
+        "release": {
+          "new_sweep": 84,
+          "top_all_time": 36
+        },
+        "vibe": {
+          "dark": 84,
+          "light": 36
+        },
+        "origin": {
+          "any": 120
+        },
+        "original_language": {}
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 84,
+          "movie": 36
+        },
+        "release": {
+          "new_sweep": 84,
+          "top_all_time": 36
+        },
+        "vibe": {
+          "dark": 84,
+          "light": 36
+        },
+        "origin": {
+          "any": 120
+        },
+        "original_language": {
+          "en": 120
+        },
+        "fallback": {
+          "base": 63,
+          "relax_origin": 31,
+          "relax_genres": 14,
+          "relax_votes_mid": 7,
+          "relax_votes_low": 4,
+          "relax_era": 1
+        },
+        "source_stage": {
+          "focused": 63,
+          "fallback": 57
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "base": 63,
+        "relax_origin": 31,
+        "relax_genres": 14,
+        "relax_votes_mid": 7,
+        "relax_votes_low": 4,
+        "relax_era": 1
+      },
+      "candidate_media_counts": {
+        "tv": 84,
+        "movie": 36
+      },
+      "candidate_origin_counts": {
+        "any": 120
+      }
+    },
+    {
+      "scenario": "ru-balanced",
+      "mode": "mock",
+      "strategy": "baseline_quota_fix",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\baseline_quota_fix_ru-balanced.sqlite3",
+      "profile": {
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "mixed",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 81,
+      "elapsed_ms": 9515.6,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 60,
+        "tv": 60
+      },
+      "actual_media": {
+        "tv": 60,
+        "movie": 60
+      },
+      "planned_origin": {
+        "domestic": 60,
+        "foreign": 60
+      },
+      "actual_origin": {
+        "domestic": 60,
+        "foreign": 60
+      },
+      "source_contributions": {
+        "focused": 65,
+        "fallback": 55
+      },
+      "fallbacks": {
+        "base": 65,
+        "relax_genres": 37,
+        "relax_votes_mid": 17,
+        "relax_votes_low": 1
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 0,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "ru": 59,
+        "en": 31,
+        "ko": 7,
+        "ja": 7,
+        "fr": 5,
+        "es": 5,
+        "de": 3,
+        "it": 3
+      },
+      "rejection_counts": {},
+      "planned_counts": {
+        "media_type": {
+          "movie": 60,
+          "tv": 60
+        },
+        "release": {
+          "classic_sweep": 36,
+          "new_sweep": 36,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 60,
+          "light": 60
+        },
+        "origin": {
+          "domestic": 60,
+          "foreign": 60
+        },
+        "original_language": {
+          "de": 3,
+          "en": 30,
+          "es": 5,
+          "it": 3,
+          "fr": 5,
+          "ja": 7,
+          "ko": 7
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 60,
+          "movie": 60
+        },
+        "release": {
+          "new_sweep": 36,
+          "top_all_time": 48,
+          "classic_sweep": 36
+        },
+        "vibe": {
+          "light": 60,
+          "dark": 60
+        },
+        "origin": {
+          "domestic": 60,
+          "foreign": 60
+        },
+        "original_language": {
+          "ru": 59,
+          "ko": 7,
+          "fr": 5,
+          "ja": 7,
+          "en": 31,
+          "es": 5,
+          "de": 3,
+          "it": 3
+        },
+        "fallback": {
+          "base": 65,
+          "relax_genres": 37,
+          "relax_votes_mid": 17,
+          "relax_votes_low": 1
+        },
+        "source_stage": {
+          "focused": 65,
+          "fallback": 55
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "base": 65,
+        "relax_genres": 37,
+        "relax_votes_mid": 17,
+        "relax_votes_low": 1
+      },
+      "candidate_media_counts": {
+        "tv": 60,
+        "movie": 60
+      },
+      "candidate_origin_counts": {
+        "domestic": 60,
+        "foreign": 60
+      }
+    },
+    {
+      "scenario": "ru-domestic-movie-classic-light",
+      "mode": "mock",
+      "strategy": "baseline_quota_fix",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\baseline_quota_fix_ru-domestic-movie-classic-light.sqlite3",
+      "profile": {
+        "media_preference": "movie",
+        "release_preference": "classic",
+        "vibe_preference": "light",
+        "origin_preference": "domestic",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 57,
+      "elapsed_ms": 6690.0,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 84,
+        "tv": 36
+      },
+      "actual_media": {
+        "movie": 84,
+        "tv": 36
+      },
+      "planned_origin": {
+        "domestic": 84,
+        "foreign": 36
+      },
+      "actual_origin": {
+        "domestic": 84,
+        "foreign": 36
+      },
+      "source_contributions": {
+        "focused": 67,
+        "fallback": 53
+      },
+      "fallbacks": {
+        "base": 67,
+        "relax_genres": 34,
+        "relax_votes_mid": 12,
+        "relax_votes_low": 5,
+        "relax_era": 2
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 0,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "ru": 77,
+        "en": 25,
+        "ko": 4,
+        "ja": 4,
+        "fr": 3,
+        "es": 3,
+        "de": 2,
+        "it": 2
+      },
+      "rejection_counts": {},
+      "planned_counts": {
+        "media_type": {
+          "movie": 84,
+          "tv": 36
+        },
+        "release": {
+          "classic_sweep": 72,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 36,
+          "light": 84
+        },
+        "origin": {
+          "domestic": 84,
+          "foreign": 36
+        },
+        "original_language": {
+          "en": 18,
+          "es": 3,
+          "fr": 3,
+          "ja": 4,
+          "ko": 4,
+          "de": 2,
+          "it": 2
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "movie": 84,
+          "tv": 36
+        },
+        "release": {
+          "classic_sweep": 72,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "light": 84,
+          "dark": 36
+        },
+        "origin": {
+          "domestic": 84,
+          "foreign": 36
+        },
+        "original_language": {
+          "ru": 77,
+          "en": 25,
+          "ko": 4,
+          "ja": 4,
+          "fr": 3,
+          "es": 3,
+          "de": 2,
+          "it": 2
+        },
+        "fallback": {
+          "base": 67,
+          "relax_genres": 34,
+          "relax_votes_mid": 12,
+          "relax_votes_low": 5,
+          "relax_era": 2
+        },
+        "source_stage": {
+          "focused": 67,
+          "fallback": 53
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "base": 67,
+        "relax_genres": 34,
+        "relax_votes_mid": 12,
+        "relax_votes_low": 5,
+        "relax_era": 2
+      },
+      "candidate_media_counts": {
+        "movie": 84,
+        "tv": 36
+      },
+      "candidate_origin_counts": {
+        "domestic": 84,
+        "foreign": 36
+      }
+    },
+    {
+      "scenario": "en-tv-new-dark",
+      "mode": "mock",
+      "strategy": "broad_top_seed",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\broad_top_seed_en-tv-new-dark.sqlite3",
+      "profile": {
+        "media_preference": "tv",
+        "release_preference": "new",
+        "vibe_preference": "dark",
+        "origin_preference": null,
+        "ui_language": "en"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 33,
+      "elapsed_ms": 4110.6,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 36,
+        "tv": 84
+      },
+      "actual_media": {
+        "tv": 84,
+        "movie": 36
+      },
+      "planned_origin": {
+        "any": 120
+      },
+      "actual_origin": {
+        "any": 120
+      },
+      "source_contributions": {
+        "quality_seed": 63,
+        "focused": 31,
+        "fallback": 26
+      },
+      "fallbacks": {
+        "quality_seed": 63,
+        "base": 31,
+        "relax_origin": 14,
+        "relax_genres": 7,
+        "relax_votes_mid": 4,
+        "relax_votes_low": 1
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 0,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "en": 120
+      },
+      "rejection_counts": {},
+      "planned_counts": {
+        "media_type": {
+          "movie": 36,
+          "tv": 84
+        },
+        "release": {
+          "new_sweep": 84,
+          "top_all_time": 36
+        },
+        "vibe": {
+          "dark": 84,
+          "light": 36
+        },
+        "origin": {
+          "any": 120
+        },
+        "original_language": {}
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 84,
+          "movie": 36
+        },
+        "release": {
+          "new_sweep": 84,
+          "top_all_time": 36
+        },
+        "vibe": {
+          "dark": 84,
+          "light": 36
+        },
+        "origin": {
+          "any": 120
+        },
+        "original_language": {
+          "en": 120
+        },
+        "fallback": {
+          "quality_seed": 63,
+          "base": 31,
+          "relax_origin": 14,
+          "relax_genres": 7,
+          "relax_votes_mid": 4,
+          "relax_votes_low": 1
+        },
+        "source_stage": {
+          "quality_seed": 63,
+          "focused": 31,
+          "fallback": 26
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "quality_seed": 63,
+        "base": 31,
+        "relax_origin": 14,
+        "relax_genres": 7,
+        "relax_votes_mid": 4,
+        "relax_votes_low": 1
+      },
+      "candidate_media_counts": {
+        "tv": 84,
+        "movie": 36
+      },
+      "candidate_origin_counts": {
+        "any": 120
+      }
+    },
+    {
+      "scenario": "ru-balanced",
+      "mode": "mock",
+      "strategy": "broad_top_seed",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\broad_top_seed_ru-balanced.sqlite3",
+      "profile": {
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "mixed",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 101,
+      "elapsed_ms": 9782.3,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 60,
+        "tv": 60
+      },
+      "actual_media": {
+        "tv": 60,
+        "movie": 60
+      },
+      "planned_origin": {
+        "domestic": 60,
+        "foreign": 60
+      },
+      "actual_origin": {
+        "domestic": 60,
+        "foreign": 60
+      },
+      "source_contributions": {
+        "origin_top_seed": 30,
+        "quality_seed": 17,
+        "focused": 47,
+        "fallback": 26
+      },
+      "fallbacks": {
+        "origin_top_seed": 30,
+        "quality_seed": 17,
+        "base": 47,
+        "relax_genres": 21,
+        "relax_votes_mid": 5
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 400,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "en": 60,
+        "ru": 30,
+        "ko": 7,
+        "ja": 7,
+        "fr": 5,
+        "es": 5,
+        "de": 3,
+        "it": 3
+      },
+      "rejection_counts": {
+        "quota_mismatch": 400
+      },
+      "planned_counts": {
+        "media_type": {
+          "movie": 60,
+          "tv": 60
+        },
+        "release": {
+          "classic_sweep": 36,
+          "new_sweep": 36,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 60,
+          "light": 60
+        },
+        "origin": {
+          "domestic": 60,
+          "foreign": 60
+        },
+        "original_language": {
+          "de": 3,
+          "en": 30,
+          "es": 5,
+          "it": 3,
+          "fr": 5,
+          "ja": 7,
+          "ko": 7
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 60,
+          "movie": 60
+        },
+        "release": {
+          "new_sweep": 36,
+          "top_all_time": 48,
+          "classic_sweep": 36
+        },
+        "vibe": {
+          "light": 60,
+          "dark": 60
+        },
+        "origin": {
+          "domestic": 60,
+          "foreign": 60
+        },
+        "original_language": {
+          "en": 60,
+          "ru": 30,
+          "ko": 7,
+          "fr": 5,
+          "ja": 7,
+          "es": 5,
+          "de": 3,
+          "it": 3
+        },
+        "fallback": {
+          "origin_top_seed": 30,
+          "quality_seed": 17,
+          "base": 47,
+          "relax_genres": 21,
+          "relax_votes_mid": 5
+        },
+        "source_stage": {
+          "origin_top_seed": 30,
+          "quality_seed": 17,
+          "focused": 47,
+          "fallback": 26
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "origin_top_seed": 30,
+        "quality_seed": 17,
+        "base": 47,
+        "relax_genres": 21,
+        "relax_votes_mid": 5
+      },
+      "candidate_media_counts": {
+        "tv": 60,
+        "movie": 60
+      },
+      "candidate_origin_counts": {
+        "domestic": 60,
+        "foreign": 60
+      }
+    },
+    {
+      "scenario": "ru-domestic-movie-classic-light",
+      "mode": "mock",
+      "strategy": "broad_top_seed",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\broad_top_seed_ru-domestic-movie-classic-light.sqlite3",
+      "profile": {
+        "media_preference": "movie",
+        "release_preference": "classic",
+        "vibe_preference": "light",
+        "origin_preference": "domestic",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 73,
+      "elapsed_ms": 7086.7,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 84,
+        "tv": 36
+      },
+      "actual_media": {
+        "movie": 84,
+        "tv": 36
+      },
+      "planned_origin": {
+        "domestic": 84,
+        "foreign": 36
+      },
+      "actual_origin": {
+        "domestic": 84,
+        "foreign": 36
+      },
+      "source_contributions": {
+        "origin_top_seed": 44,
+        "quality_seed": 11,
+        "focused": 40,
+        "fallback": 25
+      },
+      "fallbacks": {
+        "origin_top_seed": 44,
+        "quality_seed": 11,
+        "base": 40,
+        "relax_genres": 18,
+        "relax_votes_mid": 5,
+        "relax_votes_low": 2
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 320,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "en": 64,
+        "ru": 38,
+        "ko": 4,
+        "ja": 4,
+        "fr": 3,
+        "es": 3,
+        "de": 2,
+        "it": 2
+      },
+      "rejection_counts": {
+        "quota_mismatch": 320
+      },
+      "planned_counts": {
+        "media_type": {
+          "movie": 84,
+          "tv": 36
+        },
+        "release": {
+          "classic_sweep": 72,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 36,
+          "light": 84
+        },
+        "origin": {
+          "domestic": 84,
+          "foreign": 36
+        },
+        "original_language": {
+          "en": 18,
+          "es": 3,
+          "fr": 3,
+          "ja": 4,
+          "ko": 4,
+          "de": 2,
+          "it": 2
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "movie": 84,
+          "tv": 36
+        },
+        "release": {
+          "classic_sweep": 72,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "light": 84,
+          "dark": 36
+        },
+        "origin": {
+          "domestic": 84,
+          "foreign": 36
+        },
+        "original_language": {
+          "en": 64,
+          "ru": 38,
+          "ko": 4,
+          "ja": 4,
+          "fr": 3,
+          "es": 3,
+          "de": 2,
+          "it": 2
+        },
+        "fallback": {
+          "origin_top_seed": 44,
+          "quality_seed": 11,
+          "base": 40,
+          "relax_genres": 18,
+          "relax_votes_mid": 5,
+          "relax_votes_low": 2
+        },
+        "source_stage": {
+          "origin_top_seed": 44,
+          "quality_seed": 11,
+          "focused": 40,
+          "fallback": 25
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "origin_top_seed": 44,
+        "quality_seed": 11,
+        "base": 40,
+        "relax_genres": 18,
+        "relax_votes_mid": 5,
+        "relax_votes_low": 2
+      },
+      "candidate_media_counts": {
+        "movie": 84,
+        "tv": 36
+      },
+      "candidate_origin_counts": {
+        "domestic": 84,
+        "foreign": 36
+      }
+    },
+    {
+      "scenario": "en-tv-new-dark",
+      "mode": "mock",
+      "strategy": "focused_first",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\focused_first_en-tv-new-dark.sqlite3",
+      "profile": {
+        "media_preference": "tv",
+        "release_preference": "new",
+        "vibe_preference": "dark",
+        "origin_preference": null,
+        "ui_language": "en"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 33,
+      "elapsed_ms": 4035.6,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 36,
+        "tv": 84
+      },
+      "actual_media": {
+        "tv": 84,
+        "movie": 36
+      },
+      "planned_origin": {
+        "any": 120
+      },
+      "actual_origin": {
+        "any": 120
+      },
+      "source_contributions": {
+        "focused": 63,
+        "quality_seed": 31,
+        "fallback": 26
+      },
+      "fallbacks": {
+        "base": 63,
+        "quality_seed": 31,
+        "relax_origin": 14,
+        "relax_genres": 7,
+        "relax_votes_mid": 4,
+        "relax_votes_low": 1
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 0,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "en": 120
+      },
+      "rejection_counts": {},
+      "planned_counts": {
+        "media_type": {
+          "movie": 36,
+          "tv": 84
+        },
+        "release": {
+          "new_sweep": 84,
+          "top_all_time": 36
+        },
+        "vibe": {
+          "dark": 84,
+          "light": 36
+        },
+        "origin": {
+          "any": 120
+        },
+        "original_language": {}
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 84,
+          "movie": 36
+        },
+        "release": {
+          "new_sweep": 84,
+          "top_all_time": 36
+        },
+        "vibe": {
+          "dark": 84,
+          "light": 36
+        },
+        "origin": {
+          "any": 120
+        },
+        "original_language": {
+          "en": 120
+        },
+        "fallback": {
+          "base": 63,
+          "quality_seed": 31,
+          "relax_origin": 14,
+          "relax_genres": 7,
+          "relax_votes_mid": 4,
+          "relax_votes_low": 1
+        },
+        "source_stage": {
+          "focused": 63,
+          "quality_seed": 31,
+          "fallback": 26
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "base": 63,
+        "quality_seed": 31,
+        "relax_origin": 14,
+        "relax_genres": 7,
+        "relax_votes_mid": 4,
+        "relax_votes_low": 1
+      },
+      "candidate_media_counts": {
+        "tv": 84,
+        "movie": 36
+      },
+      "candidate_origin_counts": {
+        "any": 120
+      }
+    },
+    {
+      "scenario": "ru-balanced",
+      "mode": "mock",
+      "strategy": "focused_first",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\focused_first_ru-balanced.sqlite3",
+      "profile": {
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "mixed",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 100,
+      "elapsed_ms": 9597.9,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 60,
+        "tv": 60
+      },
+      "actual_media": {
+        "tv": 60,
+        "movie": 60
+      },
+      "planned_origin": {
+        "domestic": 60,
+        "foreign": 60
+      },
+      "actual_origin": {
+        "domestic": 60,
+        "foreign": 60
+      },
+      "source_contributions": {
+        "focused": 65,
+        "origin_top_seed": 17,
+        "quality_seed": 12,
+        "fallback": 26
+      },
+      "fallbacks": {
+        "base": 65,
+        "origin_top_seed": 17,
+        "quality_seed": 12,
+        "relax_genres": 21,
+        "relax_votes_mid": 5
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 380,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "en": 47,
+        "ru": 43,
+        "ko": 7,
+        "ja": 7,
+        "fr": 5,
+        "es": 5,
+        "de": 3,
+        "it": 3
+      },
+      "rejection_counts": {
+        "quota_mismatch": 380
+      },
+      "planned_counts": {
+        "media_type": {
+          "movie": 60,
+          "tv": 60
+        },
+        "release": {
+          "classic_sweep": 36,
+          "new_sweep": 36,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 60,
+          "light": 60
+        },
+        "origin": {
+          "domestic": 60,
+          "foreign": 60
+        },
+        "original_language": {
+          "de": 3,
+          "en": 30,
+          "es": 5,
+          "it": 3,
+          "fr": 5,
+          "ja": 7,
+          "ko": 7
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 60,
+          "movie": 60
+        },
+        "release": {
+          "new_sweep": 36,
+          "top_all_time": 48,
+          "classic_sweep": 36
+        },
+        "vibe": {
+          "light": 60,
+          "dark": 60
+        },
+        "origin": {
+          "domestic": 60,
+          "foreign": 60
+        },
+        "original_language": {
+          "ru": 43,
+          "ko": 7,
+          "fr": 5,
+          "ja": 7,
+          "en": 47,
+          "es": 5,
+          "de": 3,
+          "it": 3
+        },
+        "fallback": {
+          "base": 65,
+          "origin_top_seed": 17,
+          "quality_seed": 12,
+          "relax_genres": 21,
+          "relax_votes_mid": 5
+        },
+        "source_stage": {
+          "focused": 65,
+          "origin_top_seed": 17,
+          "quality_seed": 12,
+          "fallback": 26
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "base": 65,
+        "origin_top_seed": 17,
+        "quality_seed": 12,
+        "relax_genres": 21,
+        "relax_votes_mid": 5
+      },
+      "candidate_media_counts": {
+        "tv": 60,
+        "movie": 60
+      },
+      "candidate_origin_counts": {
+        "domestic": 60,
+        "foreign": 60
+      }
+    },
+    {
+      "scenario": "ru-domestic-movie-classic-light",
+      "mode": "mock",
+      "strategy": "focused_first",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\focused_first_ru-domestic-movie-classic-light.sqlite3",
+      "profile": {
+        "media_preference": "movie",
+        "release_preference": "classic",
+        "vibe_preference": "light",
+        "origin_preference": "domestic",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 70,
+      "elapsed_ms": 7030.9,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 84,
+        "tv": 36
+      },
+      "actual_media": {
+        "movie": 84,
+        "tv": 36
+      },
+      "planned_origin": {
+        "domestic": 84,
+        "foreign": 36
+      },
+      "actual_origin": {
+        "domestic": 84,
+        "foreign": 36
+      },
+      "source_contributions": {
+        "focused": 67,
+        "origin_top_seed": 23,
+        "quality_seed": 5,
+        "fallback": 25
+      },
+      "fallbacks": {
+        "base": 67,
+        "origin_top_seed": 23,
+        "quality_seed": 5,
+        "relax_genres": 18,
+        "relax_votes_mid": 5,
+        "relax_votes_low": 2
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 260,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "ru": 59,
+        "en": 43,
+        "ko": 4,
+        "ja": 4,
+        "fr": 3,
+        "es": 3,
+        "de": 2,
+        "it": 2
+      },
+      "rejection_counts": {
+        "quota_mismatch": 260
+      },
+      "planned_counts": {
+        "media_type": {
+          "movie": 84,
+          "tv": 36
+        },
+        "release": {
+          "classic_sweep": 72,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 36,
+          "light": 84
+        },
+        "origin": {
+          "domestic": 84,
+          "foreign": 36
+        },
+        "original_language": {
+          "en": 18,
+          "es": 3,
+          "fr": 3,
+          "ja": 4,
+          "ko": 4,
+          "de": 2,
+          "it": 2
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "movie": 84,
+          "tv": 36
+        },
+        "release": {
+          "classic_sweep": 72,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "light": 84,
+          "dark": 36
+        },
+        "origin": {
+          "domestic": 84,
+          "foreign": 36
+        },
+        "original_language": {
+          "ru": 59,
+          "en": 43,
+          "ko": 4,
+          "ja": 4,
+          "fr": 3,
+          "es": 3,
+          "de": 2,
+          "it": 2
+        },
+        "fallback": {
+          "base": 67,
+          "origin_top_seed": 23,
+          "quality_seed": 5,
+          "relax_genres": 18,
+          "relax_votes_mid": 5,
+          "relax_votes_low": 2
+        },
+        "source_stage": {
+          "focused": 67,
+          "origin_top_seed": 23,
+          "quality_seed": 5,
+          "fallback": 25
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "base": 67,
+        "origin_top_seed": 23,
+        "quality_seed": 5,
+        "relax_genres": 18,
+        "relax_votes_mid": 5,
+        "relax_votes_low": 2
+      },
+      "candidate_media_counts": {
+        "movie": 84,
+        "tv": 36
+      },
+      "candidate_origin_counts": {
+        "domestic": 84,
+        "foreign": 36
+      }
+    },
+    {
+      "scenario": "en-tv-new-dark",
+      "mode": "mock",
+      "strategy": "hybrid_quality_focused",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\hybrid_quality_focused_en-tv-new-dark.sqlite3",
+      "profile": {
+        "media_preference": "tv",
+        "release_preference": "new",
+        "vibe_preference": "dark",
+        "origin_preference": null,
+        "ui_language": "en"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 33,
+      "elapsed_ms": 4078.2,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 36,
+        "tv": 84
+      },
+      "actual_media": {
+        "tv": 84,
+        "movie": 36
+      },
+      "planned_origin": {
+        "any": 120
+      },
+      "actual_origin": {
+        "any": 120
+      },
+      "source_contributions": {
+        "focused": 63,
+        "quality_seed": 31,
+        "fallback": 26
+      },
+      "fallbacks": {
+        "base": 63,
+        "quality_seed": 31,
+        "relax_origin": 14,
+        "relax_genres": 7,
+        "relax_votes_mid": 4,
+        "relax_votes_low": 1
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 0,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "en": 120
+      },
+      "rejection_counts": {},
+      "planned_counts": {
+        "media_type": {
+          "movie": 36,
+          "tv": 84
+        },
+        "release": {
+          "new_sweep": 84,
+          "top_all_time": 36
+        },
+        "vibe": {
+          "dark": 84,
+          "light": 36
+        },
+        "origin": {
+          "any": 120
+        },
+        "original_language": {}
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 84,
+          "movie": 36
+        },
+        "release": {
+          "new_sweep": 84,
+          "top_all_time": 36
+        },
+        "vibe": {
+          "dark": 84,
+          "light": 36
+        },
+        "origin": {
+          "any": 120
+        },
+        "original_language": {
+          "en": 120
+        },
+        "fallback": {
+          "base": 63,
+          "quality_seed": 31,
+          "relax_origin": 14,
+          "relax_genres": 7,
+          "relax_votes_mid": 4,
+          "relax_votes_low": 1
+        },
+        "source_stage": {
+          "focused": 63,
+          "quality_seed": 31,
+          "fallback": 26
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "base": 63,
+        "quality_seed": 31,
+        "relax_origin": 14,
+        "relax_genres": 7,
+        "relax_votes_mid": 4,
+        "relax_votes_low": 1
+      },
+      "candidate_media_counts": {
+        "tv": 84,
+        "movie": 36
+      },
+      "candidate_origin_counts": {
+        "any": 120
+      }
+    },
+    {
+      "scenario": "ru-balanced",
+      "mode": "mock",
+      "strategy": "hybrid_quality_focused",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\hybrid_quality_focused_ru-balanced.sqlite3",
+      "profile": {
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "mixed",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 101,
+      "elapsed_ms": 9690.3,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 60,
+        "tv": 60
+      },
+      "actual_media": {
+        "tv": 60,
+        "movie": 60
+      },
+      "planned_origin": {
+        "domestic": 60,
+        "foreign": 60
+      },
+      "actual_origin": {
+        "domestic": 60,
+        "foreign": 60
+      },
+      "source_contributions": {
+        "origin_top_seed": 30,
+        "quality_seed": 17,
+        "focused": 47,
+        "fallback": 26
+      },
+      "fallbacks": {
+        "origin_top_seed": 30,
+        "quality_seed": 17,
+        "base": 47,
+        "relax_genres": 21,
+        "relax_votes_mid": 5
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 400,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "en": 60,
+        "ru": 30,
+        "ko": 7,
+        "ja": 7,
+        "fr": 5,
+        "es": 5,
+        "de": 3,
+        "it": 3
+      },
+      "rejection_counts": {
+        "quota_mismatch": 400
+      },
+      "planned_counts": {
+        "media_type": {
+          "movie": 60,
+          "tv": 60
+        },
+        "release": {
+          "classic_sweep": 36,
+          "new_sweep": 36,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 60,
+          "light": 60
+        },
+        "origin": {
+          "domestic": 60,
+          "foreign": 60
+        },
+        "original_language": {
+          "de": 3,
+          "en": 30,
+          "es": 5,
+          "it": 3,
+          "fr": 5,
+          "ja": 7,
+          "ko": 7
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 60,
+          "movie": 60
+        },
+        "release": {
+          "new_sweep": 36,
+          "top_all_time": 48,
+          "classic_sweep": 36
+        },
+        "vibe": {
+          "light": 60,
+          "dark": 60
+        },
+        "origin": {
+          "domestic": 60,
+          "foreign": 60
+        },
+        "original_language": {
+          "en": 60,
+          "ru": 30,
+          "ko": 7,
+          "fr": 5,
+          "ja": 7,
+          "es": 5,
+          "de": 3,
+          "it": 3
+        },
+        "fallback": {
+          "origin_top_seed": 30,
+          "quality_seed": 17,
+          "base": 47,
+          "relax_genres": 21,
+          "relax_votes_mid": 5
+        },
+        "source_stage": {
+          "origin_top_seed": 30,
+          "quality_seed": 17,
+          "focused": 47,
+          "fallback": 26
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "origin_top_seed": 30,
+        "quality_seed": 17,
+        "base": 47,
+        "relax_genres": 21,
+        "relax_votes_mid": 5
+      },
+      "candidate_media_counts": {
+        "tv": 60,
+        "movie": 60
+      },
+      "candidate_origin_counts": {
+        "domestic": 60,
+        "foreign": 60
+      }
+    },
+    {
+      "scenario": "ru-domestic-movie-classic-light",
+      "mode": "mock",
+      "strategy": "hybrid_quality_focused",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\hybrid_quality_focused_ru-domestic-movie-classic-light.sqlite3",
+      "profile": {
+        "media_preference": "movie",
+        "release_preference": "classic",
+        "vibe_preference": "light",
+        "origin_preference": "domestic",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 120,
+      "created_count": 120,
+      "pool_count": 120,
+      "pool_size": 120,
+      "api_requests": 70,
+      "elapsed_ms": 6850.9,
+      "quota_integrity": true,
+      "underfill": false,
+      "planned_media": {
+        "movie": 84,
+        "tv": 36
+      },
+      "actual_media": {
+        "movie": 84,
+        "tv": 36
+      },
+      "planned_origin": {
+        "domestic": 84,
+        "foreign": 36
+      },
+      "actual_origin": {
+        "domestic": 84,
+        "foreign": 36
+      },
+      "source_contributions": {
+        "focused": 67,
+        "origin_top_seed": 23,
+        "quality_seed": 5,
+        "fallback": 25
+      },
+      "fallbacks": {
+        "base": 67,
+        "origin_top_seed": 23,
+        "quality_seed": 5,
+        "relax_genres": 18,
+        "relax_votes_mid": 5,
+        "relax_votes_low": 2
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 260,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "ru": 59,
+        "en": 43,
+        "ko": 4,
+        "ja": 4,
+        "fr": 3,
+        "es": 3,
+        "de": 2,
+        "it": 2
+      },
+      "rejection_counts": {
+        "quota_mismatch": 260
+      },
+      "planned_counts": {
+        "media_type": {
+          "movie": 84,
+          "tv": 36
+        },
+        "release": {
+          "classic_sweep": 72,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 36,
+          "light": 84
+        },
+        "origin": {
+          "domestic": 84,
+          "foreign": 36
+        },
+        "original_language": {
+          "en": 18,
+          "es": 3,
+          "fr": 3,
+          "ja": 4,
+          "ko": 4,
+          "de": 2,
+          "it": 2
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "movie": 84,
+          "tv": 36
+        },
+        "release": {
+          "classic_sweep": 72,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "light": 84,
+          "dark": 36
+        },
+        "origin": {
+          "domestic": 84,
+          "foreign": 36
+        },
+        "original_language": {
+          "ru": 59,
+          "en": 43,
+          "ko": 4,
+          "ja": 4,
+          "fr": 3,
+          "es": 3,
+          "de": 2,
+          "it": 2
+        },
+        "fallback": {
+          "base": 67,
+          "origin_top_seed": 23,
+          "quality_seed": 5,
+          "relax_genres": 18,
+          "relax_votes_mid": 5,
+          "relax_votes_low": 2
+        },
+        "source_stage": {
+          "focused": 67,
+          "origin_top_seed": 23,
+          "quality_seed": 5,
+          "fallback": 25
+        }
+      },
+      "warnings": [],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "base": 67,
+        "origin_top_seed": 23,
+        "quality_seed": 5,
+        "relax_genres": 18,
+        "relax_votes_mid": 5,
+        "relax_votes_low": 2
+      },
+      "candidate_media_counts": {
+        "movie": 84,
+        "tv": 36
+      },
+      "candidate_origin_counts": {
+        "domestic": 84,
+        "foreign": 36
+      }
+    },
+    {
+      "scenario": "en-tv-new-dark",
+      "mode": "mock",
+      "strategy": "strict_underfill",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\strict_underfill_en-tv-new-dark.sqlite3",
+      "profile": {
+        "media_preference": "tv",
+        "release_preference": "new",
+        "vibe_preference": "dark",
+        "origin_preference": null,
+        "ui_language": "en"
+      },
+      "ok": true,
+      "created": 63,
+      "created_count": 63,
+      "pool_count": 63,
+      "pool_size": 63,
+      "api_requests": 8,
+      "elapsed_ms": 970.3,
+      "quota_integrity": false,
+      "underfill": true,
+      "planned_media": {
+        "movie": 36,
+        "tv": 84
+      },
+      "actual_media": {
+        "tv": 43,
+        "movie": 20
+      },
+      "planned_origin": {
+        "any": 120
+      },
+      "actual_origin": {
+        "any": 63
+      },
+      "source_contributions": {
+        "focused": 63
+      },
+      "fallbacks": {
+        "base": 63
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 0,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "en": 63
+      },
+      "rejection_counts": {},
+      "planned_counts": {
+        "media_type": {
+          "movie": 36,
+          "tv": 84
+        },
+        "release": {
+          "new_sweep": 84,
+          "top_all_time": 36
+        },
+        "vibe": {
+          "dark": 84,
+          "light": 36
+        },
+        "origin": {
+          "any": 120
+        },
+        "original_language": {}
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 43,
+          "movie": 20
+        },
+        "release": {
+          "new_sweep": 43,
+          "top_all_time": 20
+        },
+        "vibe": {
+          "dark": 43,
+          "light": 20
+        },
+        "origin": {
+          "any": 63
+        },
+        "original_language": {
+          "en": 63
+        },
+        "fallback": {
+          "base": 63
+        },
+        "source_stage": {
+          "focused": 63
+        }
+      },
+      "warnings": [
+        "Starter pool underfilled: created 63 of 120.",
+        "Only 63 candidates collected; the pool can be topped up later.",
+        "Media quota underfilled: movie planned 36, actual 20.",
+        "Media quota underfilled: tv planned 84, actual 43."
+      ],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "base": 63
+      },
+      "candidate_media_counts": {
+        "tv": 43,
+        "movie": 20
+      },
+      "candidate_origin_counts": {
+        "any": 63
+      }
+    },
+    {
+      "scenario": "ru-balanced",
+      "mode": "mock",
+      "strategy": "strict_underfill",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\strict_underfill_ru-balanced.sqlite3",
+      "profile": {
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "mixed",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 65,
+      "created_count": 65,
+      "pool_count": 65,
+      "pool_size": 65,
+      "api_requests": 32,
+      "elapsed_ms": 3602.5,
+      "quota_integrity": false,
+      "underfill": true,
+      "planned_media": {
+        "movie": 60,
+        "tv": 60
+      },
+      "actual_media": {
+        "tv": 32,
+        "movie": 33
+      },
+      "planned_origin": {
+        "domestic": 60,
+        "foreign": 60
+      },
+      "actual_origin": {
+        "domestic": 30,
+        "foreign": 35
+      },
+      "source_contributions": {
+        "focused": 65
+      },
+      "fallbacks": {
+        "base": 65
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 0,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "ru": 30,
+        "en": 17,
+        "ko": 4,
+        "ja": 4,
+        "fr": 3,
+        "es": 3,
+        "de": 2,
+        "it": 2
+      },
+      "rejection_counts": {},
+      "planned_counts": {
+        "media_type": {
+          "movie": 60,
+          "tv": 60
+        },
+        "release": {
+          "classic_sweep": 36,
+          "new_sweep": 36,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 60,
+          "light": 60
+        },
+        "origin": {
+          "domestic": 60,
+          "foreign": 60
+        },
+        "original_language": {
+          "de": 3,
+          "en": 30,
+          "es": 5,
+          "it": 3,
+          "fr": 5,
+          "ja": 7,
+          "ko": 7
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "tv": 32,
+          "movie": 33
+        },
+        "release": {
+          "new_sweep": 19,
+          "top_all_time": 27,
+          "classic_sweep": 19
+        },
+        "vibe": {
+          "light": 32,
+          "dark": 33
+        },
+        "origin": {
+          "domestic": 30,
+          "foreign": 35
+        },
+        "original_language": {
+          "ru": 30,
+          "ko": 4,
+          "fr": 3,
+          "ja": 4,
+          "en": 17,
+          "es": 3,
+          "de": 2,
+          "it": 2
+        },
+        "fallback": {
+          "base": 65
+        },
+        "source_stage": {
+          "focused": 65
+        }
+      },
+      "warnings": [
+        "Starter pool underfilled: created 65 of 120.",
+        "Only 65 candidates collected; the pool can be topped up later.",
+        "Media quota underfilled: movie planned 60, actual 33.",
+        "Media quota underfilled: tv planned 60, actual 32.",
+        "Origin quota underfilled: domestic planned 60, actual 30.",
+        "Origin quota underfilled: foreign planned 60, actual 35."
+      ],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "base": 65
+      },
+      "candidate_media_counts": {
+        "tv": 32,
+        "movie": 33
+      },
+      "candidate_origin_counts": {
+        "domestic": 30,
+        "foreign": 35
+      }
+    },
+    {
+      "scenario": "ru-domestic-movie-classic-light",
+      "mode": "mock",
+      "strategy": "strict_underfill",
+      "target": 120,
+      "db_path": "C:\\Users\\super\\AppData\\Local\\Temp\\watchbane-onboarding-pool-tygb2xim\\strict_underfill_ru-domestic-movie-classic-light.sqlite3",
+      "profile": {
+        "media_preference": "movie",
+        "release_preference": "classic",
+        "vibe_preference": "light",
+        "origin_preference": "domestic",
+        "ui_language": "ru"
+      },
+      "ok": true,
+      "created": 67,
+      "created_count": 67,
+      "pool_count": 67,
+      "pool_size": 67,
+      "api_requests": 23,
+      "elapsed_ms": 2729.8,
+      "quota_integrity": false,
+      "underfill": true,
+      "planned_media": {
+        "movie": 84,
+        "tv": 36
+      },
+      "actual_media": {
+        "movie": 47,
+        "tv": 20
+      },
+      "planned_origin": {
+        "domestic": 84,
+        "foreign": 36
+      },
+      "actual_origin": {
+        "domestic": 44,
+        "foreign": 23
+      },
+      "source_contributions": {
+        "focused": 67
+      },
+      "fallbacks": {
+        "base": 67
+      },
+      "future_rejected": 0,
+      "quota_mismatch_rejected": 0,
+      "duplicate_rejected": 0,
+      "top_languages": {
+        "ru": 44,
+        "en": 11,
+        "ko": 3,
+        "ja": 3,
+        "fr": 2,
+        "es": 2,
+        "de": 1,
+        "it": 1
+      },
+      "rejection_counts": {},
+      "planned_counts": {
+        "media_type": {
+          "movie": 84,
+          "tv": 36
+        },
+        "release": {
+          "classic_sweep": 72,
+          "top_all_time": 48
+        },
+        "vibe": {
+          "dark": 36,
+          "light": 84
+        },
+        "origin": {
+          "domestic": 84,
+          "foreign": 36
+        },
+        "original_language": {
+          "en": 18,
+          "es": 3,
+          "fr": 3,
+          "ja": 4,
+          "ko": 4,
+          "de": 2,
+          "it": 2
+        }
+      },
+      "actual_counts": {
+        "media_type": {
+          "movie": 47,
+          "tv": 20
+        },
+        "release": {
+          "classic_sweep": 39,
+          "top_all_time": 28
+        },
+        "vibe": {
+          "light": 47,
+          "dark": 20
+        },
+        "origin": {
+          "domestic": 44,
+          "foreign": 23
+        },
+        "original_language": {
+          "ru": 44,
+          "en": 11,
+          "ko": 3,
+          "ja": 3,
+          "fr": 2,
+          "es": 2,
+          "de": 1,
+          "it": 1
+        },
+        "fallback": {
+          "base": 67
+        },
+        "source_stage": {
+          "focused": 67
+        }
+      },
+      "warnings": [
+        "Starter pool underfilled: created 67 of 120.",
+        "Only 67 candidates collected; the pool can be topped up later.",
+        "Media quota underfilled: movie planned 84, actual 47.",
+        "Media quota underfilled: tv planned 36, actual 20.",
+        "Origin quota underfilled: domestic planned 84, actual 44.",
+        "Origin quota underfilled: foreign planned 36, actual 23."
+      ],
+      "rejected_future_count": 0,
+      "top_fallback_counts": {
+        "base": 67
+      },
+      "candidate_media_counts": {
+        "movie": 47,
+        "tv": 20
+      },
+      "candidate_origin_counts": {
+        "domestic": 44,
+        "foreign": 23
+      }
+    }
+  ]
+}
