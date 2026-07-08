@@ -3,6 +3,20 @@ from __future__ import annotations
 from storage.sqlite import watched_repository
 
 
+def test_watched_repository_facade_exports_public_api() -> None:
+    assert set(watched_repository.__all__) == {
+        "delete_watched",
+        "find_exact_title",
+        "find_watched_identity",
+        "get_meta_obj",
+        "is_origin_title",
+        "load_dataset_dict",
+        "load_meta_dict",
+        "save_dataset_dict",
+        "save_meta_dict",
+    }
+
+
 def _movie(title: str = "Метод", *, media_type: str = "tv") -> dict:
     return {
         "main_info": {

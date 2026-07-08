@@ -2,16 +2,13 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
-from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 
 from candidates.models.keys import title_identity_key
 from candidates.models.schema import normalize_candidate_record
-from storage.sqlite.connection import connect
-from storage.sqlite.migrations import apply_migrations
 from storage.sqlite.json_codec import dumps_json, loads_json
+from storage.sqlite.session import connection, transaction, utc_now
 
 
 ACTION_WATCHLIST = "watchlist"
@@ -19,20 +16,7 @@ ACTION_HIDDEN = "hidden"
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def _connection(conn: sqlite3.Connection | None, path: str | Path | None):
-    if conn is not None:
-        apply_migrations(conn)
-        return conn, False
-    active = connect(path)
-    apply_migrations(active)
-    return active, True
-
-
-def _transaction(active: sqlite3.Connection, owned: bool):
-    return active if owned else nullcontext(active)
+    return utc_now()
 
 
 def _timestamp_field(action: str) -> str:
@@ -53,7 +37,7 @@ def load_candidate_actions_dict(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> dict:
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     try:
         result = {}
         for row in active.execute(
@@ -81,10 +65,10 @@ def save_candidate_actions_dict(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> None:
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     mapping = data if isinstance(data, dict) else {}
     try:
-        with _transaction(active, owned):
+        with transaction(active, owned):
             active.execute("DELETE FROM candidate_actions WHERE action = ?", (action,))
             for identity, entry in mapping.items():
                 if isinstance(entry, dict) is False:
@@ -115,11 +99,11 @@ def add_candidate_action(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> dict:
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     identity = title_identity_key(candidate)
     entry = build_action_entry(candidate, action)
     try:
-        with _transaction(active, owned):
+        with transaction(active, owned):
             active.execute(
                 """
                 INSERT INTO candidate_actions(

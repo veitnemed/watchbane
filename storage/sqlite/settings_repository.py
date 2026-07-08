@@ -2,32 +2,16 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
-from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 from typing import Any
 
-from storage.sqlite.connection import connect
-from storage.sqlite.migrations import apply_migrations
 from storage.sqlite.json_codec import dumps_json, loads_json
+from storage.sqlite.session import connection, transaction, utc_now
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def _connection(conn: sqlite3.Connection | None, path: str | Path | None):
-    if conn is not None:
-        apply_migrations(conn)
-        return conn, False
-    active = connect(path)
-    apply_migrations(active)
-    return active, True
-
-
-def _transaction(active: sqlite3.Connection, owned: bool):
-    return active if owned else nullcontext(active)
+    return utc_now()
 
 
 def load_settings_dict(
@@ -35,7 +19,7 @@ def load_settings_dict(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> dict:
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     try:
         result = {}
         for row in active.execute("SELECT key, value_json FROM app_settings ORDER BY key"):
@@ -52,10 +36,10 @@ def save_settings_dict(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> None:
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     settings = data if isinstance(data, dict) else {}
     try:
-        with _transaction(active, owned):
+        with transaction(active, owned):
             active.execute("DELETE FROM app_settings")
             timestamp = _now()
             for key, value in settings.items():
@@ -78,9 +62,9 @@ def set_setting(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> None:
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     try:
-        with _transaction(active, owned):
+        with transaction(active, owned):
             active.execute(
                 """
                 INSERT INTO app_settings(key, value_json, updated_at)
@@ -103,7 +87,7 @@ def get_setting(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> Any:
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     try:
         row = active.execute(
             "SELECT value_json FROM app_settings WHERE key = ?",

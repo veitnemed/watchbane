@@ -2,33 +2,17 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
-from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 from typing import Any
 
 from posters.cache import poster_identity_key
-from storage.sqlite.connection import connect
-from storage.sqlite.migrations import apply_migrations
 from storage.sqlite.json_codec import dumps_json, loads_json
+from storage.sqlite.session import connection, transaction, utc_now
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def _connection(conn: sqlite3.Connection | None, path: str | Path | None):
-    if conn is not None:
-        apply_migrations(conn)
-        return conn, False
-    active = connect(path)
-    apply_migrations(active)
-    return active, True
-
-
-def _transaction(active: sqlite3.Connection, owned: bool):
-    return active if owned else nullcontext(active)
+    return utc_now()
 
 
 def _clean_year(value: Any) -> int | None:
@@ -61,7 +45,7 @@ def load_poster_cache_dict(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> dict:
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     try:
         result = {}
         for row in active.execute(
@@ -82,10 +66,10 @@ def save_poster_cache_dict(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> None:
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     cache = data if isinstance(data, dict) else {}
     try:
-        with _transaction(active, owned):
+        with transaction(active, owned):
             active.execute("DELETE FROM poster_cache_entries")
             timestamp = _now()
             for identity, entry in cache.items():
@@ -126,7 +110,7 @@ def upsert_poster_cache_entry(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> dict:
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     identity = poster_identity_key(title, year)
     timestamp = _now()
     entry = {
@@ -140,7 +124,7 @@ def upsert_poster_cache_entry(
         "updated_at": timestamp,
     }
     try:
-        with _transaction(active, owned):
+        with transaction(active, owned):
             active.execute(
                 """
                 INSERT INTO poster_cache_entries(

@@ -2,35 +2,19 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
-from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 
 from candidates.pool.normalization import normalize_storage_pool
 from candidates.pool.watched_cleanup import purge_watched_from_pool
 from dataset.models.media_type import normalize_media_type
-from storage.sqlite.connection import connect
-from storage.sqlite.migrations import apply_migrations
 from storage.sqlite.candidate_mapper import extract_candidate_record
 from storage.sqlite.json_codec import dumps_json, loads_json
+from storage.sqlite.session import connection, transaction, utc_now
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def _connection(conn: sqlite3.Connection | None, path: str | Path | None):
-    if conn is not None:
-        apply_migrations(conn)
-        return conn, False
-    active = connect(path)
-    apply_migrations(active)
-    return active, True
-
-
-def _transaction(active: sqlite3.Connection, owned: bool):
-    return active if owned else nullcontext(active)
+    return utc_now()
 
 
 def load_candidate_pool_dict(
@@ -39,7 +23,7 @@ def load_candidate_pool_dict(
     path: str | Path | None = None,
 ) -> dict:
     """Load the candidate pool in legacy dict shape."""
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     try:
         result = {}
         for row in active.execute(
@@ -62,12 +46,12 @@ def save_candidate_pool_dict(
     purge_watched: bool = True,
 ) -> None:
     """Persist candidate pool with the same normalization as JSON write-path."""
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     normalized = normalize_storage_pool(data)
     if purge_watched:
         normalized = purge_watched_from_pool(normalized)
     try:
-        with _transaction(active, owned):
+        with transaction(active, owned):
             active.execute("DELETE FROM candidate_records")
             timestamp = _now()
             for pool_key, candidate in normalized.items():
@@ -111,9 +95,9 @@ def clear_candidate_pool(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> None:
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     try:
-        with _transaction(active, owned):
+        with transaction(active, owned):
             active.execute("DELETE FROM candidate_records")
     finally:
         if owned:
@@ -126,7 +110,7 @@ def load_candidate_criteria_dict(
     path: str | Path | None = None,
 ) -> dict:
     """Load candidate criteria in legacy dict shape."""
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     try:
         result = {}
         for row in active.execute(
@@ -148,10 +132,10 @@ def save_candidate_criteria_dict(
     path: str | Path | None = None,
 ) -> None:
     """Persist candidate criteria in legacy dict shape."""
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     criteria_data = data if isinstance(data, dict) else {}
     try:
-        with _transaction(active, owned):
+        with transaction(active, owned):
             active.execute("DELETE FROM candidate_criteria")
             timestamp = _now()
             for criteria_name, criteria in criteria_data.items():
@@ -184,7 +168,7 @@ def query_candidate_records(
     limit: int | None = None,
 ) -> list[dict]:
     """Query candidates using indexed SQLite columns and return payload dicts."""
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     clauses: list[str] = []
     params: list[object] = []
     if media_type is not None:
@@ -232,7 +216,7 @@ def get_worst_candidate_records(
     limit: int = 50,
 ) -> list[dict]:
     """Return lowest-scoring candidates for eviction-style flows."""
-    active, owned = _connection(conn, path)
+    active, owned = connection(conn, path)
     try:
         return [
             payload
