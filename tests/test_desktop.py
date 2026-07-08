@@ -4356,6 +4356,45 @@ def test_detail_hero_contract_tokens_are_available() -> None:
     assert DETAIL_CARD_LAYOUT_PROFILE.detail_section_spacing == theme.DETAIL_SCORE_MAIN_INFO_GAP
 
 
+def test_film_theme_tokens_match_visual_brief() -> None:
+    from desktop import theme
+
+    expected = {
+        "window_bg": "#050B14",
+        "surface_0": "#071322",
+        "surface_1": "#0A182A",
+        "surface_2": "#0B1A2D",
+        "border_weak": "#17314F",
+        "border": "#1E4B78",
+        "border_strong": "#2EA8FF",
+        "accent": "#2EA8FF",
+        "accent_hover": "#35D7F2",
+        "accent_pressed": "#477DFF",
+        "accent_dim": "#0B3558",
+        "text": "#F4F8FF",
+        "text_subtle": "#C9D6EA",
+        "text_muted": "#8798B3",
+        "chip_bg": "#0B1E34",
+        "chip_border": "#22517F",
+        "chip_text": "#DCEAFF",
+        "movie_badge_bg": "#0B2542",
+        "movie_badge_border": "#2EA8FF",
+        "movie_badge_text": "#EAF6FF",
+        "rating_track": "#17314F",
+        "rating_value": "#2EA8FF",
+        "star_on": "#35AFFF",
+        "star_off": "#2A374A",
+        "scrollbar_bg": "#071322",
+        "scrollbar_handle": "#1E4B78",
+        "scrollbar_handle_hover": "#2EA8FF",
+    }
+
+    assert theme.FILM_COLORS == expected
+    assert theme.FILM_WINDOW_BG == expected["window_bg"]
+    assert theme.FILM_ACCENT == expected["accent"]
+    assert theme.FILM_STAR_ON == expected["star_on"]
+
+
 def test_detail_card_style_uses_requested_font_sizes() -> None:
     from desktop.theme import tokens
     from desktop.theme.scaling import detail_px, font_px, set_ui_scale
