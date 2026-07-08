@@ -1,4 +1,4 @@
-"""One-time migration of candidate_pool.json to the TMDb-only contract."""
+"""Legacy JSON candidate_pool repair tool for the TMDb-only contract."""
 
 from __future__ import annotations
 
@@ -154,10 +154,10 @@ def run_migration(*, apply: bool, report_path: Path = REPORT_PATH) -> dict[str, 
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Migrate candidate_pool.json to the TMDb-only contract.")
+    parser = argparse.ArgumentParser(description="Repair legacy candidate_pool.json for the TMDb-only contract.")
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--dry-run", action="store_true", help="Build report without changing candidate_pool.json.")
-    mode.add_argument("--apply", action="store_true", help="Backup and rewrite candidate_pool.json.")
+    mode.add_argument("--dry-run", action="store_true", help="Build report without changing legacy candidate_pool.json.")
+    mode.add_argument("--apply", action="store_true", help="Backup and rewrite legacy candidate_pool.json.")
     return parser.parse_args(argv)
 
 

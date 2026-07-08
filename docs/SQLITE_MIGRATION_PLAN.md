@@ -42,7 +42,10 @@ These artifacts stay file-based:
 Poster image bytes are not stored in SQLite. SQLite stores only poster metadata
 and local image paths.
 
-## Current JSON Paths
+## Legacy JSON Compatibility Paths
+
+These paths are not runtime source of truth. They are explicit import/export
+compatibility targets:
 
 - Watched dataset: `data/watched/titles.json`
 - Watched meta: `data/watched/meta.json`

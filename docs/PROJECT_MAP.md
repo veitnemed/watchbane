@@ -193,7 +193,7 @@ KP API и локальный IMDb dataset не участвуют в public add-
 
 ### Поиск кандидатов
 
-1. Пользователь задает runtime-фильтр (defaults из `criteria.json`, запись `"pool"`).
+1. Пользователь задает runtime-фильтр (defaults из SQLite criteria, запись `"pool"`).
 2. `candidates.service` готовит view для UI.
 3. `candidates.pool` и `candidates.repositories` читают общий pool; `app/core/filters` применяет runtime-фильтры.
 4. Incomplete-кандидаты означают неполную TMDb/core metadata.
@@ -216,10 +216,8 @@ KP API и локальный IMDb dataset не участвуют в public add-
 
 ## Данные и артефакты
 
-- `data/watched/titles.json` - watched dataset.
-- `data/watched/meta.json` - meta/enrichment.
-- `data/candidates/pool.json` - общий candidate pool.
-- `data/candidates/criteria.json` - defaults сбора и search-фильтров (запись `"pool"`).
+- `data/watchbane.sqlite3` - runtime source of truth: watched, meta, candidate pool, criteria, settings, user actions, poster metadata.
+- Legacy JSON under `data/watched/`, `data/candidates/`, `data/settings.json`, `data/cache/posters/posters.json` - explicit import/export compatibility only.
 - `data/exports/candidate_pool/*.json|*.csv` - generated TMDb candidate pool results.
 - `data/diagnostics/*.json` - generated diagnostics.
 - `data/cache/` - локальные кэши.

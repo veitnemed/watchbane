@@ -63,12 +63,12 @@ py start_app.py
 
 ## Candidate Pool
 
-Общий пул хранится в `data/candidates/pool.json`. Named pools больше не создаются: TMDb build и import обновляют один pool. Defaults фильтров и параметров сбора — в `data/candidates/criteria.json` (запись `"pool"`).
+Общий пул хранится в SQLite (`data/watchbane.sqlite3`). Named pools больше не создаются: TMDb build и import обновляют один pool. Defaults фильтров и параметров сбора хранятся в SQLite criteria (`"pool"`).
 
 Счётчики в UI/console:
 
 - **уникальных** — число кандидатов после нормализации по `title|year`;
-- **в JSON** — сколько физических записей в файле, если есть лишние дубли после merge старых пуллов.
+- **в storage** — сколько физических записей сохранено, если есть лишние дубли после merge старых пуллов.
 
 Очистка дублей (console: **Поиск сериалов → Управление pool → Очистить дубли в pool**):
 
@@ -81,7 +81,7 @@ TMDb candidate pool:
 2. TMDb Details.
 3. TMDb-only нормализация и scoring.
 4. Сохранение отдельного JSON/CSV результата.
-5. При необходимости импорт в общий candidate pool.
+5. При необходимости импорт в общий SQLite candidate pool.
 
 CLI-примеры:
 
@@ -125,10 +125,8 @@ py -m pytest
 
 | Назначение | Путь |
 | --- | --- |
-| Watched titles | `data/watched/titles.json` |
-| Watched meta | `data/watched/meta.json` |
-| Общий candidate pool | `data/candidates/pool.json` |
-| Criteria / defaults | `data/candidates/criteria.json` (запись `"pool"`) |
+| SQLite runtime DB | `data/watchbane.sqlite3` |
+| Legacy JSON import/export | `data/watched/`, `data/candidates/`, `data/settings.json`, `data/cache/posters/posters.json` |
 | API log | `data/logs/api_requests.log` |
 | Backup | `data/backups/` |
 | Excel/export | `data/exports/` |

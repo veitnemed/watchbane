@@ -1,4 +1,4 @@
-"""Refresh current candidate_pool.json from TMDb Details."""
+"""Refresh current SQLite candidate pool entries from TMDb Details."""
 
 from __future__ import annotations
 

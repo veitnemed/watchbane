@@ -192,7 +192,7 @@ The public recommendation flow is TMDb-only:
 2. TMDb Details adds metadata: overview, poster, genres, countries, external ids, credits, keywords and providers.
 3. Watchbane normalizes each item into a local candidate contract.
 4. Local scoring computes `quality_score`, `hidden_gem_score` and `final_score`.
-5. The result can be imported into `data/candidates/pool.json` and searched from GUI/console.
+5. The result can be saved into the SQLite candidate pool and searched from GUI/console.
 
 The candidate contract does not require KP/IMDb ratings. `imdb_id` may exist only as an external id.
 
@@ -229,6 +229,8 @@ py scripts/migrate_candidate_pool_tmdb_only.py --dry-run
 py scripts/refresh_candidate_pool_from_tmdb.py --dry-run
 py scripts/migrate_watched_raw_scores_tmdb_only.py --dry-run
 py scripts/refresh_watched_from_tmdb.py --dry-run
+py scripts/migrate_json_to_sqlite.py --dry-run
+py scripts/export_sqlite_to_json.py --output-dir data/exports/legacy-json
 ```
 
 ## ML / LLM Experimentation Direction
