@@ -105,3 +105,71 @@ def apply_v1(conn: sqlite3.Connection) -> None:
         """
     )
 
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {str(row["name"]) for row in conn.execute(f"PRAGMA table_info({table})")}
+
+
+def _add_column_if_missing(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    if column in _table_columns(conn, table):
+        return
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def apply_v2(conn: sqlite3.Connection) -> None:
+    """Add deterministic onboarding candidate-autofill storage."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS onboarding_profiles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ui_language TEXT NOT NULL,
+          media_preference TEXT NOT NULL,
+          release_preference TEXT NOT NULL,
+          vibe_preference TEXT NOT NULL,
+          origin_preference TEXT,
+          created_at TEXT NOT NULL,
+          completed_at TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_onboarding_profiles_completed
+          ON onboarding_profiles(completed_at);
+
+        CREATE TABLE IF NOT EXISTS candidate_autofill_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          onboarding_profile_id INTEGER NOT NULL,
+          bucket_id TEXT NOT NULL,
+          endpoint TEXT NOT NULL,
+          params_json TEXT NOT NULL,
+          page INTEGER NOT NULL,
+          status TEXT NOT NULL,
+          accepted_count INTEGER NOT NULL DEFAULT 0,
+          rejected_count INTEGER NOT NULL DEFAULT 0,
+          error_text TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY(onboarding_profile_id) REFERENCES onboarding_profiles(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_candidate_autofill_profile
+          ON candidate_autofill_requests(onboarding_profile_id);
+        CREATE INDEX IF NOT EXISTS idx_candidate_autofill_bucket
+          ON candidate_autofill_requests(bucket_id);
+        """
+    )
+
+    _add_column_if_missing(conn, "candidate_records", "source", "TEXT")
+    _add_column_if_missing(conn, "candidate_records", "source_bucket_id", "TEXT")
+    _add_column_if_missing(conn, "candidate_records", "onboarding_profile_id", "INTEGER")
+    _add_column_if_missing(conn, "candidate_records", "candidate_score", "REAL")
+    _add_column_if_missing(conn, "candidate_records", "fetch_rank", "INTEGER")
+
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_candidate_source
+          ON candidate_records(source);
+        CREATE INDEX IF NOT EXISTS idx_candidate_onboarding_profile
+          ON candidate_records(onboarding_profile_id);
+        CREATE INDEX IF NOT EXISTS idx_candidate_autofill_score
+          ON candidate_records(candidate_score DESC, fetch_rank ASC);
+        """
+    )
+

@@ -20,10 +20,12 @@ def insert_candidate_record(
         INSERT INTO candidate_records(
           pool_key, title, title_normalized, media_type, year, tmdb_id,
           criteria_name, tmdb_score, tmdb_votes, tmdb_popularity,
-          quality_score, hidden_gem_score, final_score, payload_json,
+          quality_score, hidden_gem_score, final_score,
+          source, source_bucket_id, onboarding_profile_id, candidate_score, fetch_rank,
+          payload_json,
           created_at, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             row.pool_key,
@@ -39,6 +41,11 @@ def insert_candidate_record(
             row.quality_score,
             row.hidden_gem_score,
             row.final_score,
+            row.source,
+            row.source_bucket_id,
+            row.onboarding_profile_id,
+            row.candidate_score,
+            row.fetch_rank,
             row.payload_json,
             timestamp,
             timestamp,

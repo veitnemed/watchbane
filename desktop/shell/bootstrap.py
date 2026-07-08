@@ -6,7 +6,7 @@ from dataclasses import asdict
 import os
 import sys
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication
 
@@ -115,6 +115,7 @@ def main() -> None:
         )
         window = WatchedMoviesWindow(initial_size=requested_initial_size)
         window.show()
+        QTimer.singleShot(250, window.maybe_show_onboarding_autofill)
         log_event("app.window.shown")
         exit_code = app.exec()
         log_event("app.exit", exit_code=exit_code)

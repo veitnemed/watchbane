@@ -9,6 +9,11 @@ from app.core import candidates as search_core
 from app.core import ranking as search_ranking
 from app.core import storage as search_storage
 from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
+from candidates.onboarding.autofill import (
+    OnboardingTasteProfile,
+    run_onboarding_autofill,
+    should_start_onboarding_autofill,
+)
 from candidates.pool.dataset_overlap import (
     count_pool_dataset_title_matches,
     purge_dataset_title_matches_from_pool,
@@ -198,6 +203,45 @@ def get_metadata_diagnostics_view(criteria_name: str | None = None) -> dict:
         "is_empty": len(pool) == 0,
         "incomplete_candidates": incomplete_candidates,
         "incomplete_count": len(incomplete_candidates),
+    }
+
+
+def should_show_onboarding_autofill() -> bool:
+    """Return True when startup should collect taste and build the first pool."""
+    return should_start_onboarding_autofill()
+
+
+def build_onboarding_candidate_pool(
+    profile: OnboardingTasteProfile | dict,
+    *,
+    progress_callback=None,
+    cancel_checker=None,
+) -> dict:
+    """Run deterministic onboarding autofill through the service boundary."""
+    if isinstance(profile, OnboardingTasteProfile):
+        taste_profile = profile
+    else:
+        taste_profile = OnboardingTasteProfile(
+            media_preference=profile.get("media_preference"),
+            release_preference=profile.get("release_preference"),
+            vibe_preference=profile.get("vibe_preference"),
+            origin_preference=profile.get("origin_preference"),
+            ui_language=profile.get("ui_language"),
+        )
+    result = run_onboarding_autofill(
+        taste_profile,
+        progress_callback=progress_callback,
+        cancel_checker=cancel_checker,
+    )
+    return {
+        "ok": result.ok,
+        "profile_id": result.profile_id,
+        "created_count": result.created_count,
+        "pool_size": result.pool_size,
+        "api_requests": result.api_requests,
+        "cancelled": result.cancelled,
+        "warning": result.warning,
+        "candidates": result.candidates,
     }
 
 

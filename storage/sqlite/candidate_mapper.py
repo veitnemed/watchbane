@@ -88,6 +88,11 @@ class CandidateRecordRow:
     quality_score: float | None
     hidden_gem_score: float | None
     final_score: float | None
+    source: str | None
+    source_bucket_id: str | None
+    onboarding_profile_id: int | None
+    candidate_score: float | None
+    fetch_rank: int | None
     payload_json: str
 
 
@@ -123,5 +128,10 @@ def extract_candidate_record(pool_key: str | None, record: dict) -> CandidateRec
         quality_score=_float_or_none(candidate.get("quality_score")),
         hidden_gem_score=_float_or_none(candidate.get("hidden_gem_score")),
         final_score=_float_or_none(candidate.get("final_score")),
+        source=_clean_text(candidate.get("source")),
+        source_bucket_id=_clean_text(candidate.get("source_bucket_id")),
+        onboarding_profile_id=_int_or_none(candidate.get("onboarding_profile_id")),
+        candidate_score=_float_or_none(candidate.get("candidate_score")),
+        fetch_rank=_int_or_none(candidate.get("fetch_rank")),
         payload_json=dumps_json(candidate),
     )

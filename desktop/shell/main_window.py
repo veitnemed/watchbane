@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from PyQt6.QtWidgets import QApplication, QMainWindow, QTabWidget
 
+from candidates import service as candidate_service
+from desktop.onboarding import OnboardingAutofillDialog
+from desktop.settings.app_settings import get_persisted_interface_language
 from desktop.shell.app_icon import build_app_icon
 from desktop.shell.tabs import build_main_tabs
 from desktop.theme import build_app_style
@@ -49,6 +52,20 @@ class WatchedMoviesWindow(QMainWindow):
             self,
             on_status_message=self._show_status_message,
         )
+        self._onboarding_dialog: OnboardingAutofillDialog | None = None
 
     def _show_status_message(self, message: str, timeout_ms: int) -> None:
         self.statusBar().showMessage(message, timeout_ms)
+
+    def maybe_show_onboarding_autofill(self) -> None:
+        """Show first-run deterministic candidate-pool autofill wizard when needed."""
+        if candidate_service.should_show_onboarding_autofill() is False:
+            return
+        dialog = OnboardingAutofillDialog(
+            ui_language=get_persisted_interface_language(),
+            parent=self,
+        )
+        dialog.completed.connect(lambda _result: self._tabs_context.focus_candidates())
+        dialog.finished.connect(lambda _code: setattr(self, "_onboarding_dialog", None))
+        self._onboarding_dialog = dialog
+        dialog.open()
