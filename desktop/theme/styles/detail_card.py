@@ -41,6 +41,24 @@ QLabel#detailUserScoreBadge {{
     min-height: {detail_px(DETAIL_USER_SCORE_BADGE_HEIGHT)}px;
     min-width: {detail_px(DETAIL_USER_SCORE_BADGE_MIN_WIDTH)}px;
 }}
+QFrame#detailHeroCard[mediaType="movie"] {{
+    background-color: qlineargradient(
+        x1: 0, y1: 0, x2: 1, y2: 1,
+        stop: 0 {FILM_SURFACE_1},
+        stop: 0.62 {FILM_SURFACE_0},
+        stop: 1 {FILM_WINDOW_BG}
+    );
+    border: 1px solid {FILM_BORDER};
+}}
+QFrame#detailPosterShell[mediaType="movie"] {{
+    background-color: {FILM_SURFACE_0};
+    border: {poster_px(DETAIL_POSTER_BORDER_WIDTH)}px solid {FILM_BORDER};
+}}
+QLabel#detailUserScoreBadge[mediaType="movie"] {{
+    background-color: {FILM_MOVIE_BADGE_BG};
+    border: 1px solid {FILM_MOVIE_BADGE_BORDER};
+    color: {FILM_MOVIE_BADGE_TEXT};
+}}
 QLabel#detailTitle {{
     background: transparent;
     color: {COLOR_DETAIL_TITLE};
@@ -88,6 +106,11 @@ QLabel#genrePill {{
     color: {COLOR_TEXT_CHIP};
     font-size: {font_px(DETAIL_CHIP_FONT_SIZE)}px;
 }}
+QLabel#genrePill[mediaType="movie"] {{
+    background-color: {FILM_CHIP_BG};
+    border: 1px solid {FILM_CHIP_BORDER};
+    color: {FILM_CHIP_TEXT};
+}}
 QWidget#mainInfoSection,
 QWidget#detailMainInfoSection {{
     background: transparent;
@@ -98,12 +121,20 @@ QFrame#detailMainInfoPanel {{
     border: 1px solid {COLOR_DETAIL_HERO_BORDER_SOFT};
     border-radius: {detail_px(DETAIL_MAIN_INFO_PANEL_RADIUS)}px;
 }}
+QFrame#detailMainInfoPanel[mediaType="movie"] {{
+    background-color: {FILM_SURFACE_0};
+    border: 1px solid {FILM_BORDER_WEAK};
+}}
 QFrame#mainInfoDivider,
 QFrame#detailMainInfoHeaderDivider {{
     background-color: {COLOR_DETAIL_SECTION_DIVIDER};
     min-height: {detail_px(1)}px;
     max-height: {detail_px(1)}px;
     border: none;
+}}
+QFrame#detailMainInfoHeaderDivider[mediaType="movie"],
+QFrame#detailOverviewDivider[mediaType="movie"] {{
+    background-color: {FILM_BORDER};
 }}
 QLabel#mainInfoTitle,
 QLabel#detailMainInfoHeader {{

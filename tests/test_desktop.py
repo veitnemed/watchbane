@@ -3854,7 +3854,7 @@ def test_watched_user_score_badge_has_readable_background() -> None:
     import inspect
 
     import desktop.shared.detail.card_layout as card_layout_module
-    from desktop.theme import COLOR_TEXT, COLOR_TEXT_INVERTED
+    from desktop.theme import COLOR_TEXT, COLOR_TEXT_INVERTED, FILM_MOVIE_BADGE_BG, FILM_MOVIE_BADGE_BORDER
     from desktop.theme.styles.detail_card import build_detail_card_style
 
     style = build_detail_card_style()
@@ -3864,9 +3864,14 @@ def test_watched_user_score_badge_has_readable_background() -> None:
     assert f"background-color: {COLOR_TEXT}" in style
     assert f"border: 1px solid {COLOR_TEXT}" in style
     assert f"color: {COLOR_TEXT_INVERTED}" in style
+    assert f"background-color: {FILM_MOVIE_BADGE_BG}" in style
+    assert f"border: 1px solid {FILM_MOVIE_BADGE_BORDER}" in style
     assert "class UserScoreBadgeLabel(QLabel)" in layout_source
     assert "drawRoundedRect" in layout_source
-    assert "QColor(COLOR_TEXT)" in layout_source
+    assert "border_color = COLOR_TEXT" in layout_source
+    assert "fill_color = COLOR_TEXT" in layout_source
+    assert "border_color = FILM_MOVIE_BADGE_BORDER" in layout_source
+    assert "fill_color = FILM_MOVIE_BADGE_BG" in layout_source
 
 
 def test_watched_user_score_badge_hides_without_user_score(qapp) -> None:
@@ -4422,6 +4427,57 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     assert f"font-size: {font_px(tokens.DETAIL_CHIP_FONT_SIZE)}px;" in style
     assert f"padding: 0 {detail_px(tokens.DETAIL_CHIP_H_PADDING)}px;" in style
     assert f"border-radius: {detail_px(tokens.DETAIL_CHIP_RADIUS)}px;" in style
+
+
+def test_detail_card_movie_mode_sets_film_theme_properties(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame, QLabel
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Movie",
+            {"main_info": {"media_type": "movie"}},
+            {
+                "title": "Movie",
+                "media_type": "movie",
+                "runtime_status": "watched",
+                "genres": ["Drama"],
+                "user_score": 8,
+            },
+        )
+    )
+
+    hero = detail.widget
+    poster = hero.findChild(QFrame, "detailPosterShell")
+    badge = hero.findChild(QLabel, "detailUserScoreBadge")
+    chips = hero.findChildren(QLabel, "genrePill")
+
+    assert hero.property("mediaType") == "movie"
+    assert poster.property("mediaType") == "movie"
+    assert badge.property("mediaType") == "movie"
+    assert chips
+    assert {chip.property("mediaType") for chip in chips} == {"movie"}
+
+    detail.show_entry(("Fallback", {}, {"title": "Fallback", "media_type": "unexpected"}))
+
+    assert hero.property("mediaType") == "tv"
+    assert poster.property("mediaType") == "tv"
+
+
+def test_detail_card_movie_style_uses_film_tokens() -> None:
+    from desktop.theme import tokens
+    from desktop.theme.styles.detail_card import build_detail_card_style
+
+    style = build_detail_card_style()
+
+    assert 'QFrame#detailHeroCard[mediaType="movie"]' in style
+    assert tokens.FILM_WINDOW_BG in style
+    assert tokens.FILM_SURFACE_0 in style
+    assert tokens.FILM_BORDER in style
+    assert tokens.FILM_CHIP_BG in style
+    assert tokens.FILM_MOVIE_BADGE_BG in style
 
 
 def test_fit_poster_pixmap_for_display_avoids_upscale(qapp) -> None:

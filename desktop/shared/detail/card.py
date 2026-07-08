@@ -19,8 +19,18 @@ from desktop.shared.detail.presenters import (
 )
 from desktop.shared.detail.profiles import DetailCardLayoutProfile
 from desktop.shared.detail.types import DetailEntry
+from dataset.models.media_type import MEDIA_TYPE_TV, normalize_media_type
 
 MAIN_INFO_COLLAPSED_ROW_COUNT = 4
+MEDIA_THEME_OBJECT_NAMES = {
+    "detailHeroCard",
+    "detailPosterShell",
+    "detailUserScoreBadge",
+    "genrePill",
+    "detailMainInfoPanel",
+    "detailMainInfoHeaderDivider",
+    "detailOverviewDivider",
+}
 
 
 class DetailCard(DetailCardPosterMixin):
@@ -38,6 +48,8 @@ class DetailCard(DetailCardPosterMixin):
         self._main_info_items: list[dict[str, Any]] = []
         self._main_info_expanded = False
         self._layout_handles = build_detail_card_layout(self, parent, self._profile)
+        self._media_type_theme = MEDIA_TYPE_TV
+        self._apply_media_theme_properties()
 
     @property
     def widget(self):
@@ -102,6 +114,7 @@ class DetailCard(DetailCardPosterMixin):
             "genrePill",
             self._profile,
         )
+        self._apply_media_theme_properties()
         row_count = min(self._profile.detail_chip_max_rows, self._genre_pills_layout.count())
         if row_count <= 0:
             self._genre_section.setVisible(False)
@@ -116,6 +129,7 @@ class DetailCard(DetailCardPosterMixin):
         self._genre_section.setVisible(True)
 
     def show_empty(self, title: str | None = None) -> None:
+        self._set_media_theme(MEDIA_TYPE_TV)
         if title is None:
             title = tr("watched.empty.select_title")
         self._set_poster_placeholder()
@@ -141,6 +155,7 @@ class DetailCard(DetailCardPosterMixin):
         from desktop.shared.detail.presenters import get_overview_display, has_overview_text
 
         _, movie, card = entry
+        self._set_media_theme(self._resolve_entry_media_type(movie, card))
         self._title_label.setText(card.get("title") or entry[0])
         self._set_title_meta(build_title_meta_text(card))
         self._set_user_score_badge(build_user_score_badge_item(card))
@@ -174,6 +189,53 @@ class DetailCard(DetailCardPosterMixin):
             self._set_poster_placeholder()
         self._set_local_poster_path(poster_path)
         self._schedule_poster_height_sync()
+
+    def _resolve_entry_media_type(self, movie: dict, card: dict) -> str:
+        media_candidates = [
+            card.get("media_type"),
+            card.get("object_type"),
+        ]
+        if isinstance(movie, dict):
+            main_info = movie.get("main_info")
+            if isinstance(main_info, dict):
+                media_candidates.append(main_info.get("media_type"))
+                media_candidates.append(main_info.get("object_type"))
+            media_candidates.append(movie.get("media_type"))
+            media_candidates.append(movie.get("object_type"))
+        for value in media_candidates:
+            if value not in (None, ""):
+                return normalize_media_type(value)
+        return MEDIA_TYPE_TV
+
+    def _set_media_theme(self, media_type) -> None:
+        self._media_type_theme = normalize_media_type(media_type)
+        self._apply_media_theme_properties()
+
+    def _apply_media_theme_properties(self) -> None:
+        from PyQt6.QtWidgets import QWidget
+
+        widgets = [
+            self._frame,
+            self._poster_shell,
+            self._user_score_badge,
+            self._main_info_panel,
+            self._main_info_divider,
+            self._overview_divider,
+        ]
+        widgets.extend(
+            child
+            for child in self._frame.findChildren(QWidget)
+            if child.objectName() in MEDIA_THEME_OBJECT_NAMES
+        )
+        seen: set[int] = set()
+        for widget in widgets:
+            if widget is None or id(widget) in seen:
+                continue
+            seen.add(id(widget))
+            widget.setProperty("mediaType", self._media_type_theme)
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
 
     def _set_title_meta(self, text: str) -> None:
         value = str(text or "").strip()

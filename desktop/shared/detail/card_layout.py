@@ -12,6 +12,8 @@ from desktop.shared.detail.rating_indicator import StarRatingIndicator
 from desktop.theme import (
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
+    FILM_MOVIE_BADGE_BG,
+    FILM_MOVIE_BADGE_BORDER,
     TRANSPARENT_STYLE,
     build_detail_card_style,
     build_poster_placeholder_style,
@@ -98,8 +100,14 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
             rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
             radius = rect.height() / 2
-            painter.setPen(QPen(QColor(COLOR_TEXT), 1))
-            painter.setBrush(QColor(COLOR_TEXT))
+            if self.property("mediaType") == "movie":
+                border_color = FILM_MOVIE_BADGE_BORDER
+                fill_color = FILM_MOVIE_BADGE_BG
+            else:
+                border_color = COLOR_TEXT
+                fill_color = COLOR_TEXT
+            painter.setPen(QPen(QColor(border_color), 1))
+            painter.setBrush(QColor(fill_color))
             painter.drawRoundedRect(rect, radius, radius)
             painter.end()
             super().paintEvent(event)
