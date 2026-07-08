@@ -158,8 +158,8 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._content_container = QWidget()
     owner._content_container.setObjectName("detailContentContainer")
     owner._content_container.setStyleSheet(TRANSPARENT_STYLE)
-    owner._content_container.setMaximumWidth(profile.detail_content_max_width)
-    owner._content_container.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+    owner._content_container.setFixedWidth(profile.detail_content_max_width)
+    owner._content_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
     content_layout = QVBoxLayout(owner._content_container)
     content_layout.setContentsMargins(0, 0, 0, 0)
     content_layout.setSpacing(0)
@@ -394,7 +394,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
 
     owner._final_score_stars_label = QLabel("WatchBane")
     owner._final_score_stars_label.setObjectName("detailFinalScoreStarsLabel")
-    owner._final_score_stars_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    owner._final_score_stars_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     owner._final_score_stars_label.setSizePolicy(
         QSizePolicy.Policy.Expanding,
         QSizePolicy.Policy.Minimum,
@@ -408,7 +408,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._rating_stars_widget.setObjectName("detailFinalScoreStarsWidget")
     owner._final_score_stars_layout.addWidget(
         owner._rating_stars_widget,
-        alignment=Qt.AlignmentFlag.AlignHCenter,
+        alignment=Qt.AlignmentFlag.AlignLeft,
     )
 
     owner._final_score_stars_lane = QWidget()

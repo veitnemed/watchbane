@@ -3671,6 +3671,7 @@ def test_watched_detail_card_does_not_render_my_score_ring() -> None:
 
 
 def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
+    from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QFrame, QLabel, QWidget
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
@@ -3705,6 +3706,7 @@ def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
     assert top_divider is not None
     assert bottom_divider is not None
     assert stars_label.text() == "WatchBane"
+    assert stars_label.alignment() & Qt.AlignmentFlag.AlignLeft
     assert tmdb_ring.parent() is not stars_block
     assert stars_block.isHidden() is False
     assert getattr(tmdb_ring, "_display_label") == "TMDb"
@@ -3748,12 +3750,15 @@ def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
     hero = detail.widget
     ring = hero.findChild(QWidget, "detailTmdbRingSlot")
     stars = hero.findChild(QWidget, "detailFinalScoreStars")
+    content = hero.findChild(QWidget, "detailContentContainer")
     toggle = hero.findChild(QPushButton, "detailMainInfoToggleButton")
 
     assert ring is not None
     assert stars is not None
+    assert content is not None
     assert toggle is not None
     assert toggle.isHidden() is False
+    assert content.width() == DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width
 
     def right_edge(widget: QWidget) -> int:
         top_right = widget.mapTo(hero, QPoint(widget.width(), 0))
@@ -3763,6 +3768,7 @@ def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
         return widget.mapTo(hero, QPoint(0, 0)).x()
 
     ring_right = right_edge(ring)
+    content_left_before = left_edge(content)
     stars_left_before = left_edge(stars)
     gap_before = stars_left_before - ring_right
 
@@ -3772,7 +3778,9 @@ def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
     _flush_qt_deferred_deletes(qapp)
 
     gap_after = left_edge(stars) - right_edge(ring)
+    content_left_after = left_edge(content)
     assert gap_after == gap_before
+    assert content_left_after == content_left_before
 
 
 def test_candidate_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
