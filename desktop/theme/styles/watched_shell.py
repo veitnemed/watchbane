@@ -54,8 +54,8 @@ QLineEdit#watchedSearch {{
     min-height: {px(34)}px;
 }}
 QPushButton#watchedAddTitle {{
-    background-color: {COLOR_ADD_BUTTON};
-    border: 1px solid {COLOR_ADD_BUTTON_BORDER};
+    background-color: {FILM_ACCENT_DIM};
+    border: 1px solid {FILM_ACCENT};
     border-radius: {control_px(RADIUS_BUTTON)}px;
     color: {COLOR_TEXT};
     font-size: {font_px(FONT_SECTION)}px;
@@ -64,16 +64,16 @@ QPushButton#watchedAddTitle {{
     min-height: {control_px(WATCHED_ADD_TITLE_MIN_HEIGHT)}px;
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
-        stop:0 {COLOR_ADD_BUTTON_TOP},
-        stop:1 {COLOR_ADD_BUTTON}
+        stop:0 {FILM_BORDER},
+        stop:1 {FILM_ACCENT_DIM}
     );
 }}
 QPushButton#watchedAddTitle:hover {{
-    border-color: {COLOR_ADD_BUTTON_HOVER};
+    border-color: {FILM_ACCENT_HOVER};
     background: qlineargradient(
         x1:0, y1:0, x2:0, y2:1,
-        stop:0 {COLOR_ADD_BUTTON_HOVER_TOP},
-        stop:1 {COLOR_ADD_BUTTON_HOVER}
+        stop:0 {FILM_ACCENT},
+        stop:1 {FILM_BORDER}
     );
 }}
 QPushButton#watchedFilterToggle {{
