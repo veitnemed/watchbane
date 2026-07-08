@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from config import constant
+from storage.backend import is_sqlite_backend
 
 
 def is_json_exists(file_name):
@@ -49,6 +50,11 @@ def dump_json_atomic(path: str | Path, payload: dict, *, trailing_newline: bool 
 
 def create_backup():
     """Создает резервную копию датасета."""
+    if is_sqlite_backend():
+        from storage.sqlite.backup import backup_sqlite_database
+
+        return backup_sqlite_database()
+
     from storage.data import load_dataset
 
     dataset = load_dataset()
@@ -84,6 +90,11 @@ def get_backup_label(file_path: Path) -> str:
 
 def restore_backup(file_path: Path) -> int:
     """Загружает выбранный backup в основной датасет и возвращает число записей."""
+    if is_sqlite_backend() and Path(file_path).suffix.lower() in {".sqlite", ".sqlite3", ".db"}:
+        from storage.sqlite.backup import restore_sqlite_database
+
+        return restore_sqlite_database(file_path)
+
     from storage.data import save_dataset
 
     with open(file_path, 'r', encoding='utf-8-sig') as file:
