@@ -280,3 +280,14 @@ After prompt 26 performance and large-data hardening:
 Changed TMDb common import to build the candidate `(media_type, tmdb_id)` index
 once per import run and incrementally update it, avoiding repeated full-pool
 index rebuilds for large batches.
+
+After prompt 27 package architecture hardening:
+
+| Metric | Prompt 27 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15878 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
+
+Moved poster cache runtime persistence behind `storage.posters`, so
+`posters.cache` no longer imports SQLite repositories directly.

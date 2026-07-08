@@ -10,6 +10,13 @@ def test_app_core_storage_does_not_import_sqlite_internals() -> None:
     assert "action_repository" not in source
 
 
+def test_poster_cache_does_not_import_sqlite_internals() -> None:
+    source = Path("posters/cache.py").read_text(encoding="utf-8")
+
+    assert "storage.sqlite" not in source
+    assert "poster_repository" not in source
+
+
 def test_app_core_storage_delegates_candidate_actions(monkeypatch) -> None:
     from app.core import storage as app_storage
 

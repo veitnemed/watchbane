@@ -11,6 +11,7 @@ from typing import Any
 from candidates.models.keys import title_identity_key
 from config import constant
 from storage.data import get_meta_obj
+from storage import posters as poster_storage
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_POSTER_CACHE_DIR = Path(constant.CACHE_DIR) / "posters"
@@ -58,9 +59,7 @@ def poster_identity_key(title: str, year: Any) -> str:
 def load_poster_cache(path: str | Path | None = None) -> dict:
     """Load runtime poster cache from SQLite, or explicit legacy JSON path."""
     if path is None:
-        from storage.sqlite.poster_repository import load_poster_cache_dict
-
-        return load_poster_cache_dict()
+        return poster_storage.load_poster_cache()
 
     cache_path = DEFAULT_POSTER_CACHE_JSON if path is None else Path(path)
     if cache_path.is_file() is False:
@@ -78,9 +77,7 @@ def load_poster_cache(path: str | Path | None = None) -> dict:
 def save_poster_cache(cache: dict, path: str | Path | None = None) -> Path:
     """Save runtime poster cache to SQLite, or explicit legacy JSON path."""
     if path is None:
-        from storage.sqlite.poster_repository import save_poster_cache_dict
-
-        save_poster_cache_dict(cache)
+        poster_storage.save_poster_cache(cache)
         return DEFAULT_POSTER_CACHE_JSON
 
     cache_path = DEFAULT_POSTER_CACHE_JSON if path is None else Path(path)
