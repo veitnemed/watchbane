@@ -443,8 +443,8 @@ def test_add_dataset_record_preserves_localized_payload(monkeypatch) -> None:
     saved = {}
 
     monkeypatch.setattr(add_module, "load_dataset", lambda: {})
-    monkeypatch.setattr(add_module, "save_dataset", lambda data: saved.update(data))
-    monkeypatch.setattr(add_module, "get_meta_obj", lambda _title: {"raw_scores": raw_scores})
+    monkeypatch.setattr(add_module, "load_meta", lambda: {"Naruto": {"raw_scores": raw_scores}})
+    monkeypatch.setattr(add_module, "save_dataset_and_meta", lambda data, _meta: saved.update(data))
     monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
 
     result = add_module.add_dataset_record(payload)

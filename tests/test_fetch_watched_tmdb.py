@@ -382,19 +382,18 @@ def test_add_dataset_record_syncs_poster_cache_from_meta_payload(monkeypatch) ->
         return {"status": "found", "poster_url": "https://image.tmdb.org/t/p/w342/new.jpg"}
 
     with patch.object(add_module, "load_dataset", return_value={}):
-        with patch.object(add_module, "save_dataset"):
-            with patch.object(add_module, "add_movies_to_meta", return_value=True):
-                with patch.object(add_module, "get_meta_obj", return_value=None):
-                    with patch("posters.cache.sync_poster_cache_from_meta_and_sources", side_effect=fake_sync):
-                        result = dataset_records.add_dataset_record(
-                            movie,
-                            meta_payload=meta_payload,
-                            poster_hints={
-                                "poster_path": "/new.jpg",
-                                "poster_url": "https://image.tmdb.org/t/p/w342/new.jpg",
-                                "status": "found",
-                            },
-                        )
+        with patch.object(add_module, "load_meta", return_value={}):
+            with patch.object(add_module, "save_dataset_and_meta"):
+                with patch("posters.cache.sync_poster_cache_from_meta_and_sources", side_effect=fake_sync):
+                    result = dataset_records.add_dataset_record(
+                        movie,
+                        meta_payload=meta_payload,
+                        poster_hints={
+                            "poster_path": "/new.jpg",
+                            "poster_url": "https://image.tmdb.org/t/p/w342/new.jpg",
+                            "status": "found",
+                        },
+                    )
 
     assert result.ok is True
     assert synced["title"] == "New Show"

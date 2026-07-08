@@ -72,6 +72,22 @@ def save_meta(meta: dict):
     save_meta_dict(meta)
 
 
+def save_dataset_and_meta(data: dict, meta: dict) -> None:
+    """Save watched dataset and meta in one SQLite transaction."""
+    from storage.sqlite.connection import connect
+    from storage.sqlite.migrations import apply_migrations
+    from storage.sqlite.watched_repository import save_dataset_dict, save_meta_dict
+
+    conn = connect()
+    try:
+        apply_migrations(conn)
+        with conn:
+            save_dataset_dict(data, conn=conn)
+            save_meta_dict(meta, conn=conn)
+    finally:
+        conn.close()
+
+
 def clean_meta():
     """Clear watched meta from SQLite while preserving compatible payloads."""
     save_meta({})

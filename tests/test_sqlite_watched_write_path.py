@@ -103,6 +103,26 @@ def test_sqlite_runtime_rename_rolls_back_dataset_when_meta_save_fails(tmp_path,
     assert storage_data.load_meta()["Old"]["main_info"]["title"] == "Old"
 
 
+def test_sqlite_runtime_save_dataset_and_meta_rolls_back_together(tmp_path, monkeypatch) -> None:
+    _use_sqlite(tmp_path, monkeypatch)
+
+    from storage.sqlite import watched_repository
+
+    def fail_save_meta_dict(*args, **kwargs):
+        raise RuntimeError("forced atomic meta failure")
+
+    monkeypatch.setattr(watched_repository, "save_meta_dict", fail_save_meta_dict)
+
+    with pytest.raises(RuntimeError, match="forced atomic meta failure"):
+        storage_data.save_dataset_and_meta(
+            {"Alpha": _movie("Alpha")},
+            {"Alpha": {"main_info": _movie("Alpha")["main_info"], "raw_scores": {"tmdb_id": 1}}},
+        )
+
+    assert storage_data.load_dataset() == {}
+    assert storage_data.load_meta() == {}
+
+
 def test_sqlite_runtime_add_update_delete_watched_record(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     from dataset.records import add as add_module

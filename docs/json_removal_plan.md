@@ -198,3 +198,14 @@ After prompt 19 storage/service boundary hardening:
 
 Moved app-core local action routing behind `storage/actions.py` so `app/core`
 does not import SQLite internals directly.
+
+After prompt 20 candidate transfer hardening:
+
+| Metric | Prompt 20 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15799 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
+
+Added atomic watched dataset+meta persistence for add/candidate transfer and
+stopped poster side effects from reloading meta by title after the save.

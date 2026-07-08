@@ -249,10 +249,11 @@ def test_save_add_title_record_accepts_friends_1994(monkeypatch) -> None:
 
     monkeypatch.setattr(records_add, "load_dataset", lambda: {})
     monkeypatch.setattr(records_add, "load_meta", lambda: meta)
-    monkeypatch.setattr(records_add, "save_dataset", lambda data: saved.update(data))
-    monkeypatch.setattr(records_add, "save_meta", lambda data: meta.update(data))
-    monkeypatch.setattr(records_add, "get_meta_obj", lambda _title: None)
-    monkeypatch.setattr(records_add, "add_movies_to_meta", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        records_add,
+        "save_dataset_and_meta",
+        lambda data, updated_meta: saved.update(data) or meta.update(updated_meta),
+    )
     monkeypatch.setattr(records_add, "run_after_add_side_effects", lambda **_kwargs: [])
 
     defaults = {

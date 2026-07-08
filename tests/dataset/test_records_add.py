@@ -24,11 +24,15 @@ def test_add_dataset_record_returns_side_effects(monkeypatch) -> None:
     from dataset.records.add import add_dataset_record
 
     saved = {}
+    saved_meta = {}
 
     monkeypatch.setattr(add_module, "load_dataset", lambda: {})
-    monkeypatch.setattr(add_module, "save_dataset", lambda data: saved.update(data))
-    monkeypatch.setattr(add_module, "get_meta_obj", lambda _title: None)
-    monkeypatch.setattr(add_module, "add_movies_to_meta", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(add_module, "load_meta", lambda: {})
+    monkeypatch.setattr(
+        add_module,
+        "save_dataset_and_meta",
+        lambda data, meta: saved.update(data) or saved_meta.update(meta),
+    )
     monkeypatch.setattr(
         add_module,
         "run_after_add_side_effects",
@@ -40,6 +44,7 @@ def test_add_dataset_record_returns_side_effects(monkeypatch) -> None:
     assert result.ok is True
     assert result.side_effects == [{"type": "poster_cache_sync", "ok": True}]
     assert "New Title" in saved
+    assert "New Title" in saved_meta
     assert saved["New Title"]["main_info"]["media_type"] == "tv"
 
 
@@ -60,7 +65,7 @@ def test_add_dataset_record_allows_same_title_with_different_media_type(monkeypa
     from dataset.records.add import add_dataset_record
 
     saved = {}
-    meta_calls = []
+    saved_meta = {}
     existing = {
         "Watchmen": {
             "main_info": {
@@ -74,12 +79,20 @@ def test_add_dataset_record_allows_same_title_with_different_media_type(monkeypa
     }
 
     monkeypatch.setattr(add_module, "load_dataset", lambda: dict(existing))
-    monkeypatch.setattr(add_module, "save_dataset", lambda data: saved.update(data))
-    monkeypatch.setattr(add_module, "get_meta_obj", lambda _title: None)
     monkeypatch.setattr(
         add_module,
-        "add_movies_to_meta",
-        lambda _main, _raw, extra_meta=None, **kwargs: meta_calls.append(kwargs) or True,
+        "load_meta",
+        lambda: {
+            "Watchmen": {
+                "main_info": existing["Watchmen"]["main_info"],
+                "raw_scores": {"tmdb_id": 100},
+            }
+        },
+    )
+    monkeypatch.setattr(
+        add_module,
+        "save_dataset_and_meta",
+        lambda data, meta: saved.update(data) or saved_meta.update(meta),
     )
     monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
 
@@ -93,7 +106,8 @@ def test_add_dataset_record_allows_same_title_with_different_media_type(monkeypa
     assert result.title == "Watchmen (2009, movie)"
     assert saved["Watchmen (2009, movie)"]["main_info"]["title"] == "Watchmen"
     assert saved["Watchmen (2009, movie)"]["main_info"]["media_type"] == "movie"
-    assert meta_calls == [{"meta_key": "Watchmen (2009, movie)"}]
+    assert saved_meta["Watchmen"]["raw_scores"]["tmdb_id"] == 100
+    assert saved_meta["Watchmen (2009, movie)"]["main_info"]["media_type"] == "movie"
 
 
 def test_add_dataset_record_accepts_tmdb_only_raw_scores(monkeypatch) -> None:
@@ -101,12 +115,15 @@ def test_add_dataset_record_accepts_tmdb_only_raw_scores(monkeypatch) -> None:
     from dataset.records.add import add_dataset_record
 
     saved = {}
-    meta_saved = {}
+    saved_meta = {}
 
     monkeypatch.setattr(add_module, "load_dataset", lambda: {})
-    monkeypatch.setattr(add_module, "save_dataset", lambda data: saved.update(data))
-    monkeypatch.setattr(add_module, "get_meta_obj", lambda _title: None)
-    monkeypatch.setattr(add_module, "add_movies_to_meta", lambda _main, raw, extra_meta=None: meta_saved.update(raw) or True)
+    monkeypatch.setattr(add_module, "load_meta", lambda: {})
+    monkeypatch.setattr(
+        add_module,
+        "save_dataset_and_meta",
+        lambda data, meta: saved.update(data) or saved_meta.update(meta),
+    )
     monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
 
     payload = _valid_add_payload("TMDb Only")
@@ -128,7 +145,7 @@ def test_add_dataset_record_accepts_tmdb_only_raw_scores(monkeypatch) -> None:
     assert "kp_score" not in movie["raw_scores"]
     assert "imdb_score" not in movie["raw_scores"]
     assert movie["computed_scores"]["tmdb_score"] == 8.1
-    assert meta_saved["tmdb_votes"] == 1200
+    assert saved_meta["TMDb Only"]["raw_scores"]["tmdb_votes"] == 1200
 
 
 def test_add_dataset_record_saves_new_meta_from_tmdb_meta_payload(monkeypatch) -> None:
@@ -136,22 +153,15 @@ def test_add_dataset_record_saves_new_meta_from_tmdb_meta_payload(monkeypatch) -
     from dataset.records.add import add_dataset_record
 
     saved = {}
-    meta_calls = []
+    saved_meta = {}
 
     monkeypatch.setattr(add_module, "load_dataset", lambda: {})
-    monkeypatch.setattr(add_module, "save_dataset", lambda data: saved.update(data))
-    monkeypatch.setattr(add_module, "get_meta_obj", lambda _title: None)
+    monkeypatch.setattr(add_module, "load_meta", lambda: {})
     monkeypatch.setattr(
         add_module,
-        "add_movies_to_meta",
-        lambda main, raw, extra_meta=None: meta_calls.append({
-            "main": dict(main),
-            "raw": dict(raw),
-            "extra_meta": dict(extra_meta or {}),
-        }) or True,
+        "save_dataset_and_meta",
+        lambda data, meta: saved.update(data) or saved_meta.update(meta),
     )
-    monkeypatch.setattr(add_module, "load_meta", lambda: {})
-    monkeypatch.setattr(add_module, "save_meta", lambda _meta: None)
     monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
 
     payload = _valid_add_payload("TMDb Meta")
@@ -171,12 +181,11 @@ def test_add_dataset_record_saves_new_meta_from_tmdb_meta_payload(monkeypatch) -
 
     assert result.ok is True
     assert "TMDb Meta" in saved
-    assert meta_calls == [{
-        "main": payload["main_info"],
-        "raw": payload["raw_scores"],
-        "extra_meta": {
-            "tmdb_id": 153581,
-            "description": "TMDb description.",
-            "poster_path": "/poster.jpg",
-        },
-    }]
+    assert saved_meta["TMDb Meta"]["main_info"] == {
+        **payload["main_info"],
+        "media_type": "tv",
+    }
+    assert saved_meta["TMDb Meta"]["raw_scores"] == payload["raw_scores"]
+    assert saved_meta["TMDb Meta"]["tmdb_id"] == 153581
+    assert saved_meta["TMDb Meta"]["description"] == "TMDb description."
+    assert saved_meta["TMDb Meta"]["poster_path"] == "/poster.jpg"

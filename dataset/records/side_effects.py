@@ -15,7 +15,6 @@ def run_after_add_side_effects(
 
     try:
         from posters.cache import sync_poster_cache_from_meta_and_sources
-        from storage.data import get_meta_obj
 
         extra_sources = poster_hints if isinstance(poster_hints, dict) else None
         if isinstance(pool_candidate, dict):
@@ -26,7 +25,7 @@ def run_after_add_side_effects(
         sync_poster_cache_from_meta_and_sources(
             title,
             year,
-            meta_obj=get_meta_obj(title),
+            meta_obj=meta_obj,
             movie=movie,
             extra_sources=extra_sources,
         )

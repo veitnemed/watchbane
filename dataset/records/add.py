@@ -5,7 +5,7 @@ from copy import deepcopy
 from config import constant
 from common import valid
 from dataset.meta.merge import extract_extra_meta
-from dataset.models.identity import build_dataset_record_key
+from dataset.models.identity import build_dataset_record_key, find_case_insensitive_key
 from dataset.models.results import AddRecordResult
 from dataset.records.features import build_computed_scores, build_feature_vector
 from dataset.records.side_effects import run_after_add_side_effects
@@ -14,8 +14,32 @@ from dataset.records.validation import (
     validate_add_features,
     validate_add_record_payload,
 )
-from storage.data import add_movies_to_meta, get_meta_obj, load_dataset, load_meta, save_dataset, save_meta
+from storage.data import load_dataset, load_meta, save_dataset_and_meta
 from storage.normalize import normalize_main_info, normalize_raw_scores
+
+
+def _build_meta_obj(main_info: dict, raw: dict, extra_meta: dict | None = None) -> dict | None:
+    title = str(main_info["title"]).strip()
+
+    if valid.is_correct_title(title) is False:
+        return None
+    if valid.is_correct_score(str(main_info["user_score"])) is False:
+        return None
+    if valid.is_correct_year(str(main_info["year"])) is False:
+        return None
+    if valid.is_valid_raw_meta(raw) is False:
+        return None
+
+    meta_obj = {
+        "main_info": normalize_main_info(main_info),
+        "raw_scores": normalize_raw_scores(raw),
+    }
+    if isinstance(extra_meta, dict):
+        for key, value in extra_meta.items():
+            if key in {"main_info", "raw_scores"}:
+                continue
+            meta_obj[key] = value
+    return meta_obj
 
 
 def add_dataset_record(
@@ -42,14 +66,20 @@ def add_dataset_record(
     dataset_key = build_dataset_record_key(data, title, year=year, media_type=media_type)
 
     extra_meta = extract_extra_meta(meta_payload)
-    meta_obj = None
+    meta = load_meta()
+    existing_meta_key = find_case_insensitive_key(meta, dataset_key)
+    if existing_meta_key is None and dataset_key == title:
+        existing_meta_key = find_case_insensitive_key(meta, title)
+
+    existing_meta_obj = meta.get(existing_meta_key) if existing_meta_key is not None else None
     if isinstance(meta_payload, dict) and (
         "raw_scores" in meta_payload or "raw" in meta_payload
     ):
-        meta_obj = meta_payload
+        candidate_meta_obj = meta_payload
     else:
-        meta_obj = get_meta_obj(dataset_key if dataset_key != title else title)
-    if meta_obj is None:
+        candidate_meta_obj = existing_meta_obj
+
+    if candidate_meta_obj is None:
         if valid.is_valid_raw_meta(input_raw_scores) is False:
             return AddRecordResult(
                 ok=False,
@@ -59,35 +89,34 @@ def add_dataset_record(
             )
 
         raw_scores = normalize_raw_scores(input_raw_scores)
-        meta_kwargs = {"meta_key": dataset_key} if dataset_key != title else {}
-        if add_movies_to_meta(main_info, raw_scores, extra_meta=extra_meta, **meta_kwargs) is False:
+        new_meta_obj = _build_meta_obj(main_info, raw_scores, extra_meta=extra_meta)
+        if new_meta_obj is None:
             return AddRecordResult(
                 ok=False,
                 title=title,
                 message="Ошибка добавления! Некорректные meta-данные",
                 reason="invalid_payload",
             )
+        meta[dataset_key] = new_meta_obj
     else:
-        raw_scores = meta_obj.get("raw_scores", meta_obj.get("raw"))
-        if get_meta_obj(title) is None:
-            normalized_meta_raw = normalize_raw_scores(raw_scores)
-            if add_movies_to_meta(main_info, normalized_meta_raw, extra_meta=extra_meta) is False:
+        raw_scores = candidate_meta_obj.get("raw_scores", candidate_meta_obj.get("raw"))
+        target_meta_key = existing_meta_key or dataset_key
+        if existing_meta_key is None:
+            new_meta_obj = _build_meta_obj(main_info, normalize_raw_scores(raw_scores), extra_meta=extra_meta)
+            if new_meta_obj is None:
                 return AddRecordResult(
                     ok=False,
                     title=title,
                     message="Ошибка добавления! Некорректные meta-данные",
                     reason="invalid_payload",
                 )
+            meta[target_meta_key] = new_meta_obj
         if extra_meta:
-            stored_meta = load_meta()
-            for meta_title, current_meta in stored_meta.items():
-                if meta_title.strip().lower() != title.lower():
-                    continue
+            current_meta = meta.get(target_meta_key)
+            if isinstance(current_meta, dict):
                 merged_meta = dict(current_meta)
                 merged_meta.update(extra_meta)
-                stored_meta[meta_title] = merged_meta
-                save_meta(stored_meta)
-                break
+                meta[target_meta_key] = merged_meta
 
     raw_scores = normalize_raw_scores(raw_scores)
     new_main_info = normalize_main_info(main_info)
@@ -111,7 +140,7 @@ def add_dataset_record(
 
     data[dataset_key] = new_movie
     try:
-        save_dataset(data)
+        save_dataset_and_meta(data, meta)
     except Exception as error:
         return AddRecordResult(
             ok=False,
@@ -124,7 +153,7 @@ def add_dataset_record(
         title=title,
         year=year,
         movie=new_movie,
-        meta_obj=meta_obj,
+        meta_obj=meta.get(dataset_key),
         pool_candidate=pool_candidate,
         poster_hints=poster_hints,
     )
