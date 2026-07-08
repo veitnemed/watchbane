@@ -39,7 +39,6 @@ MIGRATED_STORAGE_MARKERS = (
 
 WRITE_MARKERS = (
     "json.dump",
-    "dump_json_atomic",
     ".write_text(",
     ".open(\"w\"",
     ".open('w'",

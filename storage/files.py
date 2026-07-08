@@ -10,43 +10,9 @@ from pathlib import Path
 from config import constant
 
 
-def is_json_exists(file_name):
-    """Return True when a JSON file exists."""
-    return os.path.exists(file_name)
-
-
 def open_file(file_name: str) -> None:
     """Open a file with the Windows shell."""
     os.startfile(file_name)
-
-
-def is_file_writable(file_name: str) -> bool:
-    """Return True when a file can be opened for append."""
-    try:
-        with open(file_name, "a", encoding="UTF-8"):
-            return True
-    except PermissionError:
-        return False
-
-
-def dump_json_atomic(path: str | Path, payload: dict, *, trailing_newline: bool = False) -> None:
-    """Write a JSON mapping through a same-directory temp file, then replace."""
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = target.with_name(f"{target.name}.tmp")
-
-    try:
-        with temp_path.open("w", encoding="utf-8") as file:
-            json.dump(payload, file, ensure_ascii=False, indent=4)
-            if trailing_newline:
-                file.write("\n")
-        os.replace(temp_path, target)
-    except Exception:
-        try:
-            temp_path.unlink()
-        except OSError:
-            pass
-        raise
 
 
 def create_backup():

@@ -20,8 +20,6 @@ JSON_RUNTIME_PATTERNS = (
     "hidden.json",
     "watchlist.json",
     "posters.json",
-    "dump_json" + "_atomic",
-    "is_json_exists",
     "FILE_NAME",
     "CANDIDATE_POOL_JSON",
     "CRITERIA_POOL_JSON",

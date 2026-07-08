@@ -123,11 +123,6 @@ def replace_dataset_from_excel() -> bool:
     if validate_excel_titles(movies, dataset) is False:
         return False
 
-    if storage_files.is_file_writable(constant.FILE_NAME) is False:
-        print(f"Не удалось открыть файл для записи: {constant.FILE_NAME}")
-        print("Закрой файл в другой программе или проверь права доступа и попробуй снова.")
-        return False
-
     storage_files.create_backup()
     updated_count = 0
     unchanged_count = 0

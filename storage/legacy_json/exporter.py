@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 
-from storage.files import dump_json_atomic
 from storage.sqlite import action_repository
 from storage.sqlite import candidate_repository
 from storage.sqlite import poster_repository
@@ -14,7 +15,19 @@ from storage.sqlite.connection import get_db_path
 
 
 def _dump_mapping(path: Path, payload: dict) -> None:
-    dump_json_atomic(path, payload, trailing_newline=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f"{path.name}.tmp")
+    try:
+        with temp_path.open("w", encoding="utf-8") as file:
+            json.dump(payload, file, ensure_ascii=False, indent=4)
+            file.write("\n")
+        os.replace(temp_path, path)
+    except Exception:
+        try:
+            temp_path.unlink()
+        except OSError:
+            pass
+        raise
 
 
 def export_sqlite_to_legacy_json(
