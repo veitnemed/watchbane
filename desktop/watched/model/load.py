@@ -2,13 +2,44 @@
 
 from __future__ import annotations
 
+from common.cards import build_watched_movie_card
+from dataset.read_models import watched as watched_read_model
 from dataset.read_models.watched import (
     WatchedEntry,
-    load_watched_entries,
     prepare_card_for_display,
     reload_poster_cache,
     sync_poster_for_display,
 )
+
+storage_data = watched_read_model.storage_data
+
+
+def build_export_lookup_cache(meta=None, pool_by_identity=None) -> dict:
+    """Compatibility alias for older desktop loader tests and callers."""
+    return watched_read_model.build_watched_lookup_cache(
+        meta=meta,
+        pool_by_identity=pool_by_identity,
+    )
+
+
+def load_watched_entries(data_language: str = "ru") -> list[WatchedEntry]:
+    """Load dataset and return (dataset_key, movie, display_card) tuples."""
+    data = storage_data.load_dataset()
+    poster_cache = reload_poster_cache()
+    lookup_cache = build_export_lookup_cache()
+    return [
+        (
+            key,
+            movie,
+            build_watched_movie_card(
+                movie,
+                poster_cache=poster_cache,
+                lookup_cache=lookup_cache,
+                data_language=data_language,
+            ),
+        )
+        for key, movie in data.items()
+    ]
 
 
 def watched_entry_search_haystack(entry: WatchedEntry) -> str:

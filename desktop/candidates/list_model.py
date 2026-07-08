@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from inspect import signature
+
 from PyQt6.QtCore import QAbstractListModel, QModelIndex, Qt
 
 from desktop.i18n import tr
@@ -104,10 +106,15 @@ class CandidateListModel(QAbstractListModel):
     def poster_path_for_candidate(self, candidate: dict) -> str | None:
         identity = candidate_detail_identity(candidate)
         if identity not in self._poster_paths_by_identity:
-            self._poster_paths_by_identity[identity] = resolve_local_poster_path_for_candidate(
-                candidate,
-                data_language=self._data_language,
-            )
+            resolver_parameters = signature(resolve_local_poster_path_for_candidate).parameters
+            if "data_language" in resolver_parameters:
+                poster_path = resolve_local_poster_path_for_candidate(
+                    candidate,
+                    data_language=self._data_language,
+                )
+            else:
+                poster_path = resolve_local_poster_path_for_candidate(candidate)
+            self._poster_paths_by_identity[identity] = poster_path
         return self._poster_paths_by_identity.get(identity)
 
     def update_poster_path(self, identity: str, path: str | None) -> None:

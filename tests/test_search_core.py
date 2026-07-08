@@ -272,7 +272,8 @@ def test_get_candidate_poster_diagnostics_view_uses_service_facade(monkeypatch) 
     view = service.get_candidate_poster_diagnostics_view()
     assert view["is_empty_pool"] is False
     assert view["total"] == 2
-    assert view["counts"]["metadata_only"] + view["counts"]["missing"] == 1
+    assert view["counts"]["metadata_only"] == 1
+    assert view["counts"]["missing"] == 1
 
 
 def test_collect_unique_pool_poster_urls_deduplicates() -> None:
