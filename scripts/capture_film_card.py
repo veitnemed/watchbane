@@ -21,6 +21,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scale", type=float, default=1.0, help="Application UI scale.")
     parser.add_argument("--media-type", choices=("movie", "tv"), default="movie")
+    parser.add_argument(
+        "--match-index",
+        type=int,
+        default=0,
+        help="Zero-based index among rows matching --media-type.",
+    )
     parser.add_argument("--width", type=int, default=1366)
     parser.add_argument("--height", type=int, default=768)
     parser.add_argument(
@@ -32,6 +38,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--scroll-detail-right",
         action="store_true",
         help="Scroll the detail viewport horizontally to the right before grabbing.",
+    )
+    parser.add_argument(
+        "--expand-main-info",
+        action="store_true",
+        help="Click the detail main-info expander before grabbing.",
     )
     return parser
 
@@ -49,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from PyQt6.QtCore import Qt
     from PyQt6.QtGui import QFontDatabase
-    from PyQt6.QtWidgets import QApplication, QListWidget, QScrollArea
+    from PyQt6.QtWidgets import QApplication, QListWidget, QPushButton, QScrollArea
 
     from dataset.models.media_type import MEDIA_TYPE_MOVIE, MEDIA_TYPE_TV, normalize_media_type
     from desktop.theme.scaling import set_ui_scale
@@ -74,6 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     selected_row = -1
     selected_title = ""
     if list_widget is not None:
+        match_index = 0
         for row in range(list_widget.count()):
             item = list_widget.item(row)
             entry = item.data(Qt.ItemDataRole.UserRole) if item is not None else None
@@ -82,12 +94,25 @@ def main(argv: list[str] | None = None) -> int:
             card = entry[2]
             if normalize_media_type(card.get("media_type")) != target_media_type:
                 continue
+            if match_index < max(0, args.match_index):
+                match_index += 1
+                continue
             selected_row = row
             selected_title = str(card.get("title") or entry[0])
             list_widget.setCurrentRow(row)
             break
 
     _process_events(app, 30)
+
+    expanded_toggle_clicks = 0
+    if args.expand_main_info:
+        for toggle in window.findChildren(QPushButton, "detailMainInfoToggleButton"):
+            if not toggle.isVisible():
+                continue
+            toggle.click()
+            expanded_toggle_clicks += 1
+        if expanded_toggle_clicks > 0:
+            _process_events(app, 20)
 
     if args.scroll_detail_right:
         areas = [
@@ -109,7 +134,11 @@ def main(argv: list[str] | None = None) -> int:
         f"'has_segoe_ui': {'Segoe UI' in families}, "
         f"'has_arial': {'Arial' in families}}}"
     )
-    print(f"media_type={args.media_type} row={selected_row} title={selected_title}")
+    print(
+        f"media_type={args.media_type} match_index={args.match_index} "
+        f"row={selected_row} title={selected_title}"
+    )
+    print(f"expanded_toggle_clicks={expanded_toggle_clicks}")
     print(f"window_size={window.width()}x{window.height()}")
     print(f"saved={saved} path={args.output}")
     window.close()

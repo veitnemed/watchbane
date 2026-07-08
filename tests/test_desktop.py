@@ -3673,7 +3673,6 @@ def test_watched_detail_card_does_not_render_my_score_ring() -> None:
 def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
     from PyQt6.QtWidgets import QFrame, QLabel, QWidget
 
-    from desktop.i18n import tr
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
     detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
@@ -3705,7 +3704,7 @@ def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
     assert stars_label is not None
     assert top_divider is not None
     assert bottom_divider is not None
-    assert stars_label.text() == tr("add_title.field.score")
+    assert stars_label.text() == "WatchBane"
     assert tmdb_ring.parent() is not stars_block
     assert stars_block.isHidden() is False
     assert getattr(tmdb_ring, "_display_label") == "TMDb"
@@ -3714,10 +3713,10 @@ def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
     assert not any(getattr(child, "_display_label", "") == "моя" for child in score_row.findChildren(QWidget))
 
 
-def test_final_score_stars_are_centered_between_tmdb_ring_and_main_info(qapp) -> None:
+def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
     import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
     from PyQt6.QtCore import QPoint
-    from PyQt6.QtWidgets import QWidget
+    from PyQt6.QtWidgets import QPushButton, QWidget
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
@@ -3737,19 +3736,24 @@ def test_final_score_stars_are_centered_between_tmdb_ring_and_main_info(qapp) ->
                 "country": "RU",
                 "object_type": "series",
                 "genres": ["Thriller"],
+                "first_air_date": "2020-08-31",
+                "last_air_date": "2022-11-17",
+                "watch_providers": ["Okko", "Ivi", "Premier"],
+                "tmdb_votes": 12850,
             },
         )
     )
-    qapp.processEvents()
+    _flush_qt_deferred_deletes(qapp)
 
     hero = detail.widget
     ring = hero.findChild(QWidget, "detailTmdbRingSlot")
     stars = hero.findChild(QWidget, "detailFinalScoreStars")
-    main_info = hero.findChild(QWidget, "detailMainInfoSection")
+    toggle = hero.findChild(QPushButton, "detailMainInfoToggleButton")
 
     assert ring is not None
     assert stars is not None
-    assert main_info is not None
+    assert toggle is not None
+    assert toggle.isHidden() is False
 
     def right_edge(widget: QWidget) -> int:
         top_right = widget.mapTo(hero, QPoint(widget.width(), 0))
@@ -3759,15 +3763,16 @@ def test_final_score_stars_are_centered_between_tmdb_ring_and_main_info(qapp) ->
         return widget.mapTo(hero, QPoint(0, 0)).x()
 
     ring_right = right_edge(ring)
-    main_right = right_edge(main_info)
-    stars_left = left_edge(stars)
-    stars_right = right_edge(stars)
-    corridor = main_right - ring_right
-    stars_center = (stars_left + stars_right) / 2
-    target_center = ring_right + corridor / 2
+    stars_left_before = left_edge(stars)
+    gap_before = stars_left_before - ring_right
 
-    assert corridor > stars.width()
-    assert abs(stars_center - target_center) <= 2.0
+    assert abs(gap_before - DETAIL_CARD_LAYOUT_PROFILE.detail_stars_left_gap) <= 2
+
+    toggle.click()
+    _flush_qt_deferred_deletes(qapp)
+
+    gap_after = left_edge(stars) - right_edge(ring)
+    assert gap_after == gap_before
 
 
 def test_candidate_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
@@ -4346,7 +4351,7 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "DETAIL_SCORE_ROW_TOP_GAP": 34,
         "DETAIL_RATING_WIDGET_SIZE": 136,
         "DETAIL_RATING_CIRCLE_DIAMETER": 122,
-        "DETAIL_STARS_LEFT_GAP": 52,
+        "DETAIL_STARS_LEFT_GAP": 28,
         "DETAIL_STAR_SIZE": 36,
         "DETAIL_STAR_GAP": 9,
         "DETAIL_USER_SCORE_BADGE_MIN_WIDTH": 64,
@@ -4472,8 +4477,6 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     assert f"color: {tokens.FILM_CHIP_TEXT};" in style
     assert 'QLabel#detailUserScoreBadge[mediaType="tv"]' in style
     assert 'QLabel#detailMediaTypeBadge[mediaType="tv"]' in style
-    assert f"background-color: {tokens.FILM_SERIES_BADGE_BG};" in style
-    assert f"border: 1px solid {tokens.FILM_SERIES_BADGE_BORDER};" in style
     assert f"color: {tokens.FILM_SERIES_BADGE_TEXT};" in style
     assert "QFrame#detailScoreSummaryTopDivider" in style
     assert f"background-color: {tokens.FILM_BORDER};" in style

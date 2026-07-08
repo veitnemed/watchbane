@@ -365,6 +365,15 @@ class DetailCard(DetailCardPosterMixin):
             value.setObjectName(value_object_name)
             value.setWordWrap(False)
             value.setFixedHeight(compact_row_height)
+            value_max_width = max(
+                80,
+                self._profile.detail_info_column_max_width
+                - self._profile.detail_main_info_label_width
+                - icon.width()
+                - (2 * self._profile.detail_main_info_panel_padding_x)
+                - (2 * self._profile.detail_small_spacing),
+            )
+            value.setMaximumWidth(value_max_width)
             value.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             value.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             value.setToolTip(str(item.get("tooltip") or value_text))

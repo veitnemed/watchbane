@@ -29,6 +29,7 @@ Hardening steps:
 - `110-hardening-docs-and-developer-experience.md`
 - `116-russian-movie-ui-filters-duration.md`
 - `117-detail-header-runtime-meta.md`
+- `118-film-card-badge-watchbane-stars.md`
 
 Final verification:
 

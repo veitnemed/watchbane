@@ -36,3 +36,25 @@ Observed baseline gaps vs reference:
 - Left list selected state is close in hue but lacks the reference row depth and stable scrollbar styling.
 - Right-side content is not visually separated enough from the hero background; dividers are too sparse compared with the reference.
 - Several source files contain existing mojibake strings. This audit does not repair encoding; future text fixes must trace source encoding instead of broad replace.
+
+## 2026-07-08 media badge and WatchBane stars pass
+
+Implemented:
+
+- `ФИЛЬМ` / `СЕРИАЛ` poster badge is now an opaque custom-painted pill instead of a transparent QSS background.
+- The label above final-score stars is `WatchBane`, not `Моя оценка`.
+- The final-score stars keep a fixed gap from the TMDb ring when `Основная информация` is expanded/collapsed.
+- The main-info toggle button has a stable width for `Показать больше` / `Скрыть`, so its text change does not reflow the rating row.
+- Main-info values get a bounded maximum width from the detail profile to avoid expanded long values inflating the right column.
+
+Visual verification:
+
+- Platform plugin: `windows`.
+- Font probe: `family_count=355`, `Segoe UI=True`, `Arial=True`.
+- Checked titles: `Горничная`, `Игра на выживание`, `Чернобыль: Зона отчуждения`.
+- Checked scales: 75%, 100%, 150%.
+- Checked expanded states: `screens/tmp_ui/film_card/fix_badge_stars_movie0_scale100_expanded.png`, `screens/tmp_ui/film_card/fix_badge_stars_tv0_scale100_expanded.png`.
+
+Remaining risk:
+
+- At 150% the detail view still relies on horizontal scrolling. Rating position and `WatchBane` label are stable, but a later responsive-layout pass should reduce or remove this horizontal scroll.

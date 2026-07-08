@@ -14,7 +14,9 @@ from desktop.theme import (
     COLOR_TEXT_SECONDARY,
     FILM_MOVIE_BADGE_BG,
     FILM_MOVIE_BADGE_BORDER,
+    FILM_SERIES_BADGE_BG,
     FILM_SERIES_BADGE_BORDER,
+    FILM_WINDOW_BG,
     TRANSPARENT_STYLE,
     build_detail_card_style,
     build_poster_placeholder_style,
@@ -112,6 +114,27 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
             else:
                 border_color = FILM_SERIES_BADGE_BORDER
                 fill_color = FILM_MOVIE_BADGE_BG
+            painter.setPen(QPen(QColor(border_color), 1))
+            painter.setBrush(QColor(fill_color))
+            painter.drawRoundedRect(rect, radius, radius)
+            painter.end()
+            super().paintEvent(event)
+
+    class MediaTypeBadgeLabel(QLabel):
+        def paintEvent(self, event) -> None:
+            from PyQt6.QtCore import QRectF
+            from PyQt6.QtGui import QColor, QPainter, QPen
+
+            if self.property("mediaType") == "tv":
+                border_color = FILM_SERIES_BADGE_BORDER
+                fill_color = FILM_SERIES_BADGE_BG
+            else:
+                border_color = FILM_MOVIE_BADGE_BORDER
+                fill_color = FILM_WINDOW_BG
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+            radius = rect.height() / 2
             painter.setPen(QPen(QColor(border_color), 1))
             painter.setBrush(QColor(fill_color))
             painter.drawRoundedRect(rect, radius, radius)
@@ -216,7 +239,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     )
     owner._user_score_badge.hide()
 
-    owner._media_type_badge = QLabel("", owner._poster_shell)
+    owner._media_type_badge = MediaTypeBadgeLabel("", owner._poster_shell)
     owner._media_type_badge.setObjectName("detailMediaTypeBadge")
     owner._media_type_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
     owner._media_type_badge.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -326,7 +349,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._score_summary_content.setStyleSheet(TRANSPARENT_STYLE)
     owner._score_summary_row = QHBoxLayout(owner._score_summary_content)
     owner._score_summary_row.setContentsMargins(0, 0, 0, 0)
-    owner._score_summary_row.setSpacing(0)
+    owner._score_summary_row.setSpacing(profile.detail_stars_left_gap)
 
     owner._score_summary_bottom_divider = QFrame()
     owner._score_summary_bottom_divider.setObjectName("detailScoreSummaryBottomDivider")
@@ -369,7 +392,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._final_score_stars_layout.setContentsMargins(0, 0, 0, 0)
     owner._final_score_stars_layout.setSpacing(profile.detail_small_spacing)
 
-    owner._final_score_stars_label = QLabel(tr("add_title.field.score"))
+    owner._final_score_stars_label = QLabel("WatchBane")
     owner._final_score_stars_label.setObjectName("detailFinalScoreStarsLabel")
     owner._final_score_stars_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
     owner._final_score_stars_label.setSizePolicy(
@@ -398,10 +421,9 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._final_score_stars_lane_layout = QHBoxLayout(owner._final_score_stars_lane)
     owner._final_score_stars_lane_layout.setContentsMargins(0, 0, 0, 0)
     owner._final_score_stars_lane_layout.setSpacing(0)
-    owner._final_score_stars_lane_layout.addStretch(1)
     owner._final_score_stars_lane_layout.addWidget(
         owner._final_score_stars_block,
-        alignment=Qt.AlignmentFlag.AlignVCenter,
+        alignment=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
     )
     owner._final_score_stars_lane_layout.addStretch(1)
 
@@ -508,6 +530,13 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._main_info_toggle_button = QPushButton(tr("detail.show_more"))
     owner._main_info_toggle_button.setObjectName("detailMainInfoToggleButton")
     owner._main_info_toggle_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    toggle_text_width = max(
+        owner._main_info_toggle_button.fontMetrics().horizontalAdvance(tr("detail.show_more")),
+        owner._main_info_toggle_button.fontMetrics().horizontalAdvance(tr("detail.show_less")),
+    )
+    owner._main_info_toggle_button.setFixedWidth(
+        toggle_text_width + (2 * profile.detail_small_spacing)
+    )
     owner._main_info_toggle_button.setAutoDefault(False)
     owner._main_info_toggle_button.setDefault(False)
     owner._main_info_toggle_button.clicked.connect(owner._toggle_main_info_expanded)

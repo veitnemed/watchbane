@@ -102,6 +102,7 @@ Required behavior:
 - missing/invalid value: hide the stars or show a quiet placeholder, but reserve enough vertical space to keep the circles aligned;
 - no text `Итог 75`, `Итог —`, `final_score`, or raw percent below the circles;
 - stars are a separate widget/row, not a footer inside `RatingCircleIndicator`.
+- the label above the stars in the watched film/series card is exactly `WatchBane`.
 
 Suggested mapping:
 
@@ -132,6 +133,7 @@ Required layout behavior:
 
 - TMDb ring keeps a fixed slot;
 - final-score stars are a separate widget next to the ring;
+- final-score stars keep a fixed horizontal gap from the TMDb slot when main information is collapsed or expanded;
 - star width must not affect TMDb ring value/progress;
 - missing stars must not make the ring jump vertically;
 - candidate actions never enter this score row.
@@ -168,6 +170,19 @@ Required behavior:
 - the information column must not have a maximum height equal to the poster height;
 - overview is a full-width block below the top poster/info row;
 - empty overview hides the overview block.
+
+## 10. Film/series media badge
+
+The poster media-type badge is a solid pill over the poster, not translucent text.
+
+Required behavior:
+
+- text: localized uppercase `ФИЛЬМ` or `СЕРИАЛ`;
+- location: bottom-center poster overlay;
+- fill: opaque dark film palette fill, with the series variant using the series badge background token;
+- border: cyan/series border token from the film palette;
+- text color: film/series badge text token;
+- it must remain readable over bright and dark poster artwork at 75%, 100%, and 150% UI scale.
 
 Main information rows:
 
