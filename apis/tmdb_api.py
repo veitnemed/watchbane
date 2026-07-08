@@ -28,6 +28,15 @@ DEFAULT_TV_DETAIL_APPENDS = (
     "images",
     "translations",
 )
+DEFAULT_MOVIE_DETAIL_APPENDS = (
+    "external_ids",
+    "release_dates",
+    "watch/providers",
+    "credits",
+    "keywords",
+    "images",
+    "translations",
+)
 LEGACY_TV_DETAIL_APPENDS = (
     "external_ids",
     "content_ratings",
@@ -132,6 +141,12 @@ def _tv_details_cache_path(tmdb_id: int, language: str, append_to_response: str)
     return DETAILS_CACHE_DIR / f"{int(tmdb_id)}_{safe_language}_{append_key}.json"
 
 
+def _movie_details_cache_path(tmdb_id: int, language: str, append_to_response: str) -> Path:
+    safe_language = language.replace("-", "_")
+    append_key = hashlib.sha256(append_to_response.encode("utf-8")).hexdigest()[:12]
+    return DETAILS_CACHE_DIR / f"movie_{int(tmdb_id)}_{safe_language}_{append_key}.json"
+
+
 def tmdb_get(
     path: str,
     params: dict[str, Any] | None = None,
@@ -201,6 +216,25 @@ def search_tv_by_name(
     return payload.get("results") or []
 
 
+def search_movie_by_title(
+    query: str,
+    language: str = DEFAULT_LANGUAGE,
+    *,
+    token: str | None = None,
+) -> list[dict[str, Any]]:
+    payload = tmdb_get(
+        "/search/movie",
+        {
+            "query": query,
+            "language": language,
+            "include_adult": "false",
+            "page": 1,
+        },
+        token=token,
+    )
+    return payload.get("results") or []
+
+
 def get_tv_genre_list(
     language: str = "en",
     *,
@@ -224,8 +258,34 @@ def get_tv_genre_list(
     return genres
 
 
+def get_movie_genre_list(
+    language: str = "en",
+    *,
+    force_refresh: bool = False,
+    token: str | None = None,
+) -> list[dict[str, Any]]:
+    safe_language = str(language).replace("-", "_")
+    params = {"language": str(language).strip() or "en"}
+    cache_path = GENRE_CACHE_DIR / f"movie_{safe_language}.json"
+    payload = cached_tmdb_get(
+        "/genre/movie/list",
+        params,
+        cache_path,
+        force_refresh=force_refresh,
+        token=token,
+    )
+    genres = payload.get("genres")
+    if isinstance(genres, list) is False:
+        return []
+    return genres
+
+
 def search_tv(title: str, token: str) -> list[dict[str, Any]]:
     return search_tv_by_name(title, DEFAULT_LANGUAGE, token=token)
+
+
+def search_movie(title: str, token: str) -> list[dict[str, Any]]:
+    return search_movie_by_title(title, DEFAULT_LANGUAGE, token=token)
 
 
 def discover_tv_candidates(
@@ -311,6 +371,32 @@ def get_tv_details(
     cache_path = _tv_details_cache_path(int(tmdb_id), language, append_value)
     return cached_tmdb_get(
         f"/tv/{int(tmdb_id)}",
+        params,
+        cache_path,
+        force_refresh=force_refresh,
+        token=token,
+    )
+
+
+def get_movie_details(
+    tmdb_id: int,
+    language: str = DEFAULT_LANGUAGE,
+    *,
+    append_to_response: str | list[str] | tuple[str, ...] | None = None,
+    force_refresh: bool = False,
+    token: str | None = None,
+) -> dict[str, Any]:
+    if append_to_response is None:
+        append_value = ",".join(DEFAULT_MOVIE_DETAIL_APPENDS)
+    else:
+        append_value = normalize_append_to_response(append_to_response)
+    params = {
+        "language": language,
+        "append_to_response": append_value,
+    }
+    cache_path = _movie_details_cache_path(int(tmdb_id), language, append_value)
+    return cached_tmdb_get(
+        f"/movie/{int(tmdb_id)}",
         params,
         cache_path,
         force_refresh=force_refresh,
@@ -513,6 +599,23 @@ def get_content_rating(details: dict[str, Any], region: str = DEFAULT_REGION) ->
     return None
 
 
+def get_movie_content_rating(details: dict[str, Any], region: str = DEFAULT_REGION) -> str | None:
+    release_dates = details.get("release_dates", {}).get("results") or []
+    for country in release_dates:
+        if country.get("iso_3166_1") != region:
+            continue
+        for item in country.get("release_dates") or []:
+            certification = str(item.get("certification") or "").strip()
+            if certification:
+                return certification
+    for country in release_dates:
+        for item in country.get("release_dates") or []:
+            certification = str(item.get("certification") or "").strip()
+            if certification:
+                return f"{country.get('iso_3166_1')}: {certification}"
+    return None
+
+
 def get_watch_providers(details: dict[str, Any], region: str = DEFAULT_REGION) -> list[str]:
     region_data = details.get("watch/providers", {}).get("results", {}).get(region) or {}
     names: list[str] = []
@@ -612,6 +715,64 @@ def normalize_tmdb_tv(raw_details: dict[str, Any]) -> dict[str, Any]:
         "final_score": 0.0,
         "signals": [],
         "source": "tmdb_discover",
+        "source_query": {},
+    }
+
+
+def normalize_tmdb_movie(raw_details: dict[str, Any]) -> dict[str, Any]:
+    external_ids = extract_external_ids(raw_details)
+    credits = raw_details.get("credits") or {}
+    release_date = raw_details.get("release_date")
+    production_countries = raw_details.get("production_countries") or []
+    poster_path = extract_best_poster_path(raw_details)
+
+    return {
+        "media_type": "movie",
+        "tmdb_id": raw_details.get("id"),
+        "imdb_id": external_ids.get("imdb_id") or raw_details.get("imdb_id"),
+        "tvdb_id": None,
+        "kp_id": None,
+        "title": raw_details.get("title"),
+        "original_title": raw_details.get("original_title"),
+        "year": get_year(release_date),
+        "release_date": release_date,
+        "status": raw_details.get("status"),
+        "runtime": raw_details.get("runtime"),
+        "original_language": raw_details.get("original_language"),
+        "tmdb_origin_countries": raw_details.get("origin_country") or [],
+        "tmdb_production_countries": names_from_items(production_countries),
+        "tmdb_country_codes": country_codes_from_items(production_countries),
+        "genres_tmdb": names_from_items(raw_details.get("genres")),
+        "networks": [],
+        "production_companies": names_from_items(raw_details.get("production_companies")),
+        "tmdb_rating": raw_details.get("vote_average"),
+        "tmdb_votes": raw_details.get("vote_count"),
+        "tmdb_popularity": raw_details.get("popularity"),
+        "overview": extract_best_overview(raw_details),
+        "poster_path": poster_path,
+        "poster_url": image_link(poster_path),
+        "backdrop_path": raw_details.get("backdrop_path"),
+        "backdrop_url": image_link(raw_details.get("backdrop_path")),
+        "content_rating": get_movie_content_rating(raw_details),
+        "watch_providers_ru": get_watch_providers(raw_details, DEFAULT_REGION),
+        "actors_top": normalize_people(credits.get("cast"), 8, "character"),
+        "crew_top": normalize_people(credits.get("crew"), 5, "job"),
+        "keywords": extract_keywords(raw_details),
+        "imdb_rating": None,
+        "imdb_votes": None,
+        "imdb_title_type": None,
+        "imdb_is_adult": None,
+        "imdb_start_year": None,
+        "imdb_end_year": None,
+        "imdb_runtime_minutes": raw_details.get("runtime"),
+        "imdb_genres": [],
+        "country_score": 0.0,
+        "country_signals": [],
+        "quality_score": 0.0,
+        "hidden_gem_score": 0.0,
+        "final_score": 0.0,
+        "signals": [],
+        "source": "tmdb_movie",
         "source_query": {},
     }
 

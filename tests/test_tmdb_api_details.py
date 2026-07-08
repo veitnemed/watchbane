@@ -64,6 +64,39 @@ def test_get_tv_details_uses_default_tv_detail_appends(monkeypatch, tmp_path) ->
     assert str(calls[0][2]).endswith(".json")
 
 
+def test_get_movie_details_uses_movie_endpoint_and_default_appends(monkeypatch, tmp_path) -> None:
+    calls = []
+    monkeypatch.setattr(tmdb_api, "DETAILS_CACHE_DIR", tmp_path)
+
+    def fake_cached_tmdb_get(path, params, cache_path, *, force_refresh=False, token=None):
+        calls.append((path, params, cache_path, force_refresh, token))
+        return {"id": 202}
+
+    monkeypatch.setattr(tmdb_api, "cached_tmdb_get", fake_cached_tmdb_get)
+
+    result = tmdb_api.get_movie_details(202, token="token")
+
+    assert result == {"id": 202}
+    assert calls[0][0] == "/movie/202"
+    assert calls[0][1]["append_to_response"] == ",".join(tmdb_api.DEFAULT_MOVIE_DETAIL_APPENDS)
+    assert "release_dates" in calls[0][1]["append_to_response"]
+    assert "movie_202" in str(calls[0][2])
+
+
+def test_search_movie_by_title_uses_movie_search(monkeypatch) -> None:
+    calls = []
+
+    def fake_tmdb_get(path, params, *, token=None):
+        calls.append((path, params, token))
+        return {"results": [{"id": 202, "title": "Movie"}]}
+
+    monkeypatch.setattr(tmdb_api, "tmdb_get", fake_tmdb_get)
+
+    assert tmdb_api.search_movie_by_title("Movie", token="token") == [{"id": 202, "title": "Movie"}]
+    assert calls[0][0] == "/search/movie"
+    assert calls[0][1]["include_adult"] == "false"
+
+
 def test_extract_best_overview_prefers_raw_ru_overview() -> None:
     assert tmdb_api.extract_best_overview(_details_payload()) == "Русское описание"
 
@@ -92,6 +125,45 @@ def test_extract_best_poster_path_uses_direct_poster() -> None:
 def test_extract_external_ids_preserves_imdb_id() -> None:
     assert tmdb_api.extract_external_ids(_details_payload())["imdb_id"] == "tt123"
     assert tmdb_api.normalize_tmdb_tv(_details_payload())["imdb_id"] == "tt123"
+
+
+def test_normalize_tmdb_movie_maps_movie_fields() -> None:
+    movie = tmdb_api.normalize_tmdb_movie({
+        "id": 202,
+        "title": "Movie",
+        "original_title": "Original Movie",
+        "release_date": "2009-03-06",
+        "runtime": 162,
+        "overview": "Overview",
+        "poster_path": "/movie.jpg",
+        "external_ids": {"imdb_id": "tt0409459"},
+        "production_countries": [{"iso_3166_1": "US", "name": "United States"}],
+        "genres": [{"id": 18, "name": "Drama"}],
+        "vote_average": 7.3,
+        "vote_count": 9000,
+        "popularity": 55.5,
+        "release_dates": {
+            "results": [
+                {"iso_3166_1": "RU", "release_dates": [{"certification": "18+"}]},
+            ],
+        },
+        "credits": {
+            "cast": [{"id": 1, "name": "Actor", "character": "Hero"}],
+            "crew": [{"id": 2, "name": "Director", "job": "Director"}],
+        },
+    })
+
+    assert movie["media_type"] == "movie"
+    assert movie["tmdb_id"] == 202
+    assert movie["imdb_id"] == "tt0409459"
+    assert movie["title"] == "Movie"
+    assert movie["year"] == 2009
+    assert movie["runtime"] == 162
+    assert movie["imdb_runtime_minutes"] == 162
+    assert movie["genres_tmdb"] == ["Drama"]
+    assert movie["tmdb_country_codes"] == ["US"]
+    assert movie["content_rating"] == "18+"
+    assert movie["actors_top"][0]["role"] == "Hero"
 
 
 def test_extract_aggregate_credits_top_parses_people() -> None:
