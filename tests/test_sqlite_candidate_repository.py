@@ -3,6 +3,18 @@ from __future__ import annotations
 from storage.sqlite import candidate_repository
 
 
+def test_candidate_repository_facade_exports_public_api() -> None:
+    assert set(candidate_repository.__all__) == {
+        "clear_candidate_pool",
+        "get_worst_candidate_records",
+        "load_candidate_criteria_dict",
+        "load_candidate_pool_dict",
+        "query_candidate_records",
+        "save_candidate_criteria_dict",
+        "save_candidate_pool_dict",
+    }
+
+
 def _empty_watched(monkeypatch) -> None:
     monkeypatch.setattr("storage.data.load_dataset", lambda: {})
 

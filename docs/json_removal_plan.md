@@ -129,3 +129,11 @@ After prompt 12 watched SQLite repository split:
 | Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15140 |
 | Product JSON runtime reference count | 77 |
 | Product backend switch reference count | 0 |
+
+After prompt 13 candidate SQLite repository split:
+
+| Metric | Prompt 13 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15323 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
