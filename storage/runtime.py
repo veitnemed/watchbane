@@ -52,12 +52,15 @@ def ensure_runtime_data_layout(*, create_initial_backup: bool = False) -> dict:
 
     sqlite_db_path = None
     sqlite_schema_version = None
+    sqlite_startup_migration = None
     if is_sqlite_backend():
-        from storage.sqlite.connection import get_db_path
-        from storage.sqlite.migrations import apply_migrations
+        from storage.sqlite.startup import ensure_sqlite_startup_migration
 
-        sqlite_db_path = str(get_db_path())
-        sqlite_schema_version = apply_migrations()
+        sqlite_startup_migration = ensure_sqlite_startup_migration(
+            base_dir=constant.APP_DATA_DIR,
+        )
+        sqlite_db_path = sqlite_startup_migration["db_path"]
+        sqlite_schema_version = sqlite_startup_migration["schema_version"]
 
     backup_created = False
     if create_initial_backup:
@@ -73,4 +76,5 @@ def ensure_runtime_data_layout(*, create_initial_backup: bool = False) -> dict:
         "backup_created": backup_created,
         "sqlite_db_path": sqlite_db_path,
         "sqlite_schema_version": sqlite_schema_version,
+        "sqlite_startup_migration": sqlite_startup_migration,
     }

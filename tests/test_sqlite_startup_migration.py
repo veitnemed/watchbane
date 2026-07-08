@@ -1,0 +1,76 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from storage import runtime
+from storage.sqlite import watched_repository
+from storage.sqlite.settings_repository import get_setting
+
+
+def _write_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+
+def _patch_runtime(tmp_path, monkeypatch) -> Path:
+    data_dir = tmp_path / "data"
+    watched_dir = data_dir / "watched"
+    candidates_dir = data_dir / "candidates"
+    cache_dir = data_dir / "cache"
+    exports_dir = data_dir / "exports"
+    logs_dir = data_dir / "logs"
+    backup_dir = data_dir / "backups"
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(data_dir))
+    monkeypatch.setattr("config.constant.WATCHED_DIR", str(watched_dir))
+    monkeypatch.setattr("config.constant.CANDIDATES_DIR", str(candidates_dir))
+    monkeypatch.setattr("config.constant.CACHE_DIR", str(cache_dir))
+    monkeypatch.setattr("config.constant.EXPORTS_DIR", str(exports_dir))
+    monkeypatch.setattr("config.constant.LOGS_DIR", str(logs_dir))
+    monkeypatch.setattr("config.constant.BACKUP_DIR", str(backup_dir))
+    monkeypatch.setattr("config.constant.FILE_NAME", str(watched_dir / "titles.json"))
+    monkeypatch.setattr("config.constant.META_JSON", str(watched_dir / "meta.json"))
+    monkeypatch.setattr("config.constant.CANDIDATE_POOL_JSON", str(candidates_dir / "pool.json"))
+    monkeypatch.setattr("config.constant.CRITERIA_POOL_JSON", str(candidates_dir / "criteria.json"))
+    monkeypatch.setattr(runtime, "RUNTIME_DIRECTORIES", (
+        str(data_dir),
+        str(watched_dir),
+        str(candidates_dir),
+        str(cache_dir),
+        str(exports_dir),
+        str(logs_dir),
+        str(backup_dir),
+    ))
+    monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "sqlite")
+    return data_dir
+
+
+def test_sqlite_startup_imports_existing_legacy_json_once(tmp_path, monkeypatch) -> None:
+    data_dir = _patch_runtime(tmp_path, monkeypatch)
+    _write_json(
+        data_dir / "watched" / "titles.json",
+        {"Метод": {"main_info": {"title": "Метод", "year": 2015, "user_score": 8, "country": "Россия"}}},
+    )
+    _write_json(data_dir / "watched" / "meta.json", {"Метод": {"raw_scores": {"tmdb_id": 693}}})
+
+    first = runtime.ensure_runtime_data_layout()
+    second = runtime.ensure_runtime_data_layout()
+
+    db_path = Path(first["sqlite_db_path"])
+    assert first["sqlite_startup_migration"]["legacy_imported"] is True
+    assert second["sqlite_startup_migration"]["legacy_imported"] is False
+    assert len(watched_repository.load_dataset_dict(path=db_path)) == 1
+    assert watched_repository.load_meta_dict(path=db_path)["Метод"]["raw_scores"]["tmdb_id"] == 693
+    assert get_setting("legacy_json_import_completed", path=db_path)["completed"] is True
+
+
+def test_sqlite_startup_without_legacy_data_creates_empty_db(tmp_path, monkeypatch) -> None:
+    data_dir = _patch_runtime(tmp_path, monkeypatch)
+
+    result = runtime.ensure_runtime_data_layout()
+
+    db_path = Path(result["sqlite_db_path"])
+    assert db_path.is_file()
+    assert result["sqlite_startup_migration"]["legacy_imported"] is False
+    assert watched_repository.load_dataset_dict(path=db_path) == {}
+    assert get_setting("legacy_json_import_completed", path=db_path) is None
