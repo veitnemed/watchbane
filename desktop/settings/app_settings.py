@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 
+from config import app_settings_store
 from config import constant
 
 APP_UI_SCALE_DEFAULT = 1.0
@@ -86,6 +87,9 @@ def _settings_from_payload(payload) -> AppSettings:
 
 def load_app_settings() -> AppSettings:
     """Load persisted desktop settings, falling back to defaults on invalid input."""
+    if app_settings_store.is_sqlite_settings_backend():
+        return _settings_from_payload(app_settings_store.load_sqlite_settings_dict())
+
     path = _settings_path()
     if path.exists() is False:
         return AppSettings()
@@ -106,6 +110,10 @@ def save_app_settings(settings: AppSettings) -> None:
         interface_language=normalize_language(settings.interface_language),
         data_language=normalize_language(settings.data_language),
     )
+    if app_settings_store.is_sqlite_settings_backend():
+        app_settings_store.save_sqlite_settings_dict(asdict(normalized))
+        return
+
     path = _settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
 

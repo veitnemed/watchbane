@@ -10,6 +10,7 @@ from typing import Any
 
 from candidates.models.keys import title_identity_key
 from config import constant
+from storage.backend import is_sqlite_backend
 from storage.data import get_meta_obj
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -57,6 +58,11 @@ def poster_identity_key(title: str, year: Any) -> str:
 
 def load_poster_cache(path: str | Path | None = None) -> dict:
     """Load poster cache JSON or return empty dict when file is missing."""
+    if path is None and is_sqlite_backend():
+        from storage.sqlite.poster_repository import load_poster_cache_dict
+
+        return load_poster_cache_dict()
+
     cache_path = DEFAULT_POSTER_CACHE_JSON if path is None else Path(path)
     if cache_path.is_file() is False:
         return {}
@@ -72,6 +78,12 @@ def load_poster_cache(path: str | Path | None = None) -> dict:
 
 def save_poster_cache(cache: dict, path: str | Path | None = None) -> Path:
     """Save poster cache JSON in UTF-8."""
+    if path is None and is_sqlite_backend():
+        from storage.sqlite.poster_repository import save_poster_cache_dict
+
+        save_poster_cache_dict(cache)
+        return DEFAULT_POSTER_CACHE_JSON
+
     cache_path = DEFAULT_POSTER_CACHE_JSON if path is None else Path(path)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
 

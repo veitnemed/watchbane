@@ -25,6 +25,10 @@ def _block_real_poster_cache_writes(monkeypatch):
 
     def guarded_save(cache, path=None):
         if path is None:
+            from storage.backend import is_sqlite_backend
+
+            if is_sqlite_backend():
+                return real_save(cache, path=path)
             return poster_cache_module.DEFAULT_POSTER_CACHE_JSON
         return real_save(cache, path=path)
 
