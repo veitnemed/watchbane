@@ -21,6 +21,23 @@ def _make_movie(title: str, user_score: float, year: int) -> dict:
     }
 
 
+def test_update_dataset_record_preserves_media_type(monkeypatch) -> None:
+    from dataset.records import update as update_module
+    from dataset.records.update import update_dataset_record
+
+    saved = {}
+    movie = _make_movie("Watchmen", 8.0, 2009)
+    movie["main_info"]["media_type"] = "movie"
+
+    monkeypatch.setattr(update_module, "load_dataset", lambda: {"Watchmen": movie})
+    monkeypatch.setattr(update_module, "save_dataset", lambda data: saved.update(data))
+
+    result = update_dataset_record("Watchmen", {"main_info": {"user_score": 8.5}})
+
+    assert result.ok is True
+    assert saved["Watchmen"]["main_info"]["media_type"] == "movie"
+
+
 def test_update_dataset_record_forbids_rename(monkeypatch) -> None:
     from dataset.records import update as update_module
     from dataset.records.update import update_dataset_record

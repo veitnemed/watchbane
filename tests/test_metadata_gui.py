@@ -71,6 +71,9 @@ def test_build_add_meta_payload_from_resolve() -> None:
             "tmdb_score": 7.8,
             "tmdb_votes": 456,
             "tmdb_popularity": 12.3,
+            "media_type": "movie",
+            "release_date": "2009-03-06",
+            "runtime": 162,
             "status": "Ended",
             "in_production": False,
             "number_of_seasons": 1,
@@ -93,6 +96,9 @@ def test_build_add_meta_payload_from_resolve() -> None:
     assert payload["imdb_id"] == "tt123"
     assert payload["poster_path"] == "/poster.jpg"
     assert payload["poster_url"] == "https://image.tmdb.org/t/p/original/poster.jpg"
+    assert payload["media_type"] == "movie"
+    assert payload["release_date"] == "2009-03-06"
+    assert payload["runtime"] == 162
     assert payload["status"] == "Ended"
     assert payload["in_production"] is False
     assert payload["number_of_seasons"] == 1
@@ -123,6 +129,9 @@ def test_build_candidate_meta_payload_uses_overview() -> None:
             "tmdb_score": 7.1,
             "tmdb_votes": 900,
             "tmdb_popularity": 5.5,
+            "media_type": "movie",
+            "release_date": "2009-03-06",
+            "runtime": 162,
             "status": "Returning Series",
             "number_of_seasons": 2,
             "number_of_episodes": 16,
@@ -137,6 +146,9 @@ def test_build_candidate_meta_payload_uses_overview() -> None:
 
     assert payload["description"] == "Overview text"
     assert payload["tmdb_id"] == 42
+    assert payload["media_type"] == "movie"
+    assert payload["release_date"] == "2009-03-06"
+    assert payload["runtime"] == 162
     assert payload["status"] == "Returning Series"
     assert payload["number_of_seasons"] == 2
     assert payload["number_of_episodes"] == 16

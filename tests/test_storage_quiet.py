@@ -29,6 +29,19 @@ def test_add_movies_to_meta_returns_false_without_printing(monkeypatch, tmp_path
     assert capsys.readouterr().out == ""
 
 
+def test_add_movies_to_meta_persists_media_type(monkeypatch, tmp_path) -> None:
+    _patch_storage_paths(monkeypatch, tmp_path)
+
+    result = storage_data.add_movies_to_meta(
+        {"title": "Watchmen", "user_score": 8.5, "year": 2009, "country": "US", "media_type": "movie"},
+        {"tmdb_score": 7.3, "tmdb_votes": 9000},
+    )
+
+    assert result is True
+    meta = storage_data.load_meta()
+    assert meta["Watchmen"]["main_info"]["media_type"] == "movie"
+
+
 def test_rename_movie_title_returns_false_without_printing(monkeypatch, tmp_path, capsys) -> None:
     _patch_storage_paths(monkeypatch, tmp_path)
 

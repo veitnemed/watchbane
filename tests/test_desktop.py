@@ -591,6 +591,25 @@ def test_add_title_worker_passes_data_language(monkeypatch, qapp) -> None:
     assert results[0].found is True
 
 
+def test_add_title_worker_does_not_mask_service_type_error(monkeypatch, qapp) -> None:
+    from desktop.watched.add_title.worker import AddTitleResolveWorker
+
+    def broken_resolve_title_for_add(title, country, *, on_progress=None, data_language="ru", media_type="tv"):
+        raise TypeError("internal service bug")
+
+    monkeypatch.setattr(
+        "desktop.watched.add_title.worker.service.resolve_title_for_add",
+        broken_resolve_title_for_add,
+    )
+
+    errors = []
+    worker = AddTitleResolveWorker("Trigger", "US", data_language="en", media_type="movie")
+    worker.failed.connect(errors.append)
+    worker.run()
+
+    assert errors == ["internal service bug"]
+
+
 def test_tmdb_builder_uses_passed_data_language_locale(monkeypatch) -> None:
     from candidates.sources.tmdb import builder
     from desktop.settings.app_settings import language_to_tmdb_locale

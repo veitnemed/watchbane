@@ -37,3 +37,23 @@ def test_dataset_package_exports_service() -> None:
 
     assert hasattr(dataset, "service")
     assert dataset.service is importlib.import_module("dataset.service")
+
+
+def test_service_facade_resolve_title_data_accepts_media_type(monkeypatch) -> None:
+    import dataset.service as service
+
+    captured = {}
+
+    def fake_resolve(title, country, **kwargs):
+        captured.update({"title": title, "country": country, **kwargs})
+        return {"found": False, "media_type": kwargs.get("media_type")}
+
+    monkeypatch.setattr("dataset.resolve.service.search_tmdb_title_for_add", lambda *_args, **_kwargs: {
+        "data": None,
+        "error": {"error": "not_found"},
+        "status": "not_found",
+    })
+
+    result = service.resolve_title_data_for_add("Watchmen", "US", media_type="movie")
+
+    assert result["media_type"] == "movie"

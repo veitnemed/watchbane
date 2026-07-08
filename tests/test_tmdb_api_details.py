@@ -97,6 +97,22 @@ def test_search_movie_by_title_uses_movie_search(monkeypatch) -> None:
     assert calls[0][1]["include_adult"] == "false"
 
 
+def test_get_movie_genre_list_uses_movie_genre_cache(monkeypatch, tmp_path) -> None:
+    calls = []
+    monkeypatch.setattr(tmdb_api, "GENRE_CACHE_DIR", tmp_path)
+
+    def fake_cached_tmdb_get(path, params, cache_path, *, force_refresh=False, token=None):
+        calls.append((path, params, cache_path, force_refresh, token))
+        return {"genres": [{"id": 18, "name": "Drama"}]}
+
+    monkeypatch.setattr(tmdb_api, "cached_tmdb_get", fake_cached_tmdb_get)
+
+    assert tmdb_api.get_movie_genre_list("en-US", token="token") == [{"id": 18, "name": "Drama"}]
+    assert calls[0][0] == "/genre/movie/list"
+    assert calls[0][1] == {"language": "en-US"}
+    assert str(calls[0][2]).endswith("movie_en_US.json")
+
+
 def test_extract_best_overview_prefers_raw_ru_overview() -> None:
     assert tmdb_api.extract_best_overview(_details_payload()) == "Русское описание"
 

@@ -54,8 +54,10 @@ def watched_entry_search_haystack(entry: WatchedEntry) -> str:
         localized = movie.get("localized") if isinstance(movie.get("localized"), dict) else {}
         parts.extend([
             main_info.get("title"),
+            main_info.get("media_type"),
             movie.get("title"),
             movie.get("name"),
+            movie.get("media_type"),
             movie.get("original_title"),
             movie.get("original_name"),
             movie.get("enName"),

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from dataset import service
@@ -33,7 +35,7 @@ class AddTitleResolveWorker(QThread):
     def run(self) -> None:
         log_event("add_title.worker.run.begin", title=self._title, country=self._country, media_type=self._media_type)
         try:
-            try:
+            if _callable_accepts_media_type(service.resolve_title_for_add):
                 bundle = service.resolve_title_for_add(
                     self._title,
                     self._country,
@@ -41,7 +43,7 @@ class AddTitleResolveWorker(QThread):
                     data_language=self._data_language,
                     media_type=self._media_type,
                 )
-            except TypeError:
+            else:
                 bundle = service.resolve_title_for_add(
                     self._title,
                     self._country,
@@ -57,3 +59,16 @@ class AddTitleResolveWorker(QThread):
 
     def _on_progress(self, current: int, total: int, message: str) -> None:
         self.progress.emit(current, total, message)
+
+
+def _callable_accepts_media_type(func) -> bool:
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        return True
+    if "media_type" in signature.parameters:
+        return True
+    return any(
+        parameter.kind == inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
