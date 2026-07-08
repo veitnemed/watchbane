@@ -7,6 +7,7 @@ import os
 
 from config import constant
 from candidates.repositories.json_io import dump_json_atomic
+from storage.backend import is_sqlite_backend
 
 
 def init_candidate_pool() -> None:
@@ -18,6 +19,11 @@ def init_candidate_pool() -> None:
 
 def load_candidate_pool() -> dict:
     """Загружает текущий пул кандидатов."""
+    if is_sqlite_backend():
+        from storage.sqlite.candidate_repository import load_candidate_pool_dict
+
+        return load_candidate_pool_dict()
+
     if not os.path.exists(constant.CANDIDATE_POOL_JSON):
         return {}
     with open(constant.CANDIDATE_POOL_JSON, "r", encoding="utf-8-sig") as file:
