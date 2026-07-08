@@ -4,7 +4,7 @@ from pathlib import Path
 
 from storage import data as storage_data
 from storage.files import create_backup, restore_backup
-from storage.sqlite.backup import backup_sqlite_database
+from storage.sqlite.backup import backup_sqlite_database, restore_sqlite_database
 
 
 def _use_sqlite(tmp_path, monkeypatch) -> None:
@@ -62,3 +62,23 @@ def test_restore_backup_restores_sqlite_database(tmp_path, monkeypatch) -> None:
 
     assert restored_count == 1
     assert list(storage_data.load_dataset()) == ["Alpha"]
+
+
+def test_restore_sqlite_database_rejects_invalid_backup_without_touching_target(tmp_path) -> None:
+    from storage.sqlite import watched_repository
+    import sqlite3
+
+    db_path = tmp_path / "watchbane.sqlite3"
+    invalid_backup = tmp_path / "invalid.sqlite3"
+    watched_repository.save_dataset_dict({"Alpha": _movie("Alpha")}, path=db_path)
+    with sqlite3.connect(invalid_backup) as conn:
+        conn.execute("CREATE TABLE unrelated(id INTEGER PRIMARY KEY)")
+
+    try:
+        restore_sqlite_database(invalid_backup, db_path=db_path)
+    except ValueError as exc:
+        assert "watched_records" in str(exc)
+    else:
+        raise AssertionError("restore_sqlite_database should reject invalid SQLite backups")
+
+    assert list(watched_repository.load_dataset_dict(path=db_path)) == ["Alpha"]

@@ -57,11 +57,24 @@ def restore_sqlite_database(
 ) -> int:
     """Restore a SQLite backup and return watched record count."""
     source = Path(backup_path)
+    if source.is_file() is False:
+        raise FileNotFoundError(f"SQLite backup does not exist: {source}")
+
     target = Path(db_path) if db_path is not None else get_db_path()
     target.parent.mkdir(parents=True, exist_ok=True)
 
     source_conn = sqlite3.connect(source)
     try:
+        row = source_conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'watched_records'
+            """
+        ).fetchone()
+        if int(row[0]) != 1:
+            raise ValueError(f"SQLite backup is missing watched_records table: {source}")
+
         target_conn = sqlite3.connect(target)
         try:
             source_conn.backup(target_conn)
