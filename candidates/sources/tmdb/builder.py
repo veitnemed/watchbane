@@ -16,13 +16,20 @@ from candidates.sources.tmdb.discover_query import (
     normalize_optional_tmdb_genre_filter,
 )
 from candidates.sources.tmdb.discovery_strategy import build_discovery_slices, merge_discovery_results
-from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate
+from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate, prepare_tmdb_movie_candidate
 from candidates.sources.tmdb.scoring import (
     compute_metadata_completeness_score,
     compute_tmdb_final_score,
     compute_tmdb_hidden_gem_score,
     compute_tmdb_quality_score,
 )
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, MEDIA_TYPE_TV, normalize_media_type
+
+
+DISCOVER_PATHS = {
+    MEDIA_TYPE_TV: "/discover/tv",
+    MEDIA_TYPE_MOVIE: "/discover/movie",
+}
 
 
 def _sort_candidates_by_scores(candidates: list[dict[str, Any]]) -> None:
@@ -77,6 +84,7 @@ def compute_country_score(candidate: dict[str, Any], target_country: str) -> tup
 def _discover_params(
     slice_query: dict[str, Any],
     *,
+    media_type: str,
     language: str,
     min_tmdb_score: float | None,
     min_tmdb_votes: int | None,
@@ -93,6 +101,8 @@ def _discover_params(
         "with_original_language",
         "first_air_date.gte",
         "first_air_date.lte",
+        "primary_release_date.gte",
+        "primary_release_date.lte",
         "with_genres",
         "without_genres",
     ):
@@ -109,6 +119,7 @@ def _discover_params(
 def _fetch_discovery_slices(
     slices: list[dict[str, Any]],
     *,
+    media_type: str,
     language: str,
     min_tmdb_score: float | None,
     min_tmdb_votes: int | None,
@@ -117,6 +128,7 @@ def _fetch_discovery_slices(
 ) -> tuple[list[dict[str, Any]], int]:
     results_by_slice: list[dict[str, Any]] = []
     discover_total = 0
+    discover_path = DISCOVER_PATHS[media_type]
     for discovery_slice in slices:
         query = discovery_slice.get("query") or {}
         max_pages = int(discovery_slice.get("pages_per_slice") or query.get("max_pages") or 1)
@@ -124,12 +136,13 @@ def _fetch_discovery_slices(
         for page in range(1, max_pages + 1):
             params = _discover_params(
                 query,
+                media_type=media_type,
                 language=language,
                 min_tmdb_score=min_tmdb_score,
                 min_tmdb_votes=min_tmdb_votes,
                 page=page,
             )
-            payload = api_tmdb.tmdb_get("/discover/tv", params=params, token=token)
+            payload = api_tmdb.tmdb_get(discover_path, params=params, token=token)
             page_results = payload.get("results") if isinstance(payload, dict) else []
             page_results = page_results if isinstance(page_results, list) else []
             discover_total += len(page_results)
@@ -149,13 +162,17 @@ def _fetch_discovery_slices(
     return results_by_slice, discover_total
 
 
-def _filter_existing_discover_items(items: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int, int]:
+def _filter_existing_discover_items(
+    items: list[dict[str, Any]],
+    *,
+    media_type: str,
+) -> tuple[list[dict[str, Any]], int, int]:
     existing_index = build_existing_candidate_index(load_candidate_pool())
     novel_results: list[dict[str, Any]] = []
     skipped_tmdb_id = 0
     skipped_title_year = 0
     for item in items:
-        existing_reason = discover_item_existing_reason(item, existing_index)
+        existing_reason = discover_item_existing_reason(item, existing_index, media_type=media_type)
         if existing_reason == "tmdb_id":
             skipped_tmdb_id += 1
             continue
@@ -177,6 +194,54 @@ def _score_candidate(candidate: dict[str, Any], country: str, mode: str) -> dict
     return candidate
 
 
+def _fetch_details_for_media_type(
+    tmdb_id: int,
+    *,
+    media_type: str,
+    language: str,
+    force_refresh: bool,
+    token: str,
+) -> dict[str, Any]:
+    if media_type == MEDIA_TYPE_MOVIE:
+        return api_tmdb.get_movie_details(
+            int(tmdb_id),
+            language=language,
+            append_to_response=api_tmdb.DEFAULT_MOVIE_DETAIL_APPENDS,
+            force_refresh=force_refresh,
+            token=token,
+        )
+    return api_tmdb.get_tv_details(
+        int(tmdb_id),
+        language=language,
+        append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
+        force_refresh=force_refresh,
+        token=token,
+    )
+
+
+def _prepare_candidate_for_media_type(
+    raw_details: dict[str, Any],
+    *,
+    media_type: str,
+    country: str,
+    source_query: dict[str, Any],
+    source_trace,
+) -> dict[str, Any]:
+    if media_type == MEDIA_TYPE_MOVIE:
+        return prepare_tmdb_movie_candidate(
+            raw_details,
+            country=country,
+            source_query=source_query,
+            source_trace=source_trace,
+        )
+    return prepare_tmdb_candidate(
+        raw_details,
+        country=country,
+        source_query=source_query,
+        source_trace=source_trace,
+    )
+
+
 def build_candidate_pool(
     country: str,
     pages: int = 3,
@@ -192,8 +257,10 @@ def build_candidate_pool(
     force_refresh: bool = False,
     skip_existing_pool: bool = True,
     language: str | None = None,
+    media_type: str | None = None,
 ) -> dict[str, Any]:
     country = normalize_country_code(country)
+    media_type = normalize_media_type(media_type)
     if is_iso2_country_code(country) is False:
         raise ValueError("country must be a 2-letter ISO code")
     if mode not in {"quality", "hidden_gems"}:
@@ -209,9 +276,11 @@ def build_candidate_pool(
         with_genres=with_genres,
         without_genres=without_genres,
         pages_per_slice=pages,
+        media_type=media_type,
     )
     results_by_slice, discover_total = _fetch_discovery_slices(
         slices,
+        media_type=media_type,
         language=language,
         min_tmdb_score=min_tmdb_score,
         min_tmdb_votes=min_tmdb_votes,
@@ -220,10 +289,14 @@ def build_candidate_pool(
     )
     merged_results = merge_discovery_results(results_by_slice)
     duplicates_removed = max(0, discover_total - len(merged_results))
-    not_watched_results, watched_skipped = remove_watched_discover(merged_results)
+    if media_type == MEDIA_TYPE_MOVIE:
+        not_watched_results, watched_skipped = remove_watched_discover(merged_results, media_type=media_type)
+    else:
+        not_watched_results, watched_skipped = remove_watched_discover(merged_results)
     if skip_existing_pool:
         novel_results, existing_pool_skipped_tmdb_id, existing_pool_skipped_title_year = _filter_existing_discover_items(
-            not_watched_results
+            not_watched_results,
+            media_type=media_type,
         )
     else:
         novel_results = not_watched_results
@@ -237,10 +310,10 @@ def build_candidate_pool(
 
     for item in details_candidates:
         try:
-            details = api_tmdb.get_tv_details(
+            details = _fetch_details_for_media_type(
                 int(item["id"]),
+                media_type=media_type,
                 language=language,
-                append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
                 force_refresh=force_refresh,
                 token=token,
             )
@@ -248,17 +321,20 @@ def build_candidate_pool(
             details_errors += 1
             continue
 
-        candidate = prepare_tmdb_candidate(
+        source_query = {
+            "country": country,
+            "language": language,
+            "media_type": media_type,
+            "min_tmdb_score": min_tmdb_score,
+            "min_tmdb_votes": min_tmdb_votes,
+            "with_genres": normalize_optional_tmdb_genre_filter(with_genres),
+            "without_genres": normalize_optional_tmdb_genre_filter(without_genres),
+        }
+        candidate = _prepare_candidate_for_media_type(
             details,
+            media_type=media_type,
             country=country,
-            source_query={
-                "country": country,
-                "language": language,
-                "min_tmdb_score": min_tmdb_score,
-                "min_tmdb_votes": min_tmdb_votes,
-                "with_genres": normalize_optional_tmdb_genre_filter(with_genres),
-                "without_genres": normalize_optional_tmdb_genre_filter(without_genres),
-            },
+            source_query=source_query,
             source_trace=item.get("source_trace"),
         )
         if candidate.get("imdb_id"):
@@ -286,12 +362,14 @@ def build_candidate_pool(
     return {
         "criteria_name": criteria_name,
         "country": country,
+        "media_type": media_type,
         "mode": mode,
         "source": "tmdb",
         "source_provider": "tmdb",
         "source_version": 2,
         "query": {
             "country": country,
+            "media_type": media_type,
             "language": language,
             "slices": slices,
             "min_tmdb_score": min_tmdb_score,
@@ -302,6 +380,7 @@ def build_candidate_pool(
         "settings": {
             "criteria_name": criteria_name,
             "country": country,
+            "media_type": media_type,
             "mode": mode,
             "pages": int(pages),
             "details_limit": int(details_limit),

@@ -40,6 +40,16 @@ def test_build_discovery_slices_for_other_country_uses_origin_country_only() -> 
     }
 
 
+def test_build_discovery_slices_for_movie_uses_primary_release_dates() -> None:
+    slices = build_discovery_slices("US", year_min=2009, year_max=2009, media_type="movie")
+
+    queries = [item["query"] for item in slices]
+    assert all(query.get("primary_release_date.gte") == "2009-01-01" for query in queries)
+    assert all(query.get("primary_release_date.lte") == "2009-12-31" for query in queries)
+    assert all("first_air_date.gte" not in query for query in queries)
+    assert all("first_air_date.lte" not in query for query in queries)
+
+
 def test_merge_discovery_results_dedupes_and_combines_trace() -> None:
     results = [
         {

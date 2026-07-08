@@ -1,6 +1,6 @@
 """Tests for the TMDb-only candidate normalizer."""
 
-from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate
+from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate, prepare_tmdb_movie_candidate
 
 
 def _raw_details(**overrides) -> dict:
@@ -175,3 +175,53 @@ def test_media_people_keywords_and_providers_are_mapped() -> None:
     assert candidate["actors_top"][0]["name"] == "Константин Хабенский"
     assert candidate["crew_top"][0]["role"] == "Director"
     assert candidate["keywords"] == ["detective"]
+
+
+def test_movie_candidate_maps_release_runtime_and_media_type() -> None:
+    candidate = prepare_tmdb_movie_candidate(
+        {
+            "id": 202,
+            "title": "Watchmen",
+            "original_title": "Watchmen",
+            "release_date": "2009-03-06",
+            "status": "Released",
+            "runtime": 162,
+            "overview": "Movie overview",
+            "genres": [{"id": 18, "name": "Drama"}],
+            "production_countries": [{"iso_3166_1": "US", "name": "United States of America"}],
+            "original_language": "en",
+            "production_companies": [{"id": 1, "name": "Warner Bros."}],
+            "vote_average": 7.3,
+            "vote_count": 9300,
+            "popularity": 40.0,
+            "external_ids": {"imdb_id": "tt0409459"},
+            "poster_path": "/movie.jpg",
+            "release_dates": {
+                "results": [
+                    {"iso_3166_1": "US", "release_dates": [{"certification": "R"}]},
+                ],
+            },
+            "watch/providers": {"results": {}},
+            "credits": {
+                "cast": [{"id": 10, "name": "Jackie Earle Haley", "character": "Rorschach"}],
+                "crew": [{"id": 20, "name": "Zack Snyder", "job": "Director"}],
+            },
+            "keywords": {"keywords": [{"id": 1, "name": "superhero"}]},
+        },
+        country="US",
+        source_query={"language": "en-US", "media_type": "movie"},
+        source_trace=[{"slice_name": "movie_votes"}],
+    )
+
+    assert candidate["media_type"] == "movie"
+    assert candidate["tmdb_id"] == 202
+    assert candidate["title"] == "Watchmen"
+    assert candidate["year"] == 2009
+    assert candidate["release_date"] == "2009-03-06"
+    assert candidate["runtime"] == 162
+    assert candidate["tmdb_score"] == 7.3
+    assert candidate["country_codes"] == ["US"]
+    assert candidate["content_rating"] == "US: R"
+    assert candidate["actors_top"][0]["role"] == "Rorschach"
+    assert candidate["crew_top"][0]["role"] == "Director"
+    assert candidate["is_complete"] is True

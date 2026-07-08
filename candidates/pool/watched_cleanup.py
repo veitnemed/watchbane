@@ -16,6 +16,7 @@ from candidates.pool.dedupe import (
     titles_are_similar,
 )
 from candidates.pool.normalization import normalize_storage_pool
+from dataset.models.media_type import normalize_media_type
 
 
 _EXTERNAL_ID_FIELDS = {
@@ -49,6 +50,7 @@ def _movie_year(movie: dict) -> str:
         main_info.get("year"),
         source.get("year"),
         source.get("first_air_date"),
+        source.get("release_date"),
         source.get("start_year"),
     ):
         year = _year_from_value(value)
@@ -59,15 +61,29 @@ def _movie_year(movie: dict) -> str:
 
 def _candidate_year(candidate: dict) -> str:
     source = candidate if isinstance(candidate, dict) else {}
-    for value in (source.get("year"), source.get("first_air_date"), source.get("start_year")):
+    for value in (source.get("year"), source.get("first_air_date"), source.get("release_date"), source.get("start_year")):
         year = _year_from_value(value)
         if year:
             return year
     return ""
 
 
-def _external_id_signatures(value) -> set[str]:
+def _movie_media_type(movie: dict) -> str:
+    source = movie if isinstance(movie, dict) else {}
+    main_info = source.get("main_info") if isinstance(source.get("main_info"), dict) else {}
+    return normalize_media_type(main_info.get("media_type") or source.get("media_type"))
+
+
+def _candidate_media_type(candidate: dict) -> str | None:
+    source = candidate if isinstance(candidate, dict) else {}
+    if source.get("media_type") in (None, ""):
+        return None
+    return normalize_media_type(source.get("media_type"))
+
+
+def _external_id_signatures(value, *, media_type: str | None = None, include_unscoped: bool = True) -> set[str]:
     signatures: set[str] = set()
+    normalized_media_type = normalize_media_type(media_type) if media_type is not None else None
 
     def visit(current) -> None:
         if isinstance(current, dict):
@@ -76,7 +92,11 @@ def _external_id_signatures(value) -> set[str]:
                 if prefix is not None:
                     text = _clean_text(nested_value)
                     if text is not None:
-                        signatures.add(f"{prefix}:{text.casefold()}")
+                        lowered = text.casefold()
+                        if normalized_media_type is not None:
+                            signatures.add(f"{prefix}:{normalized_media_type}:{lowered}")
+                        if include_unscoped:
+                            signatures.add(f"{prefix}:{lowered}")
                 if isinstance(nested_value, (dict, list, tuple)):
                     visit(nested_value)
             return
@@ -89,7 +109,8 @@ def _external_id_signatures(value) -> set[str]:
 
 
 def _candidate_external_signatures(candidate: dict) -> set[str]:
-    return _external_id_signatures(candidate)
+    media_type = _candidate_media_type(candidate)
+    return _external_id_signatures(candidate, media_type=media_type, include_unscoped=media_type is None)
 
 
 def build_watched_signatures() -> set:
@@ -101,6 +122,7 @@ def build_watched_signatures() -> set:
     for dataset_key, movie in dataset.items():
         if isinstance(movie, dict) is False:
             continue
+        media_type = _movie_media_type(movie)
         year = _movie_year(movie)
         for title in dataset_title_aliases(dataset_key, movie):
             signature = title_identity_key({
@@ -109,7 +131,7 @@ def build_watched_signatures() -> set:
             })
             if signature != "|":
                 signatures.add(signature)
-        signatures.update(_external_id_signatures(movie))
+        signatures.update(_external_id_signatures(movie, media_type=media_type, include_unscoped=True))
     return signatures
 
 

@@ -58,7 +58,7 @@ def test_extract_candidate_record_handles_missing_optional_fields() -> None:
 def test_extract_candidate_record_uses_unicode_stable_identity() -> None:
     row = extract_candidate_record(None, {"title": "Ёлки!", "year": "2010", "media_type": "film"})
 
-    assert row.pool_key == "елки|2010"
+    assert row.pool_key == "елки|2010|movie"
     assert row.title_normalized == "елки"
     assert row.media_type == "movie"
     assert row.year == 2010

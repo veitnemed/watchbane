@@ -4,6 +4,7 @@ from config import constant
 from candidates import service as candidate_service
 from candidates.sources.tmdb import country_options as tmdb_country_options
 from candidates.sources.tmdb import genre_options as tmdb_genre_options
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, MEDIA_TYPE_TV, normalize_media_type
 from storage import data as storage_data
 from ui.console import request
 from ui.console import ui
@@ -104,6 +105,7 @@ def _print_tmdb_candidate_stats(result: dict) -> None:
     print("\nСтатистика TMDb candidate_pool:")
     print(f"Источник: {stats.get('source', 'tmdb')} v{stats.get('source_version', 2)}")
     discover_filters = (result.get("settings") or {})
+    print(f"Тип: {_tmdb_media_type_label(discover_filters.get('media_type'))}")
     print("TMDb Discover filters:")
     print(f"Минимальный год: {discover_filters.get('year_min') if discover_filters.get('year_min') is not None else 'не важно'}")
     print(f"Максимальный год: {discover_filters.get('year_max') if discover_filters.get('year_max') is not None else 'не важно'}")
@@ -130,6 +132,27 @@ def _tmdb_mode_label(mode: str) -> str:
         "hidden_gems": "поиск по недооценённым",
     }
     return labels.get(mode, mode)
+
+
+def _tmdb_media_type_label(media_type: str | None) -> str:
+    labels = {
+        MEDIA_TYPE_TV: "сериалы",
+        MEDIA_TYPE_MOVIE: "фильмы",
+    }
+    return labels.get(normalize_media_type(media_type), "сериалы")
+
+
+def request_tmdb_media_type(input_func=input, output_func=print) -> str:
+    output_func("\nТип контента:")
+    output_func("1 >> Сериалы")
+    output_func("2 >> Фильмы")
+    while True:
+        answer = input_func("Выбор [1] >> ").strip().casefold()
+        if answer in {"", "1", "tv", "series", "serial", "с", "сериал", "сериалы"}:
+            return MEDIA_TYPE_TV
+        if answer in {"2", "movie", "film", "ф", "фильм", "фильмы"}:
+            return MEDIA_TYPE_MOVIE
+        output_func("Выберите 1 или 2.")
 
 
 def _parse_tmdb_genre_indexes(value: str, options: list[dict] | None = None) -> list[int] | None:
@@ -190,14 +213,31 @@ def _input_tmdb_include_mode(input_func=input, output_func=print) -> str:
         output_func("Выберите 1 или 2.")
 
 
-def request_tmdb_discover_genre_filters(input_func=input, output_func=print) -> tuple[str | None, str | None]:
+def _tmdb_genre_options_for_media_type(media_type: str | None) -> tuple[list[dict], list[dict]]:
+    if normalize_media_type(media_type) == MEDIA_TYPE_MOVIE:
+        return (
+            tmdb_genre_options.INCLUDE_MOVIE_GENRE_OPTIONS,
+            tmdb_genre_options.EXCLUDE_MOVIE_GENRE_OPTIONS,
+        )
+    return (
+        tmdb_genre_options.INCLUDE_TV_GENRE_OPTIONS,
+        tmdb_genre_options.EXCLUDE_TV_GENRE_OPTIONS,
+    )
+
+
+def request_tmdb_discover_genre_filters(
+    input_func=input,
+    output_func=print,
+    media_type: str | None = None,
+) -> tuple[str | None, str | None]:
+    include_options, exclude_options = _tmdb_genre_options_for_media_type(media_type)
     output_func(f"\n{tmdb_genre_options.TMDB_DISCOVER_GENRE_TITLE}")
     output_func("Выбери жанры, которые должны попасть в поиск:")
-    _print_tmdb_genre_options(tmdb_genre_options.INCLUDE_TV_GENRE_OPTIONS, output_func)
+    _print_tmdb_genre_options(include_options, output_func)
     output_func("\nВвод через запятую, например 1,2,3. Пустой ввод = не важно.")
     include_ids = _input_tmdb_genre_ids(
         "Include жанры",
-        tmdb_genre_options.INCLUDE_TV_GENRE_OPTIONS,
+        include_options,
         input_func=input_func,
         output_func=output_func,
     )
@@ -215,11 +255,11 @@ def request_tmdb_discover_genre_filters(input_func=input, output_func=print) -> 
     output_func(f"\n{tmdb_genre_options.TMDB_EXCLUDE_LABEL}")
     output_func("Выбери жанры, которые нужно исключить:")
     output_func(" все >> все перечисленные exclude-жанры")
-    _print_tmdb_genre_options(tmdb_genre_options.EXCLUDE_TV_GENRE_OPTIONS, output_func)
+    _print_tmdb_genre_options(exclude_options, output_func)
     output_func("\nВвод через запятую, например 1,2,3,4. Пустой ввод = не важно. Можно ввести все.")
     exclude_ids = _input_tmdb_genre_ids(
         "Exclude жанры",
-        tmdb_genre_options.EXCLUDE_TV_GENRE_OPTIONS,
+        exclude_options,
         allow_all=True,
         input_func=input_func,
         output_func=output_func,
@@ -310,6 +350,7 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
 
     ui.clean_terminal()
     print("TMDb candidate_pool v2\n")
+    media_type = request_tmdb_media_type(input_func=input, output_func=print)
     country_codes = request_tmdb_country_codes(input_func=input, output_func=print)
     if len(country_codes) > 1:
         print("Пока один запуск TMDb candidate_pool поддерживает одну страну. Выберите один номер.")
@@ -342,11 +383,16 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     year_max = _parse_optional_bounded_int(input("Максимальный год [не важно] >> ").strip(), 1900, constant.NOW_YEAR)
     min_tmdb_score = _parse_optional_bounded_float(input("Минимальный TMDb рейтинг [не важно] >> ").strip(), 0.0, 10.0)
     min_tmdb_votes = _parse_optional_bounded_int(input("Минимум голосов TMDb [не важно] >> ").strip(), 0, 10_000_000)
-    with_genres, without_genres = request_tmdb_discover_genre_filters(input_func=input, output_func=print)
+    with_genres, without_genres = request_tmdb_discover_genre_filters(
+        input_func=input,
+        output_func=print,
+        media_type=media_type,
+    )
     criteria_name = COMMON_POOL_CRITERIA_NAME
 
     print("\nБудет запущен TMDb-only candidate_pool v2:\n")
     print("Обновление общего pool")
+    print(f"Тип: {_tmdb_media_type_label(media_type)}")
     print(f"Страна: {country}")
     print(f"Режим: {_tmdb_mode_label(mode)}")
     if is_test_run:
@@ -373,6 +419,7 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
     try:
         result = candidate_service.build_tmdb_candidate_pool(
             country=country,
+            media_type=media_type,
             pages=pages,
             details_limit=details_limit,
             mode=mode,
@@ -410,7 +457,8 @@ def run_tmdb_candidate_pool_flow(is_test_run: bool = False) -> None:
 
     if is_test_run:
         print("\nТестовый прогон завершён.")
-        print(f"Основной candidate_pool_{country}_{mode}.json не изменялся.")
+        media_suffix = "_movie" if media_type == MEDIA_TYPE_MOVIE else ""
+        print(f"Основной candidate_pool_{country}_{mode}{media_suffix}.json не изменялся.")
         print(f"Файл тестового результата: {json_path}")
         stats = result.get("stats") or {}
         print("\nТестовый режим:")

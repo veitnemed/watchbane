@@ -16,13 +16,14 @@ if str(ROOT_DIR) not in sys.path:
 from apis import tmdb_api
 from candidates.models.schema import normalize_candidate_for_storage, resolve_canonical_year, strip_external_rating_fields
 from candidates.repositories import pool_repository
-from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate
+from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate, prepare_tmdb_movie_candidate
 from candidates.sources.tmdb.scoring import (
     compute_metadata_completeness_score,
     compute_tmdb_final_score,
     compute_tmdb_hidden_gem_score,
     compute_tmdb_quality_score,
 )
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, normalize_media_type
 from posters.fetch_watched_tmdb import match_tmdb_search_result
 
 REPORT_PATH = ROOT_DIR / "data" / "diagnostics" / "candidate_pool_tmdb_refresh_report.json"
@@ -88,7 +89,9 @@ def _prepare_refreshed_candidate(
     original: dict[str, Any],
     raw_details: dict[str, Any],
 ) -> dict[str, Any]:
-    refreshed = prepare_tmdb_candidate(
+    media_type = normalize_media_type(original.get("media_type"))
+    prepare_func = prepare_tmdb_movie_candidate if media_type == MEDIA_TYPE_MOVIE else prepare_tmdb_candidate
+    refreshed = prepare_func(
         raw_details,
         country=(original.get("country_codes") or [None])[0] if isinstance(original.get("country_codes"), list) else None,
         source_query=original.get("source_query") if isinstance(original.get("source_query"), dict) else {},
@@ -106,17 +109,29 @@ def _search_match(candidate: dict[str, Any], *, force_refresh: bool, token: str 
     year = resolve_canonical_year(candidate)
     if not title or year is None:
         return None, "failed"
-    results = tmdb_api.search_tv_by_name(title, token=token)
+    media_type = normalize_media_type(candidate.get("media_type"))
+    if media_type == MEDIA_TYPE_MOVIE:
+        results = tmdb_api.search_movie_by_title(title, token=token)
+    else:
+        results = tmdb_api.search_tv_by_name(title, token=token)
     matched, status = match_tmdb_search_result(title, year, results)
     if status != "matched" or matched is None:
         return None, "needs_manual_match" if status == "uncertain_match" else "failed"
     try:
-        details = tmdb_api.get_tv_details(
-            int(matched["id"]),
-            append_to_response=tmdb_api.DEFAULT_TV_DETAIL_APPENDS,
-            force_refresh=force_refresh,
-            token=token,
-        )
+        if media_type == MEDIA_TYPE_MOVIE:
+            details = tmdb_api.get_movie_details(
+                int(matched["id"]),
+                append_to_response=tmdb_api.DEFAULT_MOVIE_DETAIL_APPENDS,
+                force_refresh=force_refresh,
+                token=token,
+            )
+        else:
+            details = tmdb_api.get_tv_details(
+                int(matched["id"]),
+                append_to_response=tmdb_api.DEFAULT_TV_DETAIL_APPENDS,
+                force_refresh=force_refresh,
+                token=token,
+            )
     except Exception:
         return None, "failed"
     return details, "matched_by_search"
@@ -130,12 +145,20 @@ def refresh_candidate(
 ) -> tuple[dict[str, Any], str]:
     if _has_tmdb_id(candidate):
         try:
-            details = tmdb_api.get_tv_details(
-                int(candidate["tmdb_id"]),
-                append_to_response=tmdb_api.DEFAULT_TV_DETAIL_APPENDS,
-                force_refresh=force_refresh,
-                token=token,
-            )
+            if normalize_media_type(candidate.get("media_type")) == MEDIA_TYPE_MOVIE:
+                details = tmdb_api.get_movie_details(
+                    int(candidate["tmdb_id"]),
+                    append_to_response=tmdb_api.DEFAULT_MOVIE_DETAIL_APPENDS,
+                    force_refresh=force_refresh,
+                    token=token,
+                )
+            else:
+                details = tmdb_api.get_tv_details(
+                    int(candidate["tmdb_id"]),
+                    append_to_response=tmdb_api.DEFAULT_TV_DETAIL_APPENDS,
+                    force_refresh=force_refresh,
+                    token=token,
+                )
         except Exception:
             return strip_external_rating_fields(candidate), "failed"
         return _prepare_refreshed_candidate(candidate, details), "refreshed_by_tmdb_id"

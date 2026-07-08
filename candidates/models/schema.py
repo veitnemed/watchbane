@@ -12,7 +12,7 @@ from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
 REQUIRED_FIELD_GROUPS = (
     ("tmdb_id", ("tmdb_id",)),
     ("title", ("title",)),
-    ("year_or_first_air_date", ("year", "first_air_date")),
+    ("year_or_date", ("year", "first_air_date", "release_date")),
     ("tmdb_score", ("tmdb_score",)),
     ("tmdb_votes", ("tmdb_votes",)),
     ("genres", ("genres", "genre_keys", "genres_tmdb")),
@@ -181,7 +181,7 @@ def normalize_candidate_record(candidate: dict) -> dict:
 
 
 def resolve_canonical_year(candidate: dict) -> int | None:
-    """Returns the canonical pool year from year or first_air_date only."""
+    """Returns the canonical pool year from year or TMDb date fields."""
     year_value = coerce_candidate_number(candidate.get("year"))
     if isinstance(year_value, int):
         return year_value
@@ -191,6 +191,9 @@ def resolve_canonical_year(candidate: dict) -> int | None:
     first_air_date = str(candidate.get("first_air_date") or "").strip()
     if len(first_air_date) >= 4 and first_air_date[:4].isdigit():
         return int(first_air_date[:4])
+    release_date = str(candidate.get("release_date") or "").strip()
+    if len(release_date) >= 4 and release_date[:4].isdigit():
+        return int(release_date[:4])
     return None
 
 

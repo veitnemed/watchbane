@@ -28,6 +28,27 @@ def _details(tmdb_id: int, title: str = "Show", year: int = 2020) -> dict:
     }
 
 
+def _movie_details(tmdb_id: int, title: str = "Movie", year: int = 2009) -> dict:
+    return {
+        "id": tmdb_id,
+        "title": title,
+        "original_title": title,
+        "release_date": f"{year}-03-06",
+        "status": "Released",
+        "runtime": 162,
+        "overview": "Fresh movie overview",
+        "genres": [{"id": 18, "name": "Drama"}],
+        "production_countries": [{"iso_3166_1": "US", "name": "United States of America"}],
+        "original_language": "en",
+        "vote_average": 7.3,
+        "vote_count": 9000,
+        "popularity": 30.0,
+        "external_ids": {"imdb_id": f"tt{tmdb_id}"},
+        "credits": {},
+        "keywords": {"keywords": []},
+    }
+
+
 def _write_json(path: Path, data) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
@@ -86,6 +107,53 @@ def test_refresh_missing_tmdb_id_matches_by_search(monkeypatch) -> None:
     assert status == "matched_by_search"
     assert updated["tmdb_id"] == 202
     assert updated["title"] == "Search"
+
+
+def test_refresh_movie_by_tmdb_id_uses_movie_details(monkeypatch) -> None:
+    calls = []
+
+    def fake_movie_details(tmdb_id, **_kwargs):
+        calls.append(tmdb_id)
+        return _movie_details(tmdb_id)
+
+    monkeypatch.setattr(refresh.tmdb_api, "get_movie_details", fake_movie_details)
+    monkeypatch.setattr(
+        refresh.tmdb_api,
+        "get_tv_details",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("tv details should not be called")),
+    )
+
+    updated, status = refresh.refresh_candidate(
+        {"title": "Movie", "year": 2009, "media_type": "movie", "tmdb_id": 202},
+        token="token",
+    )
+
+    assert status == "refreshed_by_tmdb_id"
+    assert calls == [202]
+    assert updated["media_type"] == "movie"
+    assert updated["release_date"] == "2009-03-06"
+    assert updated["runtime"] == 162
+
+
+def test_refresh_movie_missing_tmdb_id_uses_movie_search(monkeypatch) -> None:
+    search_calls = []
+
+    def fake_search(title, token=None):
+        search_calls.append(title)
+        return [{"id": 202, "title": title, "release_date": "2009-03-06"}]
+
+    monkeypatch.setattr(refresh.tmdb_api, "search_movie_by_title", fake_search)
+    monkeypatch.setattr(refresh.tmdb_api, "get_movie_details", lambda tmdb_id, **_kwargs: _movie_details(tmdb_id, "Movie", 2009))
+
+    updated, status = refresh.refresh_candidate(
+        {"title": "Movie", "year": 2009, "media_type": "movie"},
+        token="token",
+    )
+
+    assert status == "matched_by_search"
+    assert search_calls == ["Movie"]
+    assert updated["tmdb_id"] == 202
+    assert updated["media_type"] == "movie"
 
 
 def test_refresh_missing_tmdb_id_needs_manual_match_on_ambiguous_search(monkeypatch) -> None:

@@ -88,7 +88,7 @@ def test_candidate_pool_unicode_identity(tmp_path, monkeypatch) -> None:
         path=db_path,
     )
 
-    assert "елки|2010" in candidate_repository.load_candidate_pool_dict(path=db_path)
+    assert "елки|2010|movie" in candidate_repository.load_candidate_pool_dict(path=db_path)
 
 
 def test_clear_candidate_pool_keeps_criteria(tmp_path, monkeypatch) -> None:

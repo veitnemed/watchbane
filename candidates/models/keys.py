@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, normalize_media_type
+
 
 COMMON_POOL_CRITERIA_NAME = "pool"
 DEFAULT_CRITERIA_NAME = COMMON_POOL_CRITERIA_NAME
@@ -56,5 +58,10 @@ def title_identity_key(candidate: dict) -> str:
 
 
 def pool_entry_key(candidate: dict) -> str:
-    """Builds title|year key for the single shared candidate pool."""
-    return title_identity_key(candidate)
+    """Builds a storage key for the single shared candidate pool."""
+    key = title_identity_key(candidate)
+    if key == "|":
+        return key
+    if normalize_media_type(candidate.get("media_type")) == MEDIA_TYPE_MOVIE:
+        return f"{key}|{MEDIA_TYPE_MOVIE}"
+    return key

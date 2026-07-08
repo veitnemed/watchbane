@@ -1,6 +1,6 @@
 """Tests for TMDb-only candidate scoring."""
 
-from candidates.scoring.sort_keys import candidate_sort_score
+from candidates.scoring.sort_keys import candidate_sort_score, dedupe_ranked_candidates_by_title_identity
 from candidates.sources.tmdb.scoring import (
     compute_metadata_completeness_score,
     compute_tmdb_bayesian_rating,
@@ -114,6 +114,15 @@ def test_duplicate_tiebreak_prefers_better_tmdb_final_score() -> None:
     strong = _candidate(title="Same", final_score=0.82, quality_score=0.72, tmdb_score=7.9, tmdb_votes=80)
 
     assert candidate_sort_score(strong) > candidate_sort_score(weak)
+
+
+def test_search_dedupe_keeps_same_title_year_with_different_media_type() -> None:
+    series = _candidate(title="Watchmen", year=2009, media_type="tv", quality_score=0.7)
+    movie = _candidate(title="Watchmen", year=2009, media_type="movie", quality_score=0.8)
+
+    deduped = dedupe_ranked_candidates_by_title_identity([series, movie])
+
+    assert {candidate["media_type"] for candidate in deduped} == {"tv", "movie"}
 
 
 def test_final_score_quality_mode_uses_tmdb_only_signals() -> None:

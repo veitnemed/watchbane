@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from candidates.sources.tmdb.discover_query import normalize_country_code
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, normalize_media_type
 
 DEFAULT_YEAR_WINDOW = 5
 RU_ORIGINAL_LANGUAGE = "ru"
@@ -52,6 +53,7 @@ def _normalize_genre_slices(with_genres) -> list[str | None]:
 def _base_query(
     *,
     country: str,
+    media_type: str,
     sort_by: str,
     year_start: int | None,
     year_end: int | None,
@@ -70,11 +72,12 @@ def _base_query(
         query["with_origin_country"] = with_origin_country
     if with_original_language:
         query["with_original_language"] = with_original_language
+    date_prefix = "primary_release_date" if media_type == MEDIA_TYPE_MOVIE else "first_air_date"
     if year_start is not None:
-        query["first_air_date.gte"] = f"{year_start:04d}-01-01"
+        query[f"{date_prefix}.gte"] = f"{year_start:04d}-01-01"
         query["year_min"] = year_start
     if year_end is not None:
-        query["first_air_date.lte"] = f"{year_end:04d}-12-31"
+        query[f"{date_prefix}.lte"] = f"{year_end:04d}-12-31"
         query["year_max"] = year_end
     if with_genres:
         query["with_genres"] = with_genres
@@ -99,8 +102,10 @@ def build_discovery_slices(
     with_genres=None,
     without_genres=None,
     pages_per_slice=2,
+    media_type: str | None = None,
 ) -> list[dict]:
     country_code = normalize_country_code(country)
+    normalized_media_type = normalize_media_type(media_type)
     year_windows = _year_windows(year_min, year_max)
     genre_slices = _normalize_genre_slices(with_genres)
     sources = [("origin_country", {"with_origin_country": country_code})]
@@ -116,6 +121,7 @@ def build_discovery_slices(
                 for genre in genre_slices:
                     query = _base_query(
                         country=country_code,
+                        media_type=normalized_media_type,
                         sort_by=sort_by,
                         year_start=year_start,
                         year_end=year_end,

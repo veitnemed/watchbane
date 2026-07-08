@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from apis import tmdb_api as api_tmdb
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, normalize_media_type
 
 
 ROOT_DIR = Path(__file__).resolve().parents[3]
@@ -21,9 +22,12 @@ CSV_FIELDS = [
     "quality_score",
     "hidden_gem_score",
     "metadata_completeness_score",
+    "media_type",
     "title",
     "original_title",
     "year",
+    "release_date",
+    "runtime",
     "tmdb_score",
     "tmdb_votes",
     "tmdb_popularity",
@@ -84,9 +88,10 @@ def _genre_values_from_field(value) -> list[str]:
     return result
 
 
-def output_base_path(country: str, mode: str) -> Path:
+def output_base_path(country: str, mode: str, media_type: str | None = None) -> Path:
     ensure_output_dir()
-    return OUTPUT_DIR / f"candidate_pool_{country.upper()}_{mode}"
+    media_suffix = "_movie" if normalize_media_type(media_type) == MEDIA_TYPE_MOVIE else ""
+    return OUTPUT_DIR / f"candidate_pool_{country.upper()}_{mode}{media_suffix}"
 
 
 def _write_build_json(result: dict[str, Any], json_path: Path) -> Path | None:
@@ -100,7 +105,7 @@ def _write_build_json(result: dict[str, Any], json_path: Path) -> Path | None:
 def save_candidate_pool_result(result: dict[str, Any]) -> tuple[Path, Path]:
     country = result["country"]
     mode = result["mode"]
-    base_path = output_base_path(country, mode)
+    base_path = output_base_path(country, mode, media_type=result.get("media_type"))
     json_path = base_path.with_suffix(".json")
     csv_path = base_path.with_suffix(".csv")
 
@@ -120,7 +125,8 @@ def save_candidate_pool_test_result(result: dict[str, Any]) -> tuple[Path, Path]
     mode = result["mode"]
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     ensure_output_dir()
-    base_path = OUTPUT_DIR / f"test_candidate_pool_{country.upper()}_{mode}_{timestamp}"
+    media_suffix = "_movie" if normalize_media_type(result.get("media_type")) == MEDIA_TYPE_MOVIE else ""
+    base_path = OUTPUT_DIR / f"test_candidate_pool_{country.upper()}_{mode}{media_suffix}_{timestamp}"
     json_path = base_path.with_suffix(".json")
     csv_path = base_path.with_suffix(".csv")
 

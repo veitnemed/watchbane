@@ -26,7 +26,8 @@ def parse_args() -> argparse.Namespace:
         help="ISO-2 country code, default RU.",
     )
     parser.add_argument("--pages", type=int, default=3, help="TMDb Discover pages to scan.")
-    parser.add_argument("--details-limit", type=int, default=50, help="How many top Discover results get /tv details.")
+    parser.add_argument("--details-limit", type=int, default=50, help="How many top Discover results get TMDb details.")
+    parser.add_argument("--media-type", choices=["tv", "movie"], default="tv", help="TMDb media type to collect.")
     parser.add_argument("--mode", choices=["quality", "hidden_gems"], default="quality", help="Final ranking mode.")
     parser.add_argument("--force-refresh", action="store_true", help="Ignore TMDb cache and refresh API responses.")
     return parser.parse_args()
@@ -41,6 +42,7 @@ def main() -> None:
         country=args.country,
         pages=pages,
         details_limit=details_limit,
+        media_type=args.media_type,
         mode=args.mode,
         force_refresh=args.force_refresh,
     )

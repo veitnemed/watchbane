@@ -103,7 +103,7 @@ def extract_candidate_record(pool_key: str | None, record: dict) -> CandidateRec
             candidate.get("enName"),
         )
     ) or ""
-    year = _year_from(_first_value(candidate.get("year"), candidate.get("first_air_date")))
+    year = _year_from(_first_value(candidate.get("year"), candidate.get("first_air_date"), candidate.get("release_date")))
     payload_for_key = dict(candidate)
     if year is not None:
         payload_for_key["year"] = year

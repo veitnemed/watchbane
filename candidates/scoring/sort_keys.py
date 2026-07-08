@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from candidates.models.keys import title_identity_key
+from candidates.models.keys import pool_entry_key
 from candidates.models.schema import (
     coerce_candidate_number,
     is_candidate_complete as schema_is_candidate_complete,
@@ -87,13 +87,13 @@ def _is_better_search_duplicate(
 
 
 def dedupe_ranked_candidates_by_title_identity(ranked_candidates: list) -> list:
-    """Keeps one best candidate per normalized title/year for search display."""
+    """Keeps one best candidate per storage identity for search display."""
     best_by_identity: dict[str, dict] = {}
     best_index_by_identity: dict[str, int] = {}
     order: list[str] = []
 
     for index, candidate in enumerate(ranked_candidates):
-        identity = title_identity_key(candidate)
+        identity = pool_entry_key(candidate)
         if identity == "|":
             identity = f"__row_{index}"
 

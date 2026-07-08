@@ -1,6 +1,6 @@
 # candidates
 
-Папка `candidates` отвечает за сбор, хранение, импорт, фильтрацию и диагностику общего пула кандидатов для рекомендаций сериалов.
+Папка `candidates` отвечает за сбор, хранение, импорт, фильтрацию и диагностику общего пула кандидатов для рекомендаций сериалов и фильмов.
 
 Главная идея: здесь живёт логика candidate pool. UI должен обращаться сюда через `candidates.service`, а не напрямую менять SQLite/legacy JSON или вызывать низкоуровневые функции.
 
@@ -66,7 +66,7 @@ Build pipeline: discovery slices → TMDb Discover API → merge/dedupe → TMDb
 
 ### TMDb Discover genres и saved pool genres разные
 
-TMDb build: `sources/tmdb/genre_options.py` + TMDb TV genre IDs.
+TMDb build: `sources/tmdb/genre_options.py` + TMDb TV/movie genre IDs.
 
 Search: сохранённые жанры кандидата через `pool/search_helpers.py` + `genres.py`.
 
@@ -84,7 +84,7 @@ Write-path: `save_candidate_pool()`, import, dedupe, clear pool.
 
 ## Единый pool и счётчики
 
-Ключ identity: `normalized_title|year` (`pool_entry_key`). Write-path: канонический год через `normalize_candidate_for_storage`.
+Ключ identity: TV/legacy `normalized_title|year`, movie `normalized_title|year|movie` (`pool_entry_key`). Write-path: канонический год через `normalize_candidate_for_storage`.
 
 Stats: `pool/stats.get_pool_stats()` — `unique_total`, `raw_total`, duplicate counters.
 

@@ -53,4 +53,8 @@ def extract_candidate_year(candidate: dict | None) -> int | None:
             return int(value)
         except (TypeError, ValueError):
             continue
+    for key in ("first_air_date", "release_date"):
+        value = str(candidate.get(key) or "").strip()
+        if len(value) >= 4 and value[:4].isdigit():
+            return int(value[:4])
     return None

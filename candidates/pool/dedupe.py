@@ -7,6 +7,7 @@ from difflib import SequenceMatcher
 from candidates.models.keys import normalize_key_part, pool_entry_key, title_identity_key
 from candidates.models.schema import normalize_candidate_for_storage, resolve_canonical_year
 from candidates.scoring.sort_keys import candidate_sort_score
+from dataset.models.media_type import normalize_media_type
 
 
 def candidate_key(movie: dict) -> str:
@@ -70,6 +71,8 @@ def candidate_title(candidate: dict) -> str:
 def candidates_are_same(candidate: dict, other_candidate: dict, include_criteria: bool = True) -> bool:
     """Проверяет, относятся ли два кандидата к одному сериалу."""
     if include_criteria and (candidate.get("criteria_name") or "") != (other_candidate.get("criteria_name") or ""):
+        return False
+    if normalize_media_type(candidate.get("media_type")) != normalize_media_type(other_candidate.get("media_type")):
         return False
 
     left_year = candidate.get("year") or ""
@@ -160,6 +163,8 @@ def _same_normalized_storage_title(left: dict, right: dict) -> bool:
 
 def can_merge_cross_year_candidates(left: dict, right: dict, *, max_year_delta: int = 1) -> bool:
     """True when same normalized title, years within delta, and ids do not conflict."""
+    if normalize_media_type(left.get("media_type")) != normalize_media_type(right.get("media_type")):
+        return False
     if not _same_normalized_storage_title(left, right):
         return False
     if not _canonical_years_within_delta(left, right, max_year_delta=max_year_delta):

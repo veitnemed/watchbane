@@ -59,6 +59,18 @@ def _countries(raw_details: dict[str, Any]) -> list[str]:
     return _unique_non_empty(list(origin_country) + production_countries)
 
 
+def _movie_country_codes(raw_details: dict[str, Any]) -> list[str]:
+    origin_country = raw_details.get("origin_country") or []
+    production_codes = tmdb_api.country_codes_from_items(raw_details.get("production_countries"))
+    return _unique_non_empty(list(origin_country) + production_codes)
+
+
+def _movie_countries(raw_details: dict[str, Any]) -> list[str]:
+    origin_country = raw_details.get("origin_country") or []
+    production_countries = _country_names_from_items(raw_details.get("production_countries"))
+    return _unique_non_empty(list(origin_country) + production_countries)
+
+
 def _source_trace(source_trace) -> list:
     if source_trace is None:
         return []
@@ -90,6 +102,7 @@ def prepare_tmdb_candidate(
     countries = _countries(raw_details)
 
     candidate = {
+        "media_type": "tv",
         "source": "tmdb",
         "source_provider": "tmdb",
         "source_version": 2,
@@ -127,6 +140,81 @@ def prepare_tmdb_candidate(
         "watch_providers": tmdb_api.get_watch_providers(raw_details),
         "actors_top": credits["actors_top"],
         "crew_top": credits["crew_top"],
+        "keywords": tmdb_api.extract_keywords(raw_details),
+        "source_query": dict(source_query or {}),
+        "source_trace": _source_trace(source_trace),
+    }
+    if country is not None:
+        candidate["target_country"] = str(country or "").strip().upper()
+
+    data_language = _data_language_from_source_query(source_query)
+    tmdb_localized = localized_blocks_from_tmdb_details(raw_details, current_language=data_language)
+    localized_source = dict(candidate)
+    if tmdb_localized:
+        localized_source["localized"] = tmdb_localized
+    localized = build_localized_block_from_legacy(
+        localized_source,
+        default_language=data_language,
+    )
+    if localized:
+        candidate["localized"] = localized
+
+    candidate = strip_external_rating_fields(candidate)
+    completeness = compute_completeness(candidate)
+    candidate["is_complete"] = completeness["is_complete"]
+    candidate["missing_fields"] = completeness["missing_fields"]
+    candidate["optional_missing_fields"] = completeness["optional_missing_fields"]
+    return candidate
+
+
+def prepare_tmdb_movie_candidate(
+    raw_details: dict[str, Any],
+    country=None,
+    source_query=None,
+    source_trace=None,
+) -> dict:
+    overview = tmdb_api.extract_best_overview(raw_details)
+    poster_path = tmdb_api.extract_best_poster_path(raw_details)
+    external_ids = tmdb_api.extract_external_ids(raw_details)
+    credits = raw_details.get("credits") or {}
+    genres = _genre_names(raw_details)
+    country_codes = _movie_country_codes(raw_details)
+    countries = _movie_countries(raw_details)
+
+    candidate = {
+        "media_type": "movie",
+        "source": "tmdb",
+        "source_provider": "tmdb",
+        "source_version": 2,
+        "tmdb_id": raw_details.get("id"),
+        "title": raw_details.get("title"),
+        "original_title": raw_details.get("original_title"),
+        "year": tmdb_api.get_year(raw_details.get("release_date")),
+        "release_date": raw_details.get("release_date"),
+        "status": raw_details.get("status"),
+        "runtime": raw_details.get("runtime"),
+        "imdb_runtime_minutes": raw_details.get("runtime"),
+        "description": overview,
+        "overview": overview,
+        "genres": genres,
+        "genre_keys": _genre_keys(genres),
+        "countries": countries,
+        "country_codes": country_codes,
+        "original_language": raw_details.get("original_language"),
+        "networks": [],
+        "production_companies": _names_from_items(raw_details.get("production_companies")),
+        "tmdb_score": raw_details.get("vote_average"),
+        "tmdb_votes": raw_details.get("vote_count"),
+        "tmdb_popularity": raw_details.get("popularity"),
+        "imdb_id": external_ids.get("imdb_id") or raw_details.get("imdb_id"),
+        "poster_path": poster_path,
+        "poster_url": tmdb_api.image_link(poster_path),
+        "backdrop_path": raw_details.get("backdrop_path"),
+        "backdrop_url": tmdb_api.image_link(raw_details.get("backdrop_path")),
+        "content_rating": tmdb_api.get_movie_content_rating(raw_details),
+        "watch_providers": tmdb_api.get_watch_providers(raw_details),
+        "actors_top": tmdb_api.normalize_people(credits.get("cast"), 8, "character"),
+        "crew_top": tmdb_api.normalize_people(credits.get("crew"), 5, "job"),
         "keywords": tmdb_api.extract_keywords(raw_details),
         "source_query": dict(source_query or {}),
         "source_trace": _source_trace(source_trace),

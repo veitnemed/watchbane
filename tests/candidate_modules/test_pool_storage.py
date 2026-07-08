@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from candidates.pool.storage import build_tmdb_id_index, candidate_tmdb_identity, find_candidate_storage_match
+from candidates.pool.storage import (
+    build_tmdb_id_index,
+    candidate_storage_key,
+    candidate_tmdb_identity,
+    find_candidate_storage_match,
+)
 
 
 def test_candidate_tmdb_identity_normalizes_media_type_and_id() -> None:
@@ -28,6 +33,25 @@ def test_candidate_storage_match_does_not_merge_same_tmdb_id_different_media_typ
     match, reason = find_candidate_storage_match(
         pool,
         {"title": "Movie", "year": 2021, "media_type": "movie", "tmdb_id": 42},
+    )
+
+    assert match is None
+    assert reason is None
+
+
+def test_candidate_storage_key_scopes_movie_title_year_fallback() -> None:
+    assert candidate_storage_key({"title": "Watchmen", "year": 2009, "media_type": "movie"}) == "watchmen|2009|movie"
+    assert candidate_storage_key({"title": "Watchmen", "year": 2009, "media_type": "tv"}) == "watchmen|2009"
+
+
+def test_candidate_storage_match_does_not_merge_same_title_year_different_media_type() -> None:
+    pool = {
+        "watchmen|2009": {"title": "Watchmen", "year": 2009, "media_type": "tv"},
+    }
+
+    match, reason = find_candidate_storage_match(
+        pool,
+        {"title": "Watchmen", "year": 2009, "media_type": "movie"},
     )
 
     assert match is None

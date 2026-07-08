@@ -294,6 +294,7 @@ def build_tmdb_candidate_pool(
     force_refresh: bool = False,
     skip_existing_pool: bool = True,
     language: str | None = None,
+    media_type: str | None = None,
 ) -> dict:
     """Builds TMDb-only candidate snapshot via discover/details path."""
     build_kwargs = {
@@ -311,6 +312,7 @@ def build_tmdb_candidate_pool(
         "force_refresh": force_refresh,
         "skip_existing_pool": skip_existing_pool,
         "language": language,
+        "media_type": media_type,
     }
     return tmdb_build.build_candidate_pool(**build_kwargs)
 

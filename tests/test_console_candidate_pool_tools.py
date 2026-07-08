@@ -148,6 +148,7 @@ def test_tmdb_flow_passes_tmdb_only_build_kwargs(monkeypatch, capsys) -> None:
         "1",
         "1",
         "1",
+        "1",
         "",
         "",
         "",
@@ -188,12 +189,66 @@ def test_tmdb_flow_passes_tmdb_only_build_kwargs(monkeypatch, capsys) -> None:
     tmdb_pool_tools.run_tmdb_candidate_pool_flow()
 
     assert build_kwargs["country"] == "RU"
+    assert build_kwargs["media_type"] == "tv"
     assert build_kwargs["pages"] == 1
     assert build_kwargs["details_limit"] == 1
     assert "enrichment_mode" not in build_kwargs
     assert "kp_top_limit" not in build_kwargs
     output = capsys.readouterr().out
     assert "TMDb-only candidate_pool v2" in output
+
+
+def test_tmdb_flow_passes_movie_media_type(monkeypatch, capsys) -> None:
+    answers = iter([
+        "2",
+        "1",
+        "1",
+        "1",
+        "1",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "y",
+    ])
+    build_kwargs = {}
+
+    def fake_build(**kwargs):
+        build_kwargs.update(kwargs)
+        return {
+            "media_type": "movie",
+            "settings": {"media_type": "movie"},
+            "stats": {
+                "source": "tmdb",
+                "source_version": 2,
+                "discover_total": 0,
+                "duplicates_removed": 0,
+                "watched_skipped": 0,
+                "details_requested": 0,
+            },
+            "candidates": [],
+        }
+
+    monkeypatch.setattr(tmdb_pool_tools.ui, "clean_terminal", lambda: None)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+    monkeypatch.setattr(tmdb_pool_tools.candidate_service, "build_tmdb_candidate_pool", fake_build)
+    monkeypatch.setattr(
+        tmdb_pool_tools.candidate_service,
+        "save_tmdb_build_result",
+        lambda _result, is_test_run=False: {
+            "json_path": type("P", (), {"with_name": lambda self, _name: self, "is_file": lambda self: False})(),
+            "csv_path": "out.csv",
+        },
+    )
+    monkeypatch.setattr(tmdb_pool_tools, "maybe_auto_import_tmdb_result", lambda *_args, **_kwargs: None)
+
+    tmdb_pool_tools.run_tmdb_candidate_pool_flow()
+
+    assert build_kwargs["media_type"] == "movie"
+    output = capsys.readouterr().out
+    assert "Тип: фильмы" in output
 
 
 def test_global_menu_is_maintenance_first() -> None:

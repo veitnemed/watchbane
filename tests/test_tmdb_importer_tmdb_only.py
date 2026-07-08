@@ -126,9 +126,22 @@ def test_same_tmdb_id_different_media_type_is_added_as_distinct_candidate(monkey
 
     assert stats["added"] == 1
     assert stats["updated"] == 0
-    assert set(saved["pool"]) == {"show|2020", "movie|2021"}
+    assert set(saved["pool"]) == {"show|2020", "movie|2021|movie"}
     assert saved["pool"]["show|2020"]["media_type"] == "tv"
-    assert saved["pool"]["movie|2021"]["media_type"] == "movie"
+    assert saved["pool"]["movie|2021|movie"]["media_type"] == "movie"
+
+
+def test_same_title_year_different_media_type_is_added_as_distinct_candidate(monkeypatch) -> None:
+    saved = {}
+    existing = _candidate(title="Watchmen", year=2009, media_type="tv", tmdb_id=1396)
+    incoming = _candidate(title="Watchmen", year=2009, media_type="movie", tmdb_id=202)
+    _patch_importer(monkeypatch, {"watchmen|2009": existing}, saved)
+
+    stats = importer.import_tmdb_candidates_to_common_pool([incoming], criteria_name="pool")
+
+    assert stats["added"] == 1
+    assert stats["updated"] == 0
+    assert set(saved["pool"]) == {"watchmen|2009", "watchmen|2009|movie"}
 
 
 def test_import_builds_tmdb_id_index_once_for_large_batch(monkeypatch) -> None:

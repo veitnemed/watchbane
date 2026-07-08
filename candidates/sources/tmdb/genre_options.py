@@ -36,8 +36,34 @@ EXCLUDE_TV_GENRE_OPTIONS: list[dict[str, Any]] = [
     {"id": 99, "label": "Документальное", "tmdb_name": "Documentary"},
 ]
 
+INCLUDE_MOVIE_GENRE_OPTIONS: list[dict[str, Any]] = [
+    {"id": 18, "label": "Драма", "tmdb_name": "Drama"},
+    {"id": 80, "label": "Криминал", "tmdb_name": "Crime"},
+    {"id": 9648, "label": "Детектив / мистика", "tmdb_name": "Mystery"},
+    {"id": 53, "label": "Триллер", "tmdb_name": "Thriller"},
+    {"id": 35, "label": "Комедия", "tmdb_name": "Comedy"},
+    {"id": 28, "label": "Боевик", "tmdb_name": "Action"},
+    {"id": 12, "label": "Приключения", "tmdb_name": "Adventure"},
+    {"id": 878, "label": "Фантастика", "tmdb_name": "Science Fiction"},
+    {"id": 14, "label": "Фэнтези", "tmdb_name": "Fantasy"},
+    {"id": 36, "label": "История", "tmdb_name": "History"},
+    {"id": 27, "label": "Ужасы", "tmdb_name": "Horror"},
+    {"id": 16, "label": "Анимация", "tmdb_name": "Animation"},
+]
+
+EXCLUDE_MOVIE_GENRE_OPTIONS: list[dict[str, Any]] = [
+    {"id": 10751, "label": "Семейное", "tmdb_name": "Family"},
+    {"id": 99, "label": "Документальное", "tmdb_name": "Documentary"},
+    {"id": 10402, "label": "Музыка", "tmdb_name": "Music"},
+    {"id": 10770, "label": "ТВ-фильм", "tmdb_name": "TV Movie"},
+]
+
 TV_GENRE_OPTIONS: list[dict[str, Any]] = INCLUDE_TV_GENRE_OPTIONS + EXCLUDE_TV_GENRE_OPTIONS
-_LABEL_BY_ID = {int(option["id"]): str(option["label"]) for option in TV_GENRE_OPTIONS}
+MOVIE_GENRE_OPTIONS: list[dict[str, Any]] = INCLUDE_MOVIE_GENRE_OPTIONS + EXCLUDE_MOVIE_GENRE_OPTIONS
+_LABEL_BY_ID = {
+    int(option["id"]): str(option["label"])
+    for option in TV_GENRE_OPTIONS + MOVIE_GENRE_OPTIONS
+}
 
 
 def build_filter_value(genre_ids: list[int], mode: str = MODE_OR) -> str | None:
