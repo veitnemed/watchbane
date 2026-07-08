@@ -4,6 +4,7 @@
 
 ```text
 data/
+  watchbane.sqlite3
   watched/
     titles.json
     meta.json
@@ -25,19 +26,20 @@ data/
 
 ## Source Of Truth
 
-- `data/watched/titles.json` - пользовательские watched-записи.
-- `data/watched/meta.json` - enrichment-данные: external ids, description, poster hints, source/raw metadata.
-- `data/candidates/pool.json` - общий candidate pool между запусками.
-- `data/candidates/criteria.json` - сохраненные criteria/defaults для pool.
+- `data/watchbane.sqlite3` - источник правды для runtime user data.
+- SQLite хранит watched records, watched meta, candidate pool, candidate criteria, watchlist/hidden actions, app settings и poster-cache metadata.
+- JSON-файлы в `data/watched/`, `data/candidates/`, `data/settings.json` и `data/cache/posters/posters.json` являются legacy import/export/backup compatibility, а не source of truth при стандартном backend.
+- Для rollback/debug можно запустить legacy backend через `WATCHBANE_STORAGE_BACKEND=json`.
 
 ## Runtime Lists
 
-- `data/candidates/watchlist.json` - локальный список “посмотреть позже”.
-- `data/candidates/hidden.json` - скрытые кандидаты.
+- Watchlist и hidden хранятся в SQLite (`candidate_actions`).
+- Legacy JSON-файлы `data/candidates/watchlist.json` и `data/candidates/hidden.json` используются для import/export/rollback.
 
 ## Cache
 
-- `data/cache/posters/` - poster-cache и локальные изображения.
+- `data/cache/posters/images/` - локальные poster image files.
+- Poster metadata хранится в SQLite и экспортируется в `data/cache/posters/posters.json` только явно.
 - `data/cache/tmdb/` - TMDb Discover/Details cache.
 
 Cache можно удалить без потери watched-базы.
@@ -48,7 +50,7 @@ Cache можно удалить без потери watched-базы.
 - `data/exports/edit_dataset.xlsx` - Excel export/import рабочий файл.
 - `data/diagnostics/` - diagnostic reports.
 - `data/logs/api_requests.log` - API log.
-- `data/backups/` - backups перед изменениями.
+- `data/backups/` - SQLite backups (`*.sqlite3`) и legacy JSON backups/exports.
 
 Generated файлы не хранятся в git.
 
@@ -77,4 +79,4 @@ TMDb-only candidate migration/refresh reports:
 - `config/genre_tags.json`;
 - `apis/sql_title_aliases.json`.
 
-Локальные runtime JSON в `data/` игнорируются.
+Локальные runtime data в `data/` игнорируются: SQLite DB, WAL/SHM, legacy JSON, exports, backups и caches не коммитятся.

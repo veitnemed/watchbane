@@ -52,7 +52,7 @@ your watched dataset
 | Instead of... | Watchbane gives you... |
 | --- | --- |
 | A throwaway search result | A persistent candidate pool you can filter, clean and revisit |
-| A locked platform watchlist | Local JSON data you can inspect and back up |
+| A locked platform watchlist | Local SQLite data with JSON import/export backups |
 | Blind recommendations | Visible signals: TMDb rating, votes, popularity, country, type, metadata completeness |
 | Manual copy-paste | Add-title and candidate-transfer flows with preview and confirmation |
 | A pile of scripts | Clear UI / Domain / Infra / Project architecture |
@@ -240,6 +240,8 @@ Possible future layers include learned scoring weights from personal ratings, re
 ## Repository Notes
 
 - Runtime user data lives under `data/` and is ignored by git.
+- The default storage backend is SQLite at `data/watchbane.sqlite3`.
+- Legacy JSON files under `data/watched/`, `data/candidates/`, `data/settings.json` and `data/cache/posters/posters.json` are kept for first-run import, explicit export, backups and rollback. Set `WATCHBANE_STORAGE_BACKEND=json` to run the legacy JSON backend for debugging or rollback.
 - Temporary UI screenshots live under `screens/tmp_ui/` and are ignored by git.
 - Legacy experiments live under `archive/` and are not active runtime.
 - Contribution and project hygiene docs live in [`docs/`](docs/).

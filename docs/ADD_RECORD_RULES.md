@@ -11,7 +11,7 @@ dataset.storage_movie.add_movie(...)
 -> dataset.dataset_records.add_dataset_record(...)
 ```
 
-UI не пишет dataset/meta JSON напрямую.
+UI не пишет dataset/meta напрямую. Service path сохраняет через storage compatibility wrappers, которые по умолчанию используют SQLite backend.
 
 ## UI-Слой
 
@@ -30,7 +30,7 @@ UI не отвечает за:
 - cleanup candidate pool;
 - poster-cache side effects;
 - прямые API-запросы;
-- формат JSON.
+- формат JSON/SQLite.
 
 Relevant files:
 
@@ -45,8 +45,8 @@ Service отвечает за:
 
 - валидацию payload;
 - нормализацию `main_info`, `raw_scores`, `tags_vibe`, `genre`;
-- сохранение dataset;
-- сохранение/обновление meta;
+- сохранение dataset через SQLite-backed storage;
+- сохранение/обновление meta через SQLite-backed storage;
 - backup перед опасными операциями;
 - best-effort poster-cache sync;
 - cleanup candidate pool после переноса кандидата.
@@ -210,7 +210,7 @@ update_dataset_record(title, patch_payload, source_name="") -> UpdateRecordResul
 - менять key записи;
 - менять `main_info.title`.
 
-Переименование выполняется отдельным путем через `storage.data.rename_movie_title()`.
+Переименование выполняется отдельным путем через `storage.data.rename_movie_title()`, который при SQLite backend обновляет dataset и meta в одной transaction.
 
 ## Delete Watched
 
@@ -222,7 +222,7 @@ dataset.delete_record.delete_watched_record(dataset_key)
 
 Service:
 
-- создает backup;
+- создает backup (`*.sqlite3` при SQLite backend, legacy JSON backup при `WATCHBANE_STORAGE_BACKEND=json`);
 - удаляет запись из dataset;
 - удаляет meta;
 - чистит poster-cache;
@@ -232,7 +232,7 @@ Console и desktop используют один service path.
 
 ## Generated JSON Policy
 
-В git не добавляются generated preview/snapshot JSON.
+В git не добавляются generated preview/snapshot JSON, SQLite DB, WAL/SHM и runtime backups.
 
 Игнорируются:
 

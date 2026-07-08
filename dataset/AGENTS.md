@@ -6,8 +6,8 @@
 
 - UI/desktop/console должны ходить через `dataset.service` (цель) или существующие compatibility wrappers.
 - Write-path watched-базы: `add_dataset_record` → `update_dataset_record` → `delete_watched_record`.
-- `storage` отвечает только за I/O JSON; валидация и нормализация — в `dataset/*`.
-- Не меняй формат `data/watched/titles.json` и `data/watched/meta.json` без отдельной задачи, миграции и тестов.
+- `storage` отвечает за I/O через active backend: SQLite по умолчанию, legacy JSON только для import/export/rollback; валидация и нормализация — в `dataset/*`.
+- Не меняй формат SQLite watched tables или legacy `data/watched/titles.json` / `data/watched/meta.json` без отдельной задачи, миграции и тестов.
 - Не импортируй `ui`, `desktop`, `web` из `dataset`.
 - Не импортируй `candidates` из `dataset` (Phase 2: candidate cleanup через side_effects/events, не прямой import).
 - `load_*` read-path функции не должны писать JSON без явного write use-case.
@@ -43,8 +43,8 @@
 
 ## Данные
 
-- `data/watched/titles.json` — пользовательские watched-записи.
-- `data/watched/meta.json` — enrichment (ids, description, poster hints).
+- `data/watchbane.sqlite3` — source of truth для watched records/meta.
+- `data/watched/titles.json` и `data/watched/meta.json` — legacy import/export/rollback compatibility.
 
 Watched-запись не должна зависеть от доступности API.
 

@@ -1,14 +1,14 @@
 # Инструкции для агента в `candidates`
 
-Эта папка отвечает за candidate pool. Работай осторожно: здесь легко случайно изменить формат JSON или смешать разные типы жанровых фильтров.
+Эта папка отвечает за candidate pool. Работай осторожно: здесь легко случайно изменить storage contract или смешать разные типы жанровых фильтров.
 
 ## Рабочие правила
 
 - UI должен ходить через `candidates.service`, а не напрямую в `pool/`, `repositories/` или `sources/tmdb/builder.py`.
-- `load_candidate_pool()` и read-view функции не должны писать JSON.
+- `load_candidate_pool()` и read-view функции не должны писать runtime storage.
 - Любой write-path должен быть явным: import, save, clear pool, dedupe, mark watched.
 - Единый pool: `criteria_name = "pool"`, UI не создаёт named pools.
-- Не меняй формат `candidate_pool.json` и `candidate_criteria.json` без отдельной задачи, миграции и тестов.
+- Не меняй формат SQLite candidate tables или legacy `candidate_pool.json` / `candidate_criteria.json` без отдельной задачи, миграции и тестов.
 - Не смешивай `sources/tmdb/genre_options.py` и `genres.py`.
 - Не меняй `models/keys.py` без понимания dedupe и merge legacy-ключей.
 - Не трогай candidate pool ради desktop GUI-polish. Визуальный контракт PyQt GUI живёт в [../docs/DESKTOP_STYLE_CONTRACT.md](../docs/DESKTOP_STYLE_CONTRACT.md).
@@ -17,7 +17,7 @@
 
 - `service.py` — facade для UI.
 - `models/` — schema, keys, country/genre schema.
-- `repositories/` — load/save pool и criteria JSON.
+- `repositories/` — load/save pool и criteria через active backend; SQLite по умолчанию, JSON для import/export/rollback.
 - `pool/` — dedupe, queries, stats, diagnostics, search helpers, completeness.
 - `scoring/` — sort keys для ranking/dedupe.
 - `views/` — formatters (dict → str).
