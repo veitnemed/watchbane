@@ -54,6 +54,36 @@ def test_search_tmdb_defaults_data_found() -> None:
     assert details_calls[0][1]["append_to_response"] == sources.api_tmdb.DEFAULT_TV_DETAIL_APPENDS
 
 
+def test_search_tmdb_defaults_data_movie_uses_movie_details_and_normalizer() -> None:
+    details_calls = []
+
+    def fake_details(tmdb_id, **kwargs):
+        details_calls.append((tmdb_id, kwargs))
+        return {
+            "id": tmdb_id,
+            "title": "Watchmen",
+            "release_date": "2009-03-06",
+            "vote_average": 7.3,
+            "vote_count": 9000,
+            "popularity": 55.5,
+            "genres": [{"id": 18, "name": "Drama"}],
+        }
+
+    result = sources.search_tmdb_defaults_data(
+        [{"title": "Watchmen", "year": 2009, "country": "US"}],
+        search_func=lambda title: [{"id": 202, "title": title, "release_date": "2009-03-06"}],
+        details_func=fake_details,
+        media_type="movie",
+    )
+
+    assert result["error"] is None
+    assert result["data"]["media_type"] == "movie"
+    assert result["data"]["title"] == "Watchmen"
+    assert result["data"]["year"] == 2009
+    assert result["data"]["tmdb_rating"] == 7.3
+    assert details_calls[0][1]["append_to_response"] == sources.api_tmdb.DEFAULT_MOVIE_DETAIL_APPENDS
+
+
 def test_search_tmdb_defaults_data_not_found() -> None:
     result = sources.search_tmdb_defaults_data(
         ["Missing"],

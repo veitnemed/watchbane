@@ -7,6 +7,7 @@ from typing import Any
 from apis import tmdb_api as api_tmdb
 from config import scheme
 from dataset.language import build_localized_block_from_legacy, normalize_data_language, tmdb_locale_for_data_language
+from dataset.models.media_type import normalize_media_type
 from dataset.resolve.countries import extract_country_value
 from dataset.resolve.defaults import build_empty_add_defaults
 from dataset.resolve.genres import build_genre_defaults, extract_tmdb_genres
@@ -67,6 +68,7 @@ def _clean_tmdb_data(data: dict[str, Any]) -> dict[str, Any]:
         cleaned["tmdb_score"] = data.get("tmdb_rating")
     cleaned.pop("tmdb_rating", None)
     cleaned["source"] = "tmdb_api"
+    cleaned["media_type"] = normalize_media_type(data.get("media_type"))
     return cleaned
 
 
@@ -77,11 +79,13 @@ def _build_tmdb_add_defaults(
     *,
     data_language: str = "ru",
 ) -> dict:
-    defaults = build_empty_add_defaults(input_title)
+    media_type = normalize_media_type(tmdb_data.get("media_type"))
+    defaults = build_empty_add_defaults(input_title, media_type=media_type)
     genres = extract_tmdb_genres(tmdb_data)
     defaults[scheme.MAIN_INFO]["title"] = tmdb_data.get("title") or input_title
     defaults[scheme.MAIN_INFO]["year"] = tmdb_data.get("year")
     defaults[scheme.MAIN_INFO]["country"] = extract_country_value(tmdb_data) or country
+    defaults[scheme.MAIN_INFO]["media_type"] = media_type
     defaults[scheme.RAW_SCORES] = {
         key: tmdb_data.get(key)
         for key in ("tmdb_score", "tmdb_votes", "tmdb_popularity")
@@ -127,6 +131,7 @@ def _build_tmdb_sources(tmdb_data: dict[str, Any]) -> dict:
         "genres": "tmdb_api" if extract_tmdb_genres(tmdb_data) else None,
         "description": "tmdb_api" if tmdb_data.get("overview") not in (None, "") else None,
         "imdb_id": "tmdb_api" if tmdb_data.get("imdb_id") not in (None, "") else None,
+        "media_type": "tmdb_api",
     }
 
 
@@ -138,6 +143,7 @@ def _build_tmdb_source_values(tmdb_data: dict[str, Any]) -> dict:
         "tmdb_votes": tmdb_data.get("tmdb_votes"),
         "tmdb_popularity": tmdb_data.get("tmdb_popularity"),
         "imdb_id": tmdb_data.get("imdb_id"),
+        "media_type": normalize_media_type(tmdb_data.get("media_type")),
     }
 
 
@@ -150,6 +156,7 @@ def search_tmdb_title_for_add(
     details_func=None,
     normalizer=None,
     language: str | None = None,
+    media_type: str = "tv",
 ) -> dict[str, Any]:
     """Search TMDb and return normalized add-flow data without KP/IMDb ratings."""
     result = search_tmdb_defaults_data(
@@ -159,6 +166,7 @@ def search_tmdb_title_for_add(
         details_func=details_func,
         normalizer=normalizer,
         language=language,
+        media_type=media_type,
     )
     if result["data"] is not None:
         result["data"] = _clean_tmdb_data(result["data"])
@@ -176,10 +184,12 @@ def resolve_title_data_for_add(
     tmdb_choose_func=None,
     tmdb_details_func=None,
     tmdb_normalizer=None,
+    media_type: str = "tv",
 ) -> dict:
     """Resolve add-title defaults through TMDb only."""
     title = _normalize_text(title)
     country = _normalize_text(country)
+    normalized_media_type = normalize_media_type(media_type)
     normalized_data_language = normalize_data_language(data_language)
     resolved_tmdb_language = str(tmdb_language or "").strip() or tmdb_locale_for_data_language(normalized_data_language)
 
@@ -192,6 +202,7 @@ def resolve_title_data_for_add(
         details_func=tmdb_details_func,
         normalizer=tmdb_normalizer,
         language=resolved_tmdb_language,
+        media_type=normalized_media_type,
     )
     tmdb_data = tmdb_result["data"]
     tmdb_error = tmdb_result["error"]
@@ -212,6 +223,7 @@ def resolve_title_data_for_add(
             "statuses": {"tmdb_api": tmdb_status},
             "data_language": normalized_data_language,
             "tmdb_language": resolved_tmdb_language,
+            "media_type": normalized_media_type,
             "found": False,
         }
 
@@ -238,6 +250,7 @@ def resolve_title_data_for_add(
         "statuses": {"tmdb_api": tmdb_status},
         "data_language": normalized_data_language,
         "tmdb_language": resolved_tmdb_language,
+        "media_type": normalized_media_type,
         "found": True,
     }
 
@@ -245,3 +258,6 @@ def resolve_title_data_for_add(
 def resolve_title_data(title: str, country: str = "Россия") -> dict:
     """Compatibility name for add-flow resolve."""
     return resolve_title_data_for_add(title, country)
+def resolve_title_data(title: str, country: str = "Россия", media_type: str = "tv") -> dict:
+    """Compatibility name for add-flow resolve."""
+    return resolve_title_data_for_add(title, country, media_type=media_type)

@@ -30,6 +30,7 @@ def resolve_title_for_add(
     *,
     on_progress=None,
     data_language: str = "ru",
+    media_type: str = "tv",
 ) -> AddTitleResolveBundle:
     """Resolve title through SQL/KP/TMDb and build preview card data."""
     resolved = title_resolve.resolve_title_data_for_add(
@@ -37,6 +38,7 @@ def resolve_title_for_add(
         country,
         on_progress=on_progress,
         data_language=data_language,
+        media_type=media_type,
     )
     return build_add_title_resolve_bundle(resolved, data_language=data_language)
 
@@ -45,7 +47,10 @@ def build_add_title_resolve_bundle(resolved: dict, data_language: str = "ru") ->
     """Build preview/save bundle from resolve_title_data_for_add result."""
     defaults = resolved.get("defaults")
     if defaults is None:
-        defaults = title_resolve.build_empty_add_defaults(resolved["title"])
+        defaults = title_resolve.build_empty_add_defaults(
+            resolved["title"],
+            media_type=str(resolved.get("media_type") or "tv"),
+        )
 
     meta_payload = title_resolve.build_add_meta_payload(resolved)
     poster_hints = title_resolve.build_poster_hints_from_resolve(

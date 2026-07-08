@@ -7,6 +7,7 @@ from typing import Any
 
 from apis import tmdb_api as api_tmdb
 from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, normalize_media_type
 from dataset.resolve.countries import country_value_to_iso2
 
 
@@ -70,7 +71,7 @@ def _transliterate_cyrillic_query(value: str) -> str:
 
 
 def _year_from_item(item: dict[str, Any]) -> int | None:
-    value = item.get("year") or item.get("first_air_date")
+    value = item.get("year") or item.get("first_air_date") or item.get("release_date")
     if value in (None, ""):
         return None
     try:
@@ -83,6 +84,13 @@ def _country_signals(item: dict[str, Any]) -> set[str]:
     signals = set()
     for value in item.get("origin_country") or []:
         text = str(value or "").strip().upper()
+        if text:
+            signals.add(text)
+    for value in item.get("production_countries") or []:
+        if isinstance(value, dict):
+            text = str(value.get("iso_3166_1") or "").strip().upper()
+        else:
+            text = str(value or "").strip().upper()
         if text:
             signals.add(text)
     return signals
@@ -148,6 +156,8 @@ def _title_score(item: dict[str, Any], title: str) -> float:
     candidates = [
         _normalize_title(item.get("name")),
         _normalize_title(item.get("original_name")),
+        _normalize_title(item.get("title")),
+        _normalize_title(item.get("original_title")),
     ]
     return max(
         (
@@ -236,10 +246,19 @@ def search_tmdb_defaults_data(
     details_func=None,
     normalizer=None,
     language: str | None = None,
+    media_type: str = "tv",
 ) -> dict:
     """Search TMDb and return normalized add-flow data without KP/IMDb rating fields."""
-    search_func = search_func or api_tmdb.search_tv_by_name
-    details_func = details_func or api_tmdb.get_tv_details
+    normalized_media_type = normalize_media_type(media_type)
+    if normalized_media_type == MEDIA_TYPE_MOVIE:
+        search_func = search_func or api_tmdb.search_movie_by_title
+        details_func = details_func or api_tmdb.get_movie_details
+        normalizer = normalizer or api_tmdb.normalize_tmdb_movie
+        append_to_response = api_tmdb.DEFAULT_MOVIE_DETAIL_APPENDS
+    else:
+        search_func = search_func or api_tmdb.search_tv_by_name
+        details_func = details_func or api_tmdb.get_tv_details
+        append_to_response = api_tmdb.DEFAULT_TV_DETAIL_APPENDS
     resolved_language = str(language or api_tmdb.DEFAULT_LANGUAGE).strip() or api_tmdb.DEFAULT_LANGUAGE
     last_error = None
 
@@ -273,12 +292,12 @@ def search_tmdb_defaults_data(
                         details = details_func(
                             int(selected["id"]),
                             language=resolved_language,
-                            append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
+                            append_to_response=append_to_response,
                         )
                     except TypeError:
                         details = details_func(
                             int(selected["id"]),
-                            append_to_response=api_tmdb.DEFAULT_TV_DETAIL_APPENDS,
+                            append_to_response=append_to_response,
                         )
                     return {
                         "data": _normalizer_payload(

@@ -3,6 +3,7 @@
 from config import constant
 from config import scheme
 from dataset.language import build_localized_block_from_legacy
+from dataset.models.media_type import normalize_media_type
 from dataset.tmdb_localized import localized_blocks_from_tmdb_details
 from dataset.resolve.countries import extract_country_value
 from dataset.resolve.genres import build_genre_defaults, extract_tmdb_genres
@@ -46,7 +47,7 @@ def extract_api_description(series: dict) -> str:
     return extract_tmdb_description(series)
 
 
-def build_empty_add_defaults(input_title: str) -> dict:
+def build_empty_add_defaults(input_title: str, media_type: str = "tv") -> dict:
     """Build minimal defaults for manual add-title flow."""
     return {
         scheme.MAIN_INFO: {
@@ -54,6 +55,7 @@ def build_empty_add_defaults(input_title: str) -> dict:
             "user_score": None,
             "year": None,
             "country": "",
+            "media_type": normalize_media_type(media_type),
         },
         scheme.RAW_SCORES: {},
         scheme.TAGS_VIBE: {feature: 0 for feature in constant.TAGS_VIBE},
@@ -104,6 +106,7 @@ def build_tmdb_add_defaults(series: dict, genres: list | None = None, data_langu
             "user_score": None,
             "year": series.get("year"),
             "country": extract_country_value(series),
+            "media_type": normalize_media_type(series.get("media_type")),
         },
         scheme.RAW_SCORES: extract_tmdb_raw_scores(series),
         scheme.TAGS_VIBE: {},

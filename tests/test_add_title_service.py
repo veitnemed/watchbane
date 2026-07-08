@@ -302,6 +302,39 @@ def test_save_add_title_record_keeps_tmdb_scores_without_kp_imdb(monkeypatch) ->
     assert "imdb_score" not in captured["movie"]["raw_scores"]
 
 
+def test_save_add_title_record_preserves_movie_media_type(monkeypatch) -> None:
+    captured = {}
+
+    def fake_add_movie(movie, **kwargs):
+        captured["movie"] = movie
+        captured["kwargs"] = kwargs
+
+        class Result:
+            ok = True
+            message = "ok"
+            title = movie["main_info"]["title"]
+
+        return Result()
+
+    monkeypatch.setattr("dataset.add_flow.save.add_movie", fake_add_movie)
+
+    defaults = {
+        scheme.MAIN_INFO: {
+            "title": "Watchmen",
+            "year": 2009,
+            "country": "US",
+            "media_type": "movie",
+        },
+        scheme.RAW_SCORES: {"tmdb_score": 7.3, "tmdb_votes": 9000},
+        scheme.GENRE: {},
+        scheme.TAGS_VIBE: {},
+    }
+
+    save_add_title_record(defaults, 8.0)
+
+    assert captured["movie"]["main_info"]["media_type"] == "movie"
+
+
 def test_request_user_score_builds_payload_without_other_edits(monkeypatch) -> None:
     from ui.console import request as request_module
 

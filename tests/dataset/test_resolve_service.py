@@ -52,6 +52,48 @@ def test_resolve_title_data_for_add_tmdb_search_details_returns_defaults() -> No
     assert details_calls[0][1]["append_to_response"] == resolve_service.api_tmdb.DEFAULT_TV_DETAIL_APPENDS
 
 
+def test_resolve_title_data_for_add_movie_returns_movie_defaults() -> None:
+    details_calls = []
+
+    def fake_details(tmdb_id, **kwargs):
+        details_calls.append((tmdb_id, kwargs))
+        return {
+            "id": tmdb_id,
+            "title": "Watchmen",
+            "original_title": "Watchmen",
+            "release_date": "2009-03-06",
+            "production_countries": [{"iso_3166_1": "US", "name": "United States"}],
+            "genres": [{"id": 18, "name": "Drama"}],
+            "vote_average": 7.3,
+            "vote_count": 9000,
+            "popularity": 55.5,
+            "overview": "Movie overview",
+            "external_ids": {"imdb_id": "tt0409459"},
+        }
+
+    result = resolve_service.resolve_title_data_for_add(
+        "Watchmen",
+        "US",
+        media_type="movie",
+        tmdb_search_func=lambda title: [{"id": 202, "title": title, "release_date": "2009-03-06"}],
+        tmdb_choose_func=lambda results: results[0],
+        tmdb_details_func=fake_details,
+    )
+
+    assert result["found"] is True
+    assert result["media_type"] == "movie"
+    assert result["tmdb_data"]["media_type"] == "movie"
+    assert result["defaults"][scheme.MAIN_INFO]["title"] == "Watchmen"
+    assert result["defaults"][scheme.MAIN_INFO]["year"] == 2009
+    assert result["defaults"][scheme.MAIN_INFO]["media_type"] == "movie"
+    assert result["defaults"][scheme.RAW_SCORES] == {
+        "tmdb_score": 7.3,
+        "tmdb_votes": 9000,
+        "tmdb_popularity": 55.5,
+    }
+    assert details_calls[0][1]["append_to_response"] == resolve_service.api_tmdb.DEFAULT_MOVIE_DETAIL_APPENDS
+
+
 def test_resolve_title_data_for_add_not_found_and_manual_bundle_defaults() -> None:
     result = resolve_service.resolve_title_data_for_add(
         "Missing",
