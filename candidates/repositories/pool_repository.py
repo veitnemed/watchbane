@@ -6,21 +6,14 @@ import json
 import os
 
 from config import constant
-
-
-def _ensure_parent_dir(path: str) -> None:
-    directory = os.path.dirname(path)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
+from candidates.repositories.json_io import dump_json_atomic
 
 
 def init_candidate_pool() -> None:
     """Создает JSON с пулом кандидатов, если его еще нет."""
     if os.path.exists(constant.CANDIDATE_POOL_JSON):
         return
-    _ensure_parent_dir(constant.CANDIDATE_POOL_JSON)
-    with open(constant.CANDIDATE_POOL_JSON, "w", encoding="utf-8") as file:
-        json.dump({}, file, ensure_ascii=False, indent=4)
+    dump_json_atomic(constant.CANDIDATE_POOL_JSON, {})
 
 
 def load_candidate_pool() -> dict:
@@ -38,6 +31,4 @@ def save_candidate_pool(data: dict) -> None:
     from candidates.pool.watched_cleanup import purge_watched_from_pool
 
     data = purge_watched_from_pool(normalize_storage_pool(data))
-    _ensure_parent_dir(constant.CANDIDATE_POOL_JSON)
-    with open(constant.CANDIDATE_POOL_JSON, "w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=4)
+    dump_json_atomic(constant.CANDIDATE_POOL_JSON, data)

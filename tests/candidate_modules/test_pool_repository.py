@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from candidates.repositories import criteria_repository
+from candidates.repositories import json_io
 from candidates.repositories import pool_repository
 
 
@@ -70,6 +71,26 @@ def test_save_candidate_criteria_creates_parent_dir(monkeypatch: pytest.MonkeyPa
     criteria_repository.save_candidate_criteria({"pool": {"count": 10}})
 
     assert json.loads(criteria_path.read_text(encoding="utf-8")) == {"pool": {"count": 10}}
+
+
+def test_atomic_candidate_json_write_preserves_existing_file_on_replace_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tmp_dir = _workspace_tmp_dir()
+    target_path = tmp_dir / "candidate_pool.json"
+    original = {"existing": {"title": "Keep"}}
+    target_path.write_text(json.dumps(original), encoding="utf-8")
+
+    def fail_replace(source, target):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(json_io.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        json_io.dump_json_atomic(str(target_path), {"new": {"title": "Drop"}})
+
+    assert json.loads(target_path.read_text(encoding="utf-8")) == original
+    assert not target_path.with_name(f"{target_path.name}.tmp").exists()
 
 
 def test_save_candidate_pool_normalizes_and_writes(monkeypatch: pytest.MonkeyPatch) -> None:
