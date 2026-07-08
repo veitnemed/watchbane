@@ -244,3 +244,15 @@ After prompt 23 backup/restore/export hardening:
 Added pre-restore validation for SQLite backups: required runtime tables,
 `PRAGMA quick_check`, and `PRAGMA foreign_key_check` must pass before the
 current database is overwritten.
+
+After prompt 24 UI SQLite smoke hardening:
+
+| Metric | Prompt 24 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15847 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
+
+Added a PyQt smoke test that creates a temporary SQLite runtime, saves desktop
+settings and watched data, instantiates the main window, and verifies the
+Watched tab reads its row from SQLite.
