@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from candidates.repositories import criteria_repository
 from candidates.repositories import pool_repository
 
 
@@ -41,6 +42,34 @@ def test_load_candidate_pool_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert loaded == {"k": {"title": "A", "year": 2020}}
     assert after_mtime == before_mtime
+
+
+def test_load_candidate_pool_missing_file_is_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    tmp_dir = _workspace_tmp_dir()
+    pool_path = tmp_dir / "candidate_pool.json"
+    monkeypatch.setattr(pool_repository.constant, "CANDIDATE_POOL_JSON", str(pool_path))
+
+    assert pool_repository.load_candidate_pool() == {}
+    assert not pool_path.exists()
+
+
+def test_load_candidate_criteria_missing_file_is_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    tmp_dir = _workspace_tmp_dir()
+    criteria_path = tmp_dir / "candidate_criteria.json"
+    monkeypatch.setattr(criteria_repository.constant, "CRITERIA_POOL_JSON", str(criteria_path))
+
+    assert criteria_repository.load_candidate_criteria() == {}
+    assert not criteria_path.exists()
+
+
+def test_save_candidate_criteria_creates_parent_dir(monkeypatch: pytest.MonkeyPatch) -> None:
+    tmp_dir = _workspace_tmp_dir()
+    criteria_path = tmp_dir / "nested" / "candidate_criteria.json"
+    monkeypatch.setattr(criteria_repository.constant, "CRITERIA_POOL_JSON", str(criteria_path))
+
+    criteria_repository.save_candidate_criteria({"pool": {"count": 10}})
+
+    assert json.loads(criteria_path.read_text(encoding="utf-8")) == {"pool": {"count": 10}}
 
 
 def test_save_candidate_pool_normalizes_and_writes(monkeypatch: pytest.MonkeyPatch) -> None:
