@@ -26,7 +26,7 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     db_path = get_db_path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=DEFAULT_BUSY_TIMEOUT_MS / 1000)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute(f"PRAGMA busy_timeout={DEFAULT_BUSY_TIMEOUT_MS}")
@@ -49,4 +49,3 @@ def transaction(
     finally:
         if owned:
             active_conn.close()
-

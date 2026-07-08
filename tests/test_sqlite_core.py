@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from storage.sqlite.connection import connect, get_db_path
+from storage.sqlite.connection import DEFAULT_BUSY_TIMEOUT_MS, connect, get_db_path
 from storage.sqlite.migrations import Migration, apply_migrations, get_current_schema_version
 
 
@@ -22,6 +22,7 @@ def test_connect_creates_db_and_enables_pragmas(tmp_path) -> None:
         assert db_path.is_file()
         assert conn.row_factory is sqlite3.Row
         assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        assert conn.execute("PRAGMA busy_timeout").fetchone()[0] == DEFAULT_BUSY_TIMEOUT_MS
         assert conn.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal"
     finally:
         conn.close()
