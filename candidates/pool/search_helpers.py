@@ -11,6 +11,7 @@ from candidates.models.schema import (
     is_candidate_complete as schema_is_candidate_complete,
     normalize_candidate_record,
 )
+from dataset.models.media_type import normalize_media_type
 
 
 def _criteria_value(criteria: dict, *names, default=None):
@@ -119,6 +120,12 @@ def _matches_optional_country(candidate: dict, country_filter) -> bool:
     return country_schema.country_codes_match_any(candidate_codes, required_codes)
 
 
+def _matches_optional_media_type(candidate: dict, media_type_filter) -> bool:
+    if media_type_filter in (None, ""):
+        return True
+    return normalize_media_type(candidate.get("media_type")) == normalize_media_type(media_type_filter)
+
+
 def _matches_optional_genres(candidate: dict, include_genres: list[str], exclude_genres: list[str]) -> bool:
     candidate_keys = _candidate_list_values(candidate, "genre_keys")
     exclude_keys = genre_schema.normalize_genre_filter_list(exclude_genres or [])
@@ -158,6 +165,7 @@ def filter_saved_candidates_for_search(candidates: list, filters: dict) -> list:
     """Фильтрует уже сохранённых кандидатов из общего пула перед поиском."""
     source = filters.get("source")
     country = filters.get("country")
+    media_type = filters.get("media_type")
     year_min = filters.get("year_min")
     year_max = filters.get("year_max")
     include_genres = filters.get("include_genres") or []
@@ -172,6 +180,8 @@ def filter_saved_candidates_for_search(candidates: list, filters: dict) -> list:
         if source and candidate.get("source") != source:
             continue
         if _matches_optional_country(candidate, country) is False:
+            continue
+        if _matches_optional_media_type(candidate, media_type) is False:
             continue
 
         if _matches_min_value(candidate, "year", year_min) is False:

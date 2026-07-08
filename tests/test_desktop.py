@@ -5410,6 +5410,8 @@ def test_format_pool_stats_user_uses_plain_language() -> None:
 
 def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch, qapp) -> None:
     import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
+    from PyQt6.QtWidgets import QComboBox
+
     from config import constant
     from desktop.candidates.filters_view import CANDIDATE_YEAR_MIN, CandidateFiltersView
     from desktop.candidates.session import CandidateSearchSession
@@ -5432,9 +5434,17 @@ def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch
     )
 
     view = CandidateFiltersView(CandidateSearchSession())
+    media_type_combo = view.widget.findChild(QComboBox, "candidateSearchMediaType")
     filters = view._collect_filters()
 
+    assert media_type_combo is not None
+    assert [media_type_combo.itemText(index) for index in range(media_type_combo.count())] == [
+        "Всё",
+        "Сериал",
+        "Фильм",
+    ]
     assert filters["country"] == []
+    assert filters["media_type"] is None
     assert filters["year_min"] is None
     assert filters["year_max"] is None
     assert view._country_selector.is_all_selected() is True
@@ -5442,6 +5452,9 @@ def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch
     assert filters["min_tmdb_score"] is None
     assert filters["min_tmdb_votes"] is None
     assert view._only_complete_check.isChecked() is False
+
+    media_type_combo.setCurrentIndex(media_type_combo.findData("movie"))
+    assert view._collect_filters()["media_type"] == "movie"
 
 
 def test_country_chip_selector_clear_means_all_countries(qapp) -> None:
@@ -5484,6 +5497,7 @@ def test_candidate_filter_sections_define_visual_hierarchy() -> None:
     assert "QFrame#candidateFilterDivider" in style
     assert f"font-size: {font_px(FONT_SECTION + 2)}px;" in style
     assert "QLabel#candidateSearchFieldLabel" in style
+    assert "QComboBox#candidateSearchMediaType" in style
     assert f"font-size: {font_px(FONT_SECTION)}px;" in style
     assert "font-weight: 700;" in style
 

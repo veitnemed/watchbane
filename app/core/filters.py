@@ -6,6 +6,7 @@ from candidates.models import country_schema, genre_schema
 from candidates.models.keys import title_identity_key
 from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
 from candidates.pool.watched_cleanup import is_watched_candidate
+from dataset.models.media_type import normalize_media_type
 
 
 def _criteria_value(criteria: dict, *names, default=None):
@@ -60,6 +61,12 @@ def _matches_country(candidate: dict, country_filter) -> bool:
     return country_schema.country_codes_match_any(_list_values(candidate, "country_codes"), required)
 
 
+def _matches_media_type(candidate: dict, media_type_filter) -> bool:
+    if media_type_filter in (None, ""):
+        return True
+    return normalize_media_type(candidate.get("media_type")) == normalize_media_type(media_type_filter)
+
+
 def _matches_genres(candidate: dict, include_genres, exclude_genres) -> bool:
     candidate_keys = _list_values(candidate, "genre_keys")
     excluded = genre_schema.normalize_genre_filter_list(exclude_genres or [])
@@ -100,6 +107,8 @@ def candidate_matches(candidate: dict, criteria: dict | None = None) -> bool:
     if _criteria_value(criteria, "source") and candidate.get("source") != criteria.get("source"):
         return False
     if _matches_country(candidate, _criteria_value(criteria, "country", "countries")) is False:
+        return False
+    if _matches_media_type(candidate, _criteria_value(criteria, "media_type", "type")) is False:
         return False
     if _matches_min(candidate, "year", _criteria_value(criteria, "year_from", "min_year", "year_min")) is False:
         return False

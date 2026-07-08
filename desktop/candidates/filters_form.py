@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from desktop.candidates.filters_controls import (
     SCORE_SLIDER_MAX,
@@ -34,6 +34,7 @@ class FiltersFormWidgets:
 
     scroll: QScrollArea
     country_selector: CountryChipSelector
+    media_type_combo: QComboBox
     year_range_label: QLabel
     year_slider: RangeSlider
     include_genre_selector: GenreChipSelector
@@ -96,6 +97,15 @@ def build_filters_form(
     country_selector = CountryChipSelector([])
     basic_layout.addWidget(field_label(tr("candidates.filters.country")))
     basic_layout.addWidget(country_selector)
+    add_divider(basic_layout)
+
+    media_type_combo = QComboBox()
+    media_type_combo.setObjectName("candidateSearchMediaType")
+    media_type_combo.addItem(tr("watched.filters.media_all"), None)
+    media_type_combo.addItem(tr("media_type.tv"), "tv")
+    media_type_combo.addItem(tr("media_type.movie"), "movie")
+    basic_layout.addWidget(field_label(tr("candidates.filters.media_type")))
+    basic_layout.addWidget(media_type_combo)
     add_divider(basic_layout)
 
     year_header = QHBoxLayout()
@@ -169,6 +179,7 @@ def build_filters_form(
     return FiltersFormWidgets(
         scroll=scroll,
         country_selector=country_selector,
+        media_type_combo=media_type_combo,
         year_range_label=year_range_label,
         year_slider=year_slider,
         include_genre_selector=include_genre_selector,

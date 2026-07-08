@@ -13,6 +13,7 @@ DEFAULT_BROWSE_FILTERS = {
     "criteria_name": None,
     "source": None,
     "country": [],
+    "media_type": None,
     "year_min": None,
     "year_max": None,
     "include_genres": [],

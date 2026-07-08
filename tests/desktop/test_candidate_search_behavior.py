@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QListView, QPushButton, QCheckBox
+from PyQt6.QtWidgets import QLabel, QListView, QPushButton, QCheckBox, QComboBox
 
 from desktop.candidates.list_model import CandidateListModel, CandidateListRoles
 from desktop.candidates.filters_view import CandidateFiltersView
@@ -72,6 +72,8 @@ class FakeCandidateService:
         filtered = []
         for candidate in candidates:
             if candidate.get("is_searchable") is not True:
+                continue
+            if filters.get("media_type") and candidate.get("media_type") != filters.get("media_type"):
                 continue
             if filters.get("hide_hidden") and candidate_detail_identity(candidate) in hidden:
                 continue
@@ -216,6 +218,33 @@ def test_filter_change_updates_candidate_list(qtbot) -> None:
 
     qtbot.waitUntil(lambda: _listed_count(list_widget) == 1)
     assert _listed_titles(list_widget) == ["Predict Ready"]
+
+
+def test_media_type_filter_updates_candidate_list(qtbot) -> None:
+    service = FakeCandidateService(
+        [
+            {**_predict_ready_candidate(), "title": "Ready Series", "media_type": "tv"},
+            {**_predict_ready_candidate(), "pool_entry_key": "ready-movie|2023|movie", "title": "Ready Movie", "media_type": "movie"},
+        ]
+    )
+    _service, _session, filters_view, list_view = _build_views(qtbot, service)
+    list_widget = _candidate_list(list_view)
+    apply_button = filters_view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
+    media_type_combo = filters_view.widget.findChild(QComboBox, "candidateSearchMediaType")
+
+    assert apply_button is not None
+    assert media_type_combo is not None
+    assert [media_type_combo.itemText(index) for index in range(media_type_combo.count())] == [
+        "Всё",
+        "Сериал",
+        "Фильм",
+    ]
+
+    media_type_combo.setCurrentIndex(media_type_combo.findData("movie"))
+    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
+
+    qtbot.waitUntil(lambda: _listed_titles(list_widget) == ["Ready Movie"])
+    assert service.applied_filters[-1]["media_type"] == "movie"
 
 
 def test_filter_reset_button_clears_and_applies_all_filters(qtbot) -> None:

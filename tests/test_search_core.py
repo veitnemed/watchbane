@@ -105,6 +105,24 @@ def test_filter_saved_candidates_uses_legacy_tmdb_score_alias() -> None:
     assert [candidate["title"] for candidate in result] == ["High"]
 
 
+def test_filter_saved_candidates_by_media_type() -> None:
+    from candidates.pool.search_helpers import filter_saved_candidates_for_search
+
+    candidates = [
+        _candidate(title="Series", tmdb_id=1, media_type="tv"),
+        _candidate(title="Movie", tmdb_id=2, media_type="movie"),
+    ]
+
+    result = filter_saved_candidates_for_search(candidates, {"media_type": "movie"})
+
+    assert [candidate["title"] for candidate in result] == ["Movie"]
+
+
+def test_candidate_matches_media_type_filter() -> None:
+    assert candidate_matches(_candidate(media_type="movie"), {"media_type": "film"}) is True
+    assert candidate_matches(_candidate(media_type="tv"), {"media_type": "movie"}) is False
+
+
 def test_candidate_matches_skips_watched_and_hidden() -> None:
     candidate = _candidate()
     identity = title_identity_key(candidate)

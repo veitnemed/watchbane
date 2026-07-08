@@ -54,6 +54,26 @@ QLabel#candidateSearchFieldLabel {{
     font-weight: 700;
     padding: {px(6)}px 0 {px(2)}px 0;
 }}
+QComboBox#candidateSearchMediaType {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_INPUT)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_BASE)}px;
+    padding: {px(INPUT_PADDING_Y)}px {px(INPUT_PADDING_X)}px;
+    min-height: {px(32)}px;
+}}
+QComboBox#candidateSearchMediaType:focus {{
+    border: 1px solid {COLOR_FOCUS_BORDER};
+}}
+QComboBox#candidateSearchMediaType::drop-down {{
+    border: none;
+    width: {px(28)}px;
+}}
+QComboBox#candidateSearchMediaType::down-arrow {{
+    width: {px(10)}px;
+    height: {px(10)}px;
+}}
 QListWidget#candidateListWidget {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};

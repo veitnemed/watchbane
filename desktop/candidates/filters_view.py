@@ -180,6 +180,10 @@ class CandidateFiltersView:
         return self._form.year_range_label
 
     @property
+    def _media_type_combo(self):
+        return self._form.media_type_combo
+
+    @property
     def _year_slider(self):
         return self._form.year_slider
 
@@ -339,6 +343,7 @@ class CandidateFiltersView:
             if str(item.get("code") or "").strip()
         ]
         self._country_selector.set_options(country_options, defaults.get("country"))
+        self._set_media_type_from_default(defaults.get("media_type"))
 
         self._set_year_slider_from_defaults(defaults.get("year_min"), defaults.get("year_max"))
         set_score_slider_from_default(self._tmdb_score_slider, defaults.get("min_tmdb_score"))
@@ -348,6 +353,10 @@ class CandidateFiltersView:
         self._only_unwatched_check.setChecked(DEFAULT_BROWSE_FILTERS["only_unwatched"])
         self._hide_hidden_check.setChecked(DEFAULT_BROWSE_FILTERS["hide_hidden"])
 
+    def _set_media_type_from_default(self, media_type) -> None:
+        index = self._media_type_combo.findData(media_type)
+        self._media_type_combo.setCurrentIndex(index if index >= 0 else 0)
+
     def _collect_filters(self) -> dict:
         countries = self._country_selector.selected_country_codes()
         year_min, year_max = self._year_filter_bounds()
@@ -356,6 +365,7 @@ class CandidateFiltersView:
             "criteria_name": None,
             "source": None,
             "country": countries,
+            "media_type": self._media_type_combo.currentData(),
             "year_min": year_min,
             "year_max": year_max,
             "include_genres": self._include_genre_selector.selected_genres(),
@@ -369,6 +379,7 @@ class CandidateFiltersView:
 
     def _clear_filter_controls(self) -> None:
         self._country_selector.clear_selection()
+        self._media_type_combo.setCurrentIndex(0)
         self._include_genre_selector.clear_selection()
         self._exclude_genre_selector.clear_selection()
         self._set_year_slider_from_defaults(None, None)
