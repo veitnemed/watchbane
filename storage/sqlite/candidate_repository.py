@@ -8,6 +8,7 @@ import sqlite3
 
 from candidates.pool.normalization import normalize_storage_pool
 from candidates.pool.watched_cleanup import purge_watched_from_pool
+from dataset.models.media_type import normalize_media_type
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
 from storage.sqlite.records import dumps_json, extract_candidate_record, loads_json
@@ -182,7 +183,7 @@ def query_candidate_records(
     params: list[object] = []
     if media_type is not None:
         clauses.append("media_type = ?")
-        params.append(media_type)
+        params.append(normalize_media_type(media_type))
     if min_year is not None:
         clauses.append("year >= ?")
         params.append(min_year)

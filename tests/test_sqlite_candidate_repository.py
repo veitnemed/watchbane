@@ -54,6 +54,19 @@ def test_candidate_pool_dedupe_keeps_best_candidate(tmp_path, monkeypatch) -> No
     assert loaded["dark|2017"]["final_score"] == 9
 
 
+def test_candidate_query_normalizes_media_type_alias(tmp_path, monkeypatch) -> None:
+    _empty_watched(monkeypatch)
+    db_path = tmp_path / "watchbane.sqlite3"
+    candidate_repository.save_candidate_pool_dict(
+        {"k": {"title": "Heat", "year": 1995, "media_type": "movie", "final_score": 9}},
+        path=db_path,
+    )
+
+    results = candidate_repository.query_candidate_records(media_type="film", path=db_path)
+
+    assert [candidate["title"] for candidate in results] == ["Heat"]
+
+
 def test_candidate_pool_unicode_identity(tmp_path, monkeypatch) -> None:
     _empty_watched(monkeypatch)
     db_path = tmp_path / "watchbane.sqlite3"
