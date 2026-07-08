@@ -9,22 +9,22 @@ def build_form_controls_style() -> str:
     """Return stylesheet for inputs, combos, spinboxes and range sliders."""
     return f"""
 QLineEdit, QComboBox, QDoubleSpinBox, QSpinBox {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER_WEAK};
     border-radius: {px(RADIUS_INPUT)}px;
     padding: {px(INPUT_PADDING_Y)}px {px(INPUT_PADDING_X)}px;
-    color: {COLOR_TEXT};
+    color: {FILM_TEXT};
     font-size: {font_px(FONT_BASE)}px;
-    selection-background-color: {COLOR_SELECTED_BG};
+    selection-background-color: {FILM_ACCENT_DIM};
 }}
 QLineEdit:focus, QComboBox:focus, QDoubleSpinBox:focus, QSpinBox:focus {{
-    border: 1px solid {COLOR_FOCUS_BORDER};
+    border: 1px solid {FILM_ACCENT};
 }}
 QDoubleSpinBox::up-button,
 QDoubleSpinBox::down-button,
 QSpinBox::up-button,
 QSpinBox::down-button {{
-    background-color: {COLOR_CARD_ALT};
+    background-color: {FILM_SURFACE_2};
     border: none;
     width: {px(16)}px;
 }}
@@ -32,17 +32,17 @@ QDoubleSpinBox::up-button:hover,
 QDoubleSpinBox::down-button:hover,
 QSpinBox::up-button:hover,
 QSpinBox::down-button:hover {{
-    background-color: {COLOR_CONTROL_HOVER};
+    background-color: {FILM_ACCENT_DIM};
 }}
 QComboBox::drop-down {{
     border: none;
     width: {px(24)}px;
 }}
 QComboBox QAbstractItemView {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
-    color: {COLOR_TEXT};
-    selection-background-color: {COLOR_SELECTED_BG};
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER_WEAK};
+    color: {FILM_TEXT};
+    selection-background-color: {FILM_ACCENT_DIM};
 }}
 QWidget#watchedScoreRange,
 QWidget#watchedYearRange,

@@ -10,8 +10,8 @@ def build_shell_style() -> str:
     """Return stylesheet for application shell widgets."""
     return f"""
 QMainWindow, QWidget {{
-    background-color: {COLOR_BG};
-    color: {COLOR_TEXT};
+    background-color: {FILM_WINDOW_BG};
+    color: {FILM_TEXT};
     font-family: {FONT_FAMILY_QSS};
     font-size: {font_px(FONT_APP)}px;
 }}
@@ -20,53 +20,53 @@ QScrollArea {{
     background-color: transparent;
 }}
 QStatusBar {{
-    background-color: {COLOR_BG};
-    color: {COLOR_TEXT_SECONDARY};
-    border-top: 1px solid {COLOR_BORDER};
+    background-color: {FILM_WINDOW_BG};
+    color: {FILM_TEXT_SUBTLE};
+    border-top: 1px solid {FILM_BORDER_WEAK};
 }}
 QMenu {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER_WEAK};
     border-radius: {px(RADIUS_INPUT)}px;
     padding: {px(SPACING_SMALL)}px;
-    color: {COLOR_TEXT};
+    color: {FILM_TEXT};
 }}
 QMenu::item {{
     padding: {px(BUTTON_PADDING_Y)}px {px(BUTTON_PADDING_X)}px;
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
 }}
 QMenu::item:selected {{
-    background-color: {COLOR_SELECTED_BG};
+    background-color: {FILM_ACCENT_DIM};
 }}
 QSplitter::handle {{
-    background-color: {COLOR_BG};
+    background-color: {FILM_WINDOW_BG};
 }}
 QSplitter::handle:hover {{
-    background-color: {COLOR_BORDER};
+    background-color: {FILM_BORDER_WEAK};
 }}
 QScrollBar:vertical {{
-    background: transparent;
+    background: {FILM_SCROLLBAR_BG};
     width: {px(10)}px;
     margin: {px(SPACING_XSMALL)}px;
 }}
 QScrollBar::handle:vertical {{
-    background: {COLOR_BORDER_HOVER};
+    background: {FILM_SCROLLBAR_HANDLE};
     border-radius: {px(RADIUS_SCROLLBAR)}px;
     min-height: {px(28)}px;
 }}
 QScrollBar::handle:vertical:hover {{
-    background: {COLOR_ACCENT_SOFT};
+    background: {FILM_SCROLLBAR_HANDLE_HOVER};
 }}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
     height: 0;
 }}
 QScrollBar:horizontal {{
-    background: transparent;
+    background: {FILM_SCROLLBAR_BG};
     height: {px(10)}px;
     margin: {px(SPACING_XSMALL)}px;
 }}
 QScrollBar::handle:horizontal {{
-    background: {COLOR_BORDER_HOVER};
+    background: {FILM_SCROLLBAR_HANDLE};
     border-radius: {px(RADIUS_SCROLLBAR)}px;
     min-width: {px(28)}px;
 }}
@@ -80,10 +80,10 @@ QTabWidget#mainTabs::pane {{
     top: -{MAIN_TAB_PANE_TOP_LIFT_PX}px;
 }}
 QTabBar::tab {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER_WEAK};
     border-radius: {control_px(RADIUS_INPUT)}px;
-    color: {COLOR_TEXT_SECONDARY};
+    color: {FILM_TEXT_SUBTLE};
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 600;
     padding: {control_px(BUTTON_PADDING_Y)}px {control_px(BUTTON_PADDING_X)}px;
@@ -91,12 +91,12 @@ QTabBar::tab {{
     margin-right: {px(SPACING_SMALL)}px;
 }}
 QTabBar::tab:selected {{
-    background-color: {COLOR_ACCENT_SOFT};
-    color: {COLOR_ACCENT_HOVER};
-    border-color: {COLOR_BORDER_ACTIVE};
+    background-color: {FILM_ACCENT_DIM};
+    color: {FILM_ACCENT_HOVER};
+    border-color: {FILM_ACCENT};
 }}
 QTabBar::tab:hover {{
-    background-color: {COLOR_HOVER};
-    color: {COLOR_TEXT};
+    background-color: {FILM_SURFACE_2};
+    color: {FILM_TEXT};
 }}
 """

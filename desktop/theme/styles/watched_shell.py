@@ -15,6 +15,9 @@ QWidget#watchedSidebar {{
     background: transparent;
 }}
 QLineEdit#watchedSearch {{
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER_WEAK};
+    color: {FILM_TEXT};
     font-size: {font_px(FONT_SECTION)}px;
     padding: {px(INPUT_PADDING_Y + 1)}px {px(INPUT_PADDING_X + 2)}px;
     min-height: {px(34)}px;
@@ -46,41 +49,41 @@ QPushButton#watchedFilterToggle {{
     background-color: transparent;
     border: none;
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
-    color: {COLOR_TEXT_SECONDARY};
+    color: {FILM_TEXT_SUBTLE};
     font-size: {font_px(WATCHED_SIDEBAR_LABEL_FONT)}px;
     font-weight: 600;
     padding: {px(6)}px {px(4)}px;
     text-align: left;
 }}
 QPushButton#watchedFilterToggle:hover {{
-    color: {COLOR_TEXT};
-    background-color: {COLOR_CARD_ALT};
+    color: {FILM_TEXT};
+    background-color: {FILM_SURFACE_1};
 }}
 QPushButton#watchedFilterToggle[watchedFiltersActive="true"] {{
-    color: {COLOR_TEXT};
+    color: {FILM_TEXT};
 }}
 QFrame#watchedFiltersPanel {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
+    background-color: {FILM_SURFACE_0};
+    border: 1px solid {FILM_BORDER_WEAK};
     border-radius: {px(RADIUS_INPUT)}px;
 }}
 QPushButton#watchedFilterResetAll {{
-    background-color: {COLOR_CARD_ALT};
-    border: 1px solid {COLOR_BORDER};
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER_WEAK};
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
-    color: {COLOR_TEXT};
+    color: {FILM_TEXT};
     font-size: {font_px(FONT_SECTION)}px;
     font-weight: 600;
     padding: {px(9)}px {px(12)}px;
     min-height: {px(36)}px;
 }}
 QPushButton#watchedFilterResetAll:hover {{
-    background-color: {COLOR_CONTROL_HOVER};
-    border-color: {COLOR_BORDER_HOVER};
+    background-color: {FILM_SURFACE_2};
+    border-color: {FILM_BORDER};
 }}
 QLabel#watchedListCounter {{
     background: transparent;
-    color: {COLOR_TEXT_SECONDARY};
+    color: {FILM_TEXT_SUBTLE};
     font-size: {font_px(WATCHED_SIDEBAR_LABEL_FONT)}px;
     font-weight: 600;
     padding: 0 {px(4)}px;
@@ -90,21 +93,21 @@ QWidget#watchedSortRow {{
 }}
 QLabel#watchedSortLabel {{
     background: transparent;
-    color: {COLOR_TEXT};
+    color: {FILM_TEXT};
     font-size: {font_px(WATCHED_SIDEBAR_LABEL_FONT)}px;
     font-weight: 600;
 }}
 QComboBox#watchedSort {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER_WEAK};
     border-radius: {px(RADIUS_INPUT)}px;
-    color: {COLOR_TEXT};
+    color: {FILM_TEXT};
     font-size: {font_px(FONT_SECTION)}px;
     padding: {px(INPUT_PADDING_Y + 1)}px {px(INPUT_PADDING_X + 2)}px;
     min-height: {px(34)}px;
 }}
 QComboBox#watchedSort:focus {{
-    border: 1px solid {COLOR_FOCUS_BORDER};
+    border: 1px solid {FILM_ACCENT};
 }}
 QComboBox#watchedSort::drop-down {{
     border: none;
@@ -117,39 +120,39 @@ QComboBox#watchedSort::down-arrow {{
 QFrame#watchedScoreFilter,
 QFrame#watchedYearFilter,
 QFrame#watchedGenreFilter {{
-    background-color: {COLOR_SURFACE};
-    border: 1px solid {COLOR_BORDER};
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER_WEAK};
     border-radius: {px(RADIUS_BUTTON)}px;
 }}
 QLabel#watchedScoreFilterTitle,
 QLabel#watchedYearFilterTitle,
 QLabel#watchedGenreFilterTitle {{
     background: transparent;
-    color: {COLOR_TEXT};
+    color: {FILM_TEXT};
     font-size: {font_px(FONT_SECTION)}px;
     font-weight: 700;
 }}
 QComboBox#watchedGenre {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
+    background-color: {FILM_SURFACE_0};
+    border: 1px solid {FILM_BORDER_WEAK};
     border-radius: {px(RADIUS_INPUT)}px;
-    color: {COLOR_TEXT};
+    color: {FILM_TEXT};
     font-size: {font_px(FONT_SECTION)}px;
     padding: {px(7)}px {px(10)}px;
     min-height: {px(36)}px;
 }}
 QComboBox#watchedGenre:focus {{
-    border: 1px solid {COLOR_FOCUS_BORDER};
+    border: 1px solid {FILM_ACCENT};
 }}
 QLabel#watchedScoreFilterLabel,
 QLabel#watchedYearFilterLabel {{
     background: transparent;
-    color: {COLOR_TEXT_SECONDARY};
+    color: {FILM_TEXT_SUBTLE};
     font-size: {font_px(FONT_SECTION)}px;
 }}
 QLabel#watchedFilterValue {{
     background: transparent;
-    color: {COLOR_TEXT};
+    color: {FILM_TEXT};
     font-size: {font_px(FONT_SECTION)}px;
     font-weight: 600;
 }}

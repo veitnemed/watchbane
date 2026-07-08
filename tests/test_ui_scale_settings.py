@@ -987,7 +987,7 @@ def test_shell_tabs_and_add_title_use_control_scaled_typography() -> None:
     import desktop.theme.scaling as scaling
     from desktop.theme.styles.shell import build_shell_style
     from desktop.theme.styles.watched_shell import build_watched_shell_style
-    from desktop.theme.tokens import COLOR_SURFACE
+    from desktop.theme.tokens import FILM_SURFACE_1
     from desktop.theme.tokens import (
         FONT_BASE,
         FONT_SECTION,
@@ -1004,7 +1004,7 @@ def test_shell_tabs_and_add_title_use_control_scaled_typography() -> None:
     assert f"font-size: {scaling.font_px(FONT_SECTION)}px" in watched_style
     assert "QLineEdit#watchedSearch" in watched_style
     assert "QFrame#watchedScoreFilter" in watched_style
-    assert f"background-color: {COLOR_SURFACE}" in watched_style
+    assert f"background-color: {FILM_SURFACE_1}" in watched_style
     assert f"min-height: {scaling.layout_px(34)}px" in watched_style
     assert f"min-height: {scaling.control_px(WATCHED_ADD_TITLE_MIN_HEIGHT)}px" in watched_style
     assert f"font-size: {scaling.font_px(WATCHED_SIDEBAR_LABEL_FONT)}px" in watched_style
