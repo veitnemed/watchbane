@@ -11,6 +11,7 @@ from dataset.records.update import update_dataset_record
 from posters.cache import lookup_poster_cache_entry, upsert_poster_cache_entry
 from storage import data as storage_data
 from storage import runtime
+from storage.legacy_json.importer import import_legacy_json_to_sqlite
 
 
 def _write_json(path, payload: dict) -> None:
@@ -70,7 +71,12 @@ def test_sqlite_end_to_end_runtime_smoke(tmp_path, monkeypatch) -> None:
     _write_json(data_dir / "watched" / "titles.json", {"Legacy": _watched_payload("Legacy", 2020)})
 
     startup = runtime.ensure_runtime_data_layout()
-    assert startup["sqlite_startup_migration"]["legacy_imported"] is True
+    assert startup["sqlite_startup_migration"]["legacy_imported"] is False
+    import_legacy_json_to_sqlite(
+        base_dir=data_dir,
+        db_path=startup["sqlite_db_path"],
+        create_backup=False,
+    )
     assert "Legacy" in storage_data.load_dataset()
 
     add_result = add_dataset_record(_watched_payload("Alpha", 2021))

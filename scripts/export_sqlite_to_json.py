@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from storage.sqlite.export_legacy import export_sqlite_to_legacy_json
+from storage.legacy_json.exporter import export_sqlite_to_legacy_json
 
 
 def main() -> int:

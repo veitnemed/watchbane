@@ -8,7 +8,7 @@ from storage.sqlite import candidate_repository
 from storage.sqlite import poster_repository
 from storage.sqlite import settings_repository
 from storage.sqlite import watched_repository
-from storage.sqlite.import_legacy import import_legacy_json_to_sqlite
+from storage.legacy_json.importer import import_legacy_json_to_sqlite
 
 
 def _write_json(path: Path, payload: dict) -> None:

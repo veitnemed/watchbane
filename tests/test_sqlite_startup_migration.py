@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from storage import profiles
 from storage import runtime
 from storage.sqlite import watched_repository
 from storage.sqlite.settings_repository import get_setting
@@ -21,6 +22,7 @@ def _patch_runtime(tmp_path, monkeypatch) -> Path:
     exports_dir = data_dir / "exports"
     logs_dir = data_dir / "logs"
     backup_dir = data_dir / "backups"
+    profiles.set_base_data_dir(data_dir)
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(data_dir))
     monkeypatch.setattr("config.constant.WATCHED_DIR", str(watched_dir))
     monkeypatch.setattr("config.constant.CANDIDATES_DIR", str(candidates_dir))
@@ -44,27 +46,25 @@ def _patch_runtime(tmp_path, monkeypatch) -> Path:
     return data_dir
 
 
-def test_sqlite_startup_imports_existing_legacy_json_once(tmp_path, monkeypatch) -> None:
+def test_sqlite_startup_does_not_import_existing_legacy_json_automatically(tmp_path, monkeypatch) -> None:
     data_dir = _patch_runtime(tmp_path, monkeypatch)
     _write_json(
         data_dir / "watched" / "titles.json",
-        {"Метод": {"main_info": {"title": "Метод", "year": 2015, "user_score": 8, "country": "Россия"}}},
+        {"Legacy": {"main_info": {"title": "Legacy", "year": 2015, "user_score": 8, "country": "US"}}},
     )
-    _write_json(data_dir / "watched" / "meta.json", {"Метод": {"raw_scores": {"tmdb_id": 693}}})
+    _write_json(data_dir / "watched" / "meta.json", {"Legacy": {"raw_scores": {"tmdb_id": 693}}})
 
-    first = runtime.ensure_runtime_data_layout()
-    second = runtime.ensure_runtime_data_layout()
+    result = runtime.ensure_runtime_data_layout()
 
-    db_path = Path(first["sqlite_db_path"])
-    assert first["sqlite_startup_migration"]["legacy_imported"] is True
-    assert second["sqlite_startup_migration"]["legacy_imported"] is False
-    assert len(watched_repository.load_dataset_dict(path=db_path)) == 1
-    assert watched_repository.load_meta_dict(path=db_path)["Метод"]["raw_scores"]["tmdb_id"] == 693
-    assert get_setting("legacy_json_import_completed", path=db_path)["completed"] is True
+    db_path = Path(result["sqlite_db_path"])
+    assert result["sqlite_startup_migration"]["legacy_imported"] is False
+    assert watched_repository.load_dataset_dict(path=db_path) == {}
+    assert watched_repository.load_meta_dict(path=db_path) == {}
+    assert get_setting("legacy_json_import_completed", path=db_path) is None
 
 
 def test_sqlite_startup_without_legacy_data_creates_empty_db(tmp_path, monkeypatch) -> None:
-    data_dir = _patch_runtime(tmp_path, monkeypatch)
+    _patch_runtime(tmp_path, monkeypatch)
 
     result = runtime.ensure_runtime_data_layout()
 

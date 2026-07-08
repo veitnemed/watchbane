@@ -5,8 +5,8 @@ from pathlib import Path
 
 from candidates.pool.normalization import normalize_storage_pool
 from storage.normalize import normalize_movie_tags
-from storage.sqlite.export_legacy import export_sqlite_to_legacy_json
-from storage.sqlite.import_legacy import import_legacy_json_to_sqlite
+from storage.legacy_json.exporter import export_sqlite_to_legacy_json
+from storage.legacy_json.importer import import_legacy_json_to_sqlite
 
 
 def _write_json(path: Path, payload: dict) -> None:
