@@ -1,20 +1,12 @@
 """Tests for pool repository read/write boundary."""
 
 import json
-import uuid
-from pathlib import Path
 
 import pytest
 
 from candidates.repositories import criteria_repository
 from candidates.repositories import json_io
 from candidates.repositories import pool_repository
-
-
-def _workspace_tmp_dir() -> Path:
-    path = Path(__file__).resolve().parents[2] / "data" / "cache" / f"pytest-{uuid.uuid4().hex}"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 def _tmdb_candidate(**overrides) -> dict:
@@ -31,9 +23,8 @@ def _tmdb_candidate(**overrides) -> dict:
     return candidate
 
 
-def test_load_candidate_pool_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    tmp_dir = _workspace_tmp_dir()
-    pool_path = tmp_dir / "candidate_pool.json"
+def test_load_candidate_pool_read_only(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    pool_path = tmp_path / "candidate_pool.json"
     pool_path.write_text(json.dumps({"k": {"title": "A", "year": 2020}}), encoding="utf-8")
     monkeypatch.setattr(pool_repository.constant, "CANDIDATE_POOL_JSON", str(pool_path))
 
@@ -45,27 +36,24 @@ def test_load_candidate_pool_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
     assert after_mtime == before_mtime
 
 
-def test_load_candidate_pool_missing_file_is_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    tmp_dir = _workspace_tmp_dir()
-    pool_path = tmp_dir / "candidate_pool.json"
+def test_load_candidate_pool_missing_file_is_read_only(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    pool_path = tmp_path / "candidate_pool.json"
     monkeypatch.setattr(pool_repository.constant, "CANDIDATE_POOL_JSON", str(pool_path))
 
     assert pool_repository.load_candidate_pool() == {}
     assert not pool_path.exists()
 
 
-def test_load_candidate_criteria_missing_file_is_read_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    tmp_dir = _workspace_tmp_dir()
-    criteria_path = tmp_dir / "candidate_criteria.json"
+def test_load_candidate_criteria_missing_file_is_read_only(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    criteria_path = tmp_path / "candidate_criteria.json"
     monkeypatch.setattr(criteria_repository.constant, "CRITERIA_POOL_JSON", str(criteria_path))
 
     assert criteria_repository.load_candidate_criteria() == {}
     assert not criteria_path.exists()
 
 
-def test_save_candidate_criteria_creates_parent_dir(monkeypatch: pytest.MonkeyPatch) -> None:
-    tmp_dir = _workspace_tmp_dir()
-    criteria_path = tmp_dir / "nested" / "candidate_criteria.json"
+def test_save_candidate_criteria_creates_parent_dir(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    criteria_path = tmp_path / "nested" / "candidate_criteria.json"
     monkeypatch.setattr(criteria_repository.constant, "CRITERIA_POOL_JSON", str(criteria_path))
 
     criteria_repository.save_candidate_criteria({"pool": {"count": 10}})
@@ -75,9 +63,9 @@ def test_save_candidate_criteria_creates_parent_dir(monkeypatch: pytest.MonkeyPa
 
 def test_atomic_candidate_json_write_preserves_existing_file_on_replace_failure(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
-    tmp_dir = _workspace_tmp_dir()
-    target_path = tmp_dir / "candidate_pool.json"
+    target_path = tmp_path / "candidate_pool.json"
     original = {"existing": {"title": "Keep"}}
     target_path.write_text(json.dumps(original), encoding="utf-8")
 
@@ -93,9 +81,8 @@ def test_atomic_candidate_json_write_preserves_existing_file_on_replace_failure(
     assert not target_path.with_name(f"{target_path.name}.tmp").exists()
 
 
-def test_save_candidate_pool_normalizes_and_writes(monkeypatch: pytest.MonkeyPatch) -> None:
-    tmp_dir = _workspace_tmp_dir()
-    pool_path = tmp_dir / "candidate_pool.json"
+def test_save_candidate_pool_normalizes_and_writes(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    pool_path = tmp_path / "candidate_pool.json"
     pool_path.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(pool_repository.constant, "CANDIDATE_POOL_JSON", str(pool_path))
     monkeypatch.setattr(
@@ -116,9 +103,8 @@ def test_save_candidate_pool_normalizes_and_writes(monkeypatch: pytest.MonkeyPat
     assert len(saved) == 1
 
 
-def test_save_candidate_pool_strips_external_rating_fields(monkeypatch: pytest.MonkeyPatch) -> None:
-    tmp_dir = _workspace_tmp_dir()
-    pool_path = tmp_dir / "candidate_pool.json"
+def test_save_candidate_pool_strips_external_rating_fields(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    pool_path = tmp_path / "candidate_pool.json"
     pool_path.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(pool_repository.constant, "CANDIDATE_POOL_JSON", str(pool_path))
     monkeypatch.setattr(
