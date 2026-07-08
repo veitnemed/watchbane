@@ -26,6 +26,7 @@ MEDIA_THEME_OBJECT_NAMES = {
     "detailHeroCard",
     "detailPosterShell",
     "detailUserScoreBadge",
+    "detailMediaTypeBadge",
     "genrePill",
     "detailMainInfoPanel",
     "detailMainInfoHeaderDivider",
@@ -129,7 +130,7 @@ class DetailCard(DetailCardPosterMixin):
         self._genre_section.setVisible(True)
 
     def show_empty(self, title: str | None = None) -> None:
-        self._set_media_theme(MEDIA_TYPE_TV)
+        self._set_media_theme(MEDIA_TYPE_TV, show_media_badge=False)
         if title is None:
             title = tr("watched.empty.select_title")
         self._set_poster_placeholder()
@@ -155,7 +156,7 @@ class DetailCard(DetailCardPosterMixin):
         from desktop.shared.detail.presenters import get_overview_display, has_overview_text
 
         _, movie, card = entry
-        self._set_media_theme(self._resolve_entry_media_type(movie, card))
+        self._set_media_theme(self._resolve_entry_media_type(movie, card), show_media_badge=True)
         self._title_label.setText(card.get("title") or entry[0])
         self._set_title_meta(build_title_meta_text(card))
         self._set_user_score_badge(build_user_score_badge_item(card))
@@ -207,9 +208,18 @@ class DetailCard(DetailCardPosterMixin):
                 return normalize_media_type(value)
         return MEDIA_TYPE_TV
 
-    def _set_media_theme(self, media_type) -> None:
+    def _set_media_theme(self, media_type, *, show_media_badge: bool = True) -> None:
         self._media_type_theme = normalize_media_type(media_type)
+        self._set_media_type_badge(show_media_badge)
         self._apply_media_theme_properties()
+
+    def _set_media_type_badge(self, visible: bool) -> None:
+        if self._media_type_theme == "movie":
+            label = tr("media_type.movie")
+        else:
+            label = tr("media_type.tv")
+        self._media_type_badge.setText(str(label).upper())
+        self._media_type_badge.setVisible(visible)
 
     def _apply_media_theme_properties(self) -> None:
         from PyQt6.QtWidgets import QWidget
@@ -218,6 +228,7 @@ class DetailCard(DetailCardPosterMixin):
             self._frame,
             self._poster_shell,
             self._user_score_badge,
+            self._media_type_badge,
             self._main_info_panel,
             self._main_info_divider,
             self._overview_divider,

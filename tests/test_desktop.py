@@ -4432,6 +4432,7 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
 def test_detail_card_movie_mode_sets_film_theme_properties(qapp) -> None:
     from PyQt6.QtWidgets import QFrame, QLabel
 
+    from desktop.i18n import tr
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
     detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
@@ -4452,11 +4453,15 @@ def test_detail_card_movie_mode_sets_film_theme_properties(qapp) -> None:
     hero = detail.widget
     poster = hero.findChild(QFrame, "detailPosterShell")
     badge = hero.findChild(QLabel, "detailUserScoreBadge")
+    media_badge = hero.findChild(QLabel, "detailMediaTypeBadge")
     chips = hero.findChildren(QLabel, "genrePill")
 
     assert hero.property("mediaType") == "movie"
     assert poster.property("mediaType") == "movie"
     assert badge.property("mediaType") == "movie"
+    assert media_badge.property("mediaType") == "movie"
+    assert media_badge.text() == tr("media_type.movie").upper()
+    assert media_badge.isHidden() is False
     assert chips
     assert {chip.property("mediaType") for chip in chips} == {"movie"}
 
@@ -4464,6 +4469,13 @@ def test_detail_card_movie_mode_sets_film_theme_properties(qapp) -> None:
 
     assert hero.property("mediaType") == "tv"
     assert poster.property("mediaType") == "tv"
+    assert media_badge.property("mediaType") == "tv"
+    assert media_badge.text() == tr("media_type.tv").upper()
+    assert media_badge.isHidden() is False
+
+    detail.show_empty()
+
+    assert media_badge.isHidden() is True
 
 
 def test_detail_card_movie_style_uses_film_tokens() -> None:
@@ -4478,6 +4490,7 @@ def test_detail_card_movie_style_uses_film_tokens() -> None:
     assert tokens.FILM_BORDER in style
     assert tokens.FILM_CHIP_BG in style
     assert tokens.FILM_MOVIE_BADGE_BG in style
+    assert "QLabel#detailMediaTypeBadge" in style
 
 
 def test_fit_poster_pixmap_for_display_avoids_upscale(qapp) -> None:

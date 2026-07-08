@@ -34,6 +34,7 @@ class DetailCardHandles:
     poster_label: Any
     poster_overlay: Any
     user_score_badge: Any
+    media_type_badge: Any
     poster_column_widget: Any
     poster_actions_widget: Any
     poster_actions_layout: Any
@@ -179,14 +180,20 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         profile.detail_poster_content_width,
         profile.detail_poster_content_height,
     )
-    poster_overlay_layout = QHBoxLayout(owner._poster_overlay)
+    poster_overlay_layout = QVBoxLayout(owner._poster_overlay)
     poster_overlay_layout.setContentsMargins(
         max(0, profile.detail_user_score_badge_left - poster_border_width),
         max(0, profile.detail_user_score_badge_top - poster_border_width),
-        0,
-        0,
+        max(0, profile.detail_user_score_badge_left - poster_border_width),
+        max(0, profile.detail_user_score_badge_top - poster_border_width),
     )
     poster_overlay_layout.setSpacing(0)
+    poster_score_row = QHBoxLayout()
+    poster_score_row.setContentsMargins(0, 0, 0, 0)
+    poster_score_row.setSpacing(0)
+    poster_badge_row = QHBoxLayout()
+    poster_badge_row.setContentsMargins(0, 0, 0, 0)
+    poster_badge_row.setSpacing(0)
 
     owner._user_score_badge = UserScoreBadgeLabel("", owner._poster_shell)
     owner._user_score_badge.setObjectName("detailUserScoreBadge")
@@ -204,12 +211,29 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     )
     owner._user_score_badge.hide()
 
+    owner._media_type_badge = QLabel("", owner._poster_shell)
+    owner._media_type_badge.setObjectName("detailMediaTypeBadge")
+    owner._media_type_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    owner._media_type_badge.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+    owner._media_type_badge.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+    owner._media_type_badge.setAutoFillBackground(True)
+    owner._media_type_badge.hide()
+
     poster_shell_layout.addWidget(owner._poster_label, 0, 0)
-    poster_overlay_layout.addWidget(
+    poster_score_row.addWidget(
         owner._user_score_badge,
         alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft,
     )
+    poster_score_row.addStretch(1)
+    poster_badge_row.addStretch(1)
+    poster_badge_row.addWidget(
+        owner._media_type_badge,
+        alignment=Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter,
+    )
+    poster_badge_row.addStretch(1)
+    poster_overlay_layout.addLayout(poster_score_row)
     poster_overlay_layout.addStretch(1)
+    poster_overlay_layout.addLayout(poster_badge_row)
     poster_shell_layout.addWidget(owner._poster_overlay, 0, 0)
 
     owner._poster_column_widget = QWidget()
@@ -556,6 +580,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         poster_label=owner._poster_label,
         poster_overlay=owner._poster_overlay,
         user_score_badge=owner._user_score_badge,
+        media_type_badge=owner._media_type_badge,
         poster_column_widget=owner._poster_column_widget,
         poster_actions_widget=owner._poster_actions_widget,
         poster_actions_layout=owner._poster_actions_layout,

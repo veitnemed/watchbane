@@ -52,12 +52,23 @@ QFrame#detailHeroCard[mediaType="movie"] {{
 }}
 QFrame#detailPosterShell[mediaType="movie"] {{
     background-color: {FILM_SURFACE_0};
-    border: {poster_px(DETAIL_POSTER_BORDER_WIDTH)}px solid {FILM_BORDER};
+    border: {poster_px(DETAIL_POSTER_BORDER_WIDTH)}px solid {FILM_BORDER_STRONG};
 }}
 QLabel#detailUserScoreBadge[mediaType="movie"] {{
     background-color: {FILM_MOVIE_BADGE_BG};
     border: 1px solid {FILM_MOVIE_BADGE_BORDER};
     color: {FILM_MOVIE_BADGE_TEXT};
+}}
+QLabel#detailMediaTypeBadge {{
+    background-color: {FILM_MOVIE_BADGE_BG};
+    border: 1px solid {FILM_MOVIE_BADGE_BORDER};
+    border-radius: {detail_px(15)}px;
+    color: {FILM_MOVIE_BADGE_TEXT};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    padding: {detail_px(5)}px {detail_px(14)}px;
+    min-height: {detail_px(28)}px;
 }}
 QLabel#detailTitle {{
     background: transparent;
