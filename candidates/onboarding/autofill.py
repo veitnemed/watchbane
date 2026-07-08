@@ -75,6 +75,15 @@ FALLBACK_RELAX_VOTES_LOW = "relax_votes_low"
 FALLBACK_RELAX_ERA = "relax_era"
 FALLBACK_POPULAR = "popular"
 
+SEED_ORIGIN_TOP = "origin_top_seed"
+SEED_QUALITY = "quality_seed"
+SEED_ORDER = (SEED_ORIGIN_TOP, SEED_QUALITY)
+
+SOURCE_STAGE_ORIGIN_TOP_SEED = "origin_top_seed"
+SOURCE_STAGE_QUALITY_SEED = "quality_seed"
+SOURCE_STAGE_FOCUSED = "focused"
+SOURCE_STAGE_FALLBACK = "fallback"
+
 FALLBACK_ORDER = (
     FALLBACK_BASE,
     FALLBACK_RELAX_ORIGIN,
@@ -184,6 +193,7 @@ class AutofillResult:
     warnings: list[str]
     planned_counts: dict[str, dict[str, int]]
     actual_counts: dict[str, dict[str, int]]
+    source_stats: dict[str, int]
     rejected_future_count: int = 0
 
 
@@ -555,6 +565,28 @@ def _fallback_order_for_bucket(profile: OnboardingTasteProfile, bucket: Candidat
     return FALLBACK_ORDER
 
 
+def _source_stage_for_query(query_stage: str) -> str:
+    if query_stage == SEED_ORIGIN_TOP:
+        return SOURCE_STAGE_ORIGIN_TOP_SEED
+    if query_stage == SEED_QUALITY:
+        return SOURCE_STAGE_QUALITY_SEED
+    if query_stage == FALLBACK_BASE:
+        return SOURCE_STAGE_FOCUSED
+    return SOURCE_STAGE_FALLBACK
+
+
+def _query_stage_allowed_for_bucket(
+    profile: OnboardingTasteProfile,
+    bucket: CandidateFetchBucket,
+    query_stage: str,
+) -> bool:
+    if query_stage == SEED_ORIGIN_TOP:
+        return _is_hard_origin_bucket(profile, bucket) and bucket.origin == ORIGIN_DOMESTIC
+    if query_stage == SEED_QUALITY:
+        return True
+    return query_stage in _fallback_order_for_bucket(profile, bucket)
+
+
 def _domestic_filter_for_fallback(fallback: str) -> dict[str, str]:
     if fallback in {FALLBACK_RELAX_VOTES_LOW, FALLBACK_RELAX_ERA, FALLBACK_POPULAR}:
         return {"with_origin_country": "RU"}
@@ -627,6 +659,55 @@ def build_discover_request(
     return _endpoint(bucket.media_type), params
 
 
+def build_quality_seed_request(
+    bucket: CandidateFetchBucket,
+    *,
+    profile: OnboardingTasteProfile,
+    seed_stage: str,
+    request_index: int,
+    current_date: date | None = None,
+) -> tuple[str, dict[str, Any]]:
+    current_date = current_date or _current_date()
+    params: dict[str, Any] = {
+        "include_adult": False,
+        "language": _ui_language_to_tmdb_locale(profile.ui_language),
+        _date_lte_field(bucket.media_type): current_date.isoformat(),
+        "page": request_index + 1,
+        "sort_by": "vote_average.desc",
+        "vote_count.gte": 300 if bucket.media_type == MEDIA_MOVIE else 100,
+    }
+    if seed_stage == SEED_ORIGIN_TOP:
+        params["with_origin_country"] = "RU"
+    return _endpoint(bucket.media_type), params
+
+
+def _origin_countries(result: dict[str, Any]) -> set[str]:
+    values = result.get("origin_country") or []
+    if isinstance(values, str):
+        values = [values]
+    return {str(value).strip().upper() for value in values if str(value).strip()}
+
+
+def _seed_candidate_matches_hard_bucket(
+    result: dict[str, Any],
+    bucket: CandidateFetchBucket,
+    *,
+    profile: OnboardingTasteProfile,
+    seed_stage: str,
+) -> bool:
+    if seed_stage == SEED_ORIGIN_TOP:
+        return _query_stage_allowed_for_bucket(profile, bucket, seed_stage)
+    if seed_stage != SEED_QUALITY:
+        return True
+    if not _is_hard_origin_bucket(profile, bucket):
+        return True
+    if bucket.origin == ORIGIN_DOMESTIC:
+        return "RU" in _origin_countries(result)
+    if bucket.origin == ORIGIN_FOREIGN and bucket.original_language:
+        return str(result.get("original_language") or "").strip().casefold() == bucket.original_language
+    return True
+
+
 def _discover_candidate_stub(result: dict[str, Any], media_type: str) -> dict[str, Any]:
     title_key, original_title_key = _title_field(media_type)
     date_key = _date_field(media_type)
@@ -681,6 +762,9 @@ def candidate_rejection_reason(
         return "bad_id"
     if result.get("poster_path") in (None, ""):
         return "missing_poster"
+    title_key, original_title_key = _title_field(bucket.media_type)
+    if result.get(title_key) in (None, "") and result.get(original_title_key) in (None, ""):
+        return "wrong_media"
     release_date = _parse_iso_date(result.get(_date_field(bucket.media_type)))
     result_year = _result_year(result, bucket.media_type)
     if release_date is not None and release_date > current_date:
@@ -783,6 +867,7 @@ def build_candidate_record_from_result(
     candidate_score: float,
     fetch_rank: int,
     fallback: str = FALLBACK_BASE,
+    source_stage: str = SOURCE_STAGE_FOCUSED,
 ) -> dict[str, Any]:
     title_key, original_title_key = _title_field(bucket.media_type)
     date_key = _date_field(bucket.media_type)
@@ -802,6 +887,7 @@ def build_candidate_record_from_result(
         "source_provider": "tmdb",
         "source_version": 3,
         "source_bucket_id": bucket.bucket_id,
+        "source_stage": source_stage,
         "origin_bucket": bucket.origin,
         "onboarding_profile_id": int(profile_id),
         "candidate_score": candidate_score,
@@ -834,6 +920,7 @@ def build_candidate_record_from_result(
             "origin": bucket.origin,
             "original_language": bucket.original_language,
             "fallback": fallback,
+            "source_stage": source_stage,
         },
         "signals": ["onboarding_autofill"],
     }
@@ -895,6 +982,7 @@ def actual_counts_for_candidates(candidates: list[dict[str, Any]]) -> dict[str, 
         "origin": Counter(),
         "original_language": Counter(),
         "fallback": Counter(),
+        "source_stage": Counter(),
     }
     for candidate in candidates:
         source_query = candidate.get("source_query") if isinstance(candidate.get("source_query"), dict) else {}
@@ -916,6 +1004,9 @@ def actual_counts_for_candidates(candidates: list[dict[str, Any]]) -> dict[str, 
         fallback = source_query.get("fallback")
         if fallback:
             counters["fallback"][str(fallback)] += 1
+        source_stage = candidate.get("source_stage") or source_query.get("source_stage")
+        if source_stage:
+            counters["source_stage"][str(source_stage)] += 1
     return {name: dict(counter) for name, counter in counters.items()}
 
 
@@ -1008,7 +1099,7 @@ def run_onboarding_autofill(
     def is_cancelled() -> bool:
         return bool(cancel_checker is not None and cancel_checker())
 
-    for fallback in FALLBACK_ORDER:
+    for query_stage in (*SEED_ORDER, *FALLBACK_ORDER):
         for state in states:
             state.request_index = 0
             state.exhausted = False
@@ -1019,20 +1110,30 @@ def run_onboarding_autofill(
                     break
                 if state.filled >= state.bucket.quota or state.exhausted:
                     continue
-                if fallback not in _fallback_order_for_bucket(profile, state.bucket):
+                if not _query_stage_allowed_for_bucket(profile, state.bucket, query_stage):
                     continue
                 if is_cancelled():
                     cancelled = True
                     break
                 bucket = state.bucket
-                endpoint, params = build_discover_request(
-                    bucket,
-                    profile=profile,
-                    fallback=fallback,
-                    request_index=state.request_index,
-                    current_year=current_year,
-                    current_date=current_date,
-                )
+                source_stage = _source_stage_for_query(query_stage)
+                if query_stage in SEED_ORDER:
+                    endpoint, params = build_quality_seed_request(
+                        bucket,
+                        profile=profile,
+                        seed_stage=query_stage,
+                        request_index=state.request_index,
+                        current_date=current_date,
+                    )
+                else:
+                    endpoint, params = build_discover_request(
+                        bucket,
+                        profile=profile,
+                        fallback=query_stage,
+                        request_index=state.request_index,
+                        current_year=current_year,
+                        current_date=current_date,
+                    )
                 message = f"Собираем {'фильмы' if bucket.media_type == MEDIA_MOVIE else 'сериалы'} · {'лёгкий вайб' if bucket.vibe == VIBE_LIGHT else 'мрачный вайб'}"
                 if bucket.era == ERA_NEW_SWEEP:
                     message += " · новинки"
@@ -1047,7 +1148,8 @@ def run_onboarding_autofill(
                     api_requests=api_requests,
                     completed_buckets=sum(1 for item in states if item.filled >= item.bucket.quota),
                     total_buckets=len(states),
-                    fallback=fallback,
+                    fallback=query_stage,
+                    source_stage=source_stage,
                 )
                 accepted_batch: list[dict[str, Any]] = []
                 rejected_count = 0
@@ -1066,6 +1168,14 @@ def run_onboarding_autofill(
                             break
                         if state.filled + len(accepted_batch) >= state.bucket.quota:
                             break
+                        if query_stage in SEED_ORDER and not _seed_candidate_matches_hard_bucket(
+                            result,
+                            bucket,
+                            profile=profile,
+                            seed_stage=query_stage,
+                        ):
+                            rejected_count += 1
+                            continue
                         rejection_reason = candidate_rejection_reason(
                             result,
                             bucket,
@@ -1095,7 +1205,8 @@ def run_onboarding_autofill(
                             profile_id=profile_id,
                             candidate_score=candidate_score,
                             fetch_rank=fetch_rank,
-                            fallback=fallback,
+                            fallback=query_stage,
+                            source_stage=source_stage,
                         )
                         accepted_batch.append(candidate)
                         accepted_identities.add((bucket.media_type, int(result["id"])))
@@ -1114,7 +1225,7 @@ def run_onboarding_autofill(
                             "onboarding_profile_id": profile_id,
                             "bucket_id": bucket.bucket_id,
                             "endpoint": endpoint,
-                            "params": {**params, "_fallback": fallback},
+                            "params": {**params, "_fallback": query_stage, "_source_stage": source_stage},
                             "page": page,
                             "status": status,
                             "accepted_count": len(accepted_batch),
@@ -1140,6 +1251,7 @@ def run_onboarding_autofill(
 
     complete_onboarding_profile(profile_id, path=path)
     actual_counts = actual_counts_for_candidates(created_candidates)
+    source_stats = dict(actual_counts.get("source_stage", {}))
     warnings = _build_warnings(
         profile=profile,
         planned_counts=planned_counts,
@@ -1170,5 +1282,6 @@ def run_onboarding_autofill(
         warnings=warnings,
         planned_counts=planned_counts,
         actual_counts=actual_counts,
+        source_stats=source_stats,
         rejected_future_count=rejected_future_count,
     )

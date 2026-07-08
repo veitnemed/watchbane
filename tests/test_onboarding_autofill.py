@@ -149,6 +149,89 @@ class FutureTmdbClient(FakeTmdbClient):
         return {"results": results, "total_pages": 1}
 
 
+def _is_quality_seed_params(params: dict) -> bool:
+    return (
+        params.get("sort_by") == "vote_average.desc"
+        and "with_genres" not in params
+        and "primary_release_year" not in params
+        and "first_air_date_year" not in params
+    )
+
+
+class NonDomesticBroadSeedClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        self.calls.append((endpoint, dict(params)))
+        if params.get("with_origin_country") == "RU" or not _is_quality_seed_params(params):
+            return {"results": [], "total_pages": 1}
+
+        media = MEDIA_MOVIE if endpoint == "/discover/movie" else MEDIA_TV
+        results = []
+        for index in range(20):
+            tmdb_id = len(self.calls) * 1000 + index
+            if media == MEDIA_MOVIE:
+                results.append(
+                    {
+                        "id": tmdb_id,
+                        "title": f"Global Movie {tmdb_id}",
+                        "original_title": f"Global Movie {tmdb_id}",
+                        "release_date": "2024-01-01",
+                        "origin_country": ["US"],
+                        "poster_path": f"/g{tmdb_id}.jpg",
+                        "genre_ids": [18],
+                        "vote_average": 7.4,
+                        "vote_count": 1400,
+                        "popularity": 60,
+                        "original_language": "en",
+                    }
+                )
+            else:
+                results.append(
+                    {
+                        "id": tmdb_id,
+                        "name": f"Global Series {tmdb_id}",
+                        "original_name": f"Global Series {tmdb_id}",
+                        "first_air_date": "2024-01-01",
+                        "origin_country": ["US"],
+                        "poster_path": f"/g{tmdb_id}.jpg",
+                        "genre_ids": [18],
+                        "vote_average": 7.3,
+                        "vote_count": 500,
+                        "popularity": 45,
+                        "original_language": "en",
+                    }
+                )
+        return {"results": results, "total_pages": 1}
+
+
+class MovieShapedTvBroadSeedClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        if endpoint == "/discover/movie":
+            return super().discover(endpoint, params)
+        self.calls.append((endpoint, dict(params)))
+        if not _is_quality_seed_params(params):
+            return {"results": [], "total_pages": 1}
+
+        results = []
+        for index in range(20):
+            tmdb_id = len(self.calls) * 1000 + index
+            results.append(
+                {
+                    "id": tmdb_id,
+                    "title": f"Movie In Tv Feed {tmdb_id}",
+                    "original_title": f"Movie In Tv Feed {tmdb_id}",
+                    "release_date": "2024-01-01",
+                    "poster_path": f"/mt{tmdb_id}.jpg",
+                    "genre_ids": [18],
+                    "vote_average": 7.2,
+                    "vote_count": 1200,
+                    "popularity": 50,
+                    "original_language": "en",
+                    "origin_country": ["US"],
+                }
+            )
+        return {"results": results, "total_pages": 1}
+
+
 def _profile(**overrides) -> OnboardingTasteProfile:
     data = {
         "media_preference": "both",
@@ -288,6 +371,9 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
     assert result.created_count == autofill.STARTER_POOL_TARGET
     assert result.api_requests <= autofill.MAX_TMDB_REQUESTS
     assert client.calls
+    assert result.actual_counts["source_stage"]
+    assert sum(result.source_stats.values()) == result.created_count
+    assert result.source_stats == result.actual_counts["source_stage"]
     conn = connect(db_path)
     try:
         profile_count = conn.execute("SELECT COUNT(*) AS count FROM onboarding_profiles").fetchone()["count"]
@@ -325,7 +411,41 @@ def test_run_autofill_keeps_tv_quota_when_tv_is_preferred(tmp_path, monkeypatch)
     assert result.created_count == autofill.STARTER_POOL_TARGET
     assert result.planned_counts["media_type"] == {MEDIA_MOVIE: 36, MEDIA_TV: 84}
     assert result.actual_counts["media_type"] == {MEDIA_MOVIE: 36, MEDIA_TV: 84}
+    assert result.source_stats
     assert result.warning is None
+
+
+def test_existing_start_scenarios_keep_planned_quota_integrity(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    scenarios = [
+        (
+            "en_tv_new_dark",
+            _profile(ui_language="en", media_preference="tv", release_preference="new", vibe_preference="dark"),
+        ),
+        (
+            "ru_balanced",
+            _profile(ui_language="ru", media_preference="both", release_preference="mixed", vibe_preference="mixed", origin_preference="mixed"),
+        ),
+        (
+            "ru_domestic_movie_classic_light",
+            _profile(ui_language="ru", media_preference="movie", release_preference="classic", vibe_preference="light", origin_preference="domestic"),
+        ),
+    ]
+
+    for name, profile in scenarios:
+        result = run_onboarding_autofill(
+            profile,
+            client=FakeTmdbClient(),
+            path=tmp_path / f"{name}.sqlite3",
+            current_year=2026,
+        )
+
+        assert result.created_count == autofill.STARTER_POOL_TARGET
+        assert result.actual_counts["media_type"] == result.planned_counts["media_type"]
+        if profile.normalized().ui_language == "ru":
+            assert result.actual_counts["origin"] == result.planned_counts["origin"]
+        assert sum(result.source_stats.values()) == result.created_count
+        assert result.warning is None
 
 
 def test_run_autofill_underfills_scarce_tv_without_movie_overfill(tmp_path, monkeypatch) -> None:
@@ -334,6 +454,39 @@ def test_run_autofill_underfills_scarce_tv_without_movie_overfill(tmp_path, monk
     result = run_onboarding_autofill(
         _profile(media_preference="tv"),
         client=ScarceTvTmdbClient(),
+        path=db_path,
+        current_year=2026,
+    )
+
+    assert result.planned_counts["media_type"] == {MEDIA_MOVIE: 36, MEDIA_TV: 84}
+    assert result.actual_counts["media_type"].get(MEDIA_MOVIE) == 36
+    assert result.actual_counts["media_type"].get(MEDIA_TV, 0) == 0
+    assert result.created_count == 36
+    assert "Media quota underfilled: tv planned 84, actual 0." in result.warnings
+
+
+def test_broad_quality_seed_cannot_fill_ru_domestic_without_verified_origin(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    db_path = tmp_path / "watchbane.sqlite3"
+    result = run_onboarding_autofill(
+        _profile(ui_language="ru", origin_preference="domestic"),
+        client=NonDomesticBroadSeedClient(),
+        path=db_path,
+        current_year=2026,
+    )
+
+    assert result.planned_counts["origin"]["domestic"] == 84
+    assert result.actual_counts["origin"].get("domestic", 0) == 0
+    assert result.created_count == result.actual_counts["origin"].get("foreign", 0)
+    assert "Origin quota underfilled: domestic planned 84, actual 0." in result.warnings
+
+
+def test_broad_movie_shaped_candidates_cannot_fill_tv_underfill(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    db_path = tmp_path / "watchbane.sqlite3"
+    result = run_onboarding_autofill(
+        _profile(media_preference="tv"),
+        client=MovieShapedTvBroadSeedClient(),
         path=db_path,
         current_year=2026,
     )
@@ -356,8 +509,31 @@ def test_future_or_unreleased_results_are_rejected(tmp_path, monkeypatch) -> Non
     )
 
     assert result.created_count == 0
+    assert result.actual_counts["media_type"] == {}
+    assert result.source_stats == {}
     assert result.rejected_future_count > 0
     assert any(warning.startswith("Rejected future/unreleased titles:") for warning in result.warnings)
+
+
+def test_broad_quality_seed_rejects_future_titles_and_uses_date_lte(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = FutureTmdbClient()
+    result = run_onboarding_autofill(
+        _profile(media_preference="movie"),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    seed_calls = [params for _endpoint, params in client.calls if _is_quality_seed_params(params)]
+    assert seed_calls
+    seed_lte_dates = [
+        params.get("primary_release_date.lte") or params.get("first_air_date.lte")
+        for params in seed_calls
+    ]
+    assert all(value and value <= "2026-12-31" for value in seed_lte_dates)
+    assert result.created_count == 0
+    assert result.rejected_future_count > 0
 
 
 def test_onboarding_plan_view_has_target_quotas_without_api_calls() -> None:
