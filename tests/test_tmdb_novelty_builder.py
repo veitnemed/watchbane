@@ -123,6 +123,59 @@ def test_watched_item_is_still_skipped_before_existing_filter(monkeypatch) -> No
     assert result["stats"]["final_candidates"] == 1
 
 
+def test_builder_skips_watched_localized_title_before_details(monkeypatch) -> None:
+    watched = _discover_item(1396, "Breaking Bad", 2008)
+    novel = _discover_item(60059, "Better Call Saul", 2015)
+    discover_items = [watched, novel]
+    details_calls = []
+    dataset = {
+        "Во все тяжкие": {
+            "main_info": {"title": "Во все тяжкие", "year": 2008},
+            "localized": {"en": {"title": "Breaking Bad"}},
+            "tmdb_id": 1396,
+        }
+    }
+
+    monkeypatch.setattr(builder.api_tmdb, "load_tmdb_token", lambda: "token")
+    monkeypatch.setattr(builder, "load_candidate_pool", lambda: {})
+    monkeypatch.setattr("storage.data.load_dataset", lambda: dataset)
+    monkeypatch.setattr(
+        builder,
+        "build_discovery_slices",
+        lambda *args, **kwargs: [
+            {
+                "slice_name": "test",
+                "query": {"sort_by": "vote_count.desc", "with_origin_country": "US"},
+                "pages_per_slice": 1,
+            }
+        ],
+    )
+
+    def fake_tmdb_get(_path, params=None, token=None):
+        assert token == "token"
+        return {"page": 1, "total_pages": 1, "results": list(discover_items)}
+
+    def fake_details(tmdb_id, **kwargs):
+        assert "append_to_response" in kwargs
+        details_calls.append(int(tmdb_id))
+        source = next(item for item in discover_items if int(item["id"]) == int(tmdb_id))
+        return _details(
+            int(tmdb_id),
+            source["name"],
+            int(source["first_air_date"][:4]),
+            votes=int(source.get("vote_count") or 20),
+        )
+
+    monkeypatch.setattr(builder.api_tmdb, "tmdb_get", fake_tmdb_get)
+    monkeypatch.setattr(builder.api_tmdb, "get_tv_details", fake_details)
+
+    result = builder.build_candidate_pool("US", pages=1, details_limit=10)
+
+    assert details_calls == [60059]
+    assert result["stats"]["watched_skipped"] == 1
+    assert [candidate["title"] for candidate in result["candidates"]] == ["Better Call Saul"]
+
+
 def test_skip_existing_pool_false_preserves_all_discover_items(monkeypatch) -> None:
     discover_items = [
         _discover_item(101, "Known by tmdb", 2020),

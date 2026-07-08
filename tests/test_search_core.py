@@ -21,6 +21,7 @@ from candidates.pool.diagnostics import (
     find_title_duplicate_groups,
 )
 from candidates.pool.stats import build_pool_genre_count_rows
+from candidates.pool.watched_cleanup import remove_watched_candidates
 from candidates.views.formatters import format_pool_stats_summary
 
 
@@ -68,6 +69,45 @@ def test_candidate_matches_skips_watched_and_hidden() -> None:
     assert candidate_matches(candidate, {"hidden_identities": {identity}}) is False
     assert candidate_matches(candidate, {"watched_identities": {identity}, "only_unwatched": False}) is True
     assert filter_candidates([candidate], {"hidden_identities": set()})[0]["title"] == "Метод"
+
+
+def test_only_unwatched_matches_watched_localized_title(monkeypatch) -> None:
+    from app.core import candidates as search_candidates_module
+
+    dataset = {
+        "Во все тяжкие": {
+            "main_info": {"title": "Во все тяжкие", "year": 2008},
+            "localized": {"en": {"title": "Breaking Bad"}},
+            "tmdb_id": 1396,
+        }
+    }
+    monkeypatch.setattr("storage.data.load_dataset", lambda: dataset)
+
+    result = search_candidates_module.search_candidates([
+        _candidate(title="Breaking Bad", year=2008, tmdb_id=1396),
+    ])
+
+    assert result["filtered_count"] == 0
+    assert result["candidates"] == []
+
+
+def test_remove_watched_candidates_matches_localized_title(monkeypatch) -> None:
+    dataset = {
+        "Во все тяжкие": {
+            "main_info": {"title": "Во все тяжкие", "year": 2008},
+            "localized": {"en": {"title": "Breaking Bad"}},
+            "tmdb_id": 1396,
+        }
+    }
+    pool = {
+        "breaking bad|2008": _candidate(title="Breaking Bad", year=2008, tmdb_id=1396),
+        "better call saul|2015": _candidate(title="Better Call Saul", year=2015, tmdb_id=60059),
+    }
+    monkeypatch.setattr("storage.data.load_dataset", lambda: dataset)
+
+    filtered = remove_watched_candidates(pool)
+
+    assert list(filtered) == ["better call saul|2015"]
 
 
 def test_quality_score_prefers_reliable_tmdb_and_votes() -> None:

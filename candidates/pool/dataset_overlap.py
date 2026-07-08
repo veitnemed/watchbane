@@ -7,6 +7,82 @@ from candidates.pool.dedupe import candidate_title
 from candidates.pool.normalization import normalize_storage_pool
 
 
+TITLE_ALIAS_SELECTORS = (
+    ("main_info", "title"),
+    ("localized", "ru", "title"),
+    ("localized", "en", "title"),
+    ("meta", "localized", "ru", "title"),
+    ("meta", "localized", "en", "title"),
+    ("tmdb_data", "localized", "ru", "title"),
+    ("tmdb_data", "localized", "en", "title"),
+    ("title",),
+    ("name",),
+    ("original_title",),
+    ("original_name",),
+    ("alternative_title",),
+    ("alternativeName",),
+    ("enName",),
+    ("title_en",),
+    ("name_en",),
+)
+
+
+def _clean_text(value) -> str | None:
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
+def _path_value(record: dict, selector: tuple[str, ...]):
+    current = record
+    for part in selector:
+        if isinstance(current, dict) is False:
+            return None
+        current = current.get(part)
+    return current
+
+
+def _unique_texts(values) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = _clean_text(value)
+        if text is None:
+            continue
+        key = normalize_key_part(text)
+        if key == "" or key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+    return result
+
+
+def dataset_title_aliases(dataset_key: str, movie: dict) -> list[str]:
+    """Return watched title aliases used to keep saved pool free of repeats."""
+    source = movie if isinstance(movie, dict) else {}
+    values = [dataset_key]
+    values.extend(_path_value(source, selector) for selector in TITLE_ALIAS_SELECTORS)
+    return _unique_texts(values)
+
+
+def candidate_title_aliases(candidate: dict) -> list[str]:
+    """Return candidate title aliases for dataset-overlap checks."""
+    source = candidate if isinstance(candidate, dict) else {}
+    values = [candidate_title(source)]
+    values.extend(_path_value(source, selector) for selector in TITLE_ALIAS_SELECTORS)
+    return _unique_texts(values)
+
+
+def candidate_title_keys(candidate: dict) -> set[str]:
+    """Return normalized title keys for all candidate aliases."""
+    return {
+        key
+        for key in (normalize_key_part(title) for title in candidate_title_aliases(candidate))
+        if key
+    }
+
+
 def build_dataset_entries_by_title_key() -> dict[str, list[dict]]:
     """Read-only index of watched dataset records grouped by normalized title."""
     from storage import data as storage_data
@@ -17,15 +93,15 @@ def build_dataset_entries_by_title_key() -> dict[str, list[dict]]:
         if isinstance(movie, dict) is False:
             continue
         main_info = movie.get("main_info") or {}
-        title = main_info.get("title") or dataset_key
-        title_key = normalize_key_part(title)
-        if title_key == "":
-            continue
-        groups.setdefault(title_key, []).append({
-            "dataset_key": dataset_key,
-            "title": title,
-            "year": main_info.get("year"),
-        })
+        for title in dataset_title_aliases(dataset_key, movie):
+            title_key = normalize_key_part(title)
+            if title_key == "":
+                continue
+            groups.setdefault(title_key, []).append({
+                "dataset_key": dataset_key,
+                "title": title,
+                "year": main_info.get("year"),
+            })
     return groups
 
 
@@ -38,8 +114,7 @@ def is_dataset_title_match(candidate: dict, dataset_title_keys: set[str] | None 
     """True when candidate normalized title already exists in watched dataset."""
     if dataset_title_keys is None:
         dataset_title_keys = build_dataset_title_keys()
-    title_key = normalize_key_part(candidate_title(candidate))
-    return title_key != "" and title_key in dataset_title_keys
+    return any(title_key in dataset_title_keys for title_key in candidate_title_keys(candidate))
 
 
 def count_pool_dataset_title_matches(pool: dict | None = None) -> dict:

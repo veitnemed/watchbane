@@ -31,8 +31,8 @@ from desktop.candidates.presenters import (
     candidate_sort_mode_label,
     candidate_poster_url_for_download,
 )
-from candidates.pool.localized_posters import ensure_candidate_localized_poster
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.candidates.workers.poster_worker import CandidateLocalizedPosterWorker
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language
 from desktop.shared.detail import DetailCard
@@ -84,6 +84,8 @@ class CandidateListView(CandidateListActionsMixin):
         self._detail_entries: dict[str, tuple] = {}
         self._poster_request_seq = 0
         self._poster_worker = None
+        self._localized_poster_workers: list[CandidateLocalizedPosterWorker] = []
+        self._localized_poster_inflight: set[str] = set()
         self._model = CandidateListModel(parent=None, data_language=self._data_language)
         self._delegate = None
 
@@ -341,7 +343,7 @@ class CandidateListView(CandidateListActionsMixin):
                 self._clear_detail(show_filters_hint=not self._session.has_results)
             return
 
-        candidate = self._candidate_with_current_language_poster(self._candidates[row])
+        candidate = self._candidates[row]
         self._selected_candidate = candidate
         self._selected_identity = candidate_detail_identity(candidate)
         lookup_done = perf_counter()
@@ -369,6 +371,7 @@ class CandidateListView(CandidateListActionsMixin):
         )
         if poster_url not in (None, ""):
             self._start_poster_download(poster_url, identity, request_seq)
+        self._start_localized_poster_enrichment(candidate, identity, request_seq)
 
         total_ms = (render_done - started) * 1000
         if total_ms >= 50:
@@ -381,24 +384,103 @@ class CandidateListView(CandidateListActionsMixin):
                 total_ms,
             )
 
-    def _candidate_with_current_language_poster(self, candidate: dict) -> dict:
-        try:
-            updated_candidate, changed = ensure_candidate_localized_poster(
-                candidate,
-                data_language=self._data_language,
+    def _candidate_has_current_language_poster(self, candidate: dict) -> bool:
+        localized = candidate.get("localized") if isinstance(candidate.get("localized"), dict) else {}
+        block = localized.get(self._data_language)
+        if isinstance(block, dict) is False:
+            return False
+        return any(block.get(key) not in (None, "") for key in ("poster_url", "poster_path"))
+
+    def _candidate_has_tmdb_id(self, candidate: dict) -> bool:
+        if candidate.get("tmdb_id") not in (None, ""):
+            return True
+        source_query = candidate.get("source_query")
+        return isinstance(source_query, dict) and source_query.get("tmdb_id") not in (None, "")
+
+    def _start_localized_poster_enrichment(self, candidate: dict, identity: str, request_seq: int) -> None:
+        if isinstance(candidate, dict) is False:
+            return
+        if self._candidate_has_current_language_poster(candidate):
+            return
+        if self._candidate_has_tmdb_id(candidate) is False:
+            return
+
+        worker_key = f"{self._data_language}:{identity}"
+        if worker_key in self._localized_poster_inflight:
+            return
+        self._localized_poster_inflight.add(worker_key)
+
+        worker = CandidateLocalizedPosterWorker(identity, candidate, self._data_language, parent=self._widget)
+        worker.finished_with_candidate.connect(
+            lambda ident, updated, changed, seq=request_seq: self._on_localized_poster_enriched(
+                seq,
+                ident,
+                updated,
+                changed,
             )
-        except Exception:
-            return candidate
+        )
+        worker.finished.connect(
+            lambda worker=worker, key=worker_key: self._remove_localized_poster_worker(worker, key)
+        )
+        worker.finished.connect(worker.deleteLater)
+        self._localized_poster_workers.append(worker)
+        worker.start()
 
-        if changed is not True or not isinstance(updated_candidate, dict):
-            return candidate
+    def _remove_localized_poster_worker(self, worker: CandidateLocalizedPosterWorker, worker_key: str = "") -> None:
+        self._localized_poster_workers = [
+            item
+            for item in self._localized_poster_workers
+            if item is not worker
+        ]
+        if worker_key:
+            self._localized_poster_inflight.discard(worker_key)
 
-        identity = candidate_detail_identity(candidate)
-        candidate.clear()
-        candidate.update(updated_candidate)
+    def _replace_candidate_by_identity(self, identity: str, updated_candidate: dict) -> dict | None:
+        replacement = None
+        for candidates in (self._all_candidates, self._candidates):
+            for index, candidate in enumerate(candidates):
+                if candidate_detail_identity(candidate) != identity:
+                    continue
+                candidate.clear()
+                candidate.update(updated_candidate)
+                candidates[index] = candidate
+                replacement = candidate
+        return replacement
+
+    def _on_localized_poster_enriched(
+        self,
+        request_seq: int,
+        identity: str,
+        updated_candidate: dict,
+        changed: bool,
+    ) -> None:
+        if changed is not True or isinstance(updated_candidate, dict) is False:
+            return
+
+        candidate = self._replace_candidate_by_identity(identity, updated_candidate)
+        if candidate is None:
+            candidate = updated_candidate
         self._detail_entries.pop(identity, None)
         self._model.update_poster_path(identity, None)
-        return candidate
+        self._results_list.viewport().update()
+
+        if request_seq != self._poster_request_seq or self._selected_identity != identity:
+            return
+
+        self._selected_candidate = candidate
+        entry = build_candidate_readonly_detail_entry(
+            candidate,
+            data_language=self._data_language,
+        )
+        self._detail_entries[identity] = entry
+        self._show_detail_entry(entry)
+
+        poster_url = candidate_poster_url_for_download(
+            candidate,
+            data_language=self._data_language,
+        )
+        if poster_url not in (None, ""):
+            self._start_poster_download(poster_url, identity, request_seq)
 
     def _on_loading_changed(self) -> None:
         if self._session.is_loading:

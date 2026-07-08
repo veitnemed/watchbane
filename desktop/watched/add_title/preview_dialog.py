@@ -34,7 +34,6 @@ from desktop.watched.model import (
     USER_SCORE_MAX,
     USER_SCORE_MIN,
     USER_SCORE_STEP,
-    YEAR_FILTER_MIN,
     normalize_user_score_value,
 )
 from desktop.theme.scaling import layout_px
@@ -252,7 +251,7 @@ class AddTitlePreviewDialog(QDialog):
                 tr("add_title.header"),
                 tr(
                     "add_title.error.invalid_year",
-                    min_value=YEAR_FILTER_MIN,
+                    min_value=valid.VALID_YEAR_MIN,
                     max_value=constant.NOW_YEAR,
                 ),
             )

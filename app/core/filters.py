@@ -5,6 +5,7 @@ from __future__ import annotations
 from candidates.models import country_schema, genre_schema
 from candidates.models.keys import title_identity_key
 from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
+from candidates.pool.watched_cleanup import is_watched_candidate
 
 
 def _criteria_value(criteria: dict, *names, default=None):
@@ -120,7 +121,14 @@ def candidate_matches(candidate: dict, criteria: dict | None = None) -> bool:
 
     identity = title_identity_key(candidate)
     if _criteria_value(criteria, "only_unwatched", default=True):
-        if identity in _identity_set(_criteria_value(criteria, "watched_identities", "watched", default=set())):
+        watched_title_keys = _identity_set(
+            _criteria_value(criteria, "watched_title_keys", default=set())
+        )
+        if is_watched_candidate(
+            candidate,
+            _identity_set(_criteria_value(criteria, "watched_identities", "watched", default=set())),
+            dataset_title_keys=watched_title_keys,
+        ):
             return False
     if _criteria_value(criteria, "hide_hidden", default=True):
         if identity in _identity_set(_criteria_value(criteria, "hidden_identities", "hidden", default=set())):

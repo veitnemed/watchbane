@@ -14,6 +14,7 @@ def search_candidates(candidates: list[dict], criteria: dict | None = None) -> d
     criteria.setdefault("only_unwatched", True)
     criteria.setdefault("hide_hidden", True)
     criteria.setdefault("watched_identities", search_storage.load_watched_identities())
+    criteria.setdefault("watched_title_keys", search_storage.load_watched_title_keys())
     criteria.setdefault("hidden_identities", search_storage.load_hidden_identities())
 
     filtered = filter_candidates(candidates, criteria)

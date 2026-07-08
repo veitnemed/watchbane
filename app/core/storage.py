@@ -9,7 +9,6 @@ from datetime import datetime
 from candidates.models.keys import title_identity_key
 from candidates.models.schema import normalize_candidate_record
 from config import constant
-from storage import data as storage_data
 
 
 WATCHLIST_JSON = os.path.join(constant.CANDIDATES_DIR, "watchlist.json")
@@ -86,14 +85,12 @@ def load_watchlist_identities() -> set[str]:
 
 
 def load_watched_identities() -> set[str]:
-    dataset = storage_data.load_dataset()
-    identities = set()
-    for dataset_key, movie in dataset.items():
-        main_info = movie.get("main_info", {}) if isinstance(movie, dict) else {}
-        identity = title_identity_key({
-            "title": main_info.get("title") or dataset_key,
-            "year": main_info.get("year"),
-        })
-        if identity != "|":
-            identities.add(identity)
-    return identities
+    from candidates.pool.watched_cleanup import build_watched_signatures
+
+    return build_watched_signatures()
+
+
+def load_watched_title_keys() -> set[str]:
+    from candidates.pool.dataset_overlap import build_dataset_title_keys
+
+    return build_dataset_title_keys()

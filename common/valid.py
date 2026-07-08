@@ -4,6 +4,8 @@ import unicodedata
 
 from config import constant
 
+VALID_YEAR_MIN = 1900
+
 
 def parse_float(value) -> float:
     """Convert a string with dot or comma to float."""
@@ -41,7 +43,7 @@ def is_correct_year(year: str) -> bool:
     """Check year validity."""
     try:
         year_int = int(year)
-        return 2000 <= year_int <= constant.NOW_YEAR
+        return VALID_YEAR_MIN <= year_int <= constant.NOW_YEAR
     except:
         return False
 

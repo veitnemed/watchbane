@@ -926,6 +926,37 @@ def test_add_title_preview_score_input_uses_english_locale(qapp) -> None:
     dialog.close()
 
 
+def test_candidate_transfer_preview_accepts_friends_1994_year(qapp) -> None:
+    from PyQt6.QtWidgets import QPushButton
+
+    from dataset.add_flow.transfer import build_candidate_transfer_bundle
+    from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
+
+    bundle = build_candidate_transfer_bundle(
+        {
+            "title": "Friends",
+            "year": 1994,
+            "country_codes": ["US"],
+            "tmdb_id": 1668,
+            "tmdb_score": 8.4,
+            "tmdb_votes": 8000,
+            "tmdb_popularity": 80.0,
+            "genre_keys": ["comedy"],
+        },
+        data_language="en",
+    )
+
+    dialog = AddTitlePreviewDialog(bundle, transfer_mode=True)
+    dialog.show()
+    qapp.processEvents()
+
+    confirm_button = dialog.findChild(QPushButton, "addTitleConfirmButton")
+    assert dialog._resolved_year(bundle) == 1994
+    assert confirm_button is not None and confirm_button.isEnabled() is True
+
+    dialog.close()
+
+
 def test_add_title_compact_preview_renders_only_summary_content(qapp) -> None:
     from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QLabel, QWidget
@@ -4889,43 +4920,116 @@ def test_candidate_list_model_re_resolves_poster_after_lazy_invalidation(monkeyp
     assert [call[1] for call in calls] == ["en", "en"]
 
 
-def test_candidate_list_view_selection_enriches_missing_language_poster(monkeypatch) -> None:
+def test_candidate_selection_does_not_fetch_localized_poster_synchronously() -> None:
+    import inspect
+
+    from desktop.candidates.list_view import CandidateListView
+
+    source = inspect.getsource(CandidateListView._on_result_selected)
+
+    assert "ensure_candidate_localized_poster" not in source
+    assert "_start_localized_poster_enrichment" in source
+
+
+def test_candidate_list_view_starts_localized_poster_worker(monkeypatch) -> None:
+    import desktop.candidates.list_view as list_view_module
     from desktop.candidates.list_view import CandidateListView
 
     candidate = {"title": "Pool Show", "year": 2020, "tmdb_id": 101}
     view = CandidateListView.__new__(CandidateListView)
     view._data_language = "en"
-    view._detail_entries = {"Pool Show": ("key", {}, {})}
+    view._widget = object()
+    view._localized_poster_workers = []
+    view._localized_poster_inflight = set()
+    created = {}
+
+    class FakeSignal:
+        def __init__(self) -> None:
+            self.callbacks = []
+
+        def connect(self, callback) -> None:
+            self.callbacks.append(callback)
+
+    class FakeWorker:
+        def __init__(self, identity, candidate_arg, data_language, parent=None) -> None:
+            created["args"] = (identity, candidate_arg, data_language, parent)
+            self.finished_with_candidate = FakeSignal()
+            self.finished = FakeSignal()
+            created["worker"] = self
+
+        def start(self) -> None:
+            created["started"] = True
+
+        def deleteLater(self) -> None:
+            created["deleted"] = True
+
+    monkeypatch.setattr(list_view_module, "CandidateLocalizedPosterWorker", FakeWorker)
+
+    view._start_localized_poster_enrichment(candidate, "Pool Show", 7)
+
+    assert created["args"] == ("Pool Show", candidate, "en", view._widget)
+    assert created["started"] is True
+    assert view._localized_poster_workers == [created["worker"]]
+    assert view._localized_poster_inflight == {"en:Pool Show"}
+    assert len(created["worker"].finished_with_candidate.callbacks) == 1
+
+    view._start_localized_poster_enrichment(candidate, "Pool Show", 8)
+
+    assert view._localized_poster_workers == [created["worker"]]
+
+
+def test_candidate_list_view_applies_localized_poster_worker_result(monkeypatch) -> None:
+    from desktop.candidates.list_view import CandidateListView
+
+    candidate = {"title": "Pool Show", "year": 2020, "tmdb_id": 101}
+    updated_candidate = {
+        **candidate,
+        "localized": {
+            "en": {
+                "poster_url": "https://image.tmdb.org/t/p/original/en.jpg",
+            }
+        },
+    }
     calls = {}
 
     class FakeModel:
         def update_poster_path(self, identity, path):
             calls["model"] = (identity, path)
 
-    def fake_ensure(candidate_arg, *, data_language="ru"):
-        calls["ensure"] = (candidate_arg, data_language)
-        return (
-            {
-                **candidate_arg,
-                "localized": {
-                    "en": {
-                        "poster_url": "https://image.tmdb.org/t/p/original/en.jpg",
-                    }
-                },
-            },
-            True,
-        )
+    class FakeViewport:
+        def update(self) -> None:
+            calls["viewport"] = True
 
+    class FakeResultsList:
+        def viewport(self):
+            return FakeViewport()
+
+    view = CandidateListView.__new__(CandidateListView)
+    view._data_language = "en"
+    view._all_candidates = [candidate]
+    view._candidates = [candidate]
+    view._selected_identity = "Pool Show"
+    view._selected_candidate = candidate
+    view._poster_request_seq = 3
+    view._detail_entries = {"Pool Show": ("old", {}, {})}
     view._model = FakeModel()
-    monkeypatch.setattr("desktop.candidates.list_view.ensure_candidate_localized_poster", fake_ensure)
+    view._results_list = FakeResultsList()
+    view._show_detail_entry = lambda entry: calls.update({"entry": entry})
+    view._start_poster_download = lambda url, identity, seq: calls.update(
+        {"download": (url, identity, seq)}
+    )
+    monkeypatch.setattr(
+        "desktop.candidates.list_view.candidate_poster_url_for_download",
+        lambda candidate_arg, data_language="ru": candidate_arg["localized"][data_language]["poster_url"],
+    )
 
-    updated = view._candidate_with_current_language_poster(candidate)
+    view._on_localized_poster_enriched(3, "Pool Show", updated_candidate, True)
 
-    assert calls["ensure"] == (candidate, "en")
-    assert updated is candidate
     assert candidate["localized"]["en"]["poster_url"].endswith("/en.jpg")
     assert calls["model"] == ("Pool Show", None)
-    assert view._detail_entries == {}
+    assert calls["viewport"] is True
+    assert calls["entry"][2]["poster_url"].endswith("/en.jpg")
+    assert calls["download"] == ("https://image.tmdb.org/t/p/original/en.jpg", "Pool Show", 3)
 
 
 def test_candidate_detail_entry_resets_detail_scroll() -> None:

@@ -53,6 +53,7 @@ def remove_watched_discover(items: list[dict[str, Any]]) -> tuple[list[dict[str,
     skipped = 0
     for item in items:
         candidate = {
+            "tmdb_id": item.get("id"),
             "title": item.get("name") or item.get("original_name") or "",
             "alternative_title": item.get("original_name") or "",
             "year": api_tmdb.get_year(item.get("first_air_date")),

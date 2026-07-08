@@ -39,7 +39,7 @@ from desktop.candidates.session import (
     DEFAULT_SORT_MODE,
     CandidateSearchSession,
 )
-from desktop.candidates.workers.poster_worker import CandidatePosterDownloadWorker
+from desktop.candidates.workers.poster_worker import CandidateLocalizedPosterWorker, CandidatePosterDownloadWorker
 from desktop.candidates.workers.search_worker import CandidateSearchWorker
 
 __all__ = [
@@ -54,6 +54,7 @@ __all__ = [
     "CandidateListModel",
     "CandidateListRoles",
     "CandidateListView",
+    "CandidateLocalizedPosterWorker",
     "CandidatePosterDownloadWorker",
     "CandidateSearchWorker",
     "CandidateSearchSession",

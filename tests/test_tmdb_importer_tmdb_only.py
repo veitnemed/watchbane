@@ -48,6 +48,31 @@ def test_import_new_tmdb_candidate(monkeypatch) -> None:
     assert candidate["final_score"] > 0
 
 
+def test_import_skips_watched_localized_title(monkeypatch) -> None:
+    saved = {}
+    dataset = {
+        "Во все тяжкие": {
+            "main_info": {"title": "Во все тяжкие", "year": 2008},
+            "localized": {"en": {"title": "Breaking Bad"}},
+            "tmdb_id": 1396,
+        }
+    }
+
+    monkeypatch.setattr(importer, "load_candidate_pool", lambda: {})
+    monkeypatch.setattr(importer, "save_candidate_pool", lambda value: saved.update({"pool": value}))
+    monkeypatch.setattr(importer, "load_candidate_criteria", lambda: {})
+    monkeypatch.setattr(importer, "save_named_criteria", lambda name, criteria: saved.update({"criteria": criteria}))
+    monkeypatch.setattr("storage.data.load_dataset", lambda: dataset)
+
+    stats = importer.import_tmdb_candidates_to_common_pool([
+        _candidate(title="Breaking Bad", year=2008, tmdb_id=1396)
+    ], criteria_name="pool")
+
+    assert stats["added"] == 0
+    assert stats["watched_skipped"] == 1
+    assert saved["pool"] == {}
+
+
 def test_update_old_kp_imdb_candidate_and_strip_old_fields(monkeypatch) -> None:
     saved = {}
     old = _candidate(
