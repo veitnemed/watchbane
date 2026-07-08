@@ -8,6 +8,7 @@ from datetime import datetime
 
 from config import constant
 from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
+from candidates.repositories.json_io import dump_json_atomic
 from candidates.repositories import pool_repository
 
 
@@ -15,14 +16,13 @@ def init_candidate_criteria() -> None:
     """Создает JSON с критериями подбора, если его еще нет."""
     if os.path.exists(constant.CRITERIA_POOL_JSON):
         return
-    os.makedirs(os.path.dirname(constant.CRITERIA_POOL_JSON), exist_ok=True)
-    with open(constant.CRITERIA_POOL_JSON, "w", encoding="utf-8") as file:
-        json.dump({}, file, ensure_ascii=False, indent=4)
+    dump_json_atomic(constant.CRITERIA_POOL_JSON, {})
 
 
 def load_candidate_criteria() -> dict:
     """Загружает сохраненные критерии подбора."""
-    init_candidate_criteria()
+    if not os.path.exists(constant.CRITERIA_POOL_JSON):
+        return {}
     with open(constant.CRITERIA_POOL_JSON, "r", encoding="utf-8-sig") as file:
         data = json.load(file)
     return data if isinstance(data, dict) else {}
@@ -30,8 +30,7 @@ def load_candidate_criteria() -> dict:
 
 def save_candidate_criteria(data: dict) -> None:
     """Сохраняет критерии подбора."""
-    with open(constant.CRITERIA_POOL_JSON, "w", encoding="utf-8") as file:
-        json.dump(data, file, ensure_ascii=False, indent=4)
+    dump_json_atomic(constant.CRITERIA_POOL_JSON, data)
 
 
 def save_named_criteria(criteria_name: str, criteria: dict) -> tuple[str, dict]:

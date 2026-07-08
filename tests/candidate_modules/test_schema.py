@@ -1,6 +1,7 @@
 """Tests for candidate schema normalization."""
 
 from candidates.models.schema import (
+    coerce_candidate_number,
     normalize_candidate_record,
     resolve_canonical_year,
     strip_external_rating_fields,
@@ -193,3 +194,10 @@ def test_strip_external_rating_fields_preserves_imdb_id_and_tmdb_fields() -> Non
     assert stripped["tmdb_score"] == 7.7
     assert stripped["tmdb_votes"] == 300
     assert stripped["tmdb_popularity"] == 12.3
+
+
+def test_coerce_candidate_number_accepts_grouped_vote_strings() -> None:
+    assert coerce_candidate_number("1 234") == 1234
+    assert coerce_candidate_number("1\u00a0234") == 1234
+    assert coerce_candidate_number("1\u202f234") == 1234
+    assert coerce_candidate_number("7 234,5") == 7234.5

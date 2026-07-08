@@ -51,6 +51,7 @@ def get_incomplete_candidates(pool: dict, criteria_name: str | None = None) -> l
     return [
         candidate
         for candidate in pool.values()
-        if (criteria_name is None or candidate.get("criteria_name") == criteria_name)
+        if isinstance(candidate, dict)
+        and (criteria_name is None or candidate.get("criteria_name") == criteria_name)
         and is_candidate_incomplete(candidate)
     ]

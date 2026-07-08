@@ -61,6 +61,50 @@ def test_candidate_matches_search_criteria() -> None:
     assert candidate_matches(_candidate(tmdb_score=6.9), criteria) is False
 
 
+def test_candidate_matches_prefers_modern_tmdb_score_filter_alias() -> None:
+    assert candidate_matches(
+        _candidate(tmdb_score=5.0),
+        {"min_tmdb_score": None, "min_tmdb": 7.0},
+    ) is True
+    assert candidate_matches(
+        _candidate(tmdb_score=5.0),
+        {"min_tmdb_score": 0.0, "min_tmdb": 7.0},
+    ) is True
+
+
+def test_search_filter_defaults_prefers_modern_tmdb_score_alias(monkeypatch) -> None:
+    from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
+    from candidates.pool import search_helpers
+
+    monkeypatch.setattr(
+        search_helpers,
+        "load_candidate_criteria",
+        lambda: {
+            COMMON_POOL_CRITERIA_NAME: {
+                "min_tmdb_score": 0.0,
+                "min_tmdb": 7.0,
+            }
+        },
+    )
+
+    defaults = search_helpers.build_search_filter_defaults()
+
+    assert defaults["min_tmdb_score"] == 0.0
+
+
+def test_filter_saved_candidates_uses_legacy_tmdb_score_alias() -> None:
+    from candidates.pool.search_helpers import filter_saved_candidates_for_search
+
+    candidates = [
+        _candidate(title="Low", tmdb_id=1, tmdb_score=6.9),
+        _candidate(title="High", tmdb_id=2, tmdb_score=7.1),
+    ]
+
+    result = filter_saved_candidates_for_search(candidates, {"min_tmdb": 7.0})
+
+    assert [candidate["title"] for candidate in result] == ["High"]
+
+
 def test_candidate_matches_skips_watched_and_hidden() -> None:
     candidate = _candidate()
     identity = title_identity_key(candidate)
@@ -312,7 +356,8 @@ def test_get_candidate_poster_diagnostics_view_uses_service_facade(monkeypatch) 
     view = service.get_candidate_poster_diagnostics_view()
     assert view["is_empty_pool"] is False
     assert view["total"] == 2
-    assert view["counts"]["metadata_only"] + view["counts"]["missing"] == 1
+    assert view["counts"]["metadata_only"] == 1
+    assert view["counts"]["missing"] == 1
 
 
 def test_collect_unique_pool_poster_urls_deduplicates() -> None:
@@ -717,6 +762,12 @@ def test_clean_common_pool_duplicates_merges_cross_year(monkeypatch) -> None:
 def test_is_dataset_title_match_ignores_year() -> None:
     dataset_keys = {"бывшие"}
     candidate = {"title": "Бывшие", "year": 2018}
+    assert is_dataset_title_match(candidate, dataset_keys) is True
+
+
+def test_is_dataset_title_match_accepts_legacy_name_only_candidate() -> None:
+    dataset_keys = {"legacy show"}
+    candidate = {"name": "Legacy Show", "year": 2018}
     assert is_dataset_title_match(candidate, dataset_keys) is True
 
 

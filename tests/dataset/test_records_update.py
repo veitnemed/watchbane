@@ -65,3 +65,27 @@ def test_update_dataset_record_syncs_meta_on_raw_only_change(monkeypatch) -> Non
     assert result.ok is True
     assert result.reason == "nothing_changed"
     assert synced["title"] == "Alpha"
+
+
+def test_update_dataset_record_rejects_boolean_raw_score_values(monkeypatch) -> None:
+    from dataset.records import update as update_module
+    from dataset.records.update import update_dataset_record
+
+    save_called = False
+
+    def fake_save_dataset(_data):
+        nonlocal save_called
+        save_called = True
+
+    monkeypatch.setattr(
+        update_module,
+        "load_dataset",
+        lambda: {"Alpha": _make_movie("Alpha", 8.0, 2020)},
+    )
+    monkeypatch.setattr(update_module, "save_dataset", fake_save_dataset)
+
+    result = update_dataset_record("Alpha", {"raw_scores": {"tmdb_votes": True}})
+
+    assert result.ok is False
+    assert result.reason == "invalid_patch"
+    assert save_called is False

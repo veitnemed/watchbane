@@ -13,6 +13,13 @@ from candidates.models.schema import (
 )
 
 
+def _criteria_value(criteria: dict, *names, default=None):
+    for name in names:
+        if name in criteria:
+            return criteria.get(name)
+    return default
+
+
 def build_search_filter_defaults(criteria_name: str | None = None) -> dict:
     """Возвращает defaults runtime-фильтров поиска из единого candidate_criteria.json."""
     del criteria_name
@@ -40,7 +47,7 @@ def build_search_filter_defaults(criteria_name: str | None = None) -> dict:
         "year_max": criteria.get("max_year"),
         "include_genres": list(criteria.get("genres") or []),
         "exclude_genres": list(criteria.get("excluded_genres") or []),
-        "min_tmdb_score": criteria.get("min_tmdb_score") or criteria.get("min_tmdb"),
+        "min_tmdb_score": _criteria_value(criteria, "min_tmdb_score", "min_tmdb"),
         "min_tmdb_votes": criteria.get("min_tmdb_votes"),
     })
     return defaults
@@ -155,7 +162,7 @@ def filter_saved_candidates_for_search(candidates: list, filters: dict) -> list:
     year_max = filters.get("year_max")
     include_genres = filters.get("include_genres") or []
     exclude_genres = filters.get("exclude_genres") or []
-    min_tmdb_score = filters.get("min_tmdb_score") or filters.get("min_tmdb")
+    min_tmdb_score = _criteria_value(filters, "min_tmdb_score", "min_tmdb")
     min_tmdb_votes = filters.get("min_tmdb_votes")
     only_complete = filters.get("only_complete", True)
 

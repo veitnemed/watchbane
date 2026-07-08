@@ -369,7 +369,7 @@ def upsert_poster_cache_entry(
     if (
         isinstance(current, dict)
         and current.get("local_path")
-        and (next_url is None or current_url == next_url)
+        and (next_url is None or current_url is None or current_url == next_url)
     ):
         poster_info = dict(poster_info)
         poster_info["local_path"] = current.get("local_path")

@@ -75,3 +75,9 @@ def test_normalize_and_validate_raw_scores_drop_legacy_fields() -> None:
         "tmdb_votes": 1200,
         "tmdb_popularity": 44.2,
     }) is True
+
+
+def test_raw_scores_validation_rejects_json_booleans_as_numbers() -> None:
+    assert valid.is_valid_raw_meta({"tmdb_votes": True}) is False
+    assert valid.is_valid_raw_meta({"tmdb_score": False}) is False
+    assert valid.is_valid_raw_meta({"tmdb_popularity": True}) is False

@@ -27,6 +27,26 @@ def is_file_writable(file_name: str) -> bool:
         return False
 
 
+def dump_json_atomic(path: str | Path, payload: dict, *, trailing_newline: bool = False) -> None:
+    """Write a JSON mapping through a same-directory temp file, then replace."""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = target.with_name(f"{target.name}.tmp")
+
+    try:
+        with temp_path.open("w", encoding="utf-8") as file:
+            json.dump(payload, file, ensure_ascii=False, indent=4)
+            if trailing_newline:
+                file.write("\n")
+        os.replace(temp_path, target)
+    except Exception:
+        try:
+            temp_path.unlink()
+        except OSError:
+            pass
+        raise
+
+
 def create_backup():
     """Создает резервную копию датасета."""
     from storage.data import load_dataset

@@ -39,10 +39,10 @@ def normalize_key_part(value: Any) -> str:
 
 def _candidate_title(candidate: dict) -> str:
     return (
-        candidate.get("name")
-        or candidate.get("title")
-        or candidate.get("alternativeName")
+        candidate.get("title")
         or candidate.get("alternative_title")
+        or candidate.get("name")
+        or candidate.get("alternativeName")
         or candidate.get("enName")
         or ""
     )

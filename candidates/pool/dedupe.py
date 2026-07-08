@@ -16,13 +16,7 @@ def candidate_key(movie: dict) -> str:
 
 def normalized_title_key(title: str) -> str:
     """Нормализует название для дедупликации кандидатов."""
-    title = str(title or "").strip().casefold()
-    title = title.replace("ё", "е")
-    for char in [".", ",", "!", "?", ":", ";", "\"", "'", "`", "«", "»", "(", ")", "[", "]"]:
-        title = title.replace(char, " ")
-    while "  " in title:
-        title = title.replace("  ", " ")
-    return title.strip()
+    return normalize_key_part(title)
 
 
 def compact_title_key(title: str) -> str:
@@ -63,7 +57,14 @@ def candidate_pool_key(candidate: dict) -> str:
 
 def candidate_title(candidate: dict) -> str:
     """Возвращает лучшее доступное название кандидата."""
-    return candidate.get("title") or candidate.get("alternative_title") or ""
+    return (
+        candidate.get("title")
+        or candidate.get("alternative_title")
+        or candidate.get("name")
+        or candidate.get("alternativeName")
+        or candidate.get("enName")
+        or ""
+    )
 
 
 def candidates_are_same(candidate: dict, other_candidate: dict, include_criteria: bool = True) -> bool:

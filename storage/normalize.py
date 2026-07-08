@@ -92,7 +92,7 @@ def normalize_raw_scores(raw: dict) -> dict:
         if feature not in supported_fields or value in (None, ""):
             continue
         if feature.endswith("_votes"):
-            normalized[feature] = int(value)
+            normalized[feature] = valid.parse_int(value)
         else:
             normalized[feature] = valid.parse_float(value)
     return normalized

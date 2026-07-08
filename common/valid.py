@@ -9,7 +9,16 @@ VALID_YEAR_MIN = 1900
 
 def parse_float(value) -> float:
     """Convert a string with dot or comma to float."""
+    if isinstance(value, bool):
+        raise TypeError("boolean is not a numeric value")
     return float(str(value).replace(",", "."))
+
+
+def parse_int(value) -> int:
+    """Convert an integer-like value while rejecting JSON booleans."""
+    if isinstance(value, bool):
+        raise TypeError("boolean is not an integer value")
+    return int(value)
 
 
 def is_valid_features(features: dict) -> bool:
@@ -35,16 +44,16 @@ def is_correct_score(score: str):
     try:
         score_float = parse_float(score)
         return 0 <= score_float <= 10
-    except:
+    except (TypeError, ValueError):
         return False
 
 
 def is_correct_year(year: str) -> bool:
     """Check year validity."""
     try:
-        year_int = int(year)
+        year_int = parse_int(year)
         return VALID_YEAR_MIN <= year_int <= constant.NOW_YEAR
-    except:
+    except (TypeError, ValueError):
         return False
 
 
@@ -64,9 +73,9 @@ def is_correct_main_menu_command(command: str):
 def is_correct_votes(votes: str) -> bool:
     """Check votes count validity."""
     try:
-        votes_int = int(votes)
+        votes_int = parse_int(votes)
         return votes_int >= 0
-    except:
+    except (TypeError, ValueError):
         return False
 
 
@@ -98,18 +107,18 @@ def is_valid_raw_meta(raw: dict) -> bool:
 def is_tags_score(score: str, max_value: int = 1) -> bool:
     """Check tag score validity."""
     try:
-        score_int = int(score)
+        score_int = parse_int(score)
         if max_value is None:
             return score_int >= 0
         return 0 <= score_int <= max_value
-    except:
+    except (TypeError, ValueError):
         return False
 
 
 def is_correct_select_menu(max_value: int, n: int) -> bool:
     """Check menu item selection."""
     try:
-        n_int = int(n)
+        n_int = parse_int(n)
         return 0 <= n_int <= max_value
     except (TypeError, ValueError):
         return False
@@ -122,7 +131,7 @@ def is_correct_noise_delta(value: str) -> bool:
     try:
         delta = parse_float(value)
         return 0 <= delta <= 10
-    except ValueError:
+    except (TypeError, ValueError):
         return False
 
 
@@ -131,18 +140,18 @@ def is_correct_noise_runs(value: str) -> bool:
     if value.strip() == "":
         return True
     try:
-        runs = int(value)
+        runs = parse_int(value)
         return runs > 0
-    except ValueError:
+    except (TypeError, ValueError):
         return False
 
 
 def is_correct_top_n(value: str) -> bool:
     """Check top-N input."""
     try:
-        top_n = int(value)
+        top_n = parse_int(value)
         return top_n > 0
-    except ValueError:
+    except (TypeError, ValueError):
         return False
 
 

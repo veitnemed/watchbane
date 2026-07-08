@@ -72,6 +72,25 @@ def test_transfer_payload_uses_tmdb_candidate_fields_without_kp_imdb() -> None:
     assert payload["meta_payload"]["poster_url"] == "https://example.com/poster.jpg"
 
 
+def test_transfer_payload_coerces_string_year_to_int() -> None:
+    payload = build_candidate_transfer_payload({
+        "title": "String Year",
+        "year": "2021",
+    })
+
+    assert payload["defaults"][scheme.MAIN_INFO]["year"] == 2021
+
+
+def test_transfer_payload_falls_back_to_first_air_date_when_year_invalid() -> None:
+    payload = build_candidate_transfer_payload({
+        "title": "Date Year",
+        "year": "unknown",
+        "first_air_date": "2020-05-01",
+    })
+
+    assert payload["defaults"][scheme.MAIN_INFO]["year"] == 2020
+
+
 def test_transfer_payload_genre_priority_genre_keys_then_genres_then_genres_tmdb() -> None:
     by_keys = build_candidate_transfer_payload({
         "title": "By Keys",
