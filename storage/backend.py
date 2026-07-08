@@ -12,8 +12,8 @@ _SUPPORTED_BACKENDS = {BACKEND_JSON, BACKEND_SQLITE}
 
 
 def get_storage_backend() -> str:
-    """Return the active storage backend, defaulting to legacy JSON."""
-    value = os.environ.get(ENV_STORAGE_BACKEND, BACKEND_JSON)
+    """Return the active storage backend, defaulting to SQLite."""
+    value = os.environ.get(ENV_STORAGE_BACKEND, BACKEND_SQLITE)
     backend = str(value or "").strip().casefold()
     if backend in _SUPPORTED_BACKENDS:
         return backend
@@ -22,4 +22,3 @@ def get_storage_backend() -> str:
 
 def is_sqlite_backend() -> bool:
     return get_storage_backend() == BACKEND_SQLITE
-

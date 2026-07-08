@@ -17,6 +17,12 @@ def qapp():
 
 
 @pytest.fixture(autouse=True)
+def _default_tests_to_legacy_json_backend(monkeypatch):
+    """Keep legacy JSON-focused tests explicit after app default flips to SQLite."""
+    monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "json")
+
+
+@pytest.fixture(autouse=True)
 def _block_real_poster_cache_writes(monkeypatch):
     """Prevent tests from overwriting the developer's data/cache/posters/posters.json."""
     import posters.cache as poster_cache_module
