@@ -1141,7 +1141,7 @@ def test_build_watched_movie_card_uses_localized_poster_for_data_language(tmp_pa
     assert card["poster_src"] != str(stale_local)
 
 
-def test_poster_cache_uses_localized_language_and_drops_stale_local_path(monkeypatch, tmp_path) -> None:
+def test_poster_cache_preserves_previous_local_path_until_language_download(monkeypatch, tmp_path) -> None:
     from posters import cache as poster_cache_module
 
     monkeypatch.setattr(poster_cache_module, "DEFAULT_POSTER_IMAGES_DIR", tmp_path)
@@ -1178,8 +1178,39 @@ def test_poster_cache_uses_localized_language_and_drops_stale_local_path(monkeyp
 
     assert entry["poster_url"] == "https://image.tmdb.org/t/p/w342/naruto_en.jpg"
     assert entry["poster_path"] == "/naruto_en.jpg"
-    assert entry["local_path"] is None
-    assert stale_local.exists() is False
+    assert entry["local_path"] == str(stale_local)
+    assert stale_local.exists() is True
+
+
+def test_watched_card_keeps_local_poster_fallback_after_language_cache_switch(tmp_path) -> None:
+    from common.cards import build_watched_movie_card
+    from posters.cache import poster_identity_key
+
+    fallback_local = tmp_path / "naruto-2002.jpg"
+    fallback_local.write_bytes(b"old")
+    movie = {
+        "main_info": {"title": "Naruto", "year": 2002, "user_score": 8.0},
+        "localized": {
+            "en": {
+                "poster_path": "/naruto_en.jpg",
+                "poster_url": "https://image.tmdb.org/t/p/w342/naruto_en.jpg",
+            },
+        },
+    }
+    poster_cache = {
+        poster_identity_key("Naruto", 2002): {
+            "title": "Naruto",
+            "year": 2002,
+            "status": "found",
+            "poster_url": "https://image.tmdb.org/t/p/w342/naruto_en.jpg",
+            "local_path": str(fallback_local),
+        }
+    }
+
+    card = build_watched_movie_card(movie, poster_cache=poster_cache, data_language="en")
+
+    assert card["poster_url"] == "https://image.tmdb.org/t/p/w342/naruto_en.jpg"
+    assert card["poster_src"] == str(fallback_local)
 
 
 def test_sync_poster_for_display_fetches_missing_language_poster_from_tmdb(monkeypatch, tmp_path) -> None:
@@ -1232,8 +1263,8 @@ def test_sync_poster_for_display_fetches_missing_language_poster_from_tmdb(monke
             },
         }
 
-    def fake_download(title, year):
-        download_calls.append((title, year))
+    def fake_download(title, year, **kwargs):
+        download_calls.append((title, year, kwargs))
         return {"ok": True, "reason": "downloaded", "local_path": str(tmp_path / "naruto.jpg")}
 
     monkeypatch.setattr("apis.tmdb_api.get_tv_details", fake_get_tv_details)
@@ -1245,7 +1276,7 @@ def test_sync_poster_for_display_fetches_missing_language_poster_from_tmdb(monke
     assert details_calls[0][0:2] == (46260, "en-US")
     assert meta_store["Naruto"]["localized"]["en"]["poster_path"] == "/naruto_en.jpg"
     assert result["entry"]["poster_url"] == "https://image.tmdb.org/t/p/original/naruto_en.jpg"
-    assert download_calls == [("Naruto", 2002)]
+    assert download_calls == [("Naruto", 2002, {"force": True})]
 
 
 def test_build_watched_movie_card_uses_localized_meta_fallback_for_english() -> None:
@@ -4828,6 +4859,34 @@ def test_candidate_list_model_resets_poster_cache_on_data_language_change(monkey
 
     assert model.poster_path_for_candidate(candidate) == "en.jpg"
     assert calls == ["ru", "en"]
+
+
+def test_candidate_list_model_re_resolves_poster_after_lazy_invalidation(monkeypatch, qapp) -> None:
+    from desktop.candidates.list_model import CandidateListModel
+
+    candidate = {"title": "Pool Show", "year": 2020}
+    calls = []
+
+    def fake_resolve(candidate_arg, data_language="ru"):
+        calls.append((dict(candidate_arg), data_language))
+        localized = candidate_arg.get("localized") if isinstance(candidate_arg.get("localized"), dict) else {}
+        if localized.get("en", {}).get("poster_path") == "/en.jpg":
+            return "en.jpg"
+        return "ru.jpg"
+
+    monkeypatch.setattr(
+        "desktop.candidates.list_model.resolve_local_poster_path_for_candidate",
+        fake_resolve,
+    )
+    model = CandidateListModel([candidate], data_language="en")
+
+    assert model.poster_path_for_candidate(candidate) == "ru.jpg"
+
+    candidate["localized"] = {"en": {"poster_path": "/en.jpg"}}
+    model.update_poster_path("Pool Show", None)
+
+    assert model.poster_path_for_candidate(candidate) == "en.jpg"
+    assert [call[1] for call in calls] == ["en", "en"]
 
 
 def test_candidate_list_view_selection_enriches_missing_language_poster(monkeypatch) -> None:

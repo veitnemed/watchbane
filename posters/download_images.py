@@ -249,7 +249,7 @@ def _promote_existing_poster_sources(entry: dict, destination: Path) -> str | No
     return None
 
 
-def _ensure_poster_image_downloaded(identity: str, entry: dict) -> str:
+def _ensure_poster_image_downloaded(identity: str, entry: dict, *, force: bool = False) -> str:
     """Download one cache entry when possible. Returns result reason."""
     if isinstance(entry, dict) is False:
         return "skipped_invalid"
@@ -262,7 +262,7 @@ def _ensure_poster_image_downloaded(identity: str, entry: dict) -> str:
         return "skipped_no_url"
 
     destination = poster_image_path_for_identity(identity)
-    if destination.is_file():
+    if force is False and destination.is_file():
         entry["local_path"] = str(destination)
         return "skipped_existing"
 
@@ -278,7 +278,7 @@ def _ensure_poster_image_downloaded(identity: str, entry: dict) -> str:
     return "downloaded"
 
 
-def download_poster_for_title(title: str, year, *, cache: dict | None = None) -> dict:
+def download_poster_for_title(title: str, year, *, cache: dict | None = None, force: bool = False) -> dict:
     """Download poster image for one watched title when cache has a URL."""
     identity = poster_identity_key(title, year)
     owns_cache = cache is None
@@ -293,7 +293,7 @@ def download_poster_for_title(title: str, year, *, cache: dict | None = None) ->
             "identity": identity,
         }
 
-    result_reason = _ensure_poster_image_downloaded(identity, entry)
+    result_reason = _ensure_poster_image_downloaded(identity, entry, force=force)
     if owns_cache:
         save_poster_cache(poster_cache)
 

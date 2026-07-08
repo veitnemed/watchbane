@@ -31,37 +31,42 @@ def _make_movie(title: str, user_score: float, year: int, poster_url: str | None
 
 
 def test_download_poster_for_title_downloads_and_persists_local_path(monkeypatch) -> None:
+    import tempfile
+
     from posters.cache import poster_identity_key
     from posters.download_images import download_poster_for_title
 
-    identity = poster_identity_key("Alpha", 2020)
-    cache = {
-        identity: {
-            "title": "Alpha",
-            "year": 2020,
-            "status": "found",
-            "poster_url": "https://example.com/a.jpg",
+    with tempfile.TemporaryDirectory() as temp_root:
+        temp_dir = Path(temp_root)
+        identity = poster_identity_key("Alpha", 2020)
+        monkeypatch.setattr("posters.download_images.DEFAULT_POSTER_IMAGES_DIR", temp_dir)
+        cache = {
+            identity: {
+                "title": "Alpha",
+                "year": 2020,
+                "status": "found",
+                "poster_url": "https://example.com/a.jpg",
+            }
         }
-    }
 
-    def fake_download(url: str, destination: Path) -> tuple[bool, str]:
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes(b"poster")
-        return True, "downloaded"
+        def fake_download(url: str, destination: Path) -> tuple[bool, str]:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(b"poster")
+            return True, "downloaded"
 
-    saved: dict = {}
+        saved: dict = {}
 
-    monkeypatch.setattr("posters.download_images._download_preview_poster", fake_download)
-    monkeypatch.setattr("posters.download_images.save_poster_cache", lambda payload: saved.update(payload))
+        monkeypatch.setattr("posters.download_images._download_preview_poster", fake_download)
+        monkeypatch.setattr("posters.download_images.save_poster_cache", lambda payload: saved.update(payload))
 
-    with patch("posters.download_images.load_poster_cache", return_value=copy.deepcopy(cache)):
-        result = download_poster_for_title("Alpha", 2020)
+        with patch("posters.download_images.load_poster_cache", return_value=copy.deepcopy(cache)):
+            result = download_poster_for_title("Alpha", 2020)
 
-    assert result["ok"] is True
-    assert result["reason"] == "downloaded"
-    assert result["local_path"] is not None
-    assert Path(result["local_path"]).is_file()
-    assert saved[identity]["local_path"] == result["local_path"]
+        assert result["ok"] is True
+        assert result["reason"] == "downloaded"
+        assert result["local_path"] is not None
+        assert Path(result["local_path"]).is_file()
+        assert saved[identity]["local_path"] == result["local_path"]
 
 
 def test_download_poster_for_title_skips_existing_file(monkeypatch) -> None:
@@ -104,6 +109,48 @@ def test_download_poster_for_title_skips_existing_file(monkeypatch) -> None:
         assert result["local_path"] == str(image_path)
         assert download_calls == []
         save_mock.assert_called_once()
+
+
+def test_download_poster_for_title_force_replaces_existing_file(monkeypatch) -> None:
+    import tempfile
+
+    from posters.cache import poster_identity_key
+    from posters.download_images import download_poster_for_title, poster_image_path_for_identity
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        temp_dir = Path(temp_root)
+        identity = poster_identity_key("Alpha", 2020)
+        monkeypatch.setattr("posters.download_images.DEFAULT_POSTER_IMAGES_DIR", temp_dir)
+        image_path = poster_image_path_for_identity(identity)
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(b"old")
+
+        cache = {
+            identity: {
+                "title": "Alpha",
+                "year": 2020,
+                "status": "found",
+                "poster_url": "https://example.com/new.jpg",
+                "local_path": str(image_path),
+            }
+        }
+        saved: dict = {}
+
+        def fake_download(url: str, destination: Path) -> tuple[bool, str]:
+            destination.write_bytes(b"new")
+            return True, "downloaded"
+
+        monkeypatch.setattr("posters.download_images._download_preview_poster", fake_download)
+        monkeypatch.setattr("posters.download_images.save_poster_cache", lambda payload: saved.update(payload))
+
+        with patch("posters.download_images.load_poster_cache", return_value=copy.deepcopy(cache)):
+            result = download_poster_for_title("Alpha", 2020, force=True)
+
+        assert result["ok"] is True
+        assert result["reason"] == "downloaded"
+        assert result["local_path"] == str(image_path)
+        assert image_path.read_bytes() == b"new"
+        assert saved[identity]["local_path"] == str(image_path)
 
 
 def test_download_poster_for_title_reuses_preview_cache(monkeypatch) -> None:

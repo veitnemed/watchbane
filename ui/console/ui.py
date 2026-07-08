@@ -32,9 +32,11 @@ def show_header(movies_counter: int, error: int):
         print(" " * 4, f"Просмотрено записей: {movies_counter}\n")
 
 
-def show_global_menu(movies_counter: int, error: int = 0, candidate_summary=None):
+def show_global_menu(movies_counter: int, error: int = 0, candidate_summary=None, profile_summary: str | None = None):
     """Print main menu with maintenance as the primary path."""
     show_header(movies_counter, error)
+    if profile_summary not in (None, ""):
+        print(f"{profile_summary}\n")
     if isinstance(candidate_summary, dict):
         line = candidate_summary.get("line")
     else:
@@ -46,6 +48,7 @@ def show_global_menu(movies_counter: int, error: int = 0, candidate_summary=None
     print(" 3 >> Candidate pool")
     print(" 4 >> Поиск")
     print(" 5 >> Справочники")
+    print(" 6 >> Данные / profiles")
     print(" 0 >> Выход\n")
 
 
@@ -61,6 +64,19 @@ def show_maintenance_menu(movies_counter: int, pool_stats_line: str, error: int 
     print(" 5 >> Диагностика API/cache")
     print(" 6 >> Проверки перед завершением рефакторинга")
     print(" 0 >> Главное меню\n")
+
+
+def show_data_profiles_menu():
+    """Print data profile and sandbox menu."""
+    show_menu_title("ДАННЫЕ / DATA PROFILES")
+    print(" 1 >> Показать активный датасет")
+    print(" 2 >> Создать песочницу (не переключает)")
+    print(" 3 >> Переключиться на песочницу")
+    print(" 4 >> Сбросить песочницу")
+    print(" 5 >> Вернуться к основному датасету")
+    print(" 6 >> Удалить песочницу")
+    print(" 7 >> Показать пути к data files")
+    print(" 0 >> Назад\n")
 
 
 def show_metadata_maintenance_menu():

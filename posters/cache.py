@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from candidates.models.keys import title_identity_key
+from config import constant
 from storage.data import get_meta_obj
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_POSTER_CACHE_DIR = ROOT_DIR / "data" / "cache" / "posters"
+DEFAULT_POSTER_CACHE_DIR = Path(constant.CACHE_DIR) / "posters"
 DEFAULT_POSTER_CACHE_JSON = DEFAULT_POSTER_CACHE_DIR / "posters.json"
 DEFAULT_POSTER_IMAGES_DIR = DEFAULT_POSTER_CACHE_DIR / "images"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p"
@@ -347,19 +348,6 @@ def _build_cache_entry(title: str, year: Any, poster_info: dict) -> dict:
     }
 
 
-def _remove_stale_local_path(local_path: Any) -> None:
-    text = _clean_text(local_path)
-    if text is None:
-        return
-    try:
-        path = Path(text).resolve()
-        cache_dir = DEFAULT_POSTER_IMAGES_DIR.resolve()
-        if path.is_file() and path.is_relative_to(cache_dir):
-            path.unlink()
-    except OSError:
-        return
-
-
 def upsert_poster_cache_entry(
     title: str,
     year: Any,
@@ -386,9 +374,8 @@ def upsert_poster_cache_entry(
         poster_info = dict(poster_info)
         poster_info["local_path"] = current.get("local_path")
     elif isinstance(current, dict) and current.get("local_path") and current_url != next_url:
-        _remove_stale_local_path(current.get("local_path"))
         poster_info = dict(poster_info)
-        poster_info.pop("local_path", None)
+        poster_info["local_path"] = current.get("local_path")
     poster_cache[identity] = _build_cache_entry(title, year, poster_info)
     if persist:
         save_poster_cache(poster_cache)

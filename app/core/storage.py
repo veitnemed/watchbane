@@ -16,6 +16,14 @@ WATCHLIST_JSON = os.path.join(constant.CANDIDATES_DIR, "watchlist.json")
 HIDDEN_JSON = os.path.join(constant.CANDIDATES_DIR, "hidden.json")
 
 
+def _watchlist_json() -> str:
+    return os.path.join(constant.CANDIDATES_DIR, "watchlist.json")
+
+
+def _hidden_json() -> str:
+    return os.path.join(constant.CANDIDATES_DIR, "hidden.json")
+
+
 def _init_json(path: str) -> None:
     if os.path.exists(path):
         return
@@ -26,8 +34,8 @@ def _init_json(path: str) -> None:
 
 def init_search_lists() -> None:
     """Creates local search list JSON files when missing."""
-    _init_json(WATCHLIST_JSON)
-    _init_json(HIDDEN_JSON)
+    _init_json(_watchlist_json())
+    _init_json(_hidden_json())
 
 
 def _load_mapping(path: str) -> dict:
@@ -53,28 +61,28 @@ def _entry(candidate: dict, action: str) -> dict:
 
 def add_to_watchlist(candidate: dict) -> dict:
     """Adds a candidate to the local watchlist."""
-    data = _load_mapping(WATCHLIST_JSON)
+    data = _load_mapping(_watchlist_json())
     identity = title_identity_key(candidate)
     data[identity] = _entry(candidate, "added")
-    _save_mapping(WATCHLIST_JSON, data)
+    _save_mapping(_watchlist_json(), data)
     return {"ok": True, "identity": identity, "count": len(data)}
 
 
 def add_to_hidden(candidate: dict) -> dict:
     """Adds a candidate to the hidden list."""
-    data = _load_mapping(HIDDEN_JSON)
+    data = _load_mapping(_hidden_json())
     identity = title_identity_key(candidate)
     data[identity] = _entry(candidate, "hidden")
-    _save_mapping(HIDDEN_JSON, data)
+    _save_mapping(_hidden_json(), data)
     return {"ok": True, "identity": identity, "count": len(data)}
 
 
 def load_hidden_identities() -> set[str]:
-    return set(_load_mapping(HIDDEN_JSON).keys())
+    return set(_load_mapping(_hidden_json()).keys())
 
 
 def load_watchlist_identities() -> set[str]:
-    return set(_load_mapping(WATCHLIST_JSON).keys())
+    return set(_load_mapping(_watchlist_json()).keys())
 
 
 def load_watched_identities() -> set[str]:

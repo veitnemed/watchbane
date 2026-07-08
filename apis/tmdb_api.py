@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from config import constant
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 API_URL = "https://api.themoviedb.org/3"
@@ -33,7 +34,7 @@ LEGACY_TV_DETAIL_APPENDS = (
     "watch/providers",
     "credits",
 )
-TMDB_CACHE_DIR = ROOT_DIR / "data" / "cache" / "tmdb"
+TMDB_CACHE_DIR = Path(constant.CACHE_DIR) / "tmdb"
 DISCOVER_CACHE_DIR = TMDB_CACHE_DIR / "discover"
 DETAILS_CACHE_DIR = TMDB_CACHE_DIR / "details"
 GENRE_CACHE_DIR = TMDB_CACHE_DIR / "genre"

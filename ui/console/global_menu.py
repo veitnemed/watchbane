@@ -1,6 +1,7 @@
 """Thin console route facade for top-level menu sections."""
 
 from ui.console import maintenance_menu
+from ui.console import data_profiles_menu
 from ui.console import pool_menu
 from ui.console import reference_menu
 from ui.console import search_hub_menu
@@ -30,6 +31,11 @@ def open_search_menu() -> None:
 def open_reference_menu() -> None:
     """Open reference data section."""
     reference_menu.open_reference_menu()
+
+
+def open_data_profiles_menu() -> None:
+    """Open safe data profile management section."""
+    data_profiles_menu.open_data_profiles_menu()
 
 
 def open_data_menu() -> None:

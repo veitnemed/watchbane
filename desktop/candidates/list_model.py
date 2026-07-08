@@ -113,7 +113,10 @@ class CandidateListModel(QAbstractListModel):
     def update_poster_path(self, identity: str, path: str | None) -> None:
         if identity in (None, ""):
             return
-        self._poster_paths_by_identity[str(identity)] = path
+        if path in (None, ""):
+            self._poster_paths_by_identity.pop(str(identity), None)
+        else:
+            self._poster_paths_by_identity[str(identity)] = path
         row = self.row_for_identity(str(identity))
         if row < 0:
             return

@@ -230,7 +230,7 @@ def sync_poster_for_display(movie: dict, data_language: str = "ru") -> dict:
     )
     download = None
     if needs_download:
-        download = download_poster_for_title(title, year)
+        download = download_poster_for_title(title, year, force=poster_changed)
     reload_poster_cache()
     return {
         "updated": bool(meta_updated or poster_changed or needs_download),

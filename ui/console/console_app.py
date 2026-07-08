@@ -18,9 +18,14 @@ def run_console_app():
         ui.clean_terminal()
         _data, movies_counter = menu_state.get_menu_state()
         candidate_summary = menu_state.get_candidate_summary_view()
-        ui.show_global_menu(movies_counter, candidate_summary=candidate_summary)
+        profile_summary = menu_state.get_profile_summary_line()
+        ui.show_global_menu(
+            movies_counter,
+            candidate_summary=candidate_summary,
+            profile_summary=profile_summary,
+        )
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 5)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
         if command == "0":
             break
         elif command == "1":
@@ -33,3 +38,5 @@ def run_console_app():
             global_menu.open_search_menu()
         elif command == "5":
             global_menu.open_reference_menu()
+        elif command == "6":
+            global_menu.open_data_profiles_menu()

@@ -11,9 +11,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from config import constant
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_JOBS_DIR = ROOT_DIR / "data" / "cache" / "posters" / "jobs"
+DEFAULT_JOBS_DIR = Path(constant.CACHE_DIR) / "posters" / "jobs"
 DEFAULT_JOB_NAME = "candidates"
 DEFAULT_LINE_COUNT = 40
 

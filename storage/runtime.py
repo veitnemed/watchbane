@@ -5,23 +5,31 @@ from __future__ import annotations
 import os
 
 from config import constant
+from storage import profiles
 
 
-RUNTIME_DIRECTORIES = (
-    constant.APP_DATA_DIR,
-    constant.WATCHED_DIR,
-    constant.CANDIDATES_DIR,
-    constant.CACHE_DIR,
-    constant.EXPORTS_DIR,
-    constant.LOGS_DIR,
-    constant.BACKUP_DIR,
-)
+RUNTIME_DIRECTORIES = None
+
+
+def _runtime_directories() -> tuple[str, ...]:
+    if RUNTIME_DIRECTORIES is not None:
+        return tuple(RUNTIME_DIRECTORIES)
+    return (
+        constant.APP_DATA_DIR,
+        constant.WATCHED_DIR,
+        constant.CANDIDATES_DIR,
+        constant.CACHE_DIR,
+        constant.EXPORTS_DIR,
+        constant.LOGS_DIR,
+        constant.BACKUP_DIR,
+    )
 
 
 def ensure_runtime_directories() -> list[str]:
     """Create standard runtime directories and return their paths."""
+    profiles.apply_active_profile_to_constants()
     created_or_existing = []
-    for directory in RUNTIME_DIRECTORIES:
+    for directory in _runtime_directories():
         os.makedirs(directory, exist_ok=True)
         created_or_existing.append(directory)
     return created_or_existing

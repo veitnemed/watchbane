@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from candidates.models.keys import title_identity_key
+from config import constant
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_TMDB_CACHE_DIR = ROOT_DIR / "data" / "cache" / "tmdb"
+DEFAULT_TMDB_CACHE_DIR = Path(constant.CACHE_DIR) / "tmdb"
 DEFAULT_WATCHED_TMDB_OVERRIDES_JSON = DEFAULT_TMDB_CACHE_DIR / "watched_tmdb_overrides.json"
 
 
