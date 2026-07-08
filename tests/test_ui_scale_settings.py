@@ -452,6 +452,7 @@ def test_range_slider_keeps_readable_minimum_at_compact_scale(qapp) -> None:
 def test_candidate_detail_card_profile_scales_with_ui_scale(qapp) -> None:
     import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
     import desktop.theme.scaling as scaling
+    from desktop.theme import layout
     from desktop.shared.detail import profiles as detail_profiles
     from desktop.theme.ui_modules import ensure_scaled_ui_modules
 
@@ -465,7 +466,7 @@ def test_candidate_detail_card_profile_scales_with_ui_scale(qapp) -> None:
     width_75 = detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width
 
     assert width_75 < width_100
-    assert width_75 == scaling.poster_px(360)
+    assert width_75 == scaling.poster_px(layout.DETAIL_POSTER_WIDTH)
 
 
 def test_settings_dialog_displays_current_scale(monkeypatch, tmp_path, qapp) -> None:
