@@ -116,6 +116,21 @@ def test_conflict_title_year_chooses_better_tmdb_candidate(monkeypatch) -> None:
     assert candidate["tmdb_score"] == 8.0
 
 
+def test_same_tmdb_id_different_media_type_is_added_as_distinct_candidate(monkeypatch) -> None:
+    saved = {}
+    existing = _candidate(title="Show", year=2020, media_type="tv", tmdb_id=42)
+    incoming = _candidate(title="Movie", year=2021, media_type="movie", tmdb_id=42)
+    _patch_importer(monkeypatch, {"show|2020": existing}, saved)
+
+    stats = importer.import_tmdb_candidates_to_common_pool([incoming], criteria_name="pool")
+
+    assert stats["added"] == 1
+    assert stats["updated"] == 0
+    assert set(saved["pool"]) == {"show|2020", "movie|2021"}
+    assert saved["pool"]["show|2020"]["media_type"] == "tv"
+    assert saved["pool"]["movie|2021"]["media_type"] == "movie"
+
+
 def test_candidate_with_imdb_id_but_no_imdb_score_saved_correctly(monkeypatch) -> None:
     saved = {}
     _patch_importer(monkeypatch, {}, saved)

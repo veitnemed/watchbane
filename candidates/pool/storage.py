@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from candidates.models.keys import pool_entry_key
+from dataset.models.media_type import normalize_media_type
 
 
 def coerce_tmdb_id(value) -> int | None:
@@ -16,23 +17,30 @@ def coerce_tmdb_id(value) -> int | None:
         return None
 
 
-def build_tmdb_id_index(pool: dict[str, Any]) -> dict[int, str]:
-    index: dict[int, str] = {}
+def _tmdb_identity(candidate: dict[str, Any]) -> tuple[str, int] | None:
+    tmdb_id = coerce_tmdb_id(candidate.get("tmdb_id"))
+    if tmdb_id is None:
+        return None
+    return normalize_media_type(candidate.get("media_type")), tmdb_id
+
+
+def build_tmdb_id_index(pool: dict[str, Any]) -> dict[tuple[str, int], str]:
+    index: dict[tuple[str, int], str] = {}
     for key, candidate in (pool or {}).items():
         if isinstance(candidate, dict) is False:
             continue
-        tmdb_id = coerce_tmdb_id(candidate.get("tmdb_id"))
-        if tmdb_id is None or tmdb_id in index:
+        identity = _tmdb_identity(candidate)
+        if identity is None or identity in index:
             continue
-        index[tmdb_id] = key
+        index[identity] = key
     return index
 
 
 def find_candidate_storage_match(pool: dict[str, Any], candidate: dict[str, Any]) -> tuple[str | None, str | None]:
-    """Finds existing candidate by primary tmdb_id, then title/year storage key."""
-    tmdb_id = coerce_tmdb_id(candidate.get("tmdb_id"))
-    if tmdb_id is not None:
-        matched_key = build_tmdb_id_index(pool).get(tmdb_id)
+    """Finds existing candidate by primary media_type/tmdb_id, then title/year storage key."""
+    tmdb_identity = _tmdb_identity(candidate)
+    if tmdb_identity is not None:
+        matched_key = build_tmdb_id_index(pool).get(tmdb_identity)
         if matched_key is not None:
             return matched_key, "tmdb_id"
 

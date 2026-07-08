@@ -256,3 +256,15 @@ After prompt 24 UI SQLite smoke hardening:
 Added a PyQt smoke test that creates a temporary SQLite runtime, saves desktop
 settings and watched data, instantiates the main window, and verifies the
 Watched tab reads its row from SQLite.
+
+After prompt 25 TMDb/API SQLite boundary hardening:
+
+| Metric | Prompt 25 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15855 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
+
+Aligned in-memory TMDb candidate matching with SQLite uniqueness by matching
+existing candidate records on `(media_type, tmdb_id)` instead of `tmdb_id`
+alone.
