@@ -4301,12 +4301,12 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "DETAIL_TITLE_MAX_LINES": 2,
         "DETAIL_CHIP_HEIGHT": 42,
         "DETAIL_CHIP_RADIUS": 21,
-        "DETAIL_CHIP_H_PADDING": 24,
+        "DETAIL_CHIP_H_PADDING": 18,
         "DETAIL_CHIP_FONT_SIZE": 16,
         "DETAIL_CHIP_ROW_GAP": 10,
         "DETAIL_CHIP_COL_GAP": 14,
         "DETAIL_CHIP_MAX_ROWS": 2,
-        "DETAIL_CHIP_MAX_WIDTH": 190,
+        "DETAIL_CHIP_MAX_WIDTH": 210,
         "DETAIL_SCORE_ROW_TOP_GAP": 34,
         "DETAIL_RATING_WIDGET_SIZE": 136,
         "DETAIL_RATING_CIRCLE_DIAMETER": 122,
@@ -4427,6 +4427,9 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     assert f"font-size: {font_px(tokens.DETAIL_CHIP_FONT_SIZE)}px;" in style
     assert f"padding: 0 {detail_px(tokens.DETAIL_CHIP_H_PADDING)}px;" in style
     assert f"border-radius: {detail_px(tokens.DETAIL_CHIP_RADIUS)}px;" in style
+    assert f"background-color: {tokens.FILM_CHIP_BG};" in style
+    assert f"border: 1px solid {tokens.FILM_CHIP_BORDER};" in style
+    assert f"color: {tokens.FILM_CHIP_TEXT};" in style
 
 
 def test_detail_card_movie_mode_sets_film_theme_properties(qapp) -> None:

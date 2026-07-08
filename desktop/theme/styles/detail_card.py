@@ -110,12 +110,13 @@ QPushButton#candidateHideButton:disabled {{
     background-color: {COLOR_DETAIL_ACTION_BG_DISABLED};
 }}
 QLabel#genrePill {{
-    background-color: {COLOR_DETAIL_CHIP_BG};
-    border: 1px solid {COLOR_DETAIL_CHIP_BORDER};
+    background-color: {FILM_CHIP_BG};
+    border: 1px solid {FILM_CHIP_BORDER};
     border-radius: {detail_px(DETAIL_CHIP_RADIUS)}px;
     padding: 0 {detail_px(DETAIL_CHIP_H_PADDING)}px;
-    color: {COLOR_TEXT_CHIP};
+    color: {FILM_CHIP_TEXT};
     font-size: {font_px(DETAIL_CHIP_FONT_SIZE)}px;
+    font-weight: 600;
 }}
 QLabel#genrePill[mediaType="movie"] {{
     background-color: {FILM_CHIP_BG};

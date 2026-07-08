@@ -12,7 +12,6 @@ from desktop.theme.tokens import (
 )
 
 CHIP_WIDTH_SAFETY = px(18)
-CHIP_ELIDE_PADDING = px(8)
 
 
 def _resolve_profile(profile: DetailCardLayoutProfile | None) -> DetailCardLayoutProfile:
@@ -28,6 +27,8 @@ def clear_layout(layout) -> None:
             continue
         widget = item.widget()
         if widget is not None:
+            widget.hide()
+            widget.setParent(None)
             widget.deleteLater()
 
 
@@ -237,7 +238,7 @@ def fill_detail_chip_rows(
         row.setSpacing(profile.detail_chip_col_gap)
         for text in row_labels:
             chip_width = _chip_width(text, max(1, int(available_width)), profile, font_metrics)
-            max_text_width = max(1, chip_width - (2 * CHIP_ELIDE_PADDING))
+            max_text_width = max(1, chip_width - (2 * profile.detail_chip_h_padding))
             display_text = (
                 _chip_display_text(text, max_text_width, font_metrics)
                 if not text.startswith("+")
