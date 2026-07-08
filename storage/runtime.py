@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 
 from config import constant
+from storage.backend import get_storage_backend, is_sqlite_backend
 from storage import profiles
 
 
@@ -49,6 +50,15 @@ def ensure_runtime_data_layout(*, create_initial_backup: bool = False) -> dict:
     init_candidate_pool()
     init_search_lists()
 
+    sqlite_db_path = None
+    sqlite_schema_version = None
+    if is_sqlite_backend():
+        from storage.sqlite.connection import get_db_path
+        from storage.sqlite.migrations import apply_migrations
+
+        sqlite_db_path = str(get_db_path())
+        sqlite_schema_version = apply_migrations()
+
     backup_created = False
     if create_initial_backup:
         from storage.files import create_backup
@@ -58,6 +68,9 @@ def ensure_runtime_data_layout(*, create_initial_backup: bool = False) -> dict:
 
     return {
         "ok": True,
+        "backend": get_storage_backend(),
         "directories": directories,
         "backup_created": backup_created,
+        "sqlite_db_path": sqlite_db_path,
+        "sqlite_schema_version": sqlite_schema_version,
     }
