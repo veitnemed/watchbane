@@ -309,3 +309,43 @@ def delete_watched(
     finally:
         if owned:
             active.close()
+
+
+def find_watched_identity(
+    title: str,
+    *,
+    year: int | None = None,
+    media_type: str | None = None,
+    tmdb_id: int | None = None,
+    conn: sqlite3.Connection | None = None,
+    path: str | Path | None = None,
+) -> str | None:
+    """Find a watched dataset key using indexed identity columns."""
+    active, owned = _connection(conn, path)
+    clauses = ["title_normalized = ?"]
+    params: list[object] = [str(title).strip().lower()]
+    if year is not None:
+        clauses.append("year = ?")
+        params.append(year)
+    if media_type is not None:
+        clauses.append("media_type = ?")
+        params.append(media_type)
+    if tmdb_id is not None:
+        clauses.append("tmdb_id = ?")
+        params.append(tmdb_id)
+    try:
+        row = active.execute(
+            f"""
+            SELECT dataset_key
+            FROM watched_records
+            WHERE {' AND '.join(clauses)}
+              AND payload_json != ?
+            ORDER BY dataset_key
+            LIMIT 1
+            """,
+            (*params, EMPTY_PAYLOAD_JSON),
+        ).fetchone()
+        return None if row is None else row["dataset_key"]
+    finally:
+        if owned:
+            active.close()
