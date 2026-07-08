@@ -4470,7 +4470,7 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     assert f"border: 1px solid {tokens.FILM_SERIES_BADGE_BORDER};" in style
     assert f"color: {tokens.FILM_SERIES_BADGE_TEXT};" in style
     assert "QFrame#detailScoreSummaryTopDivider" in style
-    assert f"background-color: {tokens.FILM_BORDER_WEAK};" in style
+    assert f"background-color: {tokens.FILM_BORDER};" in style
     assert f"color: {tokens.FILM_TEXT};" in style
     assert f"color: {tokens.FILM_TEXT_SUBTLE};" in style
     assert "QFrame#detailMainInfoRowDivider" in style

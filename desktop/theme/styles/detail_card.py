@@ -99,7 +99,7 @@ QLabel#detailTitleMeta[mediaType="movie"] {{
 }}
 QFrame#detailScoreSummaryTopDivider,
 QFrame#detailScoreSummaryBottomDivider {{
-    background-color: {FILM_BORDER_WEAK};
+    background-color: {FILM_BORDER};
     min-height: {detail_px(1)}px;
     max-height: {detail_px(1)}px;
     border: none;
