@@ -232,3 +232,15 @@ After prompt 22 SQLite schema/migration hardening:
 
 Added migration-plan validation so duplicate SQLite migration versions fail
 early and already-applied versions cannot silently change names in code.
+
+After prompt 23 backup/restore/export hardening:
+
+| Metric | Prompt 23 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15847 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
+
+Added pre-restore validation for SQLite backups: required runtime tables,
+`PRAGMA quick_check`, and `PRAGMA foreign_key_check` must pass before the
+current database is overwritten.

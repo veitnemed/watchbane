@@ -10,6 +10,17 @@ from config import constant
 from storage.sqlite.connection import get_db_path
 
 
+REQUIRED_BACKUP_TABLES = {
+    "schema_migrations",
+    "watched_records",
+    "candidate_records",
+    "candidate_criteria",
+    "candidate_actions",
+    "app_settings",
+    "poster_cache_entries",
+}
+
+
 def checkpoint_wal(db_path: str | Path | None = None) -> None:
     source = Path(db_path) if db_path is not None else get_db_path()
     if source.is_file() is False:
@@ -50,6 +61,26 @@ def backup_sqlite_database(
     return target
 
 
+def _validate_backup_source(conn: sqlite3.Connection, source: Path) -> None:
+    tables = {
+        str(row[0])
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    missing = sorted(REQUIRED_BACKUP_TABLES - tables)
+    if missing:
+        raise ValueError(
+            f"SQLite backup is missing required table(s): {', '.join(missing)} ({source})"
+        )
+
+    quick_check = [row[0] for row in conn.execute("PRAGMA quick_check")]
+    if quick_check != ["ok"]:
+        raise ValueError(f"SQLite backup failed quick_check: {source}")
+
+    foreign_key_rows = list(conn.execute("PRAGMA foreign_key_check"))
+    if foreign_key_rows:
+        raise ValueError(f"SQLite backup failed foreign_key_check: {source}")
+
+
 def restore_sqlite_database(
     backup_path: str | Path,
     *,
@@ -65,15 +96,7 @@ def restore_sqlite_database(
 
     source_conn = sqlite3.connect(source)
     try:
-        row = source_conn.execute(
-            """
-            SELECT COUNT(*)
-            FROM sqlite_master
-            WHERE type = 'table' AND name = 'watched_records'
-            """
-        ).fetchone()
-        if int(row[0]) != 1:
-            raise ValueError(f"SQLite backup is missing watched_records table: {source}")
+        _validate_backup_source(source_conn, source)
 
         target_conn = sqlite3.connect(target)
         try:

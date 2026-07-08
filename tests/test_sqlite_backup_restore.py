@@ -81,3 +81,36 @@ def test_restore_sqlite_database_rejects_invalid_backup_without_touching_target(
         raise AssertionError("restore_sqlite_database should reject invalid SQLite backups")
 
     assert list(watched_repository.load_dataset_dict(path=db_path)) == ["Alpha"]
+
+
+def test_restore_sqlite_database_rejects_incomplete_schema_without_touching_target(tmp_path) -> None:
+    from storage.sqlite import watched_repository
+    import sqlite3
+
+    db_path = tmp_path / "watchbane.sqlite3"
+    incomplete_backup = tmp_path / "incomplete.sqlite3"
+    watched_repository.save_dataset_dict({"Alpha": _movie("Alpha")}, path=db_path)
+    with sqlite3.connect(incomplete_backup) as conn:
+        conn.execute(
+            """
+            CREATE TABLE watched_records (
+              dataset_key TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              title_normalized TEXT NOT NULL,
+              media_type TEXT NOT NULL DEFAULT 'tv',
+              payload_json TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+            """
+        )
+
+    try:
+        restore_sqlite_database(incomplete_backup, db_path=db_path)
+    except ValueError as exc:
+        assert "schema_migrations" in str(exc)
+        assert "candidate_records" in str(exc)
+    else:
+        raise AssertionError("restore_sqlite_database should reject incomplete SQLite backups")
+
+    assert list(watched_repository.load_dataset_dict(path=db_path)) == ["Alpha"]
