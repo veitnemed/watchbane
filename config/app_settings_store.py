@@ -10,7 +10,10 @@ def load_sqlite_settings_dict() -> dict:
 
 
 def save_sqlite_settings_dict(payload: dict) -> None:
-    from storage.sqlite.settings_repository import save_settings_dict
+    from storage.sqlite.settings_repository import set_setting
 
-    save_settings_dict(payload)
+    if isinstance(payload, dict) is False:
+        return
+    for key, value in payload.items():
+        set_setting(str(key), value)
 

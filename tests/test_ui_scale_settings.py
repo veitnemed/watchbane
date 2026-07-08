@@ -178,6 +178,21 @@ def test_save_then_load_languages(monkeypatch, tmp_path) -> None:
     assert settings.data_language == "ru"
 
 
+def test_save_app_settings_preserves_non_ui_settings(monkeypatch, tmp_path) -> None:
+    db_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_repository.set_setting("legacy_json_import_completed", True, path=db_path)
+    settings_repository.set_setting("theme", "dark", path=db_path)
+
+    save_app_settings(AppSettings(ui_scale=1.10, interface_language="en", data_language="ru"))
+
+    payload = settings_repository.load_settings_dict(path=db_path)
+    assert payload["legacy_json_import_completed"] is True
+    assert payload["theme"] == "dark"
+    assert payload["ui_scale"] == 1.10
+    assert payload["interface_language"] == "en"
+    assert payload["data_language"] == "ru"
+
+
 def test_watchbane_ui_scale_env_override_is_current_process_only(monkeypatch, tmp_path) -> None:
     db_path = _use_settings_path(monkeypatch, tmp_path)
     save_app_settings(AppSettings(ui_scale=1.10))

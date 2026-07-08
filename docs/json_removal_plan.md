@@ -209,3 +209,15 @@ After prompt 20 candidate transfer hardening:
 
 Added atomic watched dataset+meta persistence for add/candidate transfer and
 stopped poster side effects from reloading meta by title after the save.
+
+After prompt 21 settings/posters/actions hardening:
+
+| Metric | Prompt 21 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15799 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
+
+Changed app settings persistence from full `app_settings` table replacement to
+key-by-key updates, so UI settings saves preserve unrelated SQLite settings and
+startup/migration markers.
