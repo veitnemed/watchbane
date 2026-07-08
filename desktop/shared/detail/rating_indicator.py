@@ -15,6 +15,12 @@ from desktop.theme import (
     COLOR_SURFACE,
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
+    FILM_ACCENT_HOVER,
+    FILM_RATING_TRACK,
+    FILM_RATING_VALUE,
+    FILM_SURFACE_0,
+    FILM_TEXT,
+    FILM_TEXT_SUBTLE,
     FONT_FAMILY,
     FONT_RATING_LABEL_POINT,
     FONT_RATING_VALUE_POINT,
@@ -113,7 +119,13 @@ class RatingCircleIndicator:
                 super().__init__()
                 self._label = label_text
                 self._score = score_value
-                self._accent = accent_color
+                self._is_tmdb_ring = (display_label_text or label_text) == "TMDb"
+                self._accent = FILM_RATING_VALUE if self._is_tmdb_ring else accent_color
+                self._accent_secondary = FILM_ACCENT_HOVER if self._is_tmdb_ring else accent_color
+                self._track_color = FILM_RATING_TRACK if self._is_tmdb_ring else COLOR_BORDER
+                self._surface_color = FILM_SURFACE_0 if self._is_tmdb_ring else COLOR_SURFACE
+                self._value_color = FILM_TEXT if self._is_tmdb_ring else COLOR_TEXT
+                self._label_color = FILM_TEXT_SUBTLE if self._is_tmdb_ring else COLOR_TEXT_SECONDARY
                 self._widget_size = resolved_widget_size
                 self._circle_diameter = resolved_circle_diameter
                 self._value_font_point = resolved_value_font_point
@@ -150,7 +162,7 @@ class RatingCircleIndicator:
 
             def paintEvent(self, _event) -> None:
                 from PyQt6.QtCore import QRectF, Qt
-                from PyQt6.QtGui import QColor, QFont, QPainter, QPen
+                from PyQt6.QtGui import QColor, QBrush, QConicalGradient, QFont, QPainter, QPen
 
                 painter = QPainter(self)
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -163,23 +175,30 @@ class RatingCircleIndicator:
                 ring_pen_width = max(detail_px(3), int(self._circle_diameter * 0.06))
 
                 painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor(COLOR_SURFACE))
+                painter.setBrush(QColor(self._surface_color))
                 painter.drawEllipse(rect)
 
                 ring_rect = rect.adjusted(ring_pen_width, ring_pen_width, -ring_pen_width, -ring_pen_width)
-                track_pen = QPen(QColor(COLOR_BORDER), ring_pen_width)
+                track_pen = QPen(QColor(self._track_color), ring_pen_width)
                 track_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                 painter.setPen(track_pen)
                 painter.drawArc(ring_rect, 90 * 16, -360 * 16)
 
                 progress = max(0.0, min(1.0, self._ring_progress))
                 if progress > 0:
-                    accent_pen = QPen(QColor(self._accent), ring_pen_width)
+                    if self._is_tmdb_ring:
+                        gradient = QConicalGradient(rect.center(), -90)
+                        gradient.setColorAt(0.0, QColor(self._accent_secondary))
+                        gradient.setColorAt(0.55, QColor(self._accent))
+                        gradient.setColorAt(1.0, QColor(self._accent_secondary))
+                        accent_pen = QPen(QBrush(gradient), ring_pen_width)
+                    else:
+                        accent_pen = QPen(QColor(self._accent), ring_pen_width)
                     accent_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
                     painter.setPen(accent_pen)
                     painter.drawArc(ring_rect, 90 * 16, -int(360 * 16 * progress))
 
-                painter.setPen(QPen(QColor(COLOR_TEXT)))
+                painter.setPen(QPen(QColor(self._value_color)))
                 value_font = QFont(FONT_FAMILY)
                 value_font.setPointSize(self._value_font_point)
                 value_font.setBold(True)
@@ -191,7 +210,7 @@ class RatingCircleIndicator:
                     self._display_value,
                 )
 
-                painter.setPen(QPen(QColor(COLOR_TEXT_SECONDARY)))
+                painter.setPen(QPen(QColor(self._label_color)))
                 label_font = QFont(FONT_FAMILY)
                 label_font.setPointSize(self._label_font_point)
                 label_font.setBold(True)

@@ -1884,6 +1884,14 @@ def test_score_ring_item_handles_missing_tmdb_score() -> None:
 def test_rating_circle_indicator_accepts_tmdb_score_ring_payload(qapp) -> None:
     from desktop.shared.detail import profiles as detail_profiles
     from desktop.shared.detail.rating_indicator import RatingCircleIndicator
+    from desktop.theme import (
+        FILM_ACCENT_HOVER,
+        FILM_RATING_TRACK,
+        FILM_RATING_VALUE,
+        FILM_SURFACE_0,
+        FILM_TEXT,
+        FILM_TEXT_SUBTLE,
+    )
 
     ring = RatingCircleIndicator(
         "TMDb",
@@ -1899,6 +1907,13 @@ def test_rating_circle_indicator_accepts_tmdb_score_ring_payload(qapp) -> None:
     assert not hasattr(ring, "_footer_stars")
     assert ring.width() == detail_profiles.RATING_CIRCLE_WIDGET_SIZE
     assert ring.height() == detail_profiles.RATING_CIRCLE_WIDGET_SIZE
+    assert ring._is_tmdb_ring is True
+    assert ring._accent == FILM_RATING_VALUE
+    assert ring._accent_secondary == FILM_ACCENT_HOVER
+    assert ring._track_color == FILM_RATING_TRACK
+    assert ring._surface_color == FILM_SURFACE_0
+    assert ring._value_color == FILM_TEXT
+    assert ring._label_color == FILM_TEXT_SUBTLE
 
 
 def test_rating_circle_indicator_keeps_fixed_circle_size(qapp) -> None:
