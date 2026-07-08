@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
@@ -28,6 +29,10 @@ def _connection(conn: sqlite3.Connection | None, path: str | Path | None):
     active = connect(path)
     apply_migrations(active)
     return active, True
+
+
+def _transaction(active: sqlite3.Connection, owned: bool):
+    return active if owned else nullcontext(active)
 
 
 def _timestamp_field(action: str) -> str:
@@ -79,7 +84,7 @@ def save_candidate_actions_dict(
     active, owned = _connection(conn, path)
     mapping = data if isinstance(data, dict) else {}
     try:
-        with active:
+        with _transaction(active, owned):
             active.execute("DELETE FROM candidate_actions WHERE action = ?", (action,))
             for identity, entry in mapping.items():
                 if isinstance(entry, dict) is False:
@@ -114,7 +119,7 @@ def add_candidate_action(
     identity = title_identity_key(candidate)
     entry = build_action_entry(candidate, action)
     try:
-        with active:
+        with _transaction(active, owned):
             active.execute(
                 """
                 INSERT INTO candidate_actions(
@@ -144,4 +149,3 @@ def load_action_identities(
     path: str | Path | None = None,
 ) -> set[str]:
     return set(load_candidate_actions_dict(action, conn=conn, path=path).keys())
-

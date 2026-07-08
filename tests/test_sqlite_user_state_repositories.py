@@ -38,6 +38,27 @@ def test_candidate_actions_mapping_roundtrip(tmp_path) -> None:
     assert action_repository.load_candidate_actions_dict(action_repository.ACTION_HIDDEN, path=db_path) == mapping
 
 
+def test_candidate_action_add_respects_external_transaction(tmp_path) -> None:
+    from storage.sqlite.connection import connect
+    from storage.sqlite.migrations import apply_migrations
+
+    db_path = tmp_path / "watchbane.sqlite3"
+    conn = connect(db_path)
+    apply_migrations(conn)
+    try:
+        conn.execute("BEGIN")
+        action_repository.add_candidate_action(
+            action_repository.ACTION_HIDDEN,
+            {"title": "Dark", "year": 2017},
+            conn=conn,
+        )
+        conn.rollback()
+    finally:
+        conn.close()
+
+    assert action_repository.load_candidate_actions_dict(action_repository.ACTION_HIDDEN, path=db_path) == {}
+
+
 def test_settings_roundtrip(tmp_path) -> None:
     db_path = tmp_path / "watchbane.sqlite3"
     settings_repository.save_settings_dict({"ui_scale": 1.25, "flags": {"a": True}}, path=db_path)
