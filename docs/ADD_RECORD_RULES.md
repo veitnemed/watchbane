@@ -96,6 +96,7 @@ add_dataset_record(
 - `main_info.title`;
 - `main_info.user_score`;
 - `main_info.year`;
+- `main_info.media_type` (`tv` или `movie`; legacy/empty нормализуется в `tv`);
 - `raw_scores`;
 - `tags_vibe`;
 - `genre`.
@@ -116,12 +117,12 @@ Defaults собираются через `dataset.title_resolve`.
 
 Источники:
 
-- TMDb;
+- TMDb TV/Movie;
 - candidate pool record.
 
 UI показывает defaults пользователю, но перед сохранением пользователь может изменить **только** `main_info.user_score`.
 
-Название, год, страна, `raw_scores`, жанры и `tags_vibe` берутся из resolve/candidate bundle без override.
+Название, год, страна, `media_type`, `raw_scores`, жанры и `tags_vibe` берутся из resolve/candidate bundle без override.
 
 Для правки остальных полей уже существующей записи используй `update_dataset_record()`.
 
@@ -173,7 +174,9 @@ Service сохраняет дополнительные поля в meta, есл
 
 ## Duplicate Policy
 
-Запись не добавляется, если в dataset уже есть title с тем же нормализованным названием.
+Запись не добавляется, если в dataset уже есть объект с тем же нормализованным `title`, `year` и `media_type`.
+
+Legacy-поиск без `year/media_type` сохраняет прежнее title-only поведение для старых API. Если одно название легально существует у разных типов/лет, service создаёт безопасный dataset key с суффиксом, не перезаписывая существующую запись.
 
 Типовой результат:
 

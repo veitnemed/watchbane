@@ -6,6 +6,7 @@ from config import scheme
 from dataset.genres.mapping import candidate_genre_keys_to_dataset_genres
 from dataset.language import build_localized_block_from_legacy
 from dataset.meta.payload import build_candidate_meta_payload
+from dataset.models.media_type import normalize_media_type
 from dataset.resolve.countries import extract_country_value
 from dataset.resolve.genres import (
     build_genre_defaults,
@@ -32,6 +33,9 @@ def _candidate_year(candidate: dict):
     first_air_date = str(candidate.get("first_air_date") or "").strip()
     if len(first_air_date) >= 4 and first_air_date[:4].isdigit():
         return int(first_air_date[:4])
+    release_date = str(candidate.get("release_date") or "").strip()
+    if len(release_date) >= 4 and release_date[:4].isdigit():
+        return int(release_date[:4])
     return None
 
 
@@ -147,6 +151,7 @@ def build_candidate_transfer_payload(candidate: dict) -> dict:
             "user_score": None,
             "year": _candidate_year(candidate),
             "country": extract_country_value(candidate),
+            "media_type": normalize_media_type(candidate.get("media_type")),
         },
         scheme.RAW_SCORES: {
             field_name: candidate.get(field_name)

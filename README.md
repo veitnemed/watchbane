@@ -203,11 +203,12 @@ See [TMDb-only candidate flow](docs/TMDB_ONLY_CANDIDATE_FLOW.md) for the full co
 Adding a watched title is also TMDb-only:
 
 1. enter an input title;
-2. search TMDb TV;
-3. fetch TMDb Details;
-4. preview title/year/metadata/poster/genres;
-5. enter your `user_score`;
-6. save into the watched dataset.
+2. choose `Series` or `Movie`;
+3. search TMDb TV or Movie;
+4. fetch TMDb Details;
+5. preview title/year/type/metadata/poster/genres;
+6. enter your `user_score`;
+7. save into the watched dataset through the domain service path.
 
 KP API is not needed. A local IMDb dataset is not needed. IMDb rating/votes are not used. `imdb_id` may be stored only as an external id returned by TMDb.
 

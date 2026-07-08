@@ -59,6 +59,7 @@ def test_transfer_payload_uses_tmdb_candidate_fields_without_kp_imdb() -> None:
     defaults = payload["defaults"]
 
     assert defaults[scheme.MAIN_INFO]["title"] == "TMDb Transfer"
+    assert defaults[scheme.MAIN_INFO]["media_type"] == "tv"
     assert defaults[scheme.MAIN_INFO]["year"] == 2022
     assert defaults[scheme.MAIN_INFO]["country"] == "Россия"
     assert defaults[scheme.RAW_SCORES] == {
@@ -70,6 +71,17 @@ def test_transfer_payload_uses_tmdb_candidate_fields_without_kp_imdb() -> None:
     assert "imdb_score" not in defaults[scheme.RAW_SCORES]
     assert payload["meta_payload"]["description"] == "Main description."
     assert payload["meta_payload"]["poster_url"] == "https://example.com/poster.jpg"
+
+
+def test_transfer_payload_preserves_movie_media_type_and_release_date_year() -> None:
+    payload = build_candidate_transfer_payload({
+        "title": "Watchmen",
+        "media_type": "movie",
+        "release_date": "2009-03-06",
+    })
+
+    assert payload["defaults"][scheme.MAIN_INFO]["media_type"] == "movie"
+    assert payload["defaults"][scheme.MAIN_INFO]["year"] == 2009
 
 
 def test_transfer_payload_coerces_string_year_to_int() -> None:

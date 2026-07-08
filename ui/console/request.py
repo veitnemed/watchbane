@@ -7,6 +7,7 @@ from config import scheme
 from common import valid
 from storage import data as storage_data
 from dataset import service
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, MEDIA_TYPE_TV, normalize_media_type
 from dataset.resolve.defaults import merge_defaults
 from dataset.resolve.genres import extract_tmdb_genres, split_known_genres
 from ui.console import title_presenters
@@ -223,10 +224,17 @@ def confirm_or_edit_dataset_genres(series: dict) -> list:
     )
 
 
-def build_manual_defaults(input_title: str, base_defaults: dict | None = None) -> dict:
+def choose_media_type() -> str:
+    answer = input("Media type [1=series, 2=movie] >> ").strip().lower()
+    if answer in {"2", "movie", "film"}:
+        return MEDIA_TYPE_MOVIE
+    return MEDIA_TYPE_TV
+
+
+def build_manual_defaults(input_title: str, base_defaults: dict | None = None, media_type: str = "tv") -> dict:
     """Собирает минимальные defaults для ручного добавления без SQL/API."""
     defaults = merge_defaults(
-        service.build_empty_add_defaults(input_title),
+        service.build_empty_add_defaults(input_title, media_type=media_type),
         base_defaults or {},
     )
     defaults.setdefault(scheme.MAIN_INFO, {})["title"] = (
@@ -323,6 +331,7 @@ def resolve_title_for_add(
     title: str,
     country: str = "Россия",
     confirm_genres: bool = False,
+    media_type: str = "tv",
 ) -> tuple[dict | None, dict | None, dict | None]:
     """Ищет объект через TMDb и собирает defaults."""
     del confirm_genres
@@ -330,7 +339,13 @@ def resolve_title_for_add(
     def print_progress(_step: int, _total: int, message: str) -> None:
         print(message)
 
-    resolved = service.resolve_title_data_for_add(title, country, on_progress=print_progress)
+    normalized_media_type = normalize_media_type(media_type)
+    resolved = service.resolve_title_data_for_add(
+        title,
+        country,
+        on_progress=print_progress,
+        media_type=normalized_media_type,
+    )
     meta_payload = service.build_add_meta_payload(resolved)
     poster_hints = service.build_poster_hints_from_resolve(resolved)
     tmdb_data = resolved.get("tmdb_data")
@@ -342,7 +357,7 @@ def resolve_title_for_add(
         if ask_manual_addition() is False:
             return None, None, None
 
-        defaults = build_manual_defaults(resolved["title"])
+        defaults = build_manual_defaults(resolved["title"], media_type=normalized_media_type)
         defaults[scheme.MAIN_INFO]["country"] = country
         print_autofill_status(resolved, manual_mode=True, poster_hints=poster_hints, meta_payload=meta_payload)
         return defaults, meta_payload, poster_hints
@@ -371,8 +386,9 @@ def request_api_defaults(confirm_genres: bool = False) -> tuple[dict | None, dic
         text="Название сериала >> ",
         funcs_list=[valid.is_correct_title]
     )
+    media_type = choose_media_type()
     country = tmdb_country_options.choose_single_country_label()
-    return resolve_title_for_add(title, country, confirm_genres)
+    return resolve_title_for_add(title, country, confirm_genres, media_type=media_type)
 
 
 def show_score_help(feature: str) -> None:

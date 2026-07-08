@@ -102,6 +102,27 @@ def test_resolve_title_for_add_tmdb_success(monkeypatch, capsys) -> None:
     assert "SQL" not in output
 
 
+def test_resolve_title_for_add_passes_movie_media_type(monkeypatch) -> None:
+    captured = {}
+    resolved = _resolved()
+    resolved["defaults"][scheme.MAIN_INFO]["media_type"] = "movie"
+
+    def fake_resolve(title, country, **kwargs):
+        captured.update(kwargs)
+        return resolved
+
+    monkeypatch.setattr(request.service, "resolve_title_data_for_add", fake_resolve)
+    monkeypatch.setattr(request.service, "build_add_meta_payload", lambda _resolved: {})
+    monkeypatch.setattr(request.service, "build_poster_hints_from_resolve", lambda _resolved: {})
+    monkeypatch.setattr(request.title_presenters, "print_final_add_preview", lambda _defaults: None)
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "yes")
+
+    defaults, _meta, _posters = request.resolve_title_for_add("Input Movie", "US", media_type="movie")
+
+    assert captured["media_type"] == "movie"
+    assert defaults[scheme.MAIN_INFO]["media_type"] == "movie"
+
+
 def test_resolve_title_for_add_manual_fallback(monkeypatch, capsys) -> None:
     resolved = _resolved(found=False)
     poster_hints = {}
@@ -123,3 +144,16 @@ def test_resolve_title_for_add_manual_fallback(monkeypatch, capsys) -> None:
     assert "ручная разметка" in output
     assert "KP" not in output
     assert "IMDb" not in output
+
+
+def test_resolve_title_for_add_manual_fallback_preserves_movie_media_type(monkeypatch) -> None:
+    resolved = _resolved(found=False)
+
+    monkeypatch.setattr(request.service, "resolve_title_data_for_add", lambda *_args, **_kwargs: resolved)
+    monkeypatch.setattr(request.service, "build_add_meta_payload", lambda _resolved: {})
+    monkeypatch.setattr(request.service, "build_poster_hints_from_resolve", lambda _resolved: {})
+    monkeypatch.setattr("builtins.input", lambda _prompt="": "y")
+
+    defaults, _meta, _posters = request.resolve_title_for_add("Input Movie", "US", media_type="movie")
+
+    assert defaults[scheme.MAIN_INFO]["media_type"] == "movie"
