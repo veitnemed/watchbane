@@ -4327,7 +4327,7 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "FONT_DETAIL_MAIN_INFO_HEADER": 17,
         "FONT_DETAIL_MAIN_INFO_LABEL": 17,
         "FONT_DETAIL_MAIN_INFO_VALUE": 18,
-        "FONT_DETAIL_OVERVIEW_TEXT": 19,
+        "FONT_DETAIL_OVERVIEW_TEXT": 17,
         "DETAIL_TITLE_LINE_HEIGHT": 42,
         "DETAIL_TITLE_MAX_LINES": 2,
         "DETAIL_CHIP_HEIGHT": 36,
