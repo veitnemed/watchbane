@@ -1,5 +1,5 @@
 from desktop.shared.detail.additional_info import format_runtime_minutes, format_tmdb_status
-from desktop.shared.detail.main_info import build_main_info_items
+from desktop.shared.detail.main_info import build_main_info_items, build_title_meta_text
 
 
 def _value_for(items: list[dict], label: str):
@@ -9,7 +9,7 @@ def _value_for(items: list[dict], label: str):
     return None
 
 
-def test_movie_detail_info_translates_status_country_and_runtime() -> None:
+def test_movie_detail_info_translates_status_country_without_runtime_row() -> None:
     items = build_main_info_items(
         {
             "media_type": "movie",
@@ -25,8 +25,22 @@ def test_movie_detail_info_translates_status_country_and_runtime() -> None:
 
     assert _value_for(items, "Страна") == "США"
     assert _value_for(items, "Статус") == "Выпущен"
-    assert _value_for(items, "Продолжительность") == "2 ч 42 мин"
+    assert _value_for(items, "Продолжительность") is None
     assert _value_for(items, "Длительность серии") is None
+
+
+def test_movie_title_meta_includes_runtime_next_to_year() -> None:
+    assert (
+        build_title_meta_text(
+            {
+                "media_type": "movie",
+                "year": 2025,
+                "runtime": 162,
+            },
+            data_language="ru",
+        )
+        == "2025 • 2 ч 42 мин"
+    )
 
 
 def test_movie_runtime_formatter_handles_edge_cases() -> None:

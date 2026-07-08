@@ -2049,6 +2049,13 @@ def test_build_title_meta_text_formats_year_and_seasons() -> None:
     assert build_title_meta_text({"number_of_seasons": 1, "number_of_episodes": 8}) == "1 сезон / 8 серий"
 
 
+def test_build_title_meta_text_formats_movie_runtime_next_to_year() -> None:
+    from desktop.shared.detail import build_title_meta_text
+
+    assert build_title_meta_text({"media_type": "movie", "year": 2025, "runtime": 135}) == "2025 • 2 ч 15 мин"
+    assert build_title_meta_text({"media_type": "movie", "runtime": 45}) == "45 мин"
+
+
 def test_build_main_info_items_displays_normalized_country_value() -> None:
     from desktop.watched import build_main_info_items
 
@@ -3279,6 +3286,44 @@ def test_detail_main_info_panel_renders_known_rows(qapp) -> None:
     assert "Сериал" in values
     assert "США" in values
     assert "12.9к" in values
+
+
+def test_detail_main_info_header_does_not_share_row_with_toggle(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QPushButton, QSizePolicy
+
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "runtime_status": "watched",
+                "country": "US",
+                "object_type": "movie",
+                "watch_providers": None,
+                "tmdb_votes": 2600,
+                "status": "Released",
+            },
+        )
+    )
+    detail.widget.resize(900, 700)
+    detail.widget.show()
+    _flush_qt_deferred_deletes(qapp)
+
+    header = detail.widget.findChild(QLabel, "detailMainInfoHeader")
+    toggle = detail.widget.findChild(QPushButton, "detailMainInfoToggleButton")
+
+    assert header is not None
+    assert toggle is not None
+    assert toggle.isHidden() is False
+    assert header.wordWrap() is True
+    assert header.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
+    assert toggle.geometry().top() >= header.geometry().bottom()
+    assert toggle.geometry().left() <= header.geometry().left() + DETAIL_CARD_LAYOUT_PROFILE.detail_small_spacing
+    assert toggle.geometry().right() <= header.geometry().right()
 
 
 def test_detail_title_meta_renders_year_and_seasons_under_title(qapp) -> None:

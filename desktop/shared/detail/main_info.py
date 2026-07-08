@@ -11,9 +11,11 @@ from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language
 from desktop.shared.detail.additional_info import (
     build_additional_info_items,
+    format_runtime_minutes,
     format_seasons_episodes,
     list_watch_provider_values,
 )
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, normalize_media_type
 from desktop.shared.detail.presenters import format_year_display
 
 
@@ -235,6 +237,12 @@ def build_title_meta_text(card: dict, data_language: str | None = None) -> str:
     if year:
         parts.append(year)
 
+    if _is_movie_card(card):
+        runtime = format_runtime_minutes(_movie_runtime_value(card), data_language=language)
+        if runtime is not None:
+            parts.append(runtime)
+        return " • ".join(parts)
+
     seasons_episodes = format_seasons_episodes(
         card.get("number_of_seasons"),
         card.get("number_of_episodes"),
@@ -244,3 +252,18 @@ def build_title_meta_text(card: dict, data_language: str | None = None) -> str:
         parts.append(seasons_episodes)
 
     return " • ".join(parts)
+
+
+def _is_movie_card(card: dict) -> bool:
+    if normalize_media_type(card.get("media_type")) == MEDIA_TYPE_MOVIE:
+        return True
+    text = _clean_text(card.get("object_type"))
+    return text is not None and text.casefold() in {"movie", "film", "tvmovie", "tv movie", "фильм"}
+
+
+def _movie_runtime_value(card: dict):
+    for field_name in ("runtime", "runtime_minutes", "imdb_runtime_minutes"):
+        value = card.get(field_name)
+        if value not in (None, ""):
+            return value
+    return None

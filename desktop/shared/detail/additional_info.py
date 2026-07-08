@@ -190,14 +190,6 @@ def _is_movie_card(card: dict) -> bool:
     return text is not None and text.casefold() in {"movie", "film", "tvmovie", "tv movie", "фильм"}
 
 
-def _movie_runtime_value(card: dict) -> Any:
-    for field_name in ("runtime", "runtime_minutes", "imdb_runtime_minutes"):
-        value = card.get(field_name)
-        if value not in (None, ""):
-            return value
-    return None
-
-
 def build_additional_info_items(card: dict, data_language: str | None = None) -> list[dict[str, str]]:
     """Build compact rows for the title additional-info block."""
     items: list[dict[str, str]] = []
@@ -211,11 +203,7 @@ def build_additional_info_items(card: dict, data_language: str | None = None) ->
     if status is not None:
         items.append({"label": tr("detail.info.status"), "value": status})
 
-    if _is_movie_card(card):
-        movie_runtime = format_runtime_minutes(_movie_runtime_value(card), data_language=language)
-        if movie_runtime is not None:
-            items.append({"label": tr("detail.info.movie_runtime"), "value": movie_runtime})
-    else:
+    if _is_movie_card(card) is False:
         runtime = format_episode_runtime(
             card.get("episode_run_time") or card.get("runtime_minutes"),
             data_language=language,

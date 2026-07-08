@@ -28,6 +28,7 @@ Hardening steps:
 - `109-hardening-read-model-display.md`
 - `110-hardening-docs-and-developer-experience.md`
 - `116-russian-movie-ui-filters-duration.md`
+- `117-detail-header-runtime-meta.md`
 
 Final verification:
 

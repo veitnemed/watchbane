@@ -412,9 +412,12 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
 
     owner._main_info_header_widget = QWidget()
     owner._main_info_header_widget.setStyleSheet(TRANSPARENT_STYLE)
-    main_info_header_layout = QHBoxLayout(owner._main_info_header_widget)
+    main_info_header_layout = QVBoxLayout(owner._main_info_header_widget)
     main_info_header_layout.setContentsMargins(0, 0, 0, 0)
-    main_info_header_layout.setSpacing(profile.detail_column_spacing)
+    main_info_header_layout.setSpacing(profile.detail_small_spacing)
+    main_info_button_row = QHBoxLayout()
+    main_info_button_row.setContentsMargins(0, 0, 0, 0)
+    main_info_button_row.setSpacing(profile.detail_column_spacing)
 
     owner._main_info_divider = QFrame()
     owner._main_info_divider.setObjectName("detailMainInfoHeaderDivider")
@@ -424,7 +427,8 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
 
     owner._main_info_title_label = QLabel(tr("detail.main_info.title"))
     owner._main_info_title_label.setObjectName("detailMainInfoHeader")
-    owner._main_info_title_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Minimum)
+    owner._main_info_title_label.setWordWrap(True)
+    owner._main_info_title_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
     owner._main_info_toggle_button = QPushButton(tr("detail.show_more"))
     owner._main_info_toggle_button.setObjectName("detailMainInfoToggleButton")
@@ -434,9 +438,10 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._main_info_toggle_button.clicked.connect(owner._toggle_main_info_expanded)
     owner._main_info_toggle_button.hide()
 
-    main_info_header_layout.addWidget(owner._main_info_title_label, stretch=1)
-    main_info_header_layout.addWidget(owner._main_info_toggle_button)
-    main_info_header_layout.addWidget(owner._main_info_divider, stretch=1)
+    main_info_header_layout.addWidget(owner._main_info_title_label)
+    main_info_button_row.addWidget(owner._main_info_toggle_button)
+    main_info_button_row.addWidget(owner._main_info_divider, stretch=1)
+    main_info_header_layout.addLayout(main_info_button_row)
 
     owner._main_info_panel = QFrame()
     owner._main_info_panel.setObjectName("detailMainInfoPanel")
