@@ -10,7 +10,7 @@ runtime dependencies after the SQLite migration and orders their deletion.
 | --- | --- | --- | --- |
 | Runtime backend selector | `storage/backend.py`, `WATCHBANE_STORAGE_BACKEND`, `BACKEND_JSON`, `get_storage_backend()`, `is_sqlite_backend()` | DELETE | Remove env-driven runtime switch. Replace call sites with direct SQLite paths or explicit legacy utility calls. |
 | Watched runtime facade | `storage/data.py` JSON branches, `constant.FILE_NAME`, `constant.META_JSON`, `dump_json_atomic`, `is_json_exists` | DELETE | Keep facade API if useful, but make implementation SQLite-only. Move JSON reads/writes to legacy import/export. |
-| Candidate runtime repositories | `candidates/repositories/pool_repository.py`, `criteria_repository.py`, `json_io.py` | DELETE | Make repositories SQLite-only or replace callers with split SQLite repositories. Delete JSON persistence helpers. |
+| Candidate runtime repositories | `candidates/repositories/pool_repository.py`, `criteria_repository.py`, deleted `json_io.py` | DELETE | Active repositories are SQLite-only. Runtime JSON persistence helper was removed; remaining JSON references are legacy import/export or later cleanup targets. |
 | Search lists | `app/core/storage.py`, `watchlist.json`, `hidden.json` | DELETE | Route watchlist/hidden through SQLite action repository only. Keep JSON names only in legacy export/import mappings. |
 | Poster runtime cache | `posters/cache.py`, `DEFAULT_POSTER_CACHE_JSON`, `posters.json` | DELETE/MOVE | Runtime metadata should use SQLite. Keep JSON file path only for explicit legacy import/export. |
 | Settings runtime | `desktop/settings/app_settings.py`, `config/app_settings_store.py`, `settings.json` | DELETE/MOVE | Runtime settings should use SQLite. Keep JSON handling only for legacy import/export or explicitly documented local config if still required. |
@@ -88,4 +88,12 @@ After prompt 05 runtime JSON initialization cleanup:
 | --- | ---: |
 | Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15518 |
 | Product JSON runtime reference count | 96 |
+| Product backend switch reference count | 0 |
+
+After prompt 07 candidate JSON helper deletion:
+
+| Metric | Prompt 07 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15499 |
+| Product JSON runtime reference count | 92 |
 | Product backend switch reference count | 0 |

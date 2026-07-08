@@ -342,6 +342,10 @@ def test_get_candidate_poster_diagnostics_view_uses_service_facade(monkeypatch) 
     from candidates import service
 
     monkeypatch.setattr(
+        "posters.download_images.local_preview_poster_path_if_cached",
+        lambda _url: None,
+    )
+    monkeypatch.setattr(
         service,
         "get_search_overview_view",
         lambda: {

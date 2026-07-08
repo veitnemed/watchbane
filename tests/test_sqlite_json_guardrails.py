@@ -6,7 +6,6 @@ from pathlib import Path
 APPROVED_DIRECT_JSON_WRITERS = {
     "app/core/storage.py",
     "candidates/repositories/criteria_repository.py",
-    "candidates/repositories/json_io.py",
     "candidates/repositories/pool_repository.py",
     "desktop/settings/app_settings.py",
     "posters/cache.py",
