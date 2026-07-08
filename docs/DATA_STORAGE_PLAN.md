@@ -59,6 +59,18 @@ TMDb-only candidate migration/refresh reports:
 - `data/diagnostics/candidate_pool_tmdb_only_migration_report.json`;
 - `data/diagnostics/candidate_pool_tmdb_refresh_report.json`.
 
+## SQLite Diagnostics
+
+`storage.sqlite.diagnostics` provides read-only runtime DB diagnostics:
+
+- schema version;
+- `PRAGMA quick_check`;
+- `PRAGMA foreign_key_check`;
+- table counts;
+- duplicate watched/candidate title and TMDb identities;
+- orphaned candidate actions;
+- legacy JSON files that may still exist on disk but are not canonical.
+
 ## Main Info Country
 
 `main_info.country` хранит страну тайтла в watched-записи.

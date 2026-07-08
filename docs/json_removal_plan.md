@@ -145,3 +145,11 @@ After prompt 14 transaction ownership consolidation:
 | Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15595 |
 | Product JSON runtime reference count | 77 |
 | Product backend switch reference count | 0 |
+
+After prompt 15 SQLite diagnostics:
+
+| Metric | Prompt 15 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15595 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
