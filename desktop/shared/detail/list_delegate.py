@@ -7,13 +7,16 @@ from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.posters import resolve_local_poster_path
 from desktop.shared.detail.presenters import format_user_score_display, format_year_display
 from desktop.theme import (
-    COLOR_ACCENT,
-    COLOR_BORDER,
-    COLOR_CARD,
-    COLOR_CARD_ALT,
-    COLOR_SELECTED_BG,
-    COLOR_TEXT,
-    COLOR_TEXT_SECONDARY,
+    FILM_ACCENT,
+    FILM_ACCENT_DIM,
+    FILM_ACCENT_HOVER,
+    FILM_BORDER_WEAK,
+    FILM_SURFACE_0,
+    FILM_SURFACE_1,
+    FILM_SURFACE_2,
+    FILM_TEXT,
+    FILM_TEXT_MUTED,
+    FILM_TEXT_SUBTLE,
     FONT_FAMILY,
 )
 from desktop.theme.scaling import list_px
@@ -125,16 +128,31 @@ class WatchedListItemDelegate:
                 painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
                 if is_selected:
-                    painter.setPen(QPen(QColor(COLOR_ACCENT), 2))
-                    painter.setBrush(QColor(COLOR_SELECTED_BG))
-                elif is_hovered:
-                    painter.setPen(QPen(QColor(COLOR_BORDER), 1))
-                    painter.setBrush(QColor(COLOR_CARD_ALT))
-                else:
                     painter.setPen(Qt.PenStyle.NoPen)
+                    painter.setBrush(QColor(FILM_ACCENT_DIM))
+                    painter.drawRoundedRect(
+                        rect,
+                        detail_profiles.LIST_CARD_CORNER_RADIUS,
+                        detail_profiles.LIST_CARD_CORNER_RADIUS,
+                    )
+                    glow = QColor(FILM_ACCENT)
+                    glow.setAlpha(110)
                     painter.setBrush(Qt.BrushStyle.NoBrush)
-
-                if is_selected or is_hovered:
+                    painter.setPen(QPen(glow, 3))
+                    painter.drawRoundedRect(
+                        rect.adjusted(1, 1, -1, -1),
+                        detail_profiles.LIST_CARD_CORNER_RADIUS,
+                        detail_profiles.LIST_CARD_CORNER_RADIUS,
+                    )
+                    painter.setPen(QPen(QColor(FILM_ACCENT), 1))
+                    painter.drawRoundedRect(
+                        rect.adjusted(2, 2, -2, -2),
+                        max(1, detail_profiles.LIST_CARD_CORNER_RADIUS - 1),
+                        max(1, detail_profiles.LIST_CARD_CORNER_RADIUS - 1),
+                    )
+                elif is_hovered:
+                    painter.setPen(QPen(QColor(FILM_BORDER_WEAK), 1))
+                    painter.setBrush(QColor(FILM_SURFACE_1))
                     painter.drawRoundedRect(
                         rect,
                         detail_profiles.LIST_CARD_CORNER_RADIUS,
@@ -158,7 +176,7 @@ class WatchedListItemDelegate:
                 if thumb is not None:
                     clip = thumb_rect.adjusted(1, 1, -1, -1)
                     painter.setPen(Qt.PenStyle.NoPen)
-                    painter.setBrush(QColor(COLOR_CARD))
+                    painter.setBrush(QColor(FILM_SURFACE_0))
                     painter.drawRoundedRect(
                         clip,
                         detail_profiles.LIST_THUMB_CORNER_RADIUS,
@@ -166,8 +184,8 @@ class WatchedListItemDelegate:
                     )
                     painter.drawPixmap(clip, thumb)
                 else:
-                    painter.setPen(QPen(QColor(COLOR_BORDER), 1))
-                    painter.setBrush(QColor(COLOR_CARD))
+                    painter.setPen(QPen(QColor(FILM_BORDER_WEAK), 1))
+                    painter.setBrush(QColor(FILM_SURFACE_2))
                     painter.drawRoundedRect(
                         thumb_rect,
                         detail_profiles.LIST_THUMB_CORNER_RADIUS,
@@ -175,7 +193,7 @@ class WatchedListItemDelegate:
                     )
                     placeholder_font = QFont(FONT_FAMILY, detail_profiles.LIST_PLACEHOLDER_FONT_POINT)
                     painter.setFont(placeholder_font)
-                    painter.setPen(QPen(QColor(COLOR_TEXT_SECONDARY)))
+                    painter.setPen(QPen(QColor(FILM_TEXT_MUTED)))
                     painter.drawText(thumb_rect, Qt.AlignmentFlag.AlignCenter, "—")
 
                 text_left = thumb_rect.right() + detail_profiles.LIST_TEXT_GAP
@@ -207,7 +225,7 @@ class WatchedListItemDelegate:
                 )
 
                 painter.setFont(title_font)
-                painter.setPen(QPen(QColor(COLOR_TEXT if is_selected else COLOR_TEXT)))
+                painter.setPen(QPen(QColor(FILM_TEXT)))
                 painter.drawText(
                     title_rect,
                     Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -216,7 +234,7 @@ class WatchedListItemDelegate:
 
                 if meta_text:
                     painter.setFont(meta_font)
-                    painter.setPen(QPen(QColor(COLOR_ACCENT if is_selected else COLOR_TEXT_SECONDARY)))
+                    painter.setPen(QPen(QColor(FILM_ACCENT_HOVER if is_selected else FILM_TEXT_SUBTLE)))
                     painter.drawText(
                         meta_rect,
                         Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,

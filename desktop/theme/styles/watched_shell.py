@@ -11,6 +11,37 @@ def build_watched_shell_style() -> str:
 QListWidget#watchedList {{
     padding: {px(8)}px;
 }}
+QListWidget#watchedList QScrollBar:vertical {{
+    background: {FILM_SCROLLBAR_BG};
+    width: {px(10)}px;
+    margin: {px(SPACING_XSMALL)}px;
+}}
+QListWidget#watchedList QScrollBar::handle:vertical {{
+    background: {FILM_SCROLLBAR_HANDLE};
+    border-radius: {px(RADIUS_SCROLLBAR)}px;
+    min-height: {px(28)}px;
+}}
+QListWidget#watchedList QScrollBar::handle:vertical:hover {{
+    background: {FILM_SCROLLBAR_HANDLE_HOVER};
+}}
+QListWidget#watchedList QScrollBar::add-line:vertical,
+QListWidget#watchedList QScrollBar::sub-line:vertical {{
+    height: 0;
+}}
+QListWidget#watchedList QScrollBar:horizontal {{
+    background: {FILM_SCROLLBAR_BG};
+    height: {px(10)}px;
+    margin: {px(SPACING_XSMALL)}px;
+}}
+QListWidget#watchedList QScrollBar::handle:horizontal {{
+    background: {FILM_SCROLLBAR_HANDLE};
+    border-radius: {px(RADIUS_SCROLLBAR)}px;
+    min-width: {px(28)}px;
+}}
+QListWidget#watchedList QScrollBar::add-line:horizontal,
+QListWidget#watchedList QScrollBar::sub-line:horizontal {{
+    width: 0;
+}}
 QWidget#watchedSidebar {{
     background: transparent;
 }}

@@ -4688,6 +4688,31 @@ def test_watched_list_delegate_uses_poster_resolver() -> None:
     assert "format_user_score_display" in source
 
 
+def test_watched_list_delegate_uses_film_selection_palette() -> None:
+    import inspect
+
+    import desktop.shared.detail.list_delegate as watched_view_module
+
+    source = inspect.getsource(watched_view_module.WatchedListItemDelegate.__new__)
+
+    assert "FILM_ACCENT_DIM" in source
+    assert "FILM_ACCENT_HOVER" in source
+    assert "FILM_BORDER_WEAK" in source
+    assert "glow.setAlpha(110)" in source
+
+
+def test_watched_list_scrollbar_uses_film_tokens() -> None:
+    from desktop.theme import FILM_SCROLLBAR_BG, FILM_SCROLLBAR_HANDLE, FILM_SCROLLBAR_HANDLE_HOVER
+    from desktop.theme.styles.watched_shell import build_watched_shell_style
+
+    style = build_watched_shell_style()
+
+    assert "QListWidget#watchedList QScrollBar:vertical" in style
+    assert f"background: {FILM_SCROLLBAR_BG};" in style
+    assert f"background: {FILM_SCROLLBAR_HANDLE};" in style
+    assert f"background: {FILM_SCROLLBAR_HANDLE_HOVER};" in style
+
+
 def test_format_delete_status_message() -> None:
     from desktop.watched.delete import format_delete_status_message
 
