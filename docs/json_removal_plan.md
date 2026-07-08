@@ -221,3 +221,14 @@ After prompt 21 settings/posters/actions hardening:
 Changed app settings persistence from full `app_settings` table replacement to
 key-by-key updates, so UI settings saves preserve unrelated SQLite settings and
 startup/migration markers.
+
+After prompt 22 SQLite schema/migration hardening:
+
+| Metric | Prompt 22 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15824 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
+
+Added migration-plan validation so duplicate SQLite migration versions fail
+early and already-applied versions cannot silently change names in code.

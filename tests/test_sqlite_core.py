@@ -3,7 +3,12 @@ from __future__ import annotations
 import sqlite3
 
 from storage.sqlite.connection import DEFAULT_BUSY_TIMEOUT_MS, connect, get_db_path
-from storage.sqlite.migrations import Migration, apply_migrations, get_current_schema_version
+from storage.sqlite.migrations import (
+    Migration,
+    MigrationError,
+    apply_migrations,
+    get_current_schema_version,
+)
 
 
 def test_get_db_path_uses_runtime_data_dir(tmp_path, monkeypatch) -> None:
@@ -45,5 +50,50 @@ def test_apply_migrations_is_idempotent(tmp_path) -> None:
 
         assert calls == [1]
         assert get_current_schema_version(conn) == 1
+    finally:
+        conn.close()
+
+
+def test_apply_migrations_rejects_duplicate_versions(tmp_path) -> None:
+    db_path = tmp_path / "watchbane.sqlite3"
+
+    def migration(conn: sqlite3.Connection) -> None:
+        conn.execute("CREATE TABLE example (id INTEGER PRIMARY KEY)")
+
+    conn = connect(db_path)
+    try:
+        migrations = (
+            Migration(1, "example_a", migration),
+            Migration(1, "example_b", migration),
+        )
+
+        try:
+            apply_migrations(conn, migrations=migrations)
+        except MigrationError as error:
+            assert "Duplicate SQLite migration version" in str(error)
+        else:
+            raise AssertionError("duplicate migration versions must fail")
+    finally:
+        conn.close()
+
+
+def test_apply_migrations_rejects_applied_name_mismatch(tmp_path) -> None:
+    db_path = tmp_path / "watchbane.sqlite3"
+
+    def migration(conn: sqlite3.Connection) -> None:
+        conn.execute("CREATE TABLE example (id INTEGER PRIMARY KEY)")
+
+    conn = connect(db_path)
+    try:
+        assert apply_migrations(conn, migrations=(Migration(1, "example_a", migration),)) == 1
+
+        try:
+            apply_migrations(conn, migrations=(Migration(1, "example_b", migration),))
+        except MigrationError as error:
+            assert "history mismatch" in str(error)
+            assert "example_a" in str(error)
+            assert "example_b" in str(error)
+        else:
+            raise AssertionError("migration name mismatch must fail")
     finally:
         conn.close()
