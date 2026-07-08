@@ -3666,7 +3666,7 @@ def test_watched_detail_card_does_not_render_my_score_ring() -> None:
 
 
 def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
-    from PyQt6.QtWidgets import QLabel, QWidget
+    from PyQt6.QtWidgets import QFrame, QLabel, QWidget
 
     from desktop.i18n import tr
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
@@ -3691,11 +3691,15 @@ def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
     tmdb_ring = detail.widget.findChild(QWidget, "detailTmdbScoreRing")
     stars_block = detail.widget.findChild(QWidget, "detailFinalScoreStars")
     stars_label = detail.widget.findChild(QLabel, "detailFinalScoreStarsLabel")
+    top_divider = detail.widget.findChild(QFrame, "detailScoreSummaryTopDivider")
+    bottom_divider = detail.widget.findChild(QFrame, "detailScoreSummaryBottomDivider")
 
     assert score_row is not None
     assert tmdb_ring is not None
     assert stars_block is not None
     assert stars_label is not None
+    assert top_divider is not None
+    assert bottom_divider is not None
     assert stars_label.text() == tr("add_title.field.score")
     assert tmdb_ring.parent() is not stars_block
     assert stars_block.isHidden() is False
@@ -4452,6 +4456,10 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     assert f"background-color: {tokens.FILM_CHIP_BG};" in style
     assert f"border: 1px solid {tokens.FILM_CHIP_BORDER};" in style
     assert f"color: {tokens.FILM_CHIP_TEXT};" in style
+    assert "QFrame#detailScoreSummaryTopDivider" in style
+    assert f"background-color: {tokens.FILM_BORDER_WEAK};" in style
+    assert f"color: {tokens.FILM_TEXT};" in style
+    assert f"color: {tokens.FILM_TEXT_SUBTLE};" in style
 
 
 def test_detail_card_movie_mode_sets_film_theme_properties(qapp) -> None:

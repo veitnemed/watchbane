@@ -24,6 +24,10 @@ from dataset.models.media_type import MEDIA_TYPE_TV, normalize_media_type
 MAIN_INFO_COLLAPSED_ROW_COUNT = 4
 MEDIA_THEME_OBJECT_NAMES = {
     "detailHeroCard",
+    "detailTitle",
+    "detailTitleMeta",
+    "detailScoreSummaryTopDivider",
+    "detailScoreSummaryBottomDivider",
     "detailPosterShell",
     "detailUserScoreBadge",
     "detailMediaTypeBadge",

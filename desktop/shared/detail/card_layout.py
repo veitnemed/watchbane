@@ -46,7 +46,10 @@ class DetailCardHandles:
     title_label: Any
     title_meta_label: Any
     score_summary_widget: Any
+    score_summary_content: Any
     score_summary_row: Any
+    score_summary_top_divider: Any
+    score_summary_bottom_divider: Any
     tmdb_ring_slot: Any
     tmdb_ring_layout: Any
     final_score_stars_block: Any
@@ -304,9 +307,38 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     score_summary_widget.setObjectName("detailScoreSummaryRow")
     score_summary_widget.setStyleSheet(TRANSPARENT_STYLE)
     owner._score_summary_widget = score_summary_widget
-    owner._score_summary_row = QHBoxLayout(score_summary_widget)
+    score_summary_layout = QVBoxLayout(score_summary_widget)
+    score_summary_layout.setContentsMargins(0, 0, 0, 0)
+    score_summary_layout.setSpacing(0)
+
+    owner._score_summary_top_divider = QFrame()
+    owner._score_summary_top_divider.setObjectName("detailScoreSummaryTopDivider")
+    owner._score_summary_top_divider.setFrameShape(QFrame.Shape.HLine)
+    owner._score_summary_top_divider.setFixedHeight(profile.detail_divider_height)
+    owner._score_summary_top_divider.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Fixed,
+    )
+
+    owner._score_summary_content = QWidget()
+    owner._score_summary_content.setObjectName("detailScoreSummaryContent")
+    owner._score_summary_content.setStyleSheet(TRANSPARENT_STYLE)
+    owner._score_summary_row = QHBoxLayout(owner._score_summary_content)
     owner._score_summary_row.setContentsMargins(0, 0, 0, 0)
     owner._score_summary_row.setSpacing(0)
+
+    owner._score_summary_bottom_divider = QFrame()
+    owner._score_summary_bottom_divider.setObjectName("detailScoreSummaryBottomDivider")
+    owner._score_summary_bottom_divider.setFrameShape(QFrame.Shape.HLine)
+    owner._score_summary_bottom_divider.setFixedHeight(profile.detail_divider_height)
+    owner._score_summary_bottom_divider.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Fixed,
+    )
+
+    score_summary_layout.addWidget(owner._score_summary_top_divider)
+    score_summary_layout.addWidget(owner._score_summary_content)
+    score_summary_layout.addWidget(owner._score_summary_bottom_divider)
     score_summary_widget.setMaximumWidth(profile.detail_section_max_width)
 
     owner._score_indicator = None
@@ -602,7 +634,10 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         title_label=owner._title_label,
         title_meta_label=owner._title_meta_label,
         score_summary_widget=owner._score_summary_widget,
+        score_summary_content=owner._score_summary_content,
         score_summary_row=owner._score_summary_row,
+        score_summary_top_divider=owner._score_summary_top_divider,
+        score_summary_bottom_divider=owner._score_summary_bottom_divider,
         tmdb_ring_slot=owner._tmdb_ring_slot,
         tmdb_ring_layout=owner._tmdb_ring_layout,
         final_score_stars_block=owner._final_score_stars_block,

@@ -85,6 +85,20 @@ QLabel#detailTitleMeta {{
     font-weight: 500;
     padding: 0;
 }}
+QLabel#detailTitle[mediaType="movie"] {{
+    color: {FILM_TEXT};
+    font-weight: 700;
+}}
+QLabel#detailTitleMeta[mediaType="movie"] {{
+    color: {FILM_TEXT_SUBTLE};
+}}
+QFrame#detailScoreSummaryTopDivider,
+QFrame#detailScoreSummaryBottomDivider {{
+    background-color: {FILM_BORDER_WEAK};
+    min-height: {detail_px(1)}px;
+    max-height: {detail_px(1)}px;
+    border: none;
+}}
 QWidget#detailPosterActions {{
     background: transparent;
 }}
@@ -141,8 +155,8 @@ QFrame#detailMainInfoPanel {{
     border-radius: {detail_px(DETAIL_MAIN_INFO_PANEL_RADIUS)}px;
 }}
 QFrame#detailMainInfoPanel[mediaType="movie"] {{
-    background-color: {FILM_SURFACE_0};
-    border: 1px solid {FILM_BORDER_WEAK};
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER};
 }}
 QFrame#mainInfoDivider,
 QFrame#detailMainInfoHeaderDivider {{
