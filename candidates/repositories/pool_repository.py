@@ -12,6 +12,12 @@ from storage.backend import is_sqlite_backend
 
 def init_candidate_pool() -> None:
     """Создает JSON с пулом кандидатов, если его еще нет."""
+    if is_sqlite_backend():
+        from storage.sqlite.migrations import apply_migrations
+
+        apply_migrations()
+        return
+
     if os.path.exists(constant.CANDIDATE_POOL_JSON):
         return
     dump_json_atomic(constant.CANDIDATE_POOL_JSON, {})
@@ -33,6 +39,12 @@ def load_candidate_pool() -> dict:
 
 def save_candidate_pool(data: dict) -> None:
     """Сохраняет пул кандидатов."""
+    if is_sqlite_backend():
+        from storage.sqlite.candidate_repository import save_candidate_pool_dict
+
+        save_candidate_pool_dict(data)
+        return
+
     from candidates.pool.normalization import normalize_storage_pool
     from candidates.pool.watched_cleanup import purge_watched_from_pool
 

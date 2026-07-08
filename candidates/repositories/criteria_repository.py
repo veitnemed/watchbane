@@ -15,6 +15,12 @@ from storage.backend import is_sqlite_backend
 
 def init_candidate_criteria() -> None:
     """Создает JSON с критериями подбора, если его еще нет."""
+    if is_sqlite_backend():
+        from storage.sqlite.migrations import apply_migrations
+
+        apply_migrations()
+        return
+
     if os.path.exists(constant.CRITERIA_POOL_JSON):
         return
     dump_json_atomic(constant.CRITERIA_POOL_JSON, {})
@@ -36,6 +42,12 @@ def load_candidate_criteria() -> dict:
 
 def save_candidate_criteria(data: dict) -> None:
     """Сохраняет критерии подбора."""
+    if is_sqlite_backend():
+        from storage.sqlite.candidate_repository import save_candidate_criteria_dict
+
+        save_candidate_criteria_dict(data)
+        return
+
     dump_json_atomic(constant.CRITERIA_POOL_JSON, data)
 
 
