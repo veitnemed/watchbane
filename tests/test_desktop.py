@@ -4323,7 +4323,7 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "DETAIL_INFO_TOP_OFFSET": 18,
         "DETAIL_TITLE_FONT_FAMILY": "Segoe UI",
         "DETAIL_TITLE_FONT_FALLBACK": "Arial, sans-serif",
-        "DETAIL_TITLE_FONT_SIZE": 34,
+        "DETAIL_TITLE_FONT_SIZE": 32,
         "FONT_DETAIL_MAIN_INFO_HEADER": 17,
         "FONT_DETAIL_MAIN_INFO_LABEL": 17,
         "FONT_DETAIL_MAIN_INFO_VALUE": 18,
@@ -4357,7 +4357,7 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "DETAIL_MAIN_INFO_PANEL_PADDING_Y": 22,
         "DETAIL_MAIN_INFO_ROW_HEIGHT": 54,
         "DETAIL_MAIN_INFO_ROW_GAP": 12,
-        "DETAIL_MAIN_INFO_HEADER_PANEL_GAP": 28,
+        "DETAIL_MAIN_INFO_HEADER_PANEL_GAP": 20,
         "DETAIL_MAIN_INFO_LABEL_WIDTH": 230,
         "DETAIL_OVERVIEW_TOP_GAP": 14,
         "DETAIL_OVERVIEW_LEFT_INSET": 0,
@@ -4365,8 +4365,8 @@ def test_detail_hero_contract_tokens_are_available() -> None:
         "DETAIL_OVERVIEW_TEXT_TOP_GAP": 20,
         "DETAIL_OVERVIEW_MAX_LINES_COLLAPSED": 4,
         "DETAIL_OVERVIEW_MAX_WIDTH": 360,
-        "DETAIL_TITLE_CHIPS_GAP": 42,
-        "DETAIL_SCORE_MAIN_INFO_GAP": 30,
+        "DETAIL_TITLE_CHIPS_GAP": 30,
+        "DETAIL_SCORE_MAIN_INFO_GAP": 24,
         "DETAIL_SECTION_MAX_WIDTH": 920,
     }
 
