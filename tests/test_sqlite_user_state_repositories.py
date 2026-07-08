@@ -71,6 +71,23 @@ def test_settings_roundtrip(tmp_path) -> None:
     assert settings_repository.get_setting("missing", "fallback", path=db_path) == "fallback"
 
 
+def test_setting_set_respects_external_transaction(tmp_path) -> None:
+    from storage.sqlite.connection import connect
+    from storage.sqlite.migrations import apply_migrations
+
+    db_path = tmp_path / "watchbane.sqlite3"
+    conn = connect(db_path)
+    apply_migrations(conn)
+    try:
+        conn.execute("BEGIN")
+        settings_repository.set_setting("theme", "dark", conn=conn)
+        conn.rollback()
+    finally:
+        conn.close()
+
+    assert settings_repository.load_settings_dict(path=db_path) == {}
+
+
 def test_poster_metadata_roundtrip_and_lookup(tmp_path) -> None:
     db_path = tmp_path / "watchbane.sqlite3"
     cache = {

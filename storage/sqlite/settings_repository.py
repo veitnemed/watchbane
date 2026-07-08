@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
@@ -23,6 +24,10 @@ def _connection(conn: sqlite3.Connection | None, path: str | Path | None):
     active = connect(path)
     apply_migrations(active)
     return active, True
+
+
+def _transaction(active: sqlite3.Connection, owned: bool):
+    return active if owned else nullcontext(active)
 
 
 def load_settings_dict(
@@ -50,7 +55,7 @@ def save_settings_dict(
     active, owned = _connection(conn, path)
     settings = data if isinstance(data, dict) else {}
     try:
-        with active:
+        with _transaction(active, owned):
             active.execute("DELETE FROM app_settings")
             timestamp = _now()
             for key, value in settings.items():
@@ -75,7 +80,7 @@ def set_setting(
 ) -> None:
     active, owned = _connection(conn, path)
     try:
-        with active:
+        with _transaction(active, owned):
             active.execute(
                 """
                 INSERT INTO app_settings(key, value_json, updated_at)
@@ -108,4 +113,3 @@ def get_setting(
     finally:
         if owned:
             active.close()
-
