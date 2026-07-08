@@ -291,3 +291,15 @@ After prompt 27 package architecture hardening:
 
 Moved poster cache runtime persistence behind `storage.posters`, so
 `posters.cache` no longer imports SQLite repositories directly.
+
+After prompt 28 final prune and maintainability:
+
+| Metric | Prompt 28 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15895 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
+
+Pruned stale legacy JSON diagnostics paths so SQLite diagnostics now reports
+the actual explicit import/export compatibility locations for candidate
+watchlist/hidden lists and poster cache metadata.

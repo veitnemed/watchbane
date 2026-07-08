@@ -104,9 +104,15 @@ def test_sqlite_diagnostics_reports_orphaned_actions_and_legacy_json(tmp_path) -
         {"title": "Ghost", "year": 2020},
         path=db_path,
     )
-    legacy_file = tmp_path / "data" / "watched" / "titles.json"
-    legacy_file.parent.mkdir(parents=True)
-    legacy_file.write_text("{}", encoding="utf-8")
+    legacy_files = [
+        tmp_path / "data" / "watched" / "titles.json",
+        tmp_path / "data" / "candidates" / "watchlist.json",
+        tmp_path / "data" / "candidates" / "hidden.json",
+        tmp_path / "data" / "cache" / "posters" / "posters.json",
+    ]
+    for legacy_file in legacy_files:
+        legacy_file.parent.mkdir(parents=True, exist_ok=True)
+        legacy_file.write_text("{}", encoding="utf-8")
 
     report = diagnostics.build_sqlite_diagnostics(path=db_path, base_dir=tmp_path)
 
@@ -119,5 +125,23 @@ def test_sqlite_diagnostics_reports_orphaned_actions_and_legacy_json(tmp_path) -
             "exists": True,
             "canonical": False,
             "size_bytes": 2,
-        }
+        },
+        {
+            "path": "data/candidates/watchlist.json",
+            "exists": True,
+            "canonical": False,
+            "size_bytes": 2,
+        },
+        {
+            "path": "data/candidates/hidden.json",
+            "exists": True,
+            "canonical": False,
+            "size_bytes": 2,
+        },
+        {
+            "path": "data/cache/posters/posters.json",
+            "exists": True,
+            "canonical": False,
+            "size_bytes": 2,
+        },
     ]

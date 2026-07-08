@@ -26,9 +26,9 @@ LEGACY_JSON_PATHS = (
     constant.META_JSON,
     constant.CANDIDATE_POOL_JSON,
     constant.CRITERIA_POOL_JSON,
-    str(Path(constant.APP_DATA_DIR) / "watchlist.json"),
-    str(Path(constant.APP_DATA_DIR) / "hidden.json"),
-    str(Path(constant.APP_DATA_DIR) / "posters.json"),
+    str(Path(constant.CANDIDATES_DIR) / "watchlist.json"),
+    str(Path(constant.CANDIDATES_DIR) / "hidden.json"),
+    str(Path(constant.CACHE_DIR) / "posters" / "posters.json"),
 )
 
 
@@ -56,7 +56,7 @@ def _legacy_json_presence(base_dir: str | Path | None = None) -> list[dict[str, 
         if path.exists():
             result.append(
                 {
-                    "path": path_text,
+                    "path": Path(path_text).as_posix(),
                     "exists": True,
                     "canonical": False,
                     "size_bytes": path.stat().st_size,
