@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
@@ -24,6 +25,10 @@ def _connection(conn: sqlite3.Connection | None, path: str | Path | None):
     active = connect(path)
     apply_migrations(active)
     return active, True
+
+
+def _transaction(active: sqlite3.Connection, owned: bool):
+    return active if owned else nullcontext(active)
 
 
 def _clean_year(value: Any) -> int | None:
@@ -80,7 +85,7 @@ def save_poster_cache_dict(
     active, owned = _connection(conn, path)
     cache = data if isinstance(data, dict) else {}
     try:
-        with active:
+        with _transaction(active, owned):
             active.execute("DELETE FROM poster_cache_entries")
             timestamp = _now()
             for identity, entry in cache.items():
@@ -135,7 +140,7 @@ def upsert_poster_cache_entry(
         "updated_at": timestamp,
     }
     try:
-        with active:
+        with _transaction(active, owned):
             active.execute(
                 """
                 INSERT INTO poster_cache_entries(

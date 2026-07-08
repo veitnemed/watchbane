@@ -90,3 +90,25 @@ def test_poster_metadata_upsert_does_not_store_image_bytes(tmp_path) -> None:
     assert entry["local_path"].endswith("dark.jpg")
     assert "image_bytes" not in entry
     assert poster_repository.lookup_poster_cache_entry("Dark", 2017, path=db_path)["poster_path"] == "/dark.jpg"
+
+
+def test_poster_upsert_respects_external_transaction(tmp_path) -> None:
+    from storage.sqlite.connection import connect
+    from storage.sqlite.migrations import apply_migrations
+
+    db_path = tmp_path / "watchbane.sqlite3"
+    conn = connect(db_path)
+    apply_migrations(conn)
+    try:
+        conn.execute("BEGIN")
+        poster_repository.upsert_poster_cache_entry(
+            "Dark",
+            2017,
+            {"poster_path": "/dark.jpg", "status": "found"},
+            conn=conn,
+        )
+        conn.rollback()
+    finally:
+        conn.close()
+
+    assert poster_repository.lookup_poster_cache_entry("Dark", 2017, path=db_path) is None
