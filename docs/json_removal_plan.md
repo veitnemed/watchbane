@@ -113,3 +113,11 @@ After prompt 09 obsolete JSON helper deletion:
 | Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15452 |
 | Product JSON runtime reference count | 77 |
 | Product backend switch reference count | 0 |
+
+After prompt 11 SQLite mapping split:
+
+| Metric | Prompt 11 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15251 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |

@@ -11,7 +11,7 @@ from typing import Any
 from posters.cache import poster_identity_key
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
-from storage.sqlite.records import dumps_json, loads_json
+from storage.sqlite.json_codec import dumps_json, loads_json
 
 
 def _now() -> str:

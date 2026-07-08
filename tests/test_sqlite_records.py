@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from storage.sqlite.records import (
-    dumps_json,
-    extract_candidate_record,
-    extract_watched_record,
-    loads_json,
-)
+from storage.sqlite.candidate_mapper import extract_candidate_record
+from storage.sqlite.json_codec import dumps_json, loads_json
+from storage.sqlite.watched_mapper import extract_watched_record
 
 
 def test_extract_watched_record_defaults_legacy_tv_record() -> None:

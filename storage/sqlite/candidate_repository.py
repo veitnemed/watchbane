@@ -12,7 +12,8 @@ from candidates.pool.watched_cleanup import purge_watched_from_pool
 from dataset.models.media_type import normalize_media_type
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
-from storage.sqlite.records import dumps_json, extract_candidate_record, loads_json
+from storage.sqlite.candidate_mapper import extract_candidate_record
+from storage.sqlite.json_codec import dumps_json, loads_json
 
 
 def _now() -> str:

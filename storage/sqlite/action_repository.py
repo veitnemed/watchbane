@@ -11,7 +11,7 @@ from candidates.models.keys import title_identity_key
 from candidates.models.schema import normalize_candidate_record
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
-from storage.sqlite.records import dumps_json, loads_json
+from storage.sqlite.json_codec import dumps_json, loads_json
 
 
 ACTION_WATCHLIST = "watchlist"

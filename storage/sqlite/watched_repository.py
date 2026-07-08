@@ -13,7 +13,8 @@ from dataset.models.media_type import normalize_media_type
 from storage.normalize import normalize_movie_tags
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
-from storage.sqlite.records import dumps_json, extract_watched_record, loads_json
+from storage.sqlite.json_codec import dumps_json, loads_json
+from storage.sqlite.watched_mapper import extract_watched_record
 
 
 EMPTY_PAYLOAD_JSON = dumps_json({})
