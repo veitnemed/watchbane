@@ -116,6 +116,9 @@ def _build_views(qtbot, service: FakeCandidateService | None = None):
     session = CandidateSearchSession(service=service)
     filters_view = CandidateFiltersView(session, service=service)
     list_view = CandidateListView(session, service=service)
+    list_widget = list_view.widget.findChild(QListView, "candidateListWidget")
+    assert list_widget is not None
+    list_widget.setUpdatesEnabled(False)
     qtbot.addWidget(filters_view.widget)
     qtbot.addWidget(list_view.widget)
     filters_view.widget.show()

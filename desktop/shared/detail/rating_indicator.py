@@ -179,7 +179,7 @@ class RatingCircleIndicator:
                     painter.setPen(accent_pen)
                     painter.drawArc(ring_rect, 90 * 16, -int(360 * 16 * progress))
 
-                painter.setPen(QColor(COLOR_TEXT))
+                painter.setPen(QPen(QColor(COLOR_TEXT)))
                 value_font = QFont(FONT_FAMILY)
                 value_font.setPointSize(self._value_font_point)
                 value_font.setBold(True)
@@ -191,7 +191,7 @@ class RatingCircleIndicator:
                     self._display_value,
                 )
 
-                painter.setPen(QColor(COLOR_TEXT_SECONDARY))
+                painter.setPen(QPen(QColor(COLOR_TEXT_SECONDARY)))
                 label_font = QFont(FONT_FAMILY)
                 label_font.setPointSize(self._label_font_point)
                 label_font.setBold(True)

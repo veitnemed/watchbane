@@ -52,6 +52,8 @@ def build_candidate_list_item_delegate(parent, sort_mode: str, data_language: st
                 -detail_profiles.LIST_ROW_INSET_X,
                 -detail_profiles.LIST_ROW_INSET_Y,
             )
+            if rect.width() <= 0 or rect.height() <= 0:
+                return
             is_selected = bool(option.state & QStyle.StateFlag.State_Selected)
             is_hovered = bool(option.state & QStyle.StateFlag.State_MouseOver)
 
@@ -83,6 +85,9 @@ def build_candidate_list_item_delegate(parent, sort_mode: str, data_language: st
                 detail_profiles.LIST_THUMB_WIDTH,
                 detail_profiles.LIST_THUMB_HEIGHT,
             )
+            if thumb_rect.width() <= 0 or thumb_rect.height() <= 0:
+                painter.restore()
+                return
 
             poster_path = index.data(CandidateListRoles.PosterPathRole)
             thumb = _load_list_thumb_pixmap(poster_path)
@@ -106,7 +111,7 @@ def build_candidate_list_item_delegate(parent, sort_mode: str, data_language: st
                 )
                 placeholder_font = QFont(FONT_FAMILY, detail_profiles.LIST_PLACEHOLDER_FONT_POINT)
                 painter.setFont(placeholder_font)
-                painter.setPen(QColor(COLOR_TEXT_SECONDARY))
+                painter.setPen(QPen(QColor(COLOR_TEXT_SECONDARY)))
                 painter.drawText(thumb_rect, Qt.AlignmentFlag.AlignCenter, "—")
 
             text_left = thumb_rect.right() + detail_profiles.LIST_TEXT_GAP
@@ -137,7 +142,7 @@ def build_candidate_list_item_delegate(parent, sort_mode: str, data_language: st
             )
 
             painter.setFont(title_font)
-            painter.setPen(QColor(COLOR_TEXT))
+            painter.setPen(QPen(QColor(COLOR_TEXT)))
             painter.drawText(
                 title_rect,
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
@@ -150,7 +155,7 @@ def build_candidate_list_item_delegate(parent, sort_mode: str, data_language: st
 
             if meta_text:
                 painter.setFont(meta_font)
-                painter.setPen(QColor(COLOR_ACCENT if is_selected else COLOR_TEXT_SECONDARY))
+                painter.setPen(QPen(QColor(COLOR_ACCENT if is_selected else COLOR_TEXT_SECONDARY)))
                 painter.drawText(
                     meta_rect,
                     Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
