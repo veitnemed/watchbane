@@ -58,7 +58,7 @@ from storage import data as storage_data
 
 
 def get_pool_view(criteria_name: str | None = None) -> list:
-    """Returns candidates for display without writing candidate_pool.json."""
+    """Returns candidates for display without writing the SQLite candidate pool."""
     del criteria_name
     return get_all_candidates()
 

@@ -36,7 +36,7 @@ def normalize_pool(pool: dict) -> dict:
 
 
 def normalize_or_migrate_candidate_pool_file() -> dict:
-    """Явно мигрирует и нормализует candidate_pool.json."""
+    """Явно мигрирует и нормализует сохранённый SQLite candidate pool."""
     from candidates.pool.watched_cleanup import purge_watched_from_pool
 
     original = pool_repository.load_candidate_pool()

@@ -25,10 +25,10 @@ def edit_candidate_pool_filters() -> None:
     print(f"Исключить жанры (saved pool): {', '.join(criteria.get('excluded_genres', [])) or 'не важно'}\n")
 
     updated = candidate_pool_ui.update_criteria_filters(criteria_name, criteria)
-    print("\nDefaults обновлены в candidate_criteria.json.")
+    print("\nDefaults обновлены в SQLite candidate criteria.")
     print("Filters сохраняются как defaults поиска по уже сохранённым кандидатам (Enter = default).")
     print("Ручной ввод в поиске действует только на текущий запуск.")
-    print("Filters не пересобирают pool, не делают новый TMDb-запрос и не удаляют кандидатов из candidate_pool.json.")
+    print("Filters не пересобирают pool, не делают новый TMDb-запрос и не удаляют кандидатов из SQLite candidate pool.")
     print(f"TMDb: {updated.get('min_tmdb_score', updated.get('min_tmdb', 'не важно'))}")
     print(f"Жанры (saved pool): {', '.join(updated.get('genres', [])) or 'не важно'}")
     print(f"Жанры исключить (saved pool): {', '.join(updated.get('excluded_genres', [])) or 'не важно'}")

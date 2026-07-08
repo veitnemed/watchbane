@@ -2,7 +2,7 @@
 
 Папка `candidates` отвечает за сбор, хранение, импорт, фильтрацию и диагностику общего пула кандидатов для рекомендаций сериалов.
 
-Главная идея: здесь живёт логика candidate pool. UI должен обращаться сюда через `candidates.service`, а не напрямую менять JSON или вызывать низкоуровневые функции.
+Главная идея: здесь живёт логика candidate pool. UI должен обращаться сюда через `candidates.service`, а не напрямую менять SQLite/legacy JSON или вызывать низкоуровневые функции.
 
 Desktop GUI visual-polish не должен менять код этой папки. Контракт внешнего вида PyQt GUI описан в [../docs/DESKTOP_STYLE_CONTRACT.md](../docs/DESKTOP_STYLE_CONTRACT.md).
 
@@ -14,7 +14,7 @@ candidates/
   genres.py, to_dataset.py
 
   models/                 # schema, keys, country_schema, genre_schema
-  repositories/           # load/save pool и criteria JSON
+  repositories/           # SQLite-backed load/save pool и criteria
   pool/                   # dedupe, queries, stats, diagnostics, search_helpers, completeness
   scoring/                # sort keys
   views/                  # formatters
@@ -56,8 +56,8 @@ Build pipeline: discovery slices → TMDb Discover API → merge/dedupe → TMDb
 
 ## Данные и файлы
 
-- `constant.CANDIDATE_POOL_JSON` → `candidate_pool.json`
-- `constant.CRITERIA_POOL_JSON` → `candidate_criteria.json` (запись `"pool"`)
+- runtime candidate pool и criteria → `data/watchbane.sqlite3`
+- legacy import/export compatibility → `data/candidates/pool.json`, `data/candidates/criteria.json`
 - TMDb snapshots → `data/exports/candidate_pool/*.json`
 - diagnostics → `data/diagnostics`
 - TMDb cache/runtime exports → `data/cache/tmdb`, `data/exports/candidate_pool`

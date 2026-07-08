@@ -62,3 +62,17 @@ def test_no_unapproved_direct_json_writes_to_migrated_runtime_data() -> None:
             findings.add((normalized, "direct migrated JSON write marker"))
 
     assert findings == set()
+
+
+def test_legacy_json_import_export_stays_out_of_sqlite_namespace() -> None:
+    assert Path("storage/sqlite/import_legacy.py").exists() is False
+    assert Path("storage/sqlite/export_legacy.py").exists() is False
+
+    findings: set[str] = set()
+    for root in ("app", "candidates", "config", "dataset", "desktop", "posters", "scripts", "storage", "ui", "web"):
+        for path in Path(root).rglob("*.py"):
+            source = path.read_text(encoding="utf-8")
+            if "storage.sqlite.import_legacy" in source or "storage.sqlite.export_legacy" in source:
+                findings.add(path.as_posix())
+
+    assert findings == set()

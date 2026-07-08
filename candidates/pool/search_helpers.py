@@ -21,7 +21,7 @@ def _criteria_value(criteria: dict, *names, default=None):
 
 
 def build_search_filter_defaults(criteria_name: str | None = None) -> dict:
-    """Возвращает defaults runtime-фильтров поиска из единого candidate_criteria.json."""
+    """Возвращает defaults runtime-фильтров поиска из SQLite candidate criteria."""
     del criteria_name
     defaults = {
         "criteria_name": None,

@@ -175,3 +175,15 @@ After prompt 17 final docs cleanup:
 
 Prompt 17 updated public docs to describe SQLite as canonical runtime storage
 and legacy JSON as explicit import/export/backup compatibility.
+
+After prompt 18 final dead-code sweep:
+
+| Metric | Prompt 18 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15716 |
+| Product JSON runtime reference count | 77 |
+| Product backend switch reference count | 0 |
+
+Deleted dead compatibility shims from `storage/sqlite/` and kept legacy JSON
+behind `storage/legacy_json/`, `storage/files.py` backup/restore compatibility,
+and explicit migration/repair scripts.
