@@ -19,6 +19,64 @@ def test_global_menu_prints_candidate_summary(capsys) -> None:
 
     assert "Candidate pool: 3 | complete: 2 | posters: 1 | need posters: 1" in output
     assert "3 >> Candidate pool" in output
+    assert "7 >> Dev GUI: empty candidate pool on startup" in output
+
+
+def test_console_dev_gui_launcher_sets_candidate_clear_env(monkeypatch) -> None:
+    from storage import runtime
+    from ui.console import dev_gui
+
+    captured = {}
+
+    class Result:
+        returncode = 0
+
+    def fake_run(command, cwd=None, env=None, check=None):
+        captured["command"] = command
+        captured["cwd"] = cwd
+        captured["env"] = env
+        captured["check"] = check
+        return Result()
+
+    monkeypatch.setenv(runtime.DEV_EMPTY_PROFILE_ENV, "1")
+    monkeypatch.setattr(dev_gui.subprocess, "run", fake_run)
+
+    return_code = dev_gui.launch_gui_with_empty_candidate_pool()
+
+    assert return_code == 0
+    assert captured["command"][-1] == "start_app.py"
+    assert captured["cwd"].name == "watchbane"
+    assert captured["check"] is False
+    assert captured["env"][runtime.DEV_CLEAR_CANDIDATES_ENV] == "1"
+    assert runtime.DEV_EMPTY_PROFILE_ENV not in captured["env"]
+
+
+def test_console_app_routes_dev_gui_command(monkeypatch) -> None:
+    from ui.console import console_app
+
+    commands = iter(["7", "0"])
+    calls = {"dev_gui": 0, "press_enter": 0}
+
+    monkeypatch.setattr(console_app.storage_files, "init_all_dates", lambda: None)
+    monkeypatch.setattr(console_app.ui, "clean_terminal", lambda: None)
+    monkeypatch.setattr(console_app.menu_state, "get_menu_state", lambda: ({}, 0))
+    monkeypatch.setattr(console_app.menu_state, "get_candidate_summary_view", lambda: "")
+    monkeypatch.setattr(console_app.menu_state, "get_profile_summary_line", lambda: "")
+    monkeypatch.setattr(console_app.ui, "show_global_menu", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(console_app.request, "loop_input", lambda **_kwargs: next(commands))
+
+    def fake_launch() -> None:
+        calls["dev_gui"] += 1
+
+    def fake_press_enter() -> None:
+        calls["press_enter"] += 1
+
+    monkeypatch.setattr(console_app.global_menu, "open_dev_gui_empty_candidate_pool", fake_launch)
+    monkeypatch.setattr(console_app.ui, "press_enter", fake_press_enter)
+
+    console_app.run_console_app()
+
+    assert calls == {"dev_gui": 1, "press_enter": 1}
 
 
 def test_candidate_pool_tools_keep_interface_compatibility() -> None:

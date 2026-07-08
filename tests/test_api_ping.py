@@ -7,7 +7,7 @@ from ui.console import ui
 
 
 def test_tmdb_check_api_available_ok(monkeypatch) -> None:
-    monkeypatch.setattr(tmdb_api, "load_tmdb_token", lambda: "test-token")
+    monkeypatch.setattr(tmdb_api, "load_tmdb_credentials", lambda: ("bearer", "test-token"))
     monkeypatch.setattr(tmdb_api, "tmdb_get", lambda path, token=None: {"images": {}})
 
     result = tmdb_api.check_api_available()
@@ -20,15 +20,45 @@ def test_tmdb_check_api_available_ok(monkeypatch) -> None:
 def test_tmdb_check_api_available_missing_token(monkeypatch) -> None:
     monkeypatch.setattr(
         tmdb_api,
-        "load_tmdb_token",
-        lambda: (_ for _ in ()).throw(RuntimeError("TMDB_TOKEN не найден.")),
+        "load_tmdb_credentials",
+        lambda: (_ for _ in ()).throw(RuntimeError("TMDb credentials not found.")),
     )
 
     result = tmdb_api.check_api_available()
 
     assert result["ok"] is False
     assert result["error"] == "missing_token"
-    assert "TMDB_TOKEN" in result["details"]
+    assert "TMDb credentials" in result["details"]
+
+
+def test_tmdb_get_supports_api_key_query_auth(monkeypatch) -> None:
+    captured = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return b'{"ok": true}'
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["authorization"] = request.headers.get("Authorization")
+        captured["timeout"] = timeout
+        return FakeResponse()
+
+    monkeypatch.setattr(tmdb_api, "load_tmdb_credentials", lambda: ("api_key", "test-key"))
+    monkeypatch.setattr(tmdb_api, "urlopen", fake_urlopen)
+
+    result = tmdb_api.tmdb_get("/configuration", params={"language": "ru-RU"})
+
+    assert result == {"ok": True}
+    assert "api_key=test-key" in captured["url"]
+    assert "language=ru-RU" in captured["url"]
+    assert captured["authorization"] is None
 
 
 def test_ping_external_apis_prints_status(monkeypatch, capsys) -> None:
@@ -38,7 +68,7 @@ def test_ping_external_apis_prints_status(monkeypatch, capsys) -> None:
     )
     monkeypatch.setattr(
         "apis.tmdb_api.check_api_available",
-        lambda: {"ok": False, "error": "missing_token", "details": "TMDB_TOKEN не найден."},
+        lambda: {"ok": False, "error": "missing_token", "details": "TMDb credentials not found."},
     )
 
     interface_funcs.ping_external_apis()

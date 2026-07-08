@@ -2,6 +2,7 @@
 
 from ui.console import maintenance_menu
 from ui.console import data_profiles_menu
+from ui.console import dev_gui
 from ui.console import pool_menu
 from ui.console import reference_menu
 from ui.console import search_hub_menu
@@ -36,6 +37,13 @@ def open_reference_menu() -> None:
 def open_data_profiles_menu() -> None:
     """Open safe data profile management section."""
     data_profiles_menu.open_data_profiles_menu()
+
+
+def open_dev_gui_empty_candidate_pool() -> None:
+    """Launch GUI with dev startup cleanup for candidate pool testing."""
+    return_code = dev_gui.launch_gui_with_empty_candidate_pool()
+    if return_code != 0:
+        print(f"GUI exited with code {return_code}.")
 
 
 def open_data_menu() -> None:

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QTabWidget
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QTabWidget
 
 from candidates import service as candidate_service
 from desktop.onboarding import OnboardingAutofillDialog
@@ -43,16 +44,21 @@ class WatchedMoviesWindow(QMainWindow):
         self.setStyleSheet(build_app_style())
         self.statusBar().showMessage("")
 
+        root_stack = QStackedWidget()
+        root_stack.setObjectName("mainRootStack")
+        self.setCentralWidget(root_stack)
+        self._root_stack = root_stack
+
         tabs = QTabWidget()
         tabs.setObjectName("mainTabs")
-        self.setCentralWidget(tabs)
+        root_stack.addWidget(tabs)
         self._main_tabs = tabs
         self._tab_registry, self._tabs_context = build_main_tabs(
             tabs,
             self,
             on_status_message=self._show_status_message,
         )
-        self._onboarding_dialog: OnboardingAutofillDialog | None = None
+        self._onboarding_view: OnboardingAutofillDialog | None = None
 
     def _show_status_message(self, message: str, timeout_ms: int) -> None:
         self.statusBar().showMessage(message, timeout_ms)
@@ -61,11 +67,23 @@ class WatchedMoviesWindow(QMainWindow):
         """Show first-run deterministic candidate-pool autofill wizard when needed."""
         if candidate_service.should_show_onboarding_autofill() is False:
             return
-        dialog = OnboardingAutofillDialog(
+        onboarding = OnboardingAutofillDialog(
             ui_language=get_persisted_interface_language(),
             parent=self,
         )
-        dialog.completed.connect(lambda _result: self._tabs_context.focus_candidates())
-        dialog.finished.connect(lambda _code: setattr(self, "_onboarding_dialog", None))
-        self._onboarding_dialog = dialog
-        dialog.open()
+        onboarding.setModal(False)
+        onboarding.setWindowFlag(Qt.WindowType.Widget, True)
+
+        def finish_onboarding(_code: int) -> None:
+            self._root_stack.setCurrentWidget(self._main_tabs)
+            self._tabs_context.focus_candidates()
+            self._root_stack.removeWidget(onboarding)
+            onboarding.deleteLater()
+            self._onboarding_view = None
+
+        onboarding.completed.connect(lambda _result: self._tabs_context.focus_candidates())
+        onboarding.finished.connect(finish_onboarding)
+        self._onboarding_view = onboarding
+        self._root_stack.addWidget(onboarding)
+        self._root_stack.setCurrentWidget(onboarding)
+        onboarding.show()

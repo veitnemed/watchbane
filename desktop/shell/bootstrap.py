@@ -90,6 +90,14 @@ def log_startup_scale_diagnostics(
 
 def main() -> None:
     _prepare_webengine()
+    dev_reset = None
+    try:
+        from storage.runtime import apply_dev_startup_reset_from_env
+
+        dev_reset = apply_dev_startup_reset_from_env()
+    except Exception as error:
+        log_exception("app.dev_startup_reset.error", error)
+        raise
     ensure_runtime_data_layout()
     persisted_settings = load_app_settings()
     active_ui_scale = get_persisted_ui_scale()
@@ -100,6 +108,8 @@ def main() -> None:
     log_path = start_gui_event_log_if_enabled()
     if log_path is not None:
         log_event("app.bootstrap.runtime_ready", log_path=str(log_path))
+        if dev_reset and dev_reset.get("applied"):
+            log_event("app.bootstrap.dev_startup_reset", **dev_reset)
     app = QApplication(sys.argv)
     apply_app_icon(app)
     app.setFont(QFont(FONT_FAMILY, font_px(FONT_APP)))

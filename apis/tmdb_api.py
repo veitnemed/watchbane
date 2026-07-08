@@ -19,6 +19,8 @@ API_URL = "https://api.themoviedb.org/3"
 IMAGE_URL = "https://image.tmdb.org/t/p/original"
 DEFAULT_LANGUAGE = "ru-RU"
 DEFAULT_REGION = "RU"
+TMDB_BEARER_TOKEN_ENV_VARS = ("TMDB_ACCESS_TOKEN", "TMDB_TOKEN")
+TMDB_API_KEY_ENV_VAR = "TMDB_API_KEY"
 DEFAULT_TV_DETAIL_APPENDS = (
     "external_ids",
     "content_ratings",
@@ -81,13 +83,30 @@ def load_dotenv(path: str | Path = ".env") -> None:
             os.environ[key] = value
 
 
-def load_tmdb_token() -> str:
+def load_tmdb_credentials() -> tuple[str, str]:
+    """Return TMDb auth as ("bearer", token) or ("api_key", key)."""
     for env_file in [".env", ".env.local", "tmdb.env"]:
         load_dotenv(env_file)
-    token = os.getenv("TMDB_TOKEN", "").strip()
-    if token == "":
-        raise RuntimeError("TMDB_TOKEN не найден. Добавьте его в .env.local или переменную окружения.")
-    return token
+
+    for env_name in TMDB_BEARER_TOKEN_ENV_VARS:
+        token = os.getenv(env_name, "").strip()
+        if token:
+            return "bearer", token
+
+    api_key = os.getenv(TMDB_API_KEY_ENV_VAR, "").strip()
+    if api_key:
+        return "api_key", api_key
+
+    raise RuntimeError(
+        "TMDb credentials not found. Set TMDB_ACCESS_TOKEN, TMDB_API_KEY, or TMDB_TOKEN "
+        "in .env.local or the environment."
+    )
+
+
+def load_tmdb_token() -> str:
+    """Return a legacy TMDb token value for callers that pass explicit Bearer auth."""
+    _kind, credential = load_tmdb_credentials()
+    return credential
 
 
 def get_token() -> str:
@@ -153,8 +172,18 @@ def tmdb_get(
     *,
     token: str | None = None,
 ) -> dict[str, Any]:
-    token = token or load_tmdb_token()
-    query = urlencode(params or {}, doseq=True)
+    request_params = dict(params or {})
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    else:
+        auth_kind, credential = load_tmdb_credentials()
+        if auth_kind == "api_key":
+            request_params["api_key"] = credential
+        else:
+            headers["Authorization"] = f"Bearer {credential}"
+
+    query = urlencode(request_params, doseq=True)
     normalized_path = path if path.startswith("/") else f"/{path}"
     url = f"{API_URL}{normalized_path}"
     if query:
@@ -162,10 +191,7 @@ def tmdb_get(
 
     request = Request(
         url,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/json",
-        },
+        headers=headers,
     )
     try:
         with urlopen(request, timeout=20) as response:
@@ -868,20 +894,18 @@ def print_search_options(results: list[dict[str, Any]], selected_id: int) -> Non
 
 def check_api_available(token: str | None = None) -> dict[str, Any]:
     """Проверяет базовую доступность TMDb API коротким запросом."""
-    try:
-        resolved_token = token or load_tmdb_token()
-    except RuntimeError as error:
-        return {
-            "ok": False,
-            "error": "missing_token",
-            "details": str(error),
-        }
-
     started = time.monotonic()
     try:
-        tmdb_get("/configuration", token=resolved_token)
+        tmdb_get("/configuration", token=token)
     except RuntimeError as error:
         elapsed_ms = round((time.monotonic() - started) * 1000, 1)
+        if "TMDb credentials not found" in str(error):
+            return {
+                "ok": False,
+                "error": "missing_token",
+                "details": str(error),
+                "elapsed_ms": elapsed_ms,
+            }
         return {
             "ok": False,
             "error": "request_failed",

@@ -49,6 +49,7 @@ def show_global_menu(movies_counter: int, error: int = 0, candidate_summary=None
     print(" 4 >> Поиск")
     print(" 5 >> Справочники")
     print(" 6 >> Данные / profiles")
+    print(" 7 >> Dev GUI: empty candidate pool on startup")
     print(" 0 >> Выход\n")
 
 

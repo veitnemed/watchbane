@@ -25,7 +25,7 @@ def run_console_app():
             profile_summary=profile_summary,
         )
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 7)])
         if command == "0":
             break
         elif command == "1":
@@ -40,3 +40,6 @@ def run_console_app():
             global_menu.open_reference_menu()
         elif command == "6":
             global_menu.open_data_profiles_menu()
+        elif command == "7":
+            global_menu.open_dev_gui_empty_candidate_pool()
+            ui.press_enter()

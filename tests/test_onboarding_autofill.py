@@ -266,6 +266,24 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
         conn.close()
 
 
+def test_onboarding_plan_view_has_target_quotas_without_api_calls() -> None:
+    from candidates import service
+
+    plan = service.get_onboarding_autofill_plan_view({
+        "media_preference": "movie",
+        "release_preference": "new",
+        "vibe_preference": "dark",
+        "origin_preference": "foreign",
+        "ui_language": "ru",
+    })
+
+    assert plan["target"] == autofill.STARTER_POOL_TARGET
+    assert plan["quotas"]["media_type"][MEDIA_MOVIE] == 84
+    assert plan["quotas"]["media_type"][MEDIA_TV] == 36
+    assert plan["quotas"]["origin"]["foreign"] == 84
+    assert plan["quotas"]["origin"]["domestic"] == 36
+
+
 def test_candidate_identity_is_media_type_plus_tmdb_id() -> None:
     index = {"tmdb_identities": {(MEDIA_MOVIE, 7)}, "media_title_year_keys": set()}
     movie = {"id": 7, "title": "Seven", "release_date": "1995-01-01"}

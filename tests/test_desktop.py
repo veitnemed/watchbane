@@ -1409,6 +1409,10 @@ def test_desktop_storage_web_import_boundary_uses_documented_whitelist() -> None
             "from storage.runtime import ensure_runtime_data_layout",
         ),
         (
+            "desktop/shell/bootstrap.py",
+            "from storage.runtime import apply_dev_startup_reset_from_env",
+        ),
+        (
             "desktop/shared/detail/posters.py",
             "from storage.files import open_file",
         ),

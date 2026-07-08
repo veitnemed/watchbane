@@ -11,8 +11,13 @@ from app.core import storage as search_storage
 from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
 from candidates.onboarding.autofill import (
     OnboardingTasteProfile,
+    build_fetch_buckets,
+    media_weights,
+    origin_weights,
+    release_weights,
     run_onboarding_autofill,
     should_start_onboarding_autofill,
+    vibe_weights,
 )
 from candidates.pool.dataset_overlap import (
     count_pool_dataset_title_matches,
@@ -242,6 +247,52 @@ def build_onboarding_candidate_pool(
         "cancelled": result.cancelled,
         "warning": result.warning,
         "candidates": result.candidates,
+    }
+
+
+def _normalize_onboarding_profile(profile: OnboardingTasteProfile | dict) -> OnboardingTasteProfile:
+    if isinstance(profile, OnboardingTasteProfile):
+        return profile.normalized()
+    return OnboardingTasteProfile(
+        media_preference=profile.get("media_preference"),
+        release_preference=profile.get("release_preference"),
+        vibe_preference=profile.get("vibe_preference"),
+        origin_preference=profile.get("origin_preference"),
+        ui_language=profile.get("ui_language"),
+    ).normalized()
+
+
+def get_onboarding_autofill_plan_view(profile: OnboardingTasteProfile | dict) -> dict:
+    """Return deterministic onboarding pool quotas without making TMDb calls."""
+    taste_profile = _normalize_onboarding_profile(profile)
+    buckets = build_fetch_buckets(taste_profile)
+
+    def quota_by(field: str) -> dict[str, int]:
+        totals: dict[str, int] = {}
+        for bucket in buckets:
+            value = getattr(bucket, field)
+            if value is None:
+                continue
+            totals[str(value)] = totals.get(str(value), 0) + int(bucket.quota)
+        return totals
+
+    return {
+        "profile": taste_profile.as_repository_dict(),
+        "target": sum(int(bucket.quota) for bucket in buckets),
+        "bucket_count": len(buckets),
+        "quotas": {
+            "media_type": quota_by("media_type"),
+            "release": quota_by("era"),
+            "vibe": quota_by("vibe"),
+            "origin": quota_by("origin"),
+            "original_language": quota_by("original_language"),
+        },
+        "weights": {
+            "media_type": media_weights(taste_profile.media_preference),
+            "release": release_weights(taste_profile.release_preference),
+            "vibe": vibe_weights(taste_profile.vibe_preference),
+            "origin": origin_weights(taste_profile.origin_preference, ui_language=taste_profile.ui_language),
+        },
     }
 
 
