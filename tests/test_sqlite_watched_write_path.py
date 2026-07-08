@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from config import constant
 from config import scheme
 from common import format_score
@@ -74,6 +76,31 @@ def test_sqlite_backend_rename_updates_dataset_and_meta(tmp_path, monkeypatch) -
     assert list(storage_data.load_meta()) == ["New"]
     assert storage_data.load_dataset()["New"]["main_info"]["title"] == "New"
     assert storage_data.load_meta()["New"]["main_info"]["title"] == "New"
+
+
+def test_sqlite_backend_rename_rolls_back_dataset_when_meta_save_fails(tmp_path, monkeypatch) -> None:
+    _use_sqlite(tmp_path, monkeypatch)
+    storage_data.save_dataset({"Old": _movie("Old")})
+    storage_data.save_meta({"Old": {"main_info": _movie("Old")["main_info"], "raw_scores": {}}})
+
+    from storage.sqlite import watched_repository
+
+    original_save_meta_dict = watched_repository.save_meta_dict
+
+    def fail_save_meta_dict(*args, **kwargs):
+        raise RuntimeError("forced meta failure")
+
+    monkeypatch.setattr(watched_repository, "save_meta_dict", fail_save_meta_dict)
+
+    with pytest.raises(RuntimeError, match="forced meta failure"):
+        storage_data.rename_movie_title("Old", "New")
+
+    monkeypatch.setattr(watched_repository, "save_meta_dict", original_save_meta_dict)
+
+    assert list(storage_data.load_dataset()) == ["Old"]
+    assert list(storage_data.load_meta()) == ["Old"]
+    assert storage_data.load_dataset()["Old"]["main_info"]["title"] == "Old"
+    assert storage_data.load_meta()["Old"]["main_info"]["title"] == "Old"
 
 
 def test_sqlite_backend_add_update_delete_watched_record(tmp_path, monkeypatch) -> None:
