@@ -7,6 +7,7 @@ import pytest
 from candidates.repositories import criteria_repository
 from candidates.repositories import json_io
 from candidates.repositories import pool_repository
+from storage import files as storage_files
 
 
 def _tmdb_candidate(**overrides) -> dict:
@@ -72,7 +73,7 @@ def test_atomic_candidate_json_write_preserves_existing_file_on_replace_failure(
     def fail_replace(source, target):
         raise OSError("replace failed")
 
-    monkeypatch.setattr(json_io.os, "replace", fail_replace)
+    monkeypatch.setattr(storage_files.os, "replace", fail_replace)
 
     with pytest.raises(OSError, match="replace failed"):
         json_io.dump_json_atomic(str(target_path), {"new": {"title": "Drop"}})

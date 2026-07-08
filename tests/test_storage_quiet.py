@@ -3,6 +3,7 @@ import json
 import pytest
 
 from storage import data as storage_data
+from storage import files as storage_files
 
 
 def _patch_storage_paths(monkeypatch, tmp_path) -> None:
@@ -98,7 +99,7 @@ def test_save_dataset_preserves_existing_file_when_atomic_replace_fails(monkeypa
     def fail_replace(source, target):
         raise OSError("replace failed")
 
-    monkeypatch.setattr(storage_data.os, "replace", fail_replace)
+    monkeypatch.setattr(storage_files.os, "replace", fail_replace)
 
     with pytest.raises(OSError, match="replace failed"):
         storage_data.save_dataset({"New": {"main_info": {"title": "New"}, "genre": {}}})
@@ -117,7 +118,7 @@ def test_save_meta_preserves_existing_file_when_atomic_replace_fails(monkeypatch
     def fail_replace(source, target):
         raise OSError("replace failed")
 
-    monkeypatch.setattr(storage_data.os, "replace", fail_replace)
+    monkeypatch.setattr(storage_files.os, "replace", fail_replace)
 
     with pytest.raises(OSError, match="replace failed"):
         storage_data.save_meta({"New": {"tmdb_id": 202}})

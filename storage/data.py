@@ -1,37 +1,17 @@
 """Читает, сохраняет, создает и очищает dataset и meta."""
 
 import json
-import os
-from pathlib import Path
 
 from config import constant
 from common import valid
-from storage.files import is_json_exists
+from storage.files import dump_json_atomic, is_json_exists
 from storage.normalize import normalize_main_info, normalize_movie_tags, normalize_raw_scores
-
-
-def _dump_json_atomic(path: str, payload: dict) -> None:
-    """Write JSON through a same-directory temp file before replacing target."""
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = target.with_name(f"{target.name}.tmp")
-
-    try:
-        with temp_path.open("w", encoding="utf-8") as file:
-            json.dump(payload, file, ensure_ascii=False, indent=4)
-        os.replace(temp_path, target)
-    except Exception:
-        try:
-            temp_path.unlink()
-        except OSError:
-            pass
-        raise
 
 
 def init_dataset():
     """Создает файл датасета, если его нет."""
     if is_json_exists(constant.FILE_NAME) is False:
-        _dump_json_atomic(constant.FILE_NAME, {})
+        dump_json_atomic(constant.FILE_NAME, {})
 
 
 def load_dataset() -> dict:
@@ -51,12 +31,12 @@ def load_dataset() -> dict:
 def save_dataset(data: dict):
     """Сохраняет датасет в JSON-файл."""
     normalized = {title: normalize_movie_tags(movie) for title, movie in data.items()}
-    _dump_json_atomic(constant.FILE_NAME, normalized)
+    dump_json_atomic(constant.FILE_NAME, normalized)
 
 
 def clean_dataset():
     """Очищает датасет."""
-    _dump_json_atomic(constant.FILE_NAME, {})
+    dump_json_atomic(constant.FILE_NAME, {})
 
 
 def is_origin_title(new_title: str) -> bool:
@@ -86,7 +66,7 @@ def find_exact_title(title: str) -> str | None:
 def init_meta():
     """Создает файл meta, если его нет."""
     if is_json_exists(constant.META_JSON) is False:
-        _dump_json_atomic(constant.META_JSON, {})
+        dump_json_atomic(constant.META_JSON, {})
 
 
 def load_meta() -> dict:
@@ -105,12 +85,12 @@ def load_meta() -> dict:
 
 def save_meta(meta: dict):
     """Сохраняет meta в JSON-файл."""
-    _dump_json_atomic(constant.META_JSON, meta)
+    dump_json_atomic(constant.META_JSON, meta)
 
 
 def clean_meta():
     """Очищает meta."""
-    _dump_json_atomic(constant.META_JSON, {})
+    dump_json_atomic(constant.META_JSON, {})
 
 
 def add_movies_to_meta(main_info: dict, raw: dict, extra_meta: dict | None = None) -> bool:
