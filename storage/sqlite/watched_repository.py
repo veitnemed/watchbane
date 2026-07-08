@@ -8,7 +8,8 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 
-from dataset.models.identity import find_case_insensitive_key
+from dataset.models.identity import find_case_insensitive_key, normalize_title_key
+from dataset.models.media_type import normalize_media_type
 from storage.normalize import normalize_movie_tags
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
@@ -323,13 +324,13 @@ def find_watched_identity(
     """Find a watched dataset key using indexed identity columns."""
     active, owned = _connection(conn, path)
     clauses = ["title_normalized = ?"]
-    params: list[object] = [str(title).strip().lower()]
+    params: list[object] = [normalize_title_key(title)]
     if year is not None:
         clauses.append("year = ?")
         params.append(year)
     if media_type is not None:
         clauses.append("media_type = ?")
-        params.append(media_type)
+        params.append(normalize_media_type(media_type))
     if tmdb_id is not None:
         clauses.append("tmdb_id = ?")
         params.append(tmdb_id)

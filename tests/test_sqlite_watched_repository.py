@@ -67,6 +67,21 @@ def test_find_exact_title_origin_and_delete(tmp_path) -> None:
     assert watched_repository.is_origin_title("Watchmen", path=db_path) is True
 
 
+def test_find_watched_identity_normalizes_media_type_alias(tmp_path) -> None:
+    db_path = tmp_path / "watchbane.sqlite3"
+    watched_repository.save_dataset_dict({"Watchmen": _movie("Watchmen", media_type="movie")}, path=db_path)
+
+    assert (
+        watched_repository.find_watched_identity(
+            " watchmen ",
+            year=2015,
+            media_type="film",
+            path=db_path,
+        )
+        == "Watchmen"
+    )
+
+
 def test_delete_watched_preserves_meta(tmp_path) -> None:
     db_path = tmp_path / "watchbane.sqlite3"
     watched_repository.save_dataset_dict({"Метод": _movie()}, path=db_path)
