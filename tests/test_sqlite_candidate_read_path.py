@@ -7,7 +7,6 @@ from storage.sqlite import candidate_repository
 
 def _use_sqlite(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "sqlite")
     monkeypatch.setattr("storage.data.load_dataset", lambda: {})
 
 

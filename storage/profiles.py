@@ -17,6 +17,7 @@ SANDBOX_PROFILE = "sandbox"
 SANDBOX_KIND = "sandbox"
 ACTIVE_PROFILE_JSON = "active_profile.json"
 PROFILE_META_JSON = "profile.json"
+_BASE_DATA_DIR_OVERRIDE: Path | None = None
 
 
 class ProfileError(RuntimeError):
@@ -39,7 +40,15 @@ def _clean_profile_name(name: str) -> str:
 
 
 def _base_data_dir() -> Path:
+    if _BASE_DATA_DIR_OVERRIDE is not None:
+        return _BASE_DATA_DIR_OVERRIDE
     return Path(constant.APP_DATA_DIR)
+
+
+def set_base_data_dir(path: str | Path | None) -> None:
+    """Set the profile root independently from the currently active data dir."""
+    global _BASE_DATA_DIR_OVERRIDE
+    _BASE_DATA_DIR_OVERRIDE = None if path is None else Path(path)
 
 
 def _active_profile_path() -> Path:
@@ -295,6 +304,7 @@ def apply_profile_to_constants(name: str) -> None:
     profile = _clean_profile_name(name)
     data_dir = get_profile_data_dir(profile)
 
+    constant.APP_DATA_DIR = str(data_dir)
     constant.WATCHED_DIR = str(data_dir / "watched")
     constant.CANDIDATES_DIR = str(data_dir / "candidates")
     constant.CACHE_DIR = str(data_dir / "cache")

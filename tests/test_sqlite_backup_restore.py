@@ -10,7 +10,6 @@ from storage.sqlite.backup import backup_sqlite_database, restore_sqlite_databas
 def _use_sqlite(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setattr("config.constant.BACKUP_DIR", str(tmp_path / "data" / "backups"))
-    monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "sqlite")
 
 
 def _movie(title: str) -> dict:

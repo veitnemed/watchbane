@@ -65,3 +65,11 @@ py scripts\json_cleanup_metrics.py --json
 | Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15805 |
 | Product JSON runtime reference count | 135 |
 | Product backend switch reference count | 45 |
+
+After prompt 03 runtime backend selector removal:
+
+| Metric | Prompt 03 |
+| --- | ---: |
+| Tracked Python LOC under `storage`, `candidates`, `dataset`, `app/core` | 15535 |
+| Product JSON runtime reference count | 96 |
+| Product backend switch reference count | 0 |

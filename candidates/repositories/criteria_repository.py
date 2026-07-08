@@ -1,58 +1,36 @@
-"""JSON persistence for candidate_criteria.json."""
+"""SQLite persistence facade for runtime candidate criteria."""
 
 from __future__ import annotations
 
-import json
-import os
 from datetime import datetime
 
-from config import constant
 from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
-from candidates.repositories.json_io import dump_json_atomic
 from candidates.repositories import pool_repository
-from storage.backend import is_sqlite_backend
 
 
 def init_candidate_criteria() -> None:
-    """Создает JSON с критериями подбора, если его еще нет."""
-    if is_sqlite_backend():
-        from storage.sqlite.migrations import apply_migrations
+    """Ensure candidate criteria tables exist."""
+    from storage.sqlite.migrations import apply_migrations
 
-        apply_migrations()
-        return
-
-    if os.path.exists(constant.CRITERIA_POOL_JSON):
-        return
-    dump_json_atomic(constant.CRITERIA_POOL_JSON, {})
+    apply_migrations()
 
 
 def load_candidate_criteria() -> dict:
-    """Загружает сохраненные критерии подбора."""
-    if is_sqlite_backend():
-        from storage.sqlite.candidate_repository import load_candidate_criteria_dict
+    """Load runtime candidate criteria from SQLite."""
+    from storage.sqlite.candidate_repository import load_candidate_criteria_dict
 
-        return load_candidate_criteria_dict()
-
-    if not os.path.exists(constant.CRITERIA_POOL_JSON):
-        return {}
-    with open(constant.CRITERIA_POOL_JSON, "r", encoding="utf-8-sig") as file:
-        data = json.load(file)
-    return data if isinstance(data, dict) else {}
+    return load_candidate_criteria_dict()
 
 
 def save_candidate_criteria(data: dict) -> None:
-    """Сохраняет критерии подбора."""
-    if is_sqlite_backend():
-        from storage.sqlite.candidate_repository import save_candidate_criteria_dict
+    """Save runtime candidate criteria to SQLite."""
+    from storage.sqlite.candidate_repository import save_candidate_criteria_dict
 
-        save_candidate_criteria_dict(data)
-        return
-
-    dump_json_atomic(constant.CRITERIA_POOL_JSON, data)
+    save_candidate_criteria_dict(data)
 
 
 def save_named_criteria(criteria_name: str, criteria: dict) -> tuple[str, dict]:
-    """Сохраняет именованный набор критериев и возвращает его."""
+    """Save one named criteria entry and return it."""
     all_criteria = load_candidate_criteria()
     all_criteria[criteria_name] = criteria
     save_candidate_criteria(all_criteria)
@@ -67,7 +45,7 @@ def patch_criteria_filters(
     genres: list,
     excluded_genres: list,
 ) -> dict:
-    """Обновляет у набора критериев только блок фильтрации."""
+    """Update only filter fields for a criteria entry."""
     all_criteria = load_candidate_criteria()
 
     updated = dict(current)
@@ -82,7 +60,7 @@ def patch_criteria_filters(
 
 
 def build_criteria_label(criteria_name: str, criteria: dict) -> str:
-    """Формирует короткую подпись сохраненного набора критериев."""
+    """Build a compact label for one criteria entry."""
     parts = [criteria_name]
     if criteria.get("count"):
         parts.append(f"count={criteria['count']}")
@@ -93,14 +71,14 @@ def build_criteria_label(criteria_name: str, criteria: dict) -> str:
     if criteria.get("country"):
         parts.append(criteria["country"])
     if criteria.get("genres"):
-        parts.append(f"жанры={len(criteria['genres'])}")
+        parts.append(f"genres={len(criteria['genres'])}")
     if criteria.get("excluded_genres"):
-        parts.append(f"искл={len(criteria['excluded_genres'])}")
+        parts.append(f"excluded={len(criteria['excluded_genres'])}")
     return " | ".join(parts)
 
 
 def ensure_common_pool_criteria() -> tuple[str, dict]:
-    """Returns the single shared criteria entry, creating it when missing."""
+    """Return the shared criteria entry, creating it when missing."""
     all_criteria = load_candidate_criteria()
     existing = all_criteria.get(COMMON_POOL_CRITERIA_NAME)
     if isinstance(existing, dict):
@@ -120,7 +98,7 @@ def ensure_common_pool_criteria() -> tuple[str, dict]:
 
 
 def clear_common_pool() -> dict:
-    """Removes all candidates from the shared pool without touching watched dataset."""
+    """Remove all candidates from the shared pool without touching watched data."""
     pool = pool_repository.load_candidate_pool()
     cleared = len(pool)
     pool_repository.save_candidate_pool({})
@@ -128,7 +106,7 @@ def clear_common_pool() -> dict:
 
 
 def delete_criteria_and_candidates(criteria_name: str) -> dict:
-    """Удаляет набор критериев и все связанные с ним объекты из общего пула."""
+    """Delete a criteria entry and all candidates associated with it."""
     from candidates.pool.normalization import normalize_storage_pool
 
     all_criteria = load_candidate_criteria()

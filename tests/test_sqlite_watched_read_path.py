@@ -7,7 +7,6 @@ from storage.sqlite import watched_repository
 def test_sqlite_backend_routes_watched_read_path(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(data_dir))
-    monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "sqlite")
     watched_repository.save_dataset_dict(
         {
             "Метод": {
@@ -34,7 +33,6 @@ def test_sqlite_backend_routes_watched_read_path(tmp_path, monkeypatch) -> None:
 def test_sqlite_backend_routes_watched_meta_read_path(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "data"
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(data_dir))
-    monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "sqlite")
     watched_repository.save_meta_dict({"Метод": {"raw_scores": {"tmdb_id": 693}}})
 
     assert storage_data.load_meta() == {"Метод": {"raw_scores": {"tmdb_id": 693}}}

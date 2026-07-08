@@ -4,13 +4,11 @@ from app.core import storage as search_storage
 from candidates import service
 from desktop.settings.app_settings import AppSettings, load_app_settings, save_app_settings
 from posters import cache as poster_cache
-from storage.backend import is_sqlite_backend
 from storage.sqlite import action_repository, poster_repository, settings_repository
 
 
 def _use_sqlite(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "sqlite")
 
 
 def test_sqlite_backend_routes_hidden_and_watchlist_actions(tmp_path, monkeypatch) -> None:
@@ -38,7 +36,6 @@ def test_sqlite_backend_routes_app_settings(tmp_path, monkeypatch) -> None:
 
 def test_sqlite_backend_routes_poster_cache_metadata(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
-    assert is_sqlite_backend() is True
 
     entry = poster_cache.upsert_poster_cache_entry(
         "Dark",

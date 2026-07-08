@@ -33,11 +33,10 @@ def test_runtime_initializes_sqlite_when_backend_is_sqlite(tmp_path, monkeypatch
         str(logs_dir),
         str(backup_dir),
     ))
-    monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "sqlite")
 
     result = runtime.ensure_runtime_data_layout()
 
     assert result["backend"] == "sqlite"
     assert result["sqlite_schema_version"] == 1
     assert Path(result["sqlite_db_path"]).is_file()
-    assert (watched_dir / "titles.json").is_file()
+    assert (watched_dir / "titles.json").exists() is False

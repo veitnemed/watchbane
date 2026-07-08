@@ -1,5 +1,4 @@
 import importlib
-import json
 import re
 import sys
 from pathlib import Path
@@ -25,6 +24,7 @@ from desktop.settings.app_settings import (
     normalize_ui_scale,
     save_app_settings,
 )
+from storage.sqlite import settings_repository
 
 
 DEFAULT_TUNING = {
@@ -54,9 +54,10 @@ def _reset_ui_scale():
 
 
 def _use_settings_path(monkeypatch, tmp_path):
-    settings_path = tmp_path / "data" / "settings.json"
-    monkeypatch.setattr(constant, "APP_SETTINGS_JSON", str(settings_path))
-    return settings_path
+    data_dir = tmp_path / "data"
+    monkeypatch.setattr(constant, "APP_DATA_DIR", str(data_dir))
+    monkeypatch.setattr(constant, "APP_SETTINGS_JSON", str(data_dir / "settings.json"))
+    return data_dir / "watchbane.sqlite3"
 
 
 def _set_anchor_ui_scale(ui_scale: float) -> None:
@@ -84,17 +85,15 @@ def test_missing_settings_file_gives_default_languages(monkeypatch, tmp_path) ->
 
 
 def test_missing_ui_scale_gives_default(monkeypatch, tmp_path) -> None:
-    settings_path = _use_settings_path(monkeypatch, tmp_path)
-    settings_path.parent.mkdir(parents=True)
-    settings_path.write_text(json.dumps({"other": True}), encoding="utf-8")
+    db_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_repository.save_settings_dict({"other": True}, path=db_path)
 
     assert load_app_settings().ui_scale == APP_UI_SCALE_DEFAULT
 
 
-def test_legacy_ui_scale_only_settings_payload_loads(monkeypatch, tmp_path) -> None:
-    settings_path = _use_settings_path(monkeypatch, tmp_path)
-    settings_path.parent.mkdir(parents=True)
-    settings_path.write_text(json.dumps({"ui_scale": 1.25}), encoding="utf-8")
+def test_ui_scale_only_settings_payload_loads(monkeypatch, tmp_path) -> None:
+    db_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_repository.save_settings_dict({"ui_scale": 1.25}, path=db_path)
 
     settings = load_app_settings()
 
@@ -104,9 +103,7 @@ def test_legacy_ui_scale_only_settings_payload_loads(monkeypatch, tmp_path) -> N
 
 
 def test_invalid_json_does_not_crash(monkeypatch, tmp_path) -> None:
-    settings_path = _use_settings_path(monkeypatch, tmp_path)
-    settings_path.parent.mkdir(parents=True)
-    settings_path.write_text("{bad json", encoding="utf-8")
+    _use_settings_path(monkeypatch, tmp_path)
 
     assert load_app_settings().ui_scale == APP_UI_SCALE_DEFAULT
 
@@ -133,17 +130,14 @@ def test_invalid_language_value_defaults_to_ru() -> None:
 
 
 def test_invalid_persisted_language_values_default_to_ru(monkeypatch, tmp_path) -> None:
-    settings_path = _use_settings_path(monkeypatch, tmp_path)
-    settings_path.parent.mkdir(parents=True)
-    settings_path.write_text(
-        json.dumps(
-            {
-                "ui_scale": 1.10,
-                "interface_language": "de",
-                "data_language": "",
-            }
-        ),
-        encoding="utf-8",
+    db_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_repository.save_settings_dict(
+        {
+            "ui_scale": 1.10,
+            "interface_language": "de",
+            "data_language": "",
+        },
+        path=db_path,
     )
 
     settings = load_app_settings()
@@ -154,16 +148,16 @@ def test_invalid_persisted_language_values_default_to_ru(monkeypatch, tmp_path) 
 
 
 def test_save_then_load_ui_scale(monkeypatch, tmp_path) -> None:
-    settings_path = _use_settings_path(monkeypatch, tmp_path)
+    db_path = _use_settings_path(monkeypatch, tmp_path)
 
     save_app_settings(AppSettings(ui_scale=1.25))
 
-    assert settings_path.exists()
+    assert db_path.exists()
     assert load_app_settings().ui_scale == 1.25
 
 
 def test_save_then_load_languages(monkeypatch, tmp_path) -> None:
-    settings_path = _use_settings_path(monkeypatch, tmp_path)
+    db_path = _use_settings_path(monkeypatch, tmp_path)
 
     save_app_settings(
         AppSettings(
@@ -173,7 +167,7 @@ def test_save_then_load_languages(monkeypatch, tmp_path) -> None:
         )
     )
 
-    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    payload = settings_repository.load_settings_dict(path=db_path)
     settings = load_app_settings()
 
     assert payload == {
@@ -186,17 +180,17 @@ def test_save_then_load_languages(monkeypatch, tmp_path) -> None:
 
 
 def test_watchbane_ui_scale_env_override_is_current_process_only(monkeypatch, tmp_path) -> None:
-    settings_path = _use_settings_path(monkeypatch, tmp_path)
+    db_path = _use_settings_path(monkeypatch, tmp_path)
     save_app_settings(AppSettings(ui_scale=1.10))
 
     monkeypatch.setenv("WATCHBANE_UI_SCALE", "1.35")
 
     assert get_persisted_ui_scale() == 1.35
-    assert json.loads(settings_path.read_text(encoding="utf-8"))["ui_scale"] == 1.10
+    assert settings_repository.load_settings_dict(path=db_path)["ui_scale"] == 1.10
 
 
 def test_language_env_overrides_are_independent(monkeypatch, tmp_path) -> None:
-    settings_path = _use_settings_path(monkeypatch, tmp_path)
+    db_path = _use_settings_path(monkeypatch, tmp_path)
     save_app_settings(
         AppSettings(
             ui_scale=1.10,
@@ -210,8 +204,9 @@ def test_language_env_overrides_are_independent(monkeypatch, tmp_path) -> None:
 
     assert get_persisted_interface_language() == "en"
     assert get_persisted_data_language() == "ru"
-    assert json.loads(settings_path.read_text(encoding="utf-8"))["interface_language"] == "ru"
-    assert json.loads(settings_path.read_text(encoding="utf-8"))["data_language"] == "en"
+    payload = settings_repository.load_settings_dict(path=db_path)
+    assert payload["interface_language"] == "ru"
+    assert payload["data_language"] == "en"
 
 
 def test_language_to_tmdb_locale() -> None:

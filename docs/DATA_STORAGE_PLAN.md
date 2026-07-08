@@ -29,12 +29,12 @@ data/
 - `data/watchbane.sqlite3` - источник правды для runtime user data.
 - SQLite хранит watched records, watched meta, candidate pool, candidate criteria, watchlist/hidden actions, app settings и poster-cache metadata.
 - JSON-файлы в `data/watched/`, `data/candidates/`, `data/settings.json` и `data/cache/posters/posters.json` являются legacy import/export/backup compatibility, а не source of truth при стандартном backend.
-- Для rollback/debug можно запустить legacy backend через `WATCHBANE_STORAGE_BACKEND=json`.
+- Runtime backend selector removed: JSON is no longer a selectable runtime backend.
 
 ## Runtime Lists
 
 - Watchlist и hidden хранятся в SQLite (`candidate_actions`).
-- Legacy JSON-файлы `data/candidates/watchlist.json` и `data/candidates/hidden.json` используются для import/export/rollback.
+- Legacy JSON-файлы `data/candidates/watchlist.json` и `data/candidates/hidden.json` используются только для import/export compatibility.
 
 ## Cache
 

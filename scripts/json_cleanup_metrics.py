@@ -45,7 +45,7 @@ def _git_tracked_files(repo_root: Path) -> list[Path]:
         text=True,
         encoding="utf-8",
     )
-    return [repo_root / line for line in result.stdout.splitlines() if line.strip()]
+    return [path for line in result.stdout.splitlines() if line.strip() and (path := repo_root / line).exists()]
 
 
 def _is_under(path: Path, root: str) -> bool:

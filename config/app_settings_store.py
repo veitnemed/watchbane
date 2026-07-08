@@ -4,9 +4,7 @@ from __future__ import annotations
 
 
 def is_sqlite_settings_backend() -> bool:
-    from storage.backend import is_sqlite_backend
-
-    return is_sqlite_backend()
+    return True
 
 
 def load_sqlite_settings_dict() -> dict:

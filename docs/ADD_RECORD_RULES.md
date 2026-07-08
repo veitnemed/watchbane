@@ -222,7 +222,7 @@ dataset.delete_record.delete_watched_record(dataset_key)
 
 Service:
 
-- создает backup (`*.sqlite3` при SQLite backend, legacy JSON backup при `WATCHBANE_STORAGE_BACKEND=json`);
+- создает SQLite backup (`*.sqlite3`);
 - удаляет запись из dataset;
 - удаляет meta;
 - чистит poster-cache;

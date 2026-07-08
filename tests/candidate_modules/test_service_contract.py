@@ -1,39 +1,18 @@
 """Tests for candidates.service read-path contract."""
 
-import json
-
 import pytest
 
 from candidates import service as candidate_service
+from candidates.repositories import pool_repository
 
 
-def _pool_path(tmp_path):
-    pool_path = tmp_path / "candidate_pool.json"
-    pool_path.write_text("{}", encoding="utf-8")
-    return pool_path
-
-
-def test_get_pool_view_does_not_write_json(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    pool_path = _pool_path(tmp_path)
-    monkeypatch.setattr(
-        "candidates.repositories.pool_repository.constant.CANDIDATE_POOL_JSON",
-        str(pool_path),
-    )
-
-    before_mtime = pool_path.stat().st_mtime
+def test_get_pool_view_uses_sqlite_read_path() -> None:
     view = candidate_service.get_pool_view()
-    after_mtime = pool_path.stat().st_mtime
 
     assert isinstance(view, list)
-    assert after_mtime == before_mtime
 
 
-def test_get_pool_stats_view_does_not_write_json(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    pool_path = _pool_path(tmp_path)
-    monkeypatch.setattr(
-        "candidates.repositories.pool_repository.constant.CANDIDATE_POOL_JSON",
-        str(pool_path),
-    )
+def test_get_pool_stats_view_uses_sqlite_read_path(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "candidates.pool.watched_cleanup.build_watched_signatures",
         lambda: set(),
@@ -43,12 +22,9 @@ def test_get_pool_stats_view_does_not_write_json(monkeypatch: pytest.MonkeyPatch
         lambda: set(),
     )
 
-    before_mtime = pool_path.stat().st_mtime
     stats_view = candidate_service.get_pool_stats_view()
-    after_mtime = pool_path.stat().st_mtime
 
     assert "stats" in stats_view
-    assert after_mtime == before_mtime
 
 
 def test_service_clean_common_pool_duplicates_delegates_without_recursion(
@@ -96,13 +72,8 @@ def test_service_format_candidate_description_delegates_without_recursion() -> N
     assert description == "A l..."
 
 
-def test_metadata_diagnostics_skips_non_object_pool_entries(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    pool_path = tmp_path / "candidate_pool.json"
+def test_metadata_diagnostics_reports_incomplete_sqlite_candidates() -> None:
     payload = {
-        "broken": "not a candidate",
         "incomplete": {"title": "Missing fields", "criteria_name": "pool"},
         "complete": {
             "title": "Complete",
@@ -115,16 +86,11 @@ def test_metadata_diagnostics_skips_non_object_pool_entries(
             "criteria_name": "pool",
         },
     }
-    pool_path.write_text(json.dumps(payload), encoding="utf-8")
-    monkeypatch.setattr(
-        "candidates.repositories.pool_repository.constant.CANDIDATE_POOL_JSON",
-        str(pool_path),
-    )
+    pool_repository.save_candidate_pool(payload)
 
-    before = pool_path.read_text(encoding="utf-8")
     view = candidate_service.get_metadata_diagnostics_view()
 
     assert view["is_empty"] is False
     assert view["incomplete_count"] == 1
-    assert view["incomplete_candidates"] == [payload["incomplete"]]
-    assert pool_path.read_text(encoding="utf-8") == before
+    assert view["incomplete_candidates"][0]["title"] == "Missing fields"
+    assert "missing_fields" in view["incomplete_candidates"][0]

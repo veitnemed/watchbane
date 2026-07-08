@@ -22,7 +22,7 @@ Legacy JSON remains supported for:
 
 - initial import into SQLite;
 - explicit backup/export from SQLite;
-- rollback/debug compatibility;
+- explicit legacy JSON import/export compatibility;
 - tests and migration fixtures.
 
 The app must not automatically delete legacy JSON files. Runtime writes to
@@ -101,10 +101,10 @@ After these phases, run ten small hardening cycles. Each cycle inspects the new
 SQLite architecture, identifies two weak spots, fixes one, adds or updates
 tests, and commits the result.
 
-## Rollback Plan
+## Legacy JSON Export Plan
 
-- Set `WATCHBANE_STORAGE_BACKEND=json` to use legacy JSON paths.
 - Use the SQLite to JSON exporter to write legacy-compatible JSON files.
+- JSON is not a selectable runtime backend after the cleanup cutover.
 - Restore a SQLite backup if the database file is damaged.
 - Legacy JSON files are never deleted automatically, so first-run import is
   non-destructive.

@@ -41,7 +41,6 @@ def _patch_runtime(tmp_path, monkeypatch) -> Path:
         str(logs_dir),
         str(backup_dir),
     ))
-    monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "sqlite")
     return data_dir
 
 

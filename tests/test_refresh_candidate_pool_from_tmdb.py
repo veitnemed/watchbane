@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+from candidates.repositories import pool_repository
 from scripts import refresh_candidate_pool_from_tmdb as refresh
 
 
@@ -109,7 +110,6 @@ def test_refresh_missing_tmdb_id_needs_manual_match_on_ambiguous_search(monkeypa
 
 
 def test_refresh_pool_apply_creates_backup_and_report(monkeypatch, tmp_path) -> None:
-    pool_path = tmp_path / "pool.json"
     report_path = tmp_path / "report.json"
     original_pool = {
         "show|2020": {
@@ -123,18 +123,18 @@ def test_refresh_pool_apply_creates_backup_and_report(monkeypatch, tmp_path) -> 
             "year": 2021,
         },
     }
-    _write_json(pool_path, original_pool)
-    monkeypatch.setattr(refresh.pool_repository.constant, "CANDIDATE_POOL_JSON", str(pool_path))
+    pool_repository.save_candidate_pool(original_pool)
+    canonical_original_pool = pool_repository.load_candidate_pool()
     monkeypatch.setattr(refresh.tmdb_api, "load_tmdb_token", lambda: "token")
     monkeypatch.setattr(refresh.tmdb_api, "get_tv_details", lambda tmdb_id, **_kwargs: _details(tmdb_id, year=2020))
     monkeypatch.setattr(refresh.tmdb_api, "search_tv_by_name", lambda *_args, **_kwargs: [])
 
     report = refresh.run_refresh(apply=True, report_path=report_path)
 
-    saved = _read_json(pool_path)
+    saved = pool_repository.load_candidate_pool()
     assert report["backup_path"] is not None
     assert Path(report["backup_path"]).exists()
-    assert _read_json(Path(report["backup_path"])) == original_pool
+    assert _read_json(Path(report["backup_path"])) == canonical_original_pool
     assert _read_json(report_path)["refreshed_by_tmdb_id"] == 1
     assert report["failed"] == 1
     assert report["complete_after_refresh"] == 1

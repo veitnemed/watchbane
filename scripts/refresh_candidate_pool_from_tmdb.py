@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -48,21 +47,13 @@ def _timestamp() -> str:
 
 
 def candidate_pool_path() -> Path:
-    path = Path(pool_repository.constant.CANDIDATE_POOL_JSON)
-    if path.is_absolute():
-        return path
-    return ROOT_DIR / path
+    from storage.sqlite.connection import get_db_path
+
+    return get_db_path()
 
 
 def backup_path_for(pool_path: Path, timestamp: str) -> Path:
-    return pool_path.with_name(f"{pool_path.stem}.before_tmdb_refresh.{timestamp}{pool_path.suffix}")
-
-
-def read_json(path: Path) -> Any:
-    if not path.exists():
-        return {}
-    with path.open("r", encoding="utf-8-sig") as file:
-        return json.load(file)
+    return pool_path.with_name(f"{pool_path.stem}.candidate_pool.before_tmdb_refresh.{timestamp}.json")
 
 
 def write_json(path: Path, data: Any) -> None:
@@ -224,7 +215,7 @@ def run_refresh(
     report_path: Path = REPORT_PATH,
 ) -> dict[str, Any]:
     pool_path = candidate_pool_path()
-    original_pool = read_json(pool_path)
+    original_pool = pool_repository.load_candidate_pool()
     token = tmdb_api.load_tmdb_token()
     refreshed_pool, stats = refresh_pool(
         original_pool,
@@ -238,11 +229,8 @@ def run_refresh(
     if apply:
         backup_path = backup_path_for(pool_path, _timestamp())
         backup_path.parent.mkdir(parents=True, exist_ok=True)
-        if pool_path.exists():
-            shutil.copy2(pool_path, backup_path)
-        else:
-            write_json(backup_path, original_pool)
-        write_json(pool_path, refreshed_pool)
+        write_json(backup_path, original_pool)
+        pool_repository.save_candidate_pool(refreshed_pool)
 
     report = build_report(
         mode="apply" if apply else "dry-run",
@@ -255,10 +243,10 @@ def run_refresh(
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Refresh candidate_pool.json from TMDb.")
+    parser = argparse.ArgumentParser(description="Refresh the SQLite candidate pool from TMDb.")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="Refresh in memory and write report only.")
-    mode.add_argument("--apply", action="store_true", help="Backup and rewrite candidate_pool.json.")
+    mode.add_argument("--apply", action="store_true", help="Backup and rewrite the SQLite candidate pool.")
     parser.add_argument("--limit", type=int, default=None, help="Maximum number of candidates to refresh.")
     parser.add_argument("--only-missing", action="store_true", help="Refresh only candidates without tmdb_id.")
     parser.add_argument("--force-refresh", action="store_true", help="Force TMDb details cache refresh.")

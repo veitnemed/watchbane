@@ -241,7 +241,7 @@ Possible future layers include learned scoring weights from personal ratings, re
 
 - Runtime user data lives under `data/` and is ignored by git.
 - The default storage backend is SQLite at `data/watchbane.sqlite3`.
-- Legacy JSON files under `data/watched/`, `data/candidates/`, `data/settings.json` and `data/cache/posters/posters.json` are kept for first-run import, explicit export, backups and rollback. Set `WATCHBANE_STORAGE_BACKEND=json` to run the legacy JSON backend for debugging or rollback.
+- Legacy JSON files under `data/watched/`, `data/candidates/`, `data/settings.json` and `data/cache/posters/posters.json` are kept only for first-run import, explicit export and legacy backup workflows. They are no longer a runtime backend.
 - Temporary UI screenshots live under `screens/tmp_ui/` and are ignored by git.
 - Legacy experiments live under `archive/` and are not active runtime.
 - Contribution and project hygiene docs live in [`docs/`](docs/).

@@ -132,10 +132,8 @@ def test_load_save_dataset_in_sandbox_does_not_change_main_dataset(isolated_prof
     profiles.set_active_profile(profiles.MAIN_PROFILE)
 
     assert list(storage_data.load_dataset()) == ["Main"]
-    main_titles_path = isolated_profiles / "watched" / "titles.json"
-    sandbox_titles_path = isolated_profiles / "profiles" / "sandbox" / "watched" / "titles.json"
-    assert "Sandbox" not in json.loads(main_titles_path.read_text(encoding="utf-8"))
-    assert "Sandbox" in json.loads(sandbox_titles_path.read_text(encoding="utf-8"))
+    assert (isolated_profiles / "watchbane.sqlite3").is_file()
+    assert (isolated_profiles / "profiles" / "sandbox" / "watchbane.sqlite3").is_file()
 
 
 def test_reset_sandbox_clears_sandbox_but_not_main(isolated_profiles) -> None:

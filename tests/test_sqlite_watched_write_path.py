@@ -13,7 +13,6 @@ def _use_sqlite(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.WATCHED_DIR", str(watched_dir))
     monkeypatch.setattr("config.constant.FILE_NAME", str(watched_dir / "titles.json"))
     monkeypatch.setattr("config.constant.META_JSON", str(watched_dir / "meta.json"))
-    monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "sqlite")
 
 
 def _movie(title: str = "Метод", *, user_score: float = 8.0, year: int = 2015) -> dict:

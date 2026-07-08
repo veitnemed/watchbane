@@ -7,7 +7,6 @@ from storage import data as storage_data
 
 def _use_sqlite(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("WATCHBANE_STORAGE_BACKEND", "sqlite")
 
 
 def _candidate(title: str, year: int, score: float = 8.0) -> dict:

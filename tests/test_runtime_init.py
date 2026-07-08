@@ -1,10 +1,9 @@
-import json
-
 from config import constant
+from storage import profiles
 from storage import runtime
 
 
-def test_ensure_runtime_data_layout_initializes_runtime_json(monkeypatch, tmp_path) -> None:
+def test_ensure_runtime_data_layout_initializes_sqlite_without_runtime_json(monkeypatch, tmp_path) -> None:
     watched_dir = tmp_path / "watched"
     candidates_dir = tmp_path / "candidates"
     cache_dir = tmp_path / "cache"
@@ -20,6 +19,7 @@ def test_ensure_runtime_data_layout_initializes_runtime_json(monkeypatch, tmp_pa
     hidden_json = candidates_dir / "hidden.json"
 
     monkeypatch.setattr(constant, "APP_DATA_DIR", str(tmp_path))
+    profiles.set_base_data_dir(tmp_path)
     monkeypatch.setattr(constant, "WATCHED_DIR", str(watched_dir))
     monkeypatch.setattr(constant, "CANDIDATES_DIR", str(candidates_dir))
     monkeypatch.setattr(constant, "CACHE_DIR", str(cache_dir))
@@ -55,6 +55,8 @@ def test_ensure_runtime_data_layout_initializes_runtime_json(monkeypatch, tmp_pa
 
     assert result["ok"] is True
     assert result["backup_created"] is False
+    assert result["backend"] == "sqlite"
+    assert result["sqlite_schema_version"] == 1
+    assert (tmp_path / "watchbane.sqlite3").is_file()
     for path in (titles_json, meta_json, pool_json, criteria_json, watchlist_json, hidden_json):
-        assert path.exists()
-        assert json.loads(path.read_text(encoding="utf-8")) == {}
+        assert path.exists() is False
