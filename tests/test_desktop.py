@@ -5138,6 +5138,77 @@ def test_candidate_localized_poster_enrichment_persists_pool(monkeypatch) -> Non
     assert saved["pool show|2020"]["localized"]["en"]["poster_url"] == "https://image.tmdb.org/t/p/original/en.jpg"
 
 
+def test_candidate_tmdb_detail_enrichment_persists_tv_fields_when_poster_exists(monkeypatch) -> None:
+    from candidates.pool import localized_posters
+
+    pool = {
+        "pool show|2020": {
+            "pool_entry_key": "pool show|2020",
+            "title": "Pool Show",
+            "year": 2020,
+            "media_type": "tv",
+            "tmdb_id": 101,
+            "localized": {
+                "en": {
+                    "poster_path": "/en.jpg",
+                    "poster_url": "https://image.tmdb.org/t/p/original/en.jpg",
+                }
+            },
+        }
+    }
+    saved = {}
+
+    monkeypatch.setattr(localized_posters.pool_repository, "load_candidate_pool", lambda: copy.deepcopy(pool))
+    monkeypatch.setattr(localized_posters.pool_repository, "save_candidate_pool", lambda data: saved.update(data))
+
+    def fake_details(tmdb_id, *, language=None, append_to_response=None):
+        assert (tmdb_id, language) == (101, "en-US")
+        assert "aggregate_credits" in append_to_response
+        return {
+            "id": 101,
+            "name": "Pool Show",
+            "original_name": "Pool Show",
+            "first_air_date": "2020-01-01",
+            "last_air_date": "2021-02-03",
+            "status": "Ended",
+            "type": "Scripted",
+            "in_production": False,
+            "number_of_seasons": 2,
+            "number_of_episodes": 16,
+            "episode_run_time": [48],
+            "vote_average": 8.1,
+            "vote_count": 1200,
+            "popularity": 44.0,
+            "content_ratings": {"results": [{"iso_3166_1": "RU", "rating": "18+"}]},
+            "watch/providers": {
+                "results": {
+                    "RU": {
+                        "flatrate": [{"provider_name": "Kinopoisk"}],
+                    }
+                }
+            },
+            "images": {"posters": []},
+        }
+
+    updated, changed = localized_posters.ensure_candidate_localized_poster(
+        pool["pool show|2020"],
+        data_language="en",
+        details_func=fake_details,
+    )
+
+    assert changed is True
+    assert updated["number_of_seasons"] == 2
+    assert updated["number_of_episodes"] == 16
+    assert updated["episode_run_time"] == [48]
+    assert updated["last_air_date"] == "2021-02-03"
+    assert updated["status"] == "Ended"
+    assert updated["in_production"] is False
+    assert updated["content_rating"] == "18+"
+    assert updated["watch_providers"] == ["Kinopoisk"]
+    assert saved["pool show|2020"]["number_of_episodes"] == 16
+    assert saved["pool show|2020"]["tmdb_detail_fields_checked_at"]
+
+
 def test_candidate_list_model_resets_poster_cache_on_data_language_change(monkeypatch, qapp) -> None:
     from desktop.candidates.list_model import CandidateListModel
 
@@ -5246,6 +5317,57 @@ def test_candidate_list_view_starts_localized_poster_worker(monkeypatch) -> None
     view._start_localized_poster_enrichment(candidate, "Pool Show", 8)
 
     assert view._localized_poster_workers == [created["worker"]]
+
+
+def test_candidate_list_view_starts_worker_when_tv_metadata_missing_with_poster(monkeypatch) -> None:
+    import desktop.candidates.list_view as list_view_module
+    from desktop.candidates.list_view import CandidateListView
+
+    candidate = {
+        "title": "Pool Show",
+        "year": 2020,
+        "media_type": "tv",
+        "tmdb_id": 101,
+        "localized": {
+            "en": {
+                "poster_url": "https://image.tmdb.org/t/p/original/en.jpg",
+            }
+        },
+    }
+    view = CandidateListView.__new__(CandidateListView)
+    view._data_language = "en"
+    view._widget = object()
+    view._localized_poster_workers = []
+    view._localized_poster_inflight = set()
+    created = {}
+
+    class FakeSignal:
+        def __init__(self) -> None:
+            self.callbacks = []
+
+        def connect(self, callback) -> None:
+            self.callbacks.append(callback)
+
+    class FakeWorker:
+        def __init__(self, identity, candidate_arg, data_language, parent=None) -> None:
+            created["args"] = (identity, candidate_arg, data_language, parent)
+            self.finished_with_candidate = FakeSignal()
+            self.finished = FakeSignal()
+            created["worker"] = self
+
+        def start(self) -> None:
+            created["started"] = True
+
+        def deleteLater(self) -> None:
+            created["deleted"] = True
+
+    monkeypatch.setattr(list_view_module, "CandidateLocalizedPosterWorker", FakeWorker)
+
+    view._start_localized_poster_enrichment(candidate, "Pool Show", 9)
+
+    assert created["args"] == ("Pool Show", candidate, "en", view._widget)
+    assert created["started"] is True
+    assert view._localized_poster_inflight == {"en:Pool Show"}
 
 
 def test_candidate_list_view_applies_localized_poster_worker_result(monkeypatch) -> None:

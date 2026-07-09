@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from candidates.pool.localized_posters import candidate_needs_tmdb_detail_enrichment
 from desktop.candidates.list_actions import CandidateListActionsMixin
 from desktop.candidates.list_delegate import build_candidate_list_item_delegate
 from desktop.candidates.list_model import CandidateListModel
@@ -384,13 +385,6 @@ class CandidateListView(CandidateListActionsMixin):
                 total_ms,
             )
 
-    def _candidate_has_current_language_poster(self, candidate: dict) -> bool:
-        localized = candidate.get("localized") if isinstance(candidate.get("localized"), dict) else {}
-        block = localized.get(self._data_language)
-        if isinstance(block, dict) is False:
-            return False
-        return any(block.get(key) not in (None, "") for key in ("poster_url", "poster_path"))
-
     def _candidate_has_tmdb_id(self, candidate: dict) -> bool:
         if candidate.get("tmdb_id") not in (None, ""):
             return True
@@ -400,9 +394,9 @@ class CandidateListView(CandidateListActionsMixin):
     def _start_localized_poster_enrichment(self, candidate: dict, identity: str, request_seq: int) -> None:
         if isinstance(candidate, dict) is False:
             return
-        if self._candidate_has_current_language_poster(candidate):
-            return
         if self._candidate_has_tmdb_id(candidate) is False:
+            return
+        if candidate_needs_tmdb_detail_enrichment(candidate, self._data_language) is False:
             return
 
         worker_key = f"{self._data_language}:{identity}"
