@@ -1129,6 +1129,39 @@ def test_onboarding_wizard_plan_summary_shows_preset_axes(qapp) -> None:
         dialog.close()
 
 
+def test_onboarding_preset_ui_smoke_object_names_and_screenshot_path(qapp) -> None:
+    from pathlib import Path
+
+    from PyQt6.QtWidgets import QPushButton, QScrollArea, QWidget
+
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="en")
+    try:
+        assert dialog.objectName() == "onboardingAutofillDialog"
+        dialog._set_page(1)
+        assert dialog._stack.currentWidget() is dialog._preset_page
+        assert dialog._preset_page.objectName() == "onboardingPage"
+        assert dialog._preset_page.findChild(QScrollArea, "onboardingPresetScroll") is not None
+        assert dialog._preset_page.findChild(QWidget, "onboardingPresetViewport") is not None
+        cards = dialog._preset_page.findChildren(QPushButton, "onboardingPresetCard")
+        assert cards
+        preset_keys = {str(card.property("preset_key") or "") for card in cards}
+        assert {PRESET_ANIME, PRESET_K_DRAMA, PRESET_MANUAL}.issubset(preset_keys)
+        assert all(str(card.property("answer") or "") == str(card.property("preset_key") or "") for card in cards)
+
+        buttons = {str(button.property("answer") or ""): button for button in cards}
+        buttons[PRESET_ANIME].click()
+        dialog._set_page(dialog._plan_index())
+        assert dialog._plan_summary_label.objectName() == "onboardingPlanSummary"
+        assert "Preset: Anime (anime)" in dialog._plan_summary_label.text()
+
+        allowed_output = Path("screens/tmp_ui/onboarding") / "taste_scale100.png"
+        assert allowed_output.as_posix().startswith("screens/tmp_ui/onboarding/")
+    finally:
+        dialog.close()
+
+
 def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
     db_path = tmp_path / "watchbane.sqlite3"

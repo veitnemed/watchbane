@@ -25,8 +25,18 @@ Notes:
 Screenshot smoke:
 
 - Command family: `py scripts/screenshots/capture_onboarding.py --step taste`
+- Default output path: `screens/tmp_ui/onboarding/<step>_scaleNNN.png`
 - Platform plugin: `windows`
 - Font probe: `family_count=355`, `Segoe UI=True`, `Arial=True`
 - Scales captured under `screens/tmp_ui/onboarding/`: `0.75`, `1.0`, `1.5`
 - PNGs were opened for visual inspection; preset card text fits at all three
   checked scales, with vertical scrolling used for the longer preset list.
+
+Step `106` adds a non-capturing smoke test for environment-sensitive CI runs.
+Stable object names checked for screenshot tooling:
+
+- `onboardingAutofillDialog`
+- `onboardingPresetScroll`
+- `onboardingPresetViewport`
+- `onboardingPresetCard`
+- `onboardingPlanSummary`
