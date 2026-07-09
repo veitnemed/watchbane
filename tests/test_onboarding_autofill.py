@@ -1917,6 +1917,112 @@ def test_quality_gate_marks_missing_overview_low_confidence_as_garbage() -> None
     assert score_debug["garbage_penalty"] == 50000.0
 
 
+def test_quality_gate_marks_wrong_country_media_junk_and_adult_title_as_garbage() -> None:
+    movie_bucket = build_fetch_buckets(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+        )
+    )[0]
+    tv_bucket = build_fetch_buckets(
+        _profile(
+            media_preference="tv",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+        )
+    )[0]
+    base = {
+        "id": 10,
+        "title": "Useful",
+        "release_date": "2024-01-01",
+        "poster_path": "/poster.jpg",
+        "overview": "Overview",
+        "genre_ids": [18],
+        "origin_country": ["US"],
+        "vote_average": 7.0,
+        "vote_count": 100,
+        "popularity": 30,
+        "external_ids": {"imdb_id": "tt0000010"},
+    }
+
+    wrong_country = {**base, "origin_country": ["FR"]}
+    assert autofill.classify_candidate_quality(wrong_country, movie_bucket).quality_reasons == ("wrong_country",)
+
+    wrong_media = {**base, "media_type": MEDIA_TV}
+    media_decision = autofill.classify_candidate_quality(wrong_media, movie_bucket)
+    assert media_decision.quality_class == "garbage"
+    assert "wrong_media_type" in media_decision.quality_reasons
+
+    junk_tv = {
+        **base,
+        "name": "Reality Junk",
+        "first_air_date": "2024-01-01",
+        "genre_ids": [autofill.TV_JUNK_GENRE_IDS[0]],
+    }
+    junk_decision = autofill.classify_candidate_quality(junk_tv, tv_bucket)
+    assert junk_decision.quality_class == "garbage"
+    assert "junk_genre" in junk_decision.quality_reasons
+
+    adult_like = {**base, "title": "Erotic Night", "adult": False}
+    adult_decision = autofill.classify_candidate_quality(adult_like, movie_bucket)
+    assert adult_decision.quality_class == "garbage"
+    assert "suspicious_adult_title" in adult_decision.quality_reasons
+
+
+def test_quality_gate_duplicate_like_flag_is_garbage() -> None:
+    bucket = build_fetch_buckets(_profile(media_preference="movie"))[0]
+    result = {
+        "id": 11,
+        "title": "Duplicate Candidate",
+        "release_date": "2024-01-01",
+        "poster_path": "/poster.jpg",
+        "overview": "Overview",
+        "genre_ids": [18],
+        "origin_country": [bucket.target_country],
+        "vote_average": 7.0,
+        "vote_count": 100,
+        "popularity": 30,
+        "external_ids": {"imdb_id": "tt0000011"},
+        "_duplicate_like": True,
+    }
+
+    decision = autofill.classify_candidate_quality(result, bucket)
+
+    assert decision.quality_class == "garbage"
+    assert "duplicate_like" in decision.quality_reasons
+
+
+def test_quality_gate_fallback_overview_low_votes_and_rating_zero_are_weak_not_garbage() -> None:
+    bucket = build_fetch_buckets(_profile(media_preference="movie"))[0]
+    base = {
+        "id": 12,
+        "title": "Useful Weak Candidate",
+        "release_date": "2024-01-01",
+        "poster_path": "/poster.jpg",
+        "overview": "Fallback overview",
+        "genre_ids": [18],
+        "origin_country": [bucket.target_country],
+        "vote_average": 7.0,
+        "vote_count": 100,
+        "popularity": 30,
+        "external_ids": {"imdb_id": "tt0000012"},
+    }
+
+    fallback_overview = {**base, "overview_source": "en-US"}
+    fallback_decision = autofill.classify_candidate_quality(fallback_overview, bucket)
+    assert fallback_decision.quality_class == "weak"
+    assert "fallback_overview" in fallback_decision.quality_reasons
+
+    low_votes = {**base, "vote_count": 10}
+    low_vote_decision = autofill.classify_candidate_quality(low_votes, bucket)
+    assert low_vote_decision.quality_class == "weak"
+    assert "low_votes" in low_vote_decision.quality_reasons
+
+    rating_zero = {**base, "vote_average": 0, "vote_count": 100, "popularity": 30}
+    rating_decision = autofill.classify_candidate_quality(rating_zero, bucket)
+    assert rating_decision.quality_class == "weak"
+    assert "rating_0" in rating_decision.quality_reasons
+
+
 def test_quality_gate_blocks_garbage_candidates_from_normal_pool(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
     client = LowConfidenceMissingOverviewTmdbClient()
