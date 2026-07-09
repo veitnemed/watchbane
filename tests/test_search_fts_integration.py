@@ -79,6 +79,23 @@ def test_fts_query_filters_by_text_and_country(fts_pool, monkeypatch) -> None:
     assert result["candidates"][0].get("matched_fields")
 
 
+def test_fts_enabled_from_persisted_setting(fts_pool, monkeypatch, tmp_path) -> None:
+    from config import app_settings_store, constant
+
+    data_dir = tmp_path / "data"
+    monkeypatch.setattr(constant, "APP_DATA_DIR", str(data_dir))
+    monkeypatch.delenv(candidate_service.FTS_SEARCH_ENV, raising=False)
+    app_settings_store.save_sqlite_settings_dict({"fts_search_enabled": True})
+
+    result = candidate_service.search_candidate_pool_text(
+        fts_pool,
+        {},
+        text_query="бригада",
+    )
+    assert result.get("fts_enabled") is True
+    assert len(result["candidates"]) == 1
+
+
 def test_relevance_sort_mode_orders_by_combined_score(fts_pool, monkeypatch) -> None:
     monkeypatch.setenv(candidate_service.FTS_SEARCH_ENV, "1")
     search_view = candidate_service.search_candidate_pool_text(fts_pool, {}, text_query="бригада")

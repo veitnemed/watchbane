@@ -155,6 +155,21 @@ def test_action_entry_carries_search_id_rank_and_action(tmp_path, monkeypatch) -
     assert stored["tmdb_id"] == 101
 
 
+def test_search_query_log_entry_includes_fts_flags() -> None:
+    entry = query_log.build_search_query_entry(
+        search_id="abc",
+        query="криминал",
+        filters={},
+        sort_mode="relevance",
+        result_count=1,
+        top_candidates=[{"title": "Бригада", "final_score": 0.9}],
+        text_query="криминал",
+        fts_enabled=True,
+    )
+    assert entry["text_query"] == "криминал"
+    assert entry["fts_enabled"] is True
+
+
 def test_signature_dedup_key_matches_finalized_result() -> None:
     entry = _build_entry()
     same = _build_entry()

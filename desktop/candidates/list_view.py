@@ -244,11 +244,41 @@ class CandidateListView(CandidateListActionsMixin):
     def _fts_search_enabled(self) -> bool:
         return bool(getattr(self._service, "is_fts_search_enabled", lambda: False)())
 
+    def _sync_sort_combo_from_session(self) -> None:
+        mode = self._session.sort_mode
+        index = self._sort_combo.findData(mode)
+        if index < 0 or self._sort_combo.currentIndex() == index:
+            return
+        self._sort_combo.blockSignals(True)
+        self._sort_combo.setCurrentIndex(index)
+        self._sort_combo.blockSignals(False)
+
+    def _detail_search_context(self) -> dict | None:
+        if self._fts_search_enabled() is False:
+            return None
+        context = dict(self._session.last_search_context() or {})
+        text_query = str(context.get("text_query") or self._search_input.text() or "").strip()
+        if text_query == "":
+            return None
+        context["text_query"] = text_query
+        return context
+
+    def _build_detail_entry(self, candidate: dict) -> tuple:
+        return build_candidate_readonly_detail_entry(
+            candidate,
+            data_language=self._data_language,
+            filters=self._session.filters,
+            search_context=self._detail_search_context(),
+        )
+
     def _on_search_query_changed(self) -> None:
         query = self._search_input.text()
         if self._fts_search_enabled():
             if not self._session.has_results:
                 return
+            if self._session.maybe_auto_sort_for_text_query(query):
+                self._sync_sort_combo_from_session()
+                self._rebuild_list_delegate()
             filters = dict(self._session.filters or DEFAULT_BROWSE_FILTERS)
             self._session.apply_filters_async(filters, text_query=query, parent=self._widget)
             return
@@ -291,30 +321,30 @@ class CandidateListView(CandidateListActionsMixin):
             self._on_result_selected(self._model.index(row, 0), QModelIndex())
 
     def _log_search_query(self, query: str) -> None:
-        """Best-effort: append one JSONL row per finalized visible result."""
+        """Best-effort: log one finalized search result (deduped, never raises)."""
         try:
             from candidates.search import query_log
 
             if not query_log.is_search_query_log_enabled():
                 return
             context = self._session.last_search_context() or {}
-            result_count = len(self._candidates)
-            search_id = context.get("search_id")
-            normalized_query = query_log.normalize_query(query)
-            signature = (search_id, normalized_query, result_count)
-            if signature == self._last_logged_search_signature:
-                return
+            text_query = str(context.get("text_query") or query or "")
             entry = query_log.build_search_query_entry(
-                search_id=search_id,
+                search_id=context.get("search_id"),
                 query=query,
                 filters=context.get("filters"),
                 sort_mode=context.get("sort_mode") or self._session.sort_mode,
-                result_count=result_count,
+                result_count=len(self._candidates),
                 top_candidates=self._candidates,
                 latency_ms=context.get("latency_ms"),
+                text_query=text_query,
+                fts_enabled=self._fts_search_enabled(),
             )
-            query_log.append_search_query_log(entry)
+            signature = query_log.build_search_signature(entry)
+            if signature == self._last_logged_search_signature:
+                return
             self._last_logged_search_signature = signature
+            query_log.append_search_query_log(entry)
         except Exception:
             logger.debug("search query logging skipped", exc_info=True)
 
@@ -348,31 +378,6 @@ class CandidateListView(CandidateListActionsMixin):
                 )
             )
 
-    def _log_search_query(self, query: str) -> None:
-        """Best-effort: log one finalized search result (deduped, never raises)."""
-        try:
-            from candidates.search import query_log
-
-            if not query_log.is_search_query_log_enabled():
-                return
-            context = self._session.last_search_context() or {}
-            entry = query_log.build_search_query_entry(
-                search_id=context.get("search_id"),
-                query=query,
-                filters=context.get("filters"),
-                sort_mode=context.get("sort_mode") or self._session.sort_mode,
-                result_count=len(self._candidates),
-                top_candidates=self._candidates,
-                latency_ms=context.get("latency_ms"),
-            )
-            signature = query_log.build_search_signature(entry)
-            if signature == self._last_logged_search_signature:
-                return
-            self._last_logged_search_signature = signature
-            query_log.append_search_query_log(entry)
-        except Exception:
-            logger.debug("search query logging skipped", exc_info=True)
-
     def refresh(self) -> None:
         self._refresh_data_language()
         self._poster_request_seq += 1
@@ -391,6 +396,7 @@ class CandidateListView(CandidateListActionsMixin):
 
         self._all_candidates = self._session.sorted_candidates()
         if self._fts_search_enabled():
+            self._detail_entries = {}
             self._candidates = list(self._all_candidates)
             self._search_index = build_candidate_search_index(self._all_candidates)
             self._results_list.blockSignals(True)
@@ -433,10 +439,7 @@ class CandidateListView(CandidateListActionsMixin):
         request_seq = self._poster_request_seq
         entry = self._detail_entries.get(identity)
         if entry is None:
-            entry = build_candidate_readonly_detail_entry(
-                candidate,
-                data_language=self._data_language,
-            )
+            entry = self._build_detail_entry(candidate)
             self._detail_entries[identity] = entry
         build_done = perf_counter()
 
@@ -541,10 +544,7 @@ class CandidateListView(CandidateListActionsMixin):
             return
 
         self._selected_candidate = candidate
-        entry = build_candidate_readonly_detail_entry(
-            candidate,
-            data_language=self._data_language,
-        )
+        entry = self._build_detail_entry(candidate)
         self._detail_entries[identity] = entry
         self._show_detail_entry(entry)
 

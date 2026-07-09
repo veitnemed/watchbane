@@ -84,6 +84,8 @@ def build_search_query_entry(
     top_candidates: list[dict],
     latency_ms: float | int | None = None,
     top_limit: int = TOP_RESULTS_LIMIT,
+    text_query: str | None = None,
+    fts_enabled: bool | None = None,
 ) -> dict[str, Any]:
     """Build one finalized-search log record (``event="search"``)."""
     return {
@@ -93,6 +95,8 @@ def build_search_query_entry(
         "event": "search",
         "query": query or "",
         "normalized_query": normalize_query(query),
+        "text_query": str(text_query if text_query is not None else query or ""),
+        "fts_enabled": bool(fts_enabled) if fts_enabled is not None else None,
         "filters": dict(filters or {}),
         "sort_mode": sort_mode,
         "result_count": int(result_count),

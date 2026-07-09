@@ -53,10 +53,34 @@ QLabel#dataLanguageLabel {{
     font-weight: 600;
 }}
 QLabel#interfaceLanguageHint,
-QLabel#dataLanguageHint {{
+QLabel#dataLanguageHint,
+QLabel#autoPoolRefillHint,
+QLabel#ftsSearchHint {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
     font-size: {font_px(FONT_SMALL)}px;
+}}
+QLabel#settingsPoolTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SECTION)}px;
+    font-weight: 700;
+    margin-top: {px(6)}px;
+}}
+QCheckBox#autoPoolRefillCheckbox,
+QCheckBox#ftsSearchCheckbox {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_BASE)}px;
+    font-weight: 600;
+    spacing: {px(8)}px;
+    min-height: {px(28)}px;
+    padding: 0;
+}}
+QCheckBox#autoPoolRefillCheckbox::indicator,
+QCheckBox#ftsSearchCheckbox::indicator {{
+    width: {px(18)}px;
+    height: {px(18)}px;
 }}
 QComboBox#interfaceLanguageCombo,
 QComboBox#dataLanguageCombo {{

@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QListView, QPushButton, QCheckBox, QComboBox
+from PyQt6.QtWidgets import QLabel, QListView, QPushButton, QCheckBox, QComboBox, QLineEdit
 
 from desktop.candidates.list_model import CandidateListModel, CandidateListRoles
 from desktop.candidates.filters_view import CandidateFiltersView
@@ -41,7 +41,16 @@ def _predict_ready_candidate() -> dict:
 
 
 class FakeCandidateService:
-    SEARCH_SORT_MODES = ("final_score", "quality_score", "tmdb_score", "tmdb_votes", "tmdb_popularity", "year")
+    SEARCH_SORT_MODES = (
+        "final_score",
+        "quality_score",
+        "tmdb_score",
+        "tmdb_votes",
+        "tmdb_popularity",
+        "year",
+        "text_relevance",
+        "relevance",
+    )
     SEARCH_SORT_MODE_LABELS = {
         "final_score": "Итог",
         "quality_score": "Качество",
@@ -49,14 +58,24 @@ class FakeCandidateService:
         "tmdb_votes": "Голоса TMDb",
         "tmdb_popularity": "Популярность TMDb",
         "year": "Год",
+        "text_relevance": "Текст",
+        "relevance": "Релевантность",
     }
 
     def __init__(self, candidates: list[dict] | None = None) -> None:
         self.candidates = deepcopy(candidates or [_searchable_candidate(), _predict_ready_candidate()])
         self.hidden_candidates: list[dict] = []
         self.applied_filters: list[dict] = []
+        self.applied_text_queries: list[str] = []
         self.overview_calls = 0
         self.chip_options = {"genres": [], "countries": []}
+        self._fts_enabled = False
+
+    def is_fts_search_enabled(self) -> bool:
+        return self._fts_enabled
+
+    def set_fts_enabled(self, enabled: bool) -> None:
+        self._fts_enabled = bool(enabled)
 
     def get_search_overview_view(self) -> dict:
         self.overview_calls += 1
@@ -82,6 +101,26 @@ class FakeCandidateService:
                 continue
             filtered.append(candidate)
         return {"candidates": filtered, "filtered_count": len(filtered)}
+
+    def search_candidate_pool_text(self, candidates: list[dict], filters: dict, *, text_query: str | None = None) -> dict:
+        self.applied_text_queries.append(str(text_query or ""))
+        normalized = str(text_query or "").strip().casefold()
+        view = self.search_candidate_pool(candidates, filters)
+        if normalized == "" or not self._fts_enabled:
+            return view
+        filtered = [
+            candidate
+            for candidate in view["candidates"]
+            if normalized in str(candidate.get("title") or "").casefold()
+        ]
+        enriched = []
+        for candidate in filtered:
+            payload = dict(candidate)
+            payload["text_relevance_score"] = 0.8
+            payload["combined_relevance_score"] = 0.7
+            payload["matched_fields"] = ["title"]
+            enriched.append(payload)
+        return {"candidates": enriched, "filtered_count": len(enriched), "fts_enabled": True}
 
     def sort_search_candidates(self, candidates: list[dict], sort_mode: str) -> dict:
         return {
@@ -354,3 +393,55 @@ def test_session_ignores_stale_async_result(qtbot) -> None:
 
     assert session.has_results is False
     assert session.sorted_total_count() == 0
+
+
+def test_fts_search_uses_async_worker_not_substring_filter(qtbot) -> None:
+    service = FakeCandidateService()
+    service.set_fts_enabled(True)
+    _service, session, _filters_view, list_view = _build_views(qtbot, service=service)
+    session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": False})
+    list_widget = _candidate_list(list_view)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 2)
+
+    search_input = list_view.widget.findChild(QLineEdit, "candidateListSearch")
+    assert search_input is not None
+    search_input.setText("Searchable")
+    qtbot.waitUntil(lambda: "Searchable" in service.applied_text_queries)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 1)
+
+    assert _listed_titles(list_widget) == ["Searchable Only"]
+
+
+def test_detail_card_shows_search_reasons_when_fts_context_present(qtbot) -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_detail_entry
+
+    candidate = {
+        **_searchable_candidate(),
+        "text_relevance_score": 0.82,
+        "matched_fields": ["title"],
+    }
+    _entry_key, _movie, card = build_candidate_readonly_detail_entry(
+        candidate,
+        filters=DEFAULT_BROWSE_FILTERS,
+        search_context={"text_query": "searchable"},
+    )
+    assert card.get("search_reasons")
+    assert any("BM25" in line or "Совпадение" in line for line in card["search_reasons"])
+
+    service = FakeCandidateService([candidate])
+    service.set_fts_enabled(True)
+    _service, session, _filters_view, list_view = _build_views(qtbot, service=service)
+    session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": False})
+    list_widget = _candidate_list(list_view)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 1)
+
+    session._last_search_context = {
+        "text_query": "Searchable",
+        "filters": dict(DEFAULT_BROWSE_FILTERS),
+        "sort_mode": session.sort_mode,
+    }
+    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+
+    title_meta = list_view.widget.findChild(QLabel, "detailTitleMeta")
+    assert title_meta is not None
+    qtbot.waitUntil(lambda: "BM25" in title_meta.text() or "Совпадение" in title_meta.text())

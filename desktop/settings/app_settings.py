@@ -21,6 +21,7 @@ APP_DATA_LANGUAGE_ENV = "WATCHBANE_DATA_LANGUAGE"
 
 
 APP_AUTO_POOL_REFILL_DEFAULT = True
+APP_FTS_SEARCH_DEFAULT = False
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,7 @@ class AppSettings:
     interface_language: str = APP_LANGUAGE_DEFAULT
     data_language: str = APP_LANGUAGE_DEFAULT
     auto_pool_refill: bool = APP_AUTO_POOL_REFILL_DEFAULT
+    fts_search_enabled: bool = APP_FTS_SEARCH_DEFAULT
 
 
 def normalize_ui_scale(value) -> float:
@@ -81,6 +83,15 @@ def normalize_auto_pool_refill(value) -> bool:
     return bool(value)
 
 
+def normalize_fts_search_enabled(value) -> bool:
+    """Return a safe FTS search flag."""
+    if value in (None, ""):
+        return APP_FTS_SEARCH_DEFAULT
+    if isinstance(value, str):
+        return value.strip().casefold() not in ("0", "false", "no", "off")
+    return bool(value)
+
+
 def _settings_from_payload(payload) -> AppSettings:
     if isinstance(payload, dict) is False:
         return AppSettings()
@@ -89,6 +100,9 @@ def _settings_from_payload(payload) -> AppSettings:
         interface_language=normalize_language(payload.get("interface_language", APP_LANGUAGE_DEFAULT)),
         data_language=normalize_language(payload.get("data_language", APP_LANGUAGE_DEFAULT)),
         auto_pool_refill=normalize_auto_pool_refill(payload.get("auto_pool_refill", APP_AUTO_POOL_REFILL_DEFAULT)),
+        fts_search_enabled=normalize_fts_search_enabled(
+            payload.get("fts_search_enabled", APP_FTS_SEARCH_DEFAULT)
+        ),
     )
 
 
@@ -104,6 +118,7 @@ def save_app_settings(settings: AppSettings) -> None:
         interface_language=normalize_language(settings.interface_language),
         data_language=normalize_language(settings.data_language),
         auto_pool_refill=normalize_auto_pool_refill(settings.auto_pool_refill),
+        fts_search_enabled=normalize_fts_search_enabled(settings.fts_search_enabled),
     )
     app_settings_store.save_sqlite_settings_dict(asdict(normalized))
 

@@ -100,7 +100,7 @@ Search filter: `pool/search_helpers.py` → `service` → `app/core/filters.py`.
 Локальный текстовый поиск (Steps 2–4):
 - `search/document.py` — детерминированный `search_document` для FTS.
 - `search/fts_index.py` — SQLite FTS5 (`candidate_fts`, migration v3), BM25.
-- `service.search_candidate_pool_text()` — FTS retrieval + structural filters (флаг `WATCHBANE_FTS_SEARCH=1`).
+- `service.search_candidate_pool_text()` — FTS retrieval + structural filters. Включение: `WATCHBANE_FTS_SEARCH=1` (env override) или настройка **«Полнотекстовый поиск кандидатов»** в desktop Settings (`fts_search_enabled`, default off до калибровки).
 - `search/rerank.py` — combined score (`relevance` sort mode).
 - `search/query_log.py` — opt-in JSONL (`WATCHBANE_LOG_SEARCH_QUERIES=1`).
 - Offline: `scripts/reports/rebuild_candidate_fts_index.py`, `export_search_top_results.py`, `evaluate_search_relevance.py`.

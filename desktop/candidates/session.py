@@ -51,6 +51,7 @@ class CandidateSearchSession:
         self._request_search_id: dict[int, str] = {}
         self._current_search_id: str | None = None
         self._last_search_context: dict | None = None
+        self._sort_mode_before_search: str | None = None
 
     def add_listener(self, callback: Callable[[], None]) -> None:
         if callback not in self._listeners:
@@ -326,6 +327,22 @@ class CandidateSearchSession:
                     "latency_ms": None,
                 }
             self._notify_listeners()
+
+    def maybe_auto_sort_for_text_query(self, text_query: str | None) -> bool:
+        """Switch to relevance while typing; restore when query is cleared."""
+        normalized = str(text_query or "").strip()
+        if normalized:
+            if self._sort_mode_before_search is None and self.sort_mode != "relevance":
+                self._sort_mode_before_search = self.sort_mode
+                self.set_sort_mode("relevance")
+                return True
+            return False
+        if self._sort_mode_before_search is None:
+            return False
+        restore_mode = self._sort_mode_before_search
+        self._sort_mode_before_search = None
+        self.set_sort_mode(restore_mode)
+        return True
 
     def sorted_candidates(self) -> list[dict]:
         """Return all filtered candidates sorted by the active sort mode."""

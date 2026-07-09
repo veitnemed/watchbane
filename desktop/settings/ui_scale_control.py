@@ -13,6 +13,7 @@ from desktop.settings.app_settings import (
     AppSettings,
     load_app_settings,
     normalize_auto_pool_refill,
+    normalize_fts_search_enabled,
     normalize_language,
     normalize_ui_scale,
     save_app_settings,
@@ -146,6 +147,15 @@ class UiScaleControlPanel(QWidget):
         auto_refill_hint.setWordWrap(True)
         section_layout.addWidget(auto_refill_hint)
 
+        self._fts_search_checkbox = QCheckBox(tr("settings.pool.fts_search"))
+        self._fts_search_checkbox.setObjectName("ftsSearchCheckbox")
+        section_layout.addWidget(self._fts_search_checkbox)
+
+        fts_search_hint = QLabel(tr("settings.pool.fts_search_hint"))
+        fts_search_hint.setObjectName("ftsSearchHint")
+        fts_search_hint.setWordWrap(True)
+        section_layout.addWidget(fts_search_hint)
+
         self._message_label = QLabel("")
         self._message_label.setObjectName("settingsRestartMessage")
         self._message_label.setWordWrap(True)
@@ -187,12 +197,16 @@ class UiScaleControlPanel(QWidget):
     def selected_auto_pool_refill(self) -> bool:
         return normalize_auto_pool_refill(self._auto_refill_checkbox.isChecked())
 
+    def selected_fts_search_enabled(self) -> bool:
+        return normalize_fts_search_enabled(self._fts_search_checkbox.isChecked())
+
     def load_from_settings(self) -> None:
         settings = load_app_settings()
         self.set_ui_scale(settings.ui_scale)
         self._set_language_combo(self._interface_language_combo, settings.interface_language)
         self._set_language_combo(self._data_language_combo, settings.data_language)
         self._auto_refill_checkbox.setChecked(normalize_auto_pool_refill(settings.auto_pool_refill))
+        self._fts_search_checkbox.setChecked(normalize_fts_search_enabled(settings.fts_search_enabled))
 
     def set_ui_scale(self, scale: float) -> None:
         self._scale_slider.blockSignals(True)
@@ -213,6 +227,7 @@ class UiScaleControlPanel(QWidget):
             interface_language=self.selected_interface_language(),
             data_language=self.selected_data_language(),
             auto_pool_refill=self.selected_auto_pool_refill(),
+            fts_search_enabled=self.selected_fts_search_enabled(),
         )
         message = self._settings_saved_message(previous_settings, next_settings)
         save_app_settings(

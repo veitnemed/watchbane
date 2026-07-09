@@ -158,7 +158,13 @@ class DetailCard(DetailCardPosterMixin):
         _, movie, card = entry
         self._set_media_theme(self._resolve_entry_media_type(movie, card), show_media_badge=True)
         self._title_label.setText(card.get("title") or entry[0])
-        self._set_title_meta(build_title_meta_text(card))
+        title_meta = build_title_meta_text(card)
+        search_reasons = card.get("search_reasons") or []
+        if search_reasons:
+            reason_text = "\n".join(str(line) for line in search_reasons[:3] if line not in (None, ""))
+            if reason_text:
+                title_meta = f"{title_meta}\n{reason_text}" if title_meta else reason_text
+        self._set_title_meta(title_meta)
         self._set_user_score_badge(build_user_score_badge_item(card))
 
         meta_pills = build_meta_pill_items(card)

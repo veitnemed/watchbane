@@ -174,10 +174,28 @@ def test_save_then_load_languages(monkeypatch, tmp_path) -> None:
         "interface_language": "en",
         "data_language": "ru",
         "auto_pool_refill": True,
+        "fts_search_enabled": False,
     }
     assert settings.interface_language == "en"
     assert settings.data_language == "ru"
     assert settings.auto_pool_refill is True
+
+
+def test_save_then_load_fts_search_setting(monkeypatch, tmp_path) -> None:
+    db_path = _use_settings_path(monkeypatch, tmp_path)
+
+    save_app_settings(
+        AppSettings(
+            ui_scale=1.0,
+            fts_search_enabled=True,
+        )
+    )
+
+    payload = settings_repository.load_settings_dict(path=db_path)
+    settings = load_app_settings()
+
+    assert payload["fts_search_enabled"] is True
+    assert settings.fts_search_enabled is True
 
 
 def test_save_app_settings_preserves_non_ui_settings(monkeypatch, tmp_path) -> None:
@@ -1031,6 +1049,11 @@ def test_app_style_includes_settings_scaled_typography() -> None:
     assert "QLabel#dataLanguageLabel" in style
     assert "QLabel#interfaceLanguageHint" in style
     assert "QLabel#dataLanguageHint" in style
+    assert "QLabel#settingsPoolTitle" in style
+    assert "QCheckBox#autoPoolRefillCheckbox" in style
+    assert "QCheckBox#ftsSearchCheckbox" in style
+    assert "QLabel#autoPoolRefillHint" in style
+    assert "QLabel#ftsSearchHint" in style
     assert "QComboBox#interfaceLanguageCombo" in style
     assert "QComboBox#dataLanguageCombo" in style
     assert "QPushButton#saveSettingsButton" in style

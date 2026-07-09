@@ -74,8 +74,27 @@ from storage import data as storage_data
 FTS_SEARCH_ENV = "WATCHBANE_FTS_SEARCH"
 
 
+def _persisted_fts_search_enabled() -> bool:
+    try:
+        from config import app_settings_store
+
+        payload = app_settings_store.load_sqlite_settings_dict()
+        if isinstance(payload, dict) is False:
+            return False
+        value = payload.get("fts_search_enabled")
+        if value in (None, ""):
+            return False
+        if isinstance(value, str):
+            return value.strip().casefold() not in ("0", "false", "no", "off")
+        return bool(value)
+    except Exception:
+        return False
+
+
 def is_fts_search_enabled() -> bool:
-    return os.environ.get(FTS_SEARCH_ENV) == "1"
+    if os.environ.get(FTS_SEARCH_ENV) == "1":
+        return True
+    return _persisted_fts_search_enabled()
 
 
 def _candidate_pool_key(candidate: dict) -> str:

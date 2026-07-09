@@ -24,6 +24,8 @@ SORT_MODE_METRIC_PREFIX = {
     "tmdb_votes": "TMDb",
     "tmdb_popularity": "candidates.sort.tmdb_popularity",
     "year": "candidates.sort.year",
+    "text_relevance": "candidates.sort.text_relevance",
+    "relevance": "candidates.sort.relevance",
 }
 
 SORT_MODE_LABEL_KEYS = {
@@ -33,6 +35,8 @@ SORT_MODE_LABEL_KEYS = {
     "tmdb_votes": "candidates.sort.tmdb_votes",
     "tmdb_popularity": "candidates.sort.tmdb_popularity",
     "year": "candidates.sort.year",
+    "text_relevance": "candidates.sort.text_relevance",
+    "relevance": "candidates.sort.relevance",
 }
 
 
@@ -69,7 +73,12 @@ def format_candidate_metric_value(candidate: dict, sort_mode: str) -> str:
     field_name = sort_mode if sort_mode in candidate_service.SEARCH_SORT_MODES else candidate_service.DEFAULT_SEARCH_SORT_MODE
     prefix_key = SORT_MODE_METRIC_PREFIX.get(field_name, "")
     prefix = tr(prefix_key) if prefix_key.startswith("candidates.") else prefix_key
-    value = coerce_candidate_number(candidate.get(field_name))
+    if field_name == "text_relevance":
+        value = coerce_candidate_number(candidate.get("text_relevance_score"))
+    elif field_name == "relevance":
+        value = coerce_candidate_number(candidate.get("combined_relevance_score"))
+    else:
+        value = coerce_candidate_number(candidate.get(field_name))
     if value is None:
         return f"{prefix} —" if prefix else "—"
     if field_name == "final_score":
@@ -258,10 +267,54 @@ def build_candidate_readonly_card(candidate: dict, data_language: str = "ru") ->
     return card
 
 
-def build_candidate_readonly_detail_entry(candidate: dict, data_language: str = "ru") -> tuple:
+def _search_reason_lines(
+    candidate: dict,
+    *,
+    filters: dict | None,
+    search_context: dict | None,
+) -> list[str]:
+    context = search_context or {}
+    text_query = str(context.get("text_query") or "").strip()
+    if text_query == "":
+        return []
+    has_search_signal = bool(
+        context.get("matched_fields")
+        or candidate.get("matched_fields")
+        or candidate.get("text_relevance_score") is not None
+        or candidate.get("combined_relevance_score") is not None
+    )
+    if has_search_signal is False:
+        return []
+
+    from app.core.explain import explain_candidate
+
+    all_reasons = explain_candidate(
+        candidate,
+        filters or {},
+        search_context=context,
+    )
+    keywords = ("Совпадение", "BM25", "Комбинированная", "Релевантность")
+    picked = [line for line in all_reasons if any(keyword in line for keyword in keywords)]
+    return (picked or all_reasons)[:3]
+
+
+def build_candidate_readonly_detail_entry(
+    candidate: dict,
+    data_language: str = "ru",
+    *,
+    filters: dict | None = None,
+    search_context: dict | None = None,
+) -> tuple:
     """Build DetailCard entry tuple for read-only Candidates tab preview."""
     identity = candidate_detail_identity(candidate)
     card = build_candidate_readonly_card(candidate, data_language=data_language)
+    search_reasons = _search_reason_lines(
+        candidate,
+        filters=filters,
+        search_context=search_context,
+    )
+    if search_reasons:
+        card["search_reasons"] = search_reasons
     movie_stub = {
         "main_info": {
             "title": card.get("title") or identity,
