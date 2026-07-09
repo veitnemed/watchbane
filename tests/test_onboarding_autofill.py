@@ -66,6 +66,7 @@ TV_GENRES = [
 class FakeTmdbClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, dict]] = []
+        self.details_calls: list[tuple[str, int, str, tuple[str, ...]]] = []
 
     def movie_genres(self, language: str = "en") -> list[dict]:
         assert language == "en"
@@ -124,6 +125,42 @@ class FakeTmdbClient:
                 )
         return {"results": results, "total_pages": 5}
 
+    def movie_details(self, tmdb_id: int, language: str = "en", *, append_to_response=None) -> dict:
+        appends = tuple(append_to_response or ())
+        self.details_calls.append((MEDIA_MOVIE, int(tmdb_id), language, appends))
+        return {
+            "id": int(tmdb_id),
+            "title": f"Movie {int(tmdb_id)}",
+            "original_title": f"Movie {int(tmdb_id)}",
+            "release_date": "2024-01-01",
+            "overview": "Detailed overview",
+            "genres": [{"id": 18, "name": "Drama"}],
+            "production_countries": [{"iso_3166_1": "US", "name": "United States"}],
+            "vote_average": 8.0,
+            "vote_count": 500,
+            "popularity": 60,
+            "poster_path": f"/dm{int(tmdb_id)}.jpg",
+            "external_ids": {"imdb_id": f"tt{int(tmdb_id):07d}"},
+        }
+
+    def tv_details(self, tmdb_id: int, language: str = "en", *, append_to_response=None) -> dict:
+        appends = tuple(append_to_response or ())
+        self.details_calls.append((MEDIA_TV, int(tmdb_id), language, appends))
+        return {
+            "id": int(tmdb_id),
+            "name": f"Series {int(tmdb_id)}",
+            "original_name": f"Series {int(tmdb_id)}",
+            "first_air_date": "2024-01-01",
+            "overview": "Detailed overview",
+            "genres": [{"id": 18, "name": "Drama"}],
+            "origin_country": ["US"],
+            "vote_average": 8.0,
+            "vote_count": 500,
+            "popularity": 60,
+            "poster_path": f"/dt{int(tmdb_id)}.jpg",
+            "external_ids": {"imdb_id": f"tt{int(tmdb_id):07d}"},
+        }
+
 
 class EmptyTmdbClient(FakeTmdbClient):
     def discover(self, endpoint: str, params: dict) -> dict:
@@ -166,6 +203,44 @@ class FutureTmdbClient(FakeTmdbClient):
                 }
             )
         return {"results": results, "total_pages": 1}
+
+
+class DuplicateDiscoverTmdbClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        self.calls.append((endpoint, dict(params)))
+        media = MEDIA_MOVIE if endpoint == "/discover/movie" else MEDIA_TV
+        country = params.get("with_origin_country") or "US"
+        if media == MEDIA_MOVIE:
+            item = {
+                "id": 101,
+                "title": "Duplicate Movie",
+                "original_title": "Duplicate Movie",
+                "release_date": "2024-01-01",
+                "poster_path": "/dup.jpg",
+                "overview": "Overview",
+                "genre_ids": [18],
+                "origin_country": [country],
+                "vote_average": 8.0,
+                "vote_count": 500,
+                "popularity": 50,
+                "original_language": "en",
+            }
+        else:
+            item = {
+                "id": 101,
+                "name": "Duplicate Series",
+                "original_name": "Duplicate Series",
+                "first_air_date": "2024-01-01",
+                "poster_path": "/dup.jpg",
+                "overview": "Overview",
+                "genre_ids": [18],
+                "origin_country": [country],
+                "vote_average": 8.0,
+                "vote_count": 500,
+                "popularity": 50,
+                "original_language": "en",
+            }
+        return {"results": [dict(item), dict(item)], "total_pages": 1}
 
 
 def _profile(**overrides) -> OnboardingTasteProfile:
@@ -884,6 +959,68 @@ def test_onboarding_candidate_record_includes_score_debug_fields() -> None:
     assert candidate["score_debug"]["vote_confidence"] == 1.0
     assert candidate["score_debug"]["rating_bonus_adjusted"] == 800.0
     assert candidate["score_debug"]["final_score"] == score_debug["final_score"]
+
+
+def test_details_enrichment_dedupes_before_details_requests(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = DuplicateDiscoverTmdbClient()
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_limit=10,
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count == 1
+    assert result.details_requests == 1
+    assert [(media, tmdb_id) for media, tmdb_id, _language, _appends in client.details_calls] == [(MEDIA_MOVIE, 101)]
+    assert result.candidates[0]["details_enriched"] is True
+    assert result.candidates[0]["imdb_id"] == "tt0000101"
+
+
+def test_details_enrichment_respects_details_limit_per_bucket(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = FakeTmdbClient()
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_limit=3,
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.details_requests == 3
+    assert len(client.details_calls) == 3
+    assert all(call[0] == MEDIA_MOVIE for call in client.details_calls)
+
+
+def test_details_enrichment_can_be_disabled(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = FakeTmdbClient()
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_enrichment={"enabled": False},
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.details_requests == 0
+    assert client.details_calls == []
+    assert all(candidate["details_enriched"] is False for candidate in result.candidates)
 
 
 def test_acceptance_ru_tv_manual_sweep_contract() -> None:

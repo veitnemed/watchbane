@@ -140,3 +140,38 @@ Scoring debug now includes `rating_bonus_raw`, `vote_confidence`,
 `rating_bonus_adjusted`, and `final_score`. The adjusted rating contribution is
 `rating_bonus_raw * vote_confidence`, so a perfect score with one vote cannot
 outrank a broadly supported strong rating solely through the rating value.
+
+## Details enrichment behavior
+
+Step `007` adds an optional selective Details enrichment stage after preliminary
+Discover acceptance and before candidate records are saved.
+
+Config defaults:
+
+```text
+details_enrichment:
+  enabled: true
+  default_limit_per_bucket: 50
+  only_for_final_candidates: true
+  fetch_external_ids: true
+  fetch_tv_seasons_basic: false
+  lazy_tv_details_on_card_open: true
+```
+
+Pipeline behavior:
+
+1. Initial Discover remains country-first and uses no vote/rating hard filters.
+2. Existing duplicate, watched, hidden/rejected, pool, and future checks happen
+   before Details requests.
+3. Preliminary accepted rows are scored locally.
+4. The highest preliminary scores per country/media bucket are eligible for
+   Details, capped by `default_limit_per_bucket`.
+5. Details data can update overview, poster/backdrop, genres, countries,
+   rating/vote/popularity fields, and external IDs.
+6. Enriched rows are re-scored before final candidate records are saved.
+
+Diagnostics:
+
+- `AutofillResult.details_requests` records Details request attempts separately
+  from Discover `api_requests`.
+- Candidate records include `details_enriched` and `score_debug`.

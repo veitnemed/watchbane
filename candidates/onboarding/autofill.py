@@ -118,6 +118,24 @@ class TmdbClientProtocol(Protocol):
     def tv_genres(self, language: str = "en") -> list[dict[str, Any]]:
         ...
 
+    def movie_details(
+        self,
+        tmdb_id: int,
+        language: str = "en",
+        *,
+        append_to_response: str | list[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        ...
+
+    def tv_details(
+        self,
+        tmdb_id: int,
+        language: str = "en",
+        *,
+        append_to_response: str | list[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        ...
+
 
 class TmdbAutofillClient:
     """Small TMDb adapter kept injectable for tests and workers."""
@@ -133,6 +151,34 @@ class TmdbAutofillClient:
 
     def tv_genres(self, language: str = "en") -> list[dict[str, Any]]:
         return tmdb_api.get_tv_genre_list(language=language, token=self._token)
+
+    def movie_details(
+        self,
+        tmdb_id: int,
+        language: str = "en",
+        *,
+        append_to_response: str | list[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        return tmdb_api.get_movie_details(
+            int(tmdb_id),
+            language=language,
+            append_to_response=append_to_response,
+            token=self._token,
+        )
+
+    def tv_details(
+        self,
+        tmdb_id: int,
+        language: str = "en",
+        *,
+        append_to_response: str | list[str] | tuple[str, ...] | None = None,
+    ) -> dict[str, Any]:
+        return tmdb_api.get_tv_details(
+            int(tmdb_id),
+            language=language,
+            append_to_response=append_to_response,
+            token=self._token,
+        )
 
 
 def _normalize_country_code(value: Any) -> str:
@@ -207,6 +253,46 @@ class CountrySelection:
             "primary_country": normalized.primary_country,
             "secondary_country": normalized.secondary_country,
         }
+
+
+def _coerce_bool(value: Any, default: bool) -> bool:
+    if value in (None, ""):
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().casefold()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+@dataclass(frozen=True)
+class DetailsEnrichmentConfig:
+    enabled: bool = True
+    default_limit_per_bucket: int = DEFAULT_DETAILS_LIMIT_PER_TEMPLATE
+    only_for_final_candidates: bool = True
+    fetch_external_ids: bool = True
+    fetch_tv_seasons_basic: bool = False
+    lazy_tv_details_on_card_open: bool = True
+
+    def normalized(self, *, details_limit: int = DEFAULT_DETAILS_LIMIT_PER_TEMPLATE) -> "DetailsEnrichmentConfig":
+        try:
+            limit = int(self.default_limit_per_bucket or details_limit or DEFAULT_DETAILS_LIMIT_PER_TEMPLATE)
+        except (TypeError, ValueError):
+            limit = int(details_limit or DEFAULT_DETAILS_LIMIT_PER_TEMPLATE)
+        return DetailsEnrichmentConfig(
+            enabled=bool(self.enabled),
+            default_limit_per_bucket=max(0, limit),
+            only_for_final_candidates=bool(self.only_for_final_candidates),
+            fetch_external_ids=bool(self.fetch_external_ids),
+            fetch_tv_seasons_basic=bool(self.fetch_tv_seasons_basic),
+            lazy_tv_details_on_card_open=bool(self.lazy_tv_details_on_card_open),
+        )
+
+    def as_repository_dict(self) -> dict[str, Any]:
+        return asdict(self.normalized())
 
 
 def country_selection_for_foreign_ru() -> CountrySelection:
@@ -337,6 +423,25 @@ def _coerce_country_selection(value: Any, *, ui_language: str, origin_preference
     ).normalized()
 
 
+def _coerce_details_enrichment_config(
+    value: DetailsEnrichmentConfig | dict[str, Any] | None,
+    *,
+    details_limit: int,
+) -> DetailsEnrichmentConfig:
+    if isinstance(value, DetailsEnrichmentConfig):
+        return value.normalized(details_limit=details_limit)
+    if isinstance(value, dict):
+        return DetailsEnrichmentConfig(
+            enabled=_coerce_bool(value.get("enabled"), True),
+            default_limit_per_bucket=int(value.get("default_limit_per_bucket") or details_limit),
+            only_for_final_candidates=_coerce_bool(value.get("only_for_final_candidates"), True),
+            fetch_external_ids=_coerce_bool(value.get("fetch_external_ids"), True),
+            fetch_tv_seasons_basic=_coerce_bool(value.get("fetch_tv_seasons_basic"), False),
+            lazy_tv_details_on_card_open=_coerce_bool(value.get("lazy_tv_details_on_card_open"), True),
+        ).normalized(details_limit=details_limit)
+    return DetailsEnrichmentConfig(default_limit_per_bucket=details_limit).normalized(details_limit=details_limit)
+
+
 @dataclass(frozen=True)
 class OnboardingTasteProfile:
     media_preference: str
@@ -353,6 +458,7 @@ class OnboardingTasteProfile:
     max_year: int | None = None
     discover_pages: int = DEFAULT_DISCOVER_PAGES
     details_limit: int = DEFAULT_DETAILS_LIMIT_PER_TEMPLATE
+    details_enrichment: DetailsEnrichmentConfig | dict[str, Any] | None = None
 
     def normalized(self) -> "OnboardingTasteProfile":
         ui_language = str(self.ui_language or "ru").strip().casefold() or "ru"
@@ -375,6 +481,9 @@ class OnboardingTasteProfile:
             ui_language=ui_language,
             origin_preference=origin_preference,
         )
+        discover_pages = max(1, min(MAX_DISCOVER_PAGES, int(self.discover_pages or DEFAULT_DISCOVER_PAGES)))
+        details_limit = max(1, int(self.details_limit or DEFAULT_DETAILS_LIMIT_PER_TEMPLATE))
+        details_enrichment = _coerce_details_enrichment_config(self.details_enrichment, details_limit=details_limit)
         return OnboardingTasteProfile(
             media_preference=media_preference,
             release_preference=release_preference,
@@ -388,8 +497,9 @@ class OnboardingTasteProfile:
             exclude_genres=_normalize_int_tuple(self.exclude_genres),
             min_year=_normalize_year(self.min_year),
             max_year=_normalize_year(self.max_year),
-            discover_pages=max(1, min(MAX_DISCOVER_PAGES, int(self.discover_pages or DEFAULT_DISCOVER_PAGES))),
-            details_limit=max(1, int(self.details_limit or DEFAULT_DETAILS_LIMIT_PER_TEMPLATE)),
+            discover_pages=discover_pages,
+            details_limit=details_limit,
+            details_enrichment=details_enrichment,
         )
 
     def as_repository_dict(self) -> dict[str, Any]:
@@ -438,6 +548,7 @@ class AutofillResult:
     created_count: int
     pool_size: int
     api_requests: int
+    details_requests: int
     cancelled: bool
     warning: str | None
     candidates: list[dict[str, Any]]
@@ -1277,6 +1388,140 @@ def compute_candidate_score(
     return float(debug["final_score"])
 
 
+def _details_append_to_response(config: DetailsEnrichmentConfig) -> tuple[str, ...]:
+    appends: list[str] = []
+    if config.fetch_external_ids:
+        appends.append("external_ids")
+    return tuple(appends)
+
+
+def _fetch_details_for_result(
+    client: TmdbClientProtocol,
+    result: dict[str, Any],
+    bucket: CandidateFetchBucket,
+    profile: OnboardingTasteProfile,
+    config: DetailsEnrichmentConfig,
+) -> tuple[dict[str, Any] | None, int]:
+    tmdb_id = result.get("id")
+    if str(tmdb_id or "").strip().isdigit() is False:
+        return None, 0
+    append_to_response = _details_append_to_response(config)
+    language = _ui_language_to_tmdb_locale(profile.ui_language)
+    details_method = (
+        getattr(client, "movie_details", None)
+        if bucket.media_type == MEDIA_MOVIE
+        else getattr(client, "tv_details", None)
+    )
+    if details_method is None:
+        return None, 0
+    try:
+        return (
+            details_method(
+                int(tmdb_id),
+                language=language,
+                append_to_response=append_to_response,
+            ),
+            1,
+        )
+    except Exception:
+        return None, 1
+
+
+def _genre_ids_from_details(details: dict[str, Any]) -> list[int]:
+    result: list[int] = []
+    for item in details.get("genres") or ():
+        if not isinstance(item, dict):
+            continue
+        genre_id = item.get("id")
+        if str(genre_id or "").strip().isdigit():
+            value = int(genre_id)
+            if value not in result:
+                result.append(value)
+    return result
+
+
+def _merge_details_into_discover_result(
+    result: dict[str, Any],
+    details: dict[str, Any] | None,
+    *,
+    media_type: str,
+) -> dict[str, Any]:
+    if not isinstance(details, dict) or not details:
+        return result
+    updated = dict(result)
+    if media_type == MEDIA_MOVIE:
+        field_pairs = (
+            ("title", "title"),
+            ("original_title", "original_title"),
+            ("release_date", "release_date"),
+        )
+        country_codes = tmdb_api.country_codes_from_items(details.get("production_countries"))
+    else:
+        field_pairs = (
+            ("name", "name"),
+            ("original_name", "original_name"),
+            ("first_air_date", "first_air_date"),
+        )
+        country_codes = [str(code).strip().upper() for code in details.get("origin_country") or () if str(code).strip()]
+    for details_field, result_field in field_pairs:
+        if details.get(details_field) not in (None, ""):
+            updated[result_field] = details.get(details_field)
+    for field_name in ("overview", "poster_path", "backdrop_path", "vote_average", "vote_count", "popularity", "original_language"):
+        if details.get(field_name) not in (None, ""):
+            updated[field_name] = details.get(field_name)
+    genre_ids = _genre_ids_from_details(details)
+    if genre_ids:
+        updated["genre_ids"] = genre_ids
+    if country_codes:
+        updated["origin_country"] = country_codes
+    external_ids = details.get("external_ids") if isinstance(details.get("external_ids"), dict) else {}
+    if external_ids:
+        updated["external_ids"] = dict(external_ids)
+        if external_ids.get("imdb_id"):
+            updated["imdb_id"] = external_ids.get("imdb_id")
+    updated["_details_enriched"] = True
+    return updated
+
+
+def _details_candidate_cap(bucket: CandidateFetchBucket, config: DetailsEnrichmentConfig) -> int:
+    target_buffer = max(1, int(math.ceil(float(bucket.quota) * 1.5)))
+    return min(int(config.default_limit_per_bucket), target_buffer)
+
+
+def _enrich_preliminary_entries(
+    entries: list[dict[str, Any]],
+    *,
+    client: TmdbClientProtocol,
+    bucket: CandidateFetchBucket,
+    profile: OnboardingTasteProfile,
+    requested_for_bucket: int,
+) -> int:
+    config = profile.details_enrichment
+    if not isinstance(config, DetailsEnrichmentConfig):
+        config = DetailsEnrichmentConfig(default_limit_per_bucket=profile.details_limit).normalized(details_limit=profile.details_limit)
+    if config.enabled is False or not entries:
+        return 0
+    remaining = max(0, _details_candidate_cap(bucket, config) - int(requested_for_bucket))
+    if remaining <= 0:
+        return 0
+    selected = sorted(entries, key=lambda entry: float(entry["score_debug"]["final_score"]), reverse=True)[:remaining]
+    requested = 0
+    for entry in selected:
+        details, request_count = _fetch_details_for_result(client, entry["result"], bucket, profile, config)
+        requested += request_count
+        if details is None:
+            continue
+        enriched_result = _merge_details_into_discover_result(entry["result"], details, media_type=bucket.media_type)
+        entry["result"] = enriched_result
+        entry["score_debug"] = compute_candidate_score_debug(
+            enriched_result,
+            bucket,
+            page=int(entry["page"]),
+            index_on_page=int(entry["index_on_page"]),
+        )
+    return requested
+
+
 def build_candidate_record_from_result(
     result: dict[str, Any],
     bucket: CandidateFetchBucket,
@@ -1312,11 +1557,14 @@ def build_candidate_record_from_result(
         "target_country": bucket.target_country,
         "target_country_weight": bucket.target_country_weight,
         "onboarding_profile_id": int(profile_id),
+        "details_enriched": bool(result.get("_details_enriched")),
         "candidate_score": candidate_score,
         "score_debug": dict(score_debug or {}),
         "fetch_rank": int(fetch_rank),
         "criteria_name": COMMON_POOL_CRITERIA_NAME,
         "tmdb_id": result.get("id"),
+        "external_ids": dict(result.get("external_ids") or {}) if isinstance(result.get("external_ids"), dict) else {},
+        "imdb_id": result.get("imdb_id"),
         "title": result.get(title_key) or result.get(original_title_key) or "",
         "original_title": result.get(original_title_key),
         "year": _result_year(result, bucket.media_type),
@@ -1522,6 +1770,8 @@ def run_onboarding_autofill(
     planned_counts = planned_counts_for_profile(profile, genre_ids=genre_ids)
     states = [_BucketState(bucket=bucket) for bucket in sorted(buckets, key=lambda item: bucket_priority_key(item, profile))]
     api_requests = 0
+    details_requests = 0
+    details_requested_by_bucket: Counter[str] = Counter()
     fetch_rank = 0
     rejected_future_count = 0
     duplicate_requests_skipped = 0
@@ -1597,6 +1847,7 @@ def run_onboarding_autofill(
                     progressed = True
                     continue
                 executed_request_keys.add(request_key)
+                preliminary_entries: list[dict[str, Any]] = []
                 accepted_batch: list[dict[str, Any]] = []
                 rejected_count = 0
                 status = "ok"
@@ -1609,7 +1860,7 @@ def run_onboarding_autofill(
                     if not results:
                         state.exhausted = True
                     for index_on_page, result in enumerate(results):
-                        if len(created_candidates) + len(accepted_batch) >= STARTER_POOL_TARGET:
+                        if len(created_candidates) + len(preliminary_entries) >= STARTER_POOL_TARGET:
                             break
                         if state.filled >= state.bucket.quota:
                             break
@@ -1635,20 +1886,38 @@ def run_onboarding_autofill(
                             page=page,
                             index_on_page=index_on_page,
                         )
+                        preliminary_entries.append({
+                            "result": result,
+                            "score_debug": score_debug,
+                            "fetch_rank": fetch_rank,
+                            "page": page,
+                            "index_on_page": index_on_page,
+                        })
+                        accepted_identities.add((bucket.media_type, int(result["id"])))
+                        state.filled += 1
+                    details_delta = _enrich_preliminary_entries(
+                        preliminary_entries,
+                        client=client,
+                        bucket=bucket,
+                        profile=profile,
+                        requested_for_bucket=details_requested_by_bucket[bucket.bucket_id],
+                    )
+                    details_requests += details_delta
+                    details_requested_by_bucket[bucket.bucket_id] += details_delta
+                    for entry in preliminary_entries:
+                        score_debug = entry["score_debug"]
                         candidate_score = float(score_debug["final_score"])
                         candidate = build_candidate_record_from_result(
-                            result,
+                            entry["result"],
                             bucket,
                             genre_lookup=genre_lookup,
                             profile_id=profile_id,
                             candidate_score=candidate_score,
                             score_debug=score_debug,
-                            fetch_rank=fetch_rank,
+                            fetch_rank=int(entry["fetch_rank"]),
                             fallback=fallback,
                         )
                         accepted_batch.append(candidate)
-                        accepted_identities.add((bucket.media_type, int(result["id"])))
-                        state.filled += 1
                     total_pages = int((payload or {}).get("total_pages") or page)
                     if page >= total_pages:
                         state.exhausted = True
@@ -1704,6 +1973,7 @@ def run_onboarding_autofill(
         profile_id=profile_id,
         pool_size=len(created_candidates),
         api_requests=api_requests,
+        details_requests=details_requests,
         cancelled=cancelled,
         warning=warning,
     )
@@ -1713,6 +1983,7 @@ def run_onboarding_autofill(
         created_count=len(created_candidates),
         pool_size=len(_pool_snapshot(path=path)),
         api_requests=api_requests,
+        details_requests=details_requests,
         cancelled=cancelled,
         warning=warning,
         candidates=created_candidates,

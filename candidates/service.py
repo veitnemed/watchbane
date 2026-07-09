@@ -243,6 +243,7 @@ def build_onboarding_candidate_pool(
             max_year=profile.get("max_year"),
             discover_pages=profile.get("discover_pages", 3),
             details_limit=profile.get("details_limit", 50),
+            details_enrichment=profile.get("details_enrichment"),
         )
     result = run_onboarding_autofill(
         taste_profile,
@@ -255,6 +256,7 @@ def build_onboarding_candidate_pool(
         "created_count": result.created_count,
         "pool_size": result.pool_size,
         "api_requests": result.api_requests,
+        "details_requests": result.details_requests,
         "cancelled": result.cancelled,
         "warning": result.warning,
         "warnings": result.warnings,
@@ -284,6 +286,7 @@ def _normalize_onboarding_profile(profile: OnboardingTasteProfile | dict) -> Onb
         max_year=profile.get("max_year"),
         discover_pages=profile.get("discover_pages", 3),
         details_limit=profile.get("details_limit", 50),
+        details_enrichment=profile.get("details_enrichment"),
     ).normalized()
 
 

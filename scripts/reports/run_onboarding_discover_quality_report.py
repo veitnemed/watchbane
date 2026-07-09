@@ -394,6 +394,7 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         "created_count": result.created_count,
         "pool_size": result.pool_size,
         "api_requests": result.api_requests,
+        "details_requests": result.details_requests,
         "planned_counts": result.planned_counts,
         "actual_counts": result.actual_counts,
         "warnings": result.warnings,
