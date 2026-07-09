@@ -275,17 +275,34 @@ def test_country_first_fallback_keeps_origin_country_before_genres_and_votes() -
     assert "with_original_language" not in relaxed_era
 
 
-def test_onboarding_wizard_origin_question_depends_on_ui_language(qapp) -> None:
+def test_onboarding_wizard_starts_with_country_question_for_all_languages(qapp) -> None:
     from desktop.onboarding import OnboardingAutofillDialog
 
     ru_dialog = OnboardingAutofillDialog(ui_language="ru")
     en_dialog = OnboardingAutofillDialog(ui_language="en")
     try:
         assert len(ru_dialog._active_questions()) == 4
-        assert len(en_dialog._active_questions()) == 3
+        assert len(en_dialog._active_questions()) == 4
+        assert ru_dialog._active_questions()[0].key == "country_preference"
+        assert en_dialog._active_questions()[0].key == "country_preference"
     finally:
         ru_dialog.close()
         en_dialog.close()
+
+
+def test_onboarding_wizard_profile_contains_explicit_country_selection(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="ru")
+    try:
+        dialog._answers["country_preference"] = "foreign"
+        profile = dialog._profile()
+        assert profile["origin_preference"] == "foreign"
+        assert profile["country_selection"]["selected_countries"] == ["US", "GB"]
+        assert profile["country_selection"]["country_weights"] == {"US": 0.90, "GB": 0.10}
+        assert profile["country_selection"]["exclude_home_country"] is True
+    finally:
+        dialog.close()
 
 
 def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates(tmp_path, monkeypatch) -> None:

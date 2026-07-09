@@ -79,6 +79,16 @@ class _Question:
 
 _QUESTIONS: tuple[_Question, ...] = (
     _Question(
+        key="country_preference",
+        title_ru="Какие страны ищем?",
+        title_en="Which countries should Watchbane search?",
+        options=(
+            ("foreign", "Зарубежное: US + GB", "US + GB"),
+            ("mixed", "Смешанное: RU + US", "US + KR"),
+            ("domestic", "Только RU", "US only"),
+        ),
+    ),
+    _Question(
         key="media_preference",
         title_ru="Что вы чаще смотрите?",
         title_en="What do you watch more often?",
@@ -105,16 +115,6 @@ _QUESTIONS: tuple[_Question, ...] = (
         options=(
             ("light", "Лёгкий", "Light"),
             ("dark", "Мрачный", "Dark"),
-            ("mixed", "Не важно", "No preference"),
-        ),
-    ),
-    _Question(
-        key="origin_preference",
-        title_ru="Что вам ближе?",
-        title_en="Which origin feels closer?",
-        options=(
-            ("foreign", "Зарубежное", "Foreign"),
-            ("domestic", "Отечественное", "Domestic"),
             ("mixed", "Не важно", "No preference"),
         ),
     ),
@@ -356,10 +356,7 @@ class OnboardingAutofillDialog(QDialog):
         super().showEvent(event)
 
     def _active_questions(self) -> list[_Question]:
-        questions = list(_QUESTIONS[:3])
-        if self._ui_language == "ru":
-            questions.append(_QUESTIONS[3])
-        return questions
+        return list(_QUESTIONS)
 
     def _text(self, ru: str, en: str) -> str:
         return en if self._ui_language == "en" else ru
@@ -468,8 +465,6 @@ class OnboardingAutofillDialog(QDialog):
         if value not in {"ru", "en"} or value == self._ui_language:
             return
         self._ui_language = value
-        if self._ui_language != "ru":
-            self._answers.pop("origin_preference", None)
         save_app_settings(AppSettings(
             ui_scale=self._ui_scale,
             interface_language=self._ui_language,
@@ -677,9 +672,15 @@ class OnboardingAutofillDialog(QDialog):
         media = quotas.get("media_type") or {}
         release = quotas.get("release") or {}
         vibe = quotas.get("vibe") or {}
-        origin = quotas.get("origin") or {}
+        country_plan = plan.get("country_plan") if isinstance(plan.get("country_plan"), dict) else {}
+        country_counts = country_plan or quotas.get("country") or {}
+        country_line = ", ".join(
+            f"{country}: {int(count)}"
+            for country, count in country_counts.items()
+        )
         lines = [
             self._text(f"Цель: {plan.get('target')} кандидатов", f"Target: {plan.get('target')} candidates"),
+            self._text(f"Страны: {country_line or '-'}", f"Countries: {country_line or '-'}"),
             self._text(f"Фильмы: {media.get('movie', 0)}, сериалы: {media.get('tv', 0)}", f"Movies: {media.get('movie', 0)}, series: {media.get('tv', 0)}"),
             self._text(
                 f"Классика: {release.get('classic_sweep', 0)}, новинки: {release.get('new_sweep', 0)}, топ: {release.get('top_all_time', 0)}",
@@ -687,8 +688,6 @@ class OnboardingAutofillDialog(QDialog):
             ),
             self._text(f"Лёгкий вайб: {vibe.get('light', 0)}, мрачный: {vibe.get('dark', 0)}", f"Light vibe: {vibe.get('light', 0)}, dark: {vibe.get('dark', 0)}"),
         ]
-        if self._ui_language == "ru":
-            lines.append(f"Отечественное: {origin.get('domestic', 0)}, зарубежное: {origin.get('foreign', 0)}")
         lines.append(self._text(f"Срезов поиска: {plan.get('bucket_count')}", f"Search slices: {plan.get('bucket_count')}"))
         return "\n".join(lines)
 
@@ -728,6 +727,10 @@ class OnboardingAutofillDialog(QDialog):
             if match:
                 lines.append(f"Недобор media-квоты: {match.group(1)} план {match.group(2)}, факт {match.group(3)}.")
                 continue
+            match = re.fullmatch(r"Country quota underfilled: ([^ ]+) planned (\d+), actual (\d+)\.", text)
+            if match:
+                lines.append(f"Недобор страны: {match.group(1)} план {match.group(2)}, факт {match.group(3)}.")
+                continue
             match = re.fullmatch(r"Origin quota underfilled: ([^ ]+) planned (\d+), actual (\d+)\.", text)
             if match:
                 lines.append(f"Недобор origin-квоты: {match.group(1)} план {match.group(2)}, факт {match.group(3)}.")
@@ -759,9 +762,8 @@ class OnboardingAutofillDialog(QDialog):
                 )
             ]
         if planned or actual:
+            lines.append(self._format_actual_line("Факт/план страны", "Actual/planned countries", "country", planned, actual))
             lines.append(self._format_actual_line("Факт/план media", "Actual/planned media", "media_type", planned, actual))
-            if self._ui_language == "ru":
-                lines.append(self._format_actual_line("Факт/план origin", "Actual/planned origin", "origin", planned, actual))
         details = self._text(
             f"API-запросов: {api_requests}, отклонено будущих релизов: {rejected_future}",
             f"API requests: {api_requests}, future releases rejected: {rejected_future}",
@@ -884,13 +886,84 @@ class OnboardingAutofillDialog(QDialog):
         next_index = self._stack.currentIndex() + 1
         self._set_page(next_index)
 
+    def _country_selection_payload(self) -> dict[str, Any]:
+        preference = self._answers.get("country_preference") or "foreign"
+        if self._ui_language == "ru":
+            if preference == "domestic":
+                return {
+                    "mode": "single_country",
+                    "home_country": "RU",
+                    "selected_countries": ["RU"],
+                    "country_weights": {"RU": 1.0},
+                    "exclude_home_country": False,
+                    "max_countries": 1,
+                    "primary_country": "RU",
+                    "secondary_country": None,
+                }
+            if preference == "mixed":
+                return {
+                    "mode": "preset_mixed",
+                    "home_country": "RU",
+                    "selected_countries": ["RU", "US"],
+                    "country_weights": {"RU": 0.15, "US": 0.85},
+                    "exclude_home_country": False,
+                    "max_countries": 2,
+                    "primary_country": "RU",
+                    "secondary_country": "US",
+                }
+            return {
+                "mode": "preset_foreign",
+                "home_country": "RU",
+                "selected_countries": ["US", "GB"],
+                "country_weights": {"US": 0.90, "GB": 0.10},
+                "exclude_home_country": True,
+                "max_countries": 2,
+                "primary_country": "US",
+                "secondary_country": "GB",
+            }
+
+        if preference == "domestic":
+            return {
+                "mode": "single_country",
+                "home_country": "US",
+                "selected_countries": ["US"],
+                "country_weights": {"US": 1.0},
+                "exclude_home_country": False,
+                "max_countries": 1,
+                "primary_country": "US",
+                "secondary_country": None,
+            }
+        if preference == "mixed":
+            return {
+                "mode": "country_pair",
+                "home_country": "US",
+                "selected_countries": ["US", "KR"],
+                "country_weights": {"US": 0.70, "KR": 0.30},
+                "exclude_home_country": False,
+                "max_countries": 2,
+                "primary_country": "US",
+                "secondary_country": "KR",
+            }
+        return {
+            "mode": "country_pair",
+            "home_country": "US",
+            "selected_countries": ["US", "GB"],
+            "country_weights": {"US": 0.90, "GB": 0.10},
+            "exclude_home_country": False,
+            "max_countries": 2,
+            "primary_country": "US",
+            "secondary_country": "GB",
+        }
+
     def _profile(self) -> dict[str, Any]:
+        country_preference = self._answers.get("country_preference") or "foreign"
         return {
             "ui_language": self._ui_language,
             "media_preference": self._answers.get("media_preference") or "both",
             "release_preference": self._answers.get("release_preference") or "mixed",
             "vibe_preference": self._answers.get("vibe_preference") or "mixed",
-            "origin_preference": self._answers.get("origin_preference") if self._ui_language == "ru" else None,
+            "origin_preference": country_preference if self._ui_language == "ru" else None,
+            "country_selection": self._country_selection_payload(),
         }
 
     def _start_autofill(self) -> None:

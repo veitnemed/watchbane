@@ -75,10 +75,12 @@ def _prepare_step(dialog, step: str) -> None:
                 "api_requests": 180,
                 "rejected_future_count": 0,
                 "planned_counts": {
+                    "country": {"US": 108, "GB": 12},
                     "media_type": {"movie": 60, "tv": 60},
                     "origin": {"domestic": 60, "foreign": 60},
                 },
                 "actual_counts": {
+                    "country": {"US": 90, "GB": 9},
                     "media_type": {"movie": 49, "tv": 50},
                     "origin": {"domestic": 39, "foreign": 60},
                 },
