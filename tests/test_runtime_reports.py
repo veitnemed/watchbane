@@ -234,3 +234,32 @@ def test_onboarding_report_output_hygiene_contract() -> None:
 
     generated_reports_in_docs = sorted((PROJECT_ROOT / "docs").glob("onboarding_*report*.md"))
     assert generated_reports_in_docs == []
+
+
+def test_onboarding_final_report_template_contains_required_review_fields() -> None:
+    template = (PROJECT_ROOT / "reports/onboarding/analysis/final_report_template.md").read_text(encoding="utf-8")
+    required_fragments = [
+        "## Changed files",
+        "## Discover filter confirmation",
+        "`vote_count.gte`",
+        "`vote_average.gte`",
+        "## Vote confidence scoring formula",
+        "rating_bonus_adjusted = vote_average * 100 * vote_confidence",
+        "## Details enrichment behavior",
+        "## Localization fallback behavior",
+        "## Quality gate rules",
+        "## Adaptive pagination rules",
+        "## Tests run",
+        "## Before/after metrics",
+        "`jp_kr_garbage_rate`",
+        "`us_gb_new_movies_garbage_rate`",
+        "`ru_tv_manual_serious_2010_created_count`",
+        "`details_requests`",
+        "`missing_overview_after_fallback`",
+        "`country_hit_rate`",
+        "## Before/after onboarding scenario output",
+        "`not_captured`",
+    ]
+
+    for fragment in required_fragments:
+        assert fragment in template
