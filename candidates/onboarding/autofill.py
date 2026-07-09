@@ -15,6 +15,13 @@ from candidates.models import country_schema
 from candidates.models.genre_schema import build_genre_keys
 from candidates.models.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key, title_identity_key
 from candidates.models.schema import compute_completeness, normalize_candidate_record
+from candidates.onboarding.details_enrichment import DEFAULT_DETAILS_LIMIT_PER_TEMPLATE, DetailsEnrichmentConfig
+from candidates.onboarding.pagination import (
+    ADAPTIVE_MAX_DISCOVER_PAGES,
+    DEFAULT_DISCOVER_PAGES,
+    MAX_DISCOVER_PAGES,
+    PaginationConfig,
+)
 from candidates.pool.dataset_overlap import build_dataset_title_keys
 from candidates.pool.existing_index import build_existing_candidate_index, discover_item_existing_reason
 from candidates.pool.watched_cleanup import build_watched_signatures, is_watched_candidate
@@ -32,10 +39,6 @@ STARTER_POOL_TARGET = 120
 STARTER_POOL_MIN_ACCEPTABLE = 80
 MAX_TMDB_REQUESTS = 180
 RESULTS_PER_TMDB_PAGE = 20
-DEFAULT_DISCOVER_PAGES = 3
-MAX_DISCOVER_PAGES = 5
-ADAPTIVE_MAX_DISCOVER_PAGES = 10
-DEFAULT_DETAILS_LIMIT_PER_TEMPLATE = 50
 
 ERA_TOP_ALL_TIME = "top_all_time"
 ERA_CLASSIC_SWEEP = "classic_sweep"
@@ -319,70 +322,6 @@ def _coerce_int(value: Any, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return int(default)
-
-
-@dataclass(frozen=True)
-class DetailsEnrichmentConfig:
-    enabled: bool = True
-    default_limit_per_bucket: int = DEFAULT_DETAILS_LIMIT_PER_TEMPLATE
-    only_for_final_candidates: bool = True
-    fetch_external_ids: bool = True
-    fetch_tv_seasons_basic: bool = False
-    lazy_tv_details_on_card_open: bool = True
-
-    def normalized(self, *, details_limit: int = DEFAULT_DETAILS_LIMIT_PER_TEMPLATE) -> "DetailsEnrichmentConfig":
-        try:
-            limit = int(self.default_limit_per_bucket or details_limit or DEFAULT_DETAILS_LIMIT_PER_TEMPLATE)
-        except (TypeError, ValueError):
-            limit = int(details_limit or DEFAULT_DETAILS_LIMIT_PER_TEMPLATE)
-        return DetailsEnrichmentConfig(
-            enabled=bool(self.enabled),
-            default_limit_per_bucket=max(0, limit),
-            only_for_final_candidates=bool(self.only_for_final_candidates),
-            fetch_external_ids=bool(self.fetch_external_ids),
-            fetch_tv_seasons_basic=bool(self.fetch_tv_seasons_basic),
-            lazy_tv_details_on_card_open=bool(self.lazy_tv_details_on_card_open),
-        )
-
-    def as_repository_dict(self) -> dict[str, Any]:
-        return asdict(self.normalized())
-
-
-@dataclass(frozen=True)
-class PaginationConfig:
-    default_pages: int = DEFAULT_DISCOVER_PAGES
-    normal_max_pages: int = MAX_DISCOVER_PAGES
-    adaptive_max_pages: int = ADAPTIVE_MAX_DISCOVER_PAGES
-    continue_if_accepted_per_page_gte: int = 8
-    stop_if_accepted_per_page_lt: int = 3
-    stop_if_quota_full: bool = True
-
-    def normalized(self, *, discover_pages: int = DEFAULT_DISCOVER_PAGES) -> "PaginationConfig":
-        try:
-            default_pages = int(self.default_pages or discover_pages or DEFAULT_DISCOVER_PAGES)
-        except (TypeError, ValueError):
-            default_pages = int(discover_pages or DEFAULT_DISCOVER_PAGES)
-        try:
-            normal_max_pages = int(self.normal_max_pages or MAX_DISCOVER_PAGES)
-        except (TypeError, ValueError):
-            normal_max_pages = MAX_DISCOVER_PAGES
-        try:
-            adaptive_max_pages = int(self.adaptive_max_pages or ADAPTIVE_MAX_DISCOVER_PAGES)
-        except (TypeError, ValueError):
-            adaptive_max_pages = ADAPTIVE_MAX_DISCOVER_PAGES
-        normal_max_pages = max(default_pages, normal_max_pages)
-        adaptive_max_pages = max(normal_max_pages, adaptive_max_pages)
-        return PaginationConfig(
-            default_pages=max(1, default_pages),
-            normal_max_pages=max(1, normal_max_pages),
-            adaptive_max_pages=max(1, adaptive_max_pages),
-            continue_if_accepted_per_page_gte=max(0, _coerce_int(self.continue_if_accepted_per_page_gte, 8)),
-            stop_if_accepted_per_page_lt=max(0, _coerce_int(self.stop_if_accepted_per_page_lt, 3)),
-            stop_if_quota_full=bool(self.stop_if_quota_full),
-        )
-
-    def as_repository_dict(self) -> dict[str, Any]:
-        return asdict(self.normalized())
 
 
 def country_selection_for_foreign_ru() -> CountrySelection:

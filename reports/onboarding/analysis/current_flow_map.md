@@ -304,3 +304,25 @@ Diagnostics:
 The onboarding quality report wires these diagnostics when live TMDb calls use
 the instrumented client. A latency outlier is recorded for reporting, but does
 not reduce normal Discover page coverage by itself.
+
+## module_boundaries
+
+Step `201` keeps the large onboarding flow stable while separating small
+configuration contracts from orchestration code.
+
+Current boundaries:
+
+- `candidates/onboarding/autofill.py` owns orchestration, bucket planning,
+  Discover request generation, acceptance, scoring, persistence and progress
+  reporting.
+- `candidates/onboarding/taste_presets.py` owns serializable preset definitions
+  and preset-to-profile payload mapping.
+- `candidates/onboarding/details_enrichment.py` owns the
+  `DetailsEnrichmentConfig` contract and its defaults.
+- `candidates/onboarding/pagination.py` owns the `PaginationConfig` contract
+  and adaptive pagination defaults.
+
+`autofill.py` still re-exports the config classes through normal imports, so
+existing UI/tests using `from candidates.onboarding.autofill import ...` remain
+compatible. Further extraction should target pure helpers only, after tests
+identify a stable behavior boundary.
