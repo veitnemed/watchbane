@@ -701,6 +701,26 @@ def test_country_first_profile_replaces_broad_origin_defaults() -> None:
     assert en_countries == {"US": 60, "GB": 60}
 
 
+def test_country_first_selected_countries_all_use_origin_filter_and_plan_totals_to_target() -> None:
+    for count in range(1, 6):
+        countries = ["US", "RU", "GB", "KR", "JP"][:count]
+        profile = _profile(country_selection={"selected_countries": countries, "home_country": "RU"}).normalized()
+        country_plan = build_country_plan(profile.country_selection, autofill.STARTER_POOL_TARGET)
+        assert sum(country_plan.values()) == autofill.STARTER_POOL_TARGET
+        assert set(country_plan) == set(countries)
+        for bucket in build_fetch_buckets(profile):
+            _endpoint, params = build_discover_request(
+                bucket,
+                profile=profile,
+                fallback="base",
+                request_index=0,
+                current_year=2026,
+                current_date=date(2026, 7, 8),
+            )
+            assert bucket.target_country in countries
+            assert params.get("with_origin_country") == bucket.target_country
+
+
 def test_initial_onboarding_discover_never_uses_vote_or_rating_filters_across_variants() -> None:
     selected_countries = {"US", "KR", "JP"}
     for media_preference in ("movie", "tv", "both"):
@@ -1278,6 +1298,7 @@ def test_selected_country_underfill_keeps_country_first_while_yield_is_high(tmp_
     assert result.adaptive_pages_used == 1
     assert all(params.get("with_origin_country") == "KR" for _endpoint, params in client.calls)
     assert all("vote_count.gte" not in params and "vote_average.gte" not in params for _endpoint, params in client.calls)
+    assert {candidate["source_query"]["fallback"] for candidate in result.candidates} == {"base"}
 
 
 def test_run_autofill_underfills_scarce_tv_without_movie_overfill(tmp_path, monkeypatch) -> None:
@@ -1297,6 +1318,51 @@ def test_run_autofill_underfills_scarce_tv_without_movie_overfill(tmp_path, monk
     assert result.adaptive_pages_used == 0
     assert result.pagination_stop_reasons["empty_page"] >= 1
     assert "Media quota underfilled: tv planned 120, actual 0." in result.warnings
+
+
+def test_country_first_mocked_normal_scenario_has_no_broad_origin_or_fallback(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = PagedYieldTmdbClient(accepted_per_page=20, total_pages=10, country="US")
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_enrichment={"enabled": False},
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count == autofill.STARTER_POOL_TARGET
+    assert _candidate_country_hit_rate(result.candidates) == 1.0
+    assert all("with_origin_country" in params for _endpoint, params in client.calls)
+    assert {candidate["source_query"]["fallback"] for candidate in result.candidates} == {"base"}
+
+
+def test_country_leakage_metric_counts_off_country_candidate() -> None:
+    from scripts.reports.run_onboarding_pool_rebuild import _country_metrics
+
+    metrics = _country_metrics(
+        [
+            {
+                "target_country": "US",
+                "country_codes": ["RU"],
+            }
+        ],
+        {
+            "country_selection": {
+                "selected_countries": ["US"],
+                "home_country": "RU",
+                "exclude_home_country": True,
+            }
+        },
+    )
+
+    assert metrics["country_hit_rate"] == 0.0
+    assert metrics["country_leakage_count"] == 1
+    assert metrics["wrong_country_count"] == 1
 
 
 def test_acceptance_scenario_ru_tv_manual_serious_2010_adapts_without_vote_filters_or_foreign_fallback(tmp_path, monkeypatch) -> None:

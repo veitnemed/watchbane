@@ -35,3 +35,19 @@ Weak, not garbage:
 - rating `0` when other metadata is useful.
 
 Default onboarding still blocks `garbage` candidates from normal pool insertion.
+
+## country_first_regressions
+
+Step `108` hardens country-first starter sweep behavior.
+
+Regression guarantees:
+
+- every selected country bucket uses `with_origin_country`;
+- 1–5 selected-country plans still sum to the starter target of `120`;
+- mocked normal country-first scenarios keep country hit rate at `1.0`;
+- default onboarding does not use broad-origin requests;
+- default onboarding keeps fallback as `base`;
+- high-yield selected-country underfill continues selected-country pages instead
+  of falling outside selected countries;
+- report metrics count country leakage and wrong-country candidates when an
+  off-country row reaches diagnostics.
