@@ -175,3 +175,37 @@ Diagnostics:
 - `AutofillResult.details_requests` records Details request attempts separately
   from Discover `api_requests`.
 - Candidate records include `details_enriched` and `score_debug`.
+
+## Localization fallback behavior
+
+Step `008` adds an overview localization fallback inside the selective Details
+stage. Discover remains unchanged: no vote/rating hard filters are added, and
+country-first `with_origin_country` requests are preserved.
+
+Fallback order for a candidate whose overview is still empty after the
+UI-language Details request:
+
+1. Try Details with the candidate `original_language` locale, for example
+   `ja-JP` or `ko-KR`.
+2. Try Details with `en-US`.
+3. If overview is still empty, mark the row as missing overview metadata.
+
+Candidate records now include:
+
+- `overview_source`: `ui_language`, `original_language`, `en-US`, or
+  `missing`.
+- `metadata_missing_overview`: `true` only after fallback fails or a candidate
+  is saved without overview metadata.
+
+Scoring behavior:
+
+- `ui_language` overview has no metadata penalty.
+- `original_language` and `en-US` overview get a small fallback penalty.
+- `missing` overview gets a strong metadata penalty in `score_debug`.
+
+Metrics:
+
+- `localization_fallback_count`
+- `overview_fallback_original_language_count`
+- `overview_fallback_en_count`
+- `missing_overview_after_fallback`

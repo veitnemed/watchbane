@@ -104,6 +104,36 @@ FALLBACK_ORDER = (
     FALLBACK_BASE,
 )
 
+OVERVIEW_SOURCE_UI_LANGUAGE = "ui_language"
+OVERVIEW_SOURCE_ORIGINAL_LANGUAGE = "original_language"
+OVERVIEW_SOURCE_EN = "en-US"
+OVERVIEW_SOURCE_MISSING = "missing"
+
+LOCALIZATION_FALLBACK_COUNT = "localization_fallback_count"
+OVERVIEW_FALLBACK_ORIGINAL_LANGUAGE_COUNT = "overview_fallback_original_language_count"
+OVERVIEW_FALLBACK_EN_COUNT = "overview_fallback_en_count"
+MISSING_OVERVIEW_AFTER_FALLBACK = "missing_overview_after_fallback"
+LOCALIZATION_METRIC_KEYS = (
+    LOCALIZATION_FALLBACK_COUNT,
+    OVERVIEW_FALLBACK_ORIGINAL_LANGUAGE_COUNT,
+    OVERVIEW_FALLBACK_EN_COUNT,
+    MISSING_OVERVIEW_AFTER_FALLBACK,
+)
+
+TMDB_LOCALE_BY_LANGUAGE_CODE = {
+    "de": "de-DE",
+    "en": "en-US",
+    "es": "es-ES",
+    "fr": "fr-FR",
+    "it": "it-IT",
+    "ja": "ja-JP",
+    "ko": "ko-KR",
+    "pt": "pt-BR",
+    "ru": "ru-RU",
+    "tr": "tr-TR",
+    "zh": "zh-CN",
+}
+
 ProgressCallback = Callable[[dict[str, Any]], None]
 CancelChecker = Callable[[], bool]
 
@@ -549,6 +579,10 @@ class AutofillResult:
     pool_size: int
     api_requests: int
     details_requests: int
+    localization_fallback_count: int
+    overview_fallback_original_language_count: int
+    overview_fallback_en_count: int
+    missing_overview_after_fallback: int
     cancelled: bool
     warning: str | None
     candidates: list[dict[str, Any]]
@@ -1026,6 +1060,19 @@ def _ui_language_to_tmdb_locale(ui_language: str) -> str:
     return "ru-RU" if str(ui_language or "").strip().casefold() == "ru" else "en-US"
 
 
+def _original_language_to_tmdb_locale(original_language: Any) -> str | None:
+    text = str(original_language or "").strip()
+    if not text:
+        return None
+    normalized = text.replace("_", "-")
+    if "-" in normalized:
+        language, region, *_rest = normalized.split("-")
+        if len(language) == 2 and len(region) == 2:
+            return f"{language.casefold()}-{region.upper()}"
+    code = normalized.casefold()
+    return TMDB_LOCALE_BY_LANGUAGE_CODE.get(code, code if len(code) == 2 else None)
+
+
 def _endpoint(media_type: str) -> str:
     return "/discover/movie" if media_type == MEDIA_MOVIE else "/discover/tv"
 
@@ -1334,16 +1381,57 @@ def vote_confidence_for_count(vote_count: Any) -> float:
     return 1.0
 
 
+def _has_overview(result: dict[str, Any]) -> bool:
+    return bool(str(result.get("overview") or "").strip())
+
+
+def _mark_overview_metadata(result: dict[str, Any], source: str) -> dict[str, Any]:
+    updated = dict(result)
+    normalized_source = source if source in {
+        OVERVIEW_SOURCE_UI_LANGUAGE,
+        OVERVIEW_SOURCE_ORIGINAL_LANGUAGE,
+        OVERVIEW_SOURCE_EN,
+        OVERVIEW_SOURCE_MISSING,
+    } else OVERVIEW_SOURCE_MISSING
+    updated["overview_source"] = normalized_source
+    updated["metadata_missing_overview"] = normalized_source == OVERVIEW_SOURCE_MISSING
+    return updated
+
+
+def _ensure_overview_metadata(result: dict[str, Any]) -> dict[str, Any]:
+    if result.get("overview_source") in {
+        OVERVIEW_SOURCE_UI_LANGUAGE,
+        OVERVIEW_SOURCE_ORIGINAL_LANGUAGE,
+        OVERVIEW_SOURCE_EN,
+        OVERVIEW_SOURCE_MISSING,
+    }:
+        return result
+    if _has_overview(result):
+        return _mark_overview_metadata(result, OVERVIEW_SOURCE_UI_LANGUAGE)
+    return _mark_overview_metadata(result, OVERVIEW_SOURCE_MISSING)
+
+
+def _overview_metadata_penalty(result: dict[str, Any]) -> tuple[float, str, bool]:
+    source = str(result.get("overview_source") or "").strip()
+    missing = bool(result.get("metadata_missing_overview"))
+    if source == OVERVIEW_SOURCE_MISSING or missing:
+        return 1200.0, OVERVIEW_SOURCE_MISSING, True
+    if source in {OVERVIEW_SOURCE_ORIGINAL_LANGUAGE, OVERVIEW_SOURCE_EN}:
+        return 150.0, source, False
+    return 0.0, source or OVERVIEW_SOURCE_UI_LANGUAGE, False
+
+
 def compute_candidate_score_debug(
     result: dict[str, Any],
     bucket: CandidateFetchBucket,
     *,
     page: int,
     index_on_page: int,
-) -> dict[str, float]:
+) -> dict[str, Any]:
     vote_average = float(result.get("vote_average") or 0)
     vote_count = float(result.get("vote_count") or 0)
     popularity = float(result.get("popularity") or 0)
+    metadata_overview_penalty, overview_source, metadata_missing_overview = _overview_metadata_penalty(result)
     vote_confidence = vote_confidence_for_count(vote_count)
     rating_bonus_raw = vote_average * 100
     rating_bonus_adjusted = rating_bonus_raw * vote_confidence
@@ -1363,6 +1451,7 @@ def compute_candidate_score_debug(
         + popularity_bonus
         + freshness_score
         - fetch_order_penalty
+        - metadata_overview_penalty
     )
     return {
         "rating_bonus_raw": round(rating_bonus_raw, 4),
@@ -1373,6 +1462,9 @@ def compute_candidate_score_debug(
         "bucket_priority_score": float(bucket_priority_score),
         "freshness_score": round(float(freshness_score), 4),
         "fetch_order_penalty": round(float(fetch_order_penalty), 4),
+        "metadata_overview_penalty": round(metadata_overview_penalty, 4),
+        "metadata_missing_overview": metadata_missing_overview,
+        "overview_source": overview_source,
         "final_score": round(final_score, 4),
     }
 
@@ -1401,12 +1493,14 @@ def _fetch_details_for_result(
     bucket: CandidateFetchBucket,
     profile: OnboardingTasteProfile,
     config: DetailsEnrichmentConfig,
+    *,
+    language: str | None = None,
 ) -> tuple[dict[str, Any] | None, int]:
     tmdb_id = result.get("id")
     if str(tmdb_id or "").strip().isdigit() is False:
         return None, 0
     append_to_response = _details_append_to_response(config)
-    language = _ui_language_to_tmdb_locale(profile.ui_language)
+    request_language = language or _ui_language_to_tmdb_locale(profile.ui_language)
     details_method = (
         getattr(client, "movie_details", None)
         if bucket.media_type == MEDIA_MOVIE
@@ -1418,7 +1512,7 @@ def _fetch_details_for_result(
         return (
             details_method(
                 int(tmdb_id),
-                language=language,
+                language=request_language,
                 append_to_response=append_to_response,
             ),
             1,
@@ -1483,6 +1577,57 @@ def _merge_details_into_discover_result(
     return updated
 
 
+def resolve_overview_with_fallback(
+    result: dict[str, Any],
+    *,
+    client: TmdbClientProtocol,
+    bucket: CandidateFetchBucket,
+    profile: OnboardingTasteProfile,
+    config: DetailsEnrichmentConfig,
+    remaining_request_budget: int,
+) -> tuple[dict[str, Any], int, Counter[str]]:
+    metrics: Counter[str] = Counter()
+    if _has_overview(result):
+        return _mark_overview_metadata(result, OVERVIEW_SOURCE_UI_LANGUAGE), 0, metrics
+
+    metrics[LOCALIZATION_FALLBACK_COUNT] += 1
+    requested = 0
+    updated = dict(result)
+    ui_locale = _ui_language_to_tmdb_locale(profile.ui_language)
+    fallback_languages: list[tuple[str, str, str]] = []
+    original_locale = _original_language_to_tmdb_locale(updated.get("original_language"))
+    if original_locale and original_locale != ui_locale:
+        fallback_languages.append((
+            OVERVIEW_SOURCE_ORIGINAL_LANGUAGE,
+            original_locale,
+            OVERVIEW_FALLBACK_ORIGINAL_LANGUAGE_COUNT,
+        ))
+    if OVERVIEW_SOURCE_EN not in {ui_locale, original_locale}:
+        fallback_languages.append((OVERVIEW_SOURCE_EN, OVERVIEW_SOURCE_EN, OVERVIEW_FALLBACK_EN_COUNT))
+
+    for source, language, metric_key in fallback_languages:
+        if requested >= max(0, int(remaining_request_budget)):
+            break
+        details, request_count = _fetch_details_for_result(
+            client,
+            updated,
+            bucket,
+            profile,
+            config,
+            language=language,
+        )
+        requested += request_count
+        if details is None:
+            continue
+        updated = _merge_details_into_discover_result(updated, details, media_type=bucket.media_type)
+        if _has_overview(updated):
+            metrics[metric_key] += 1
+            return _mark_overview_metadata(updated, source), requested, metrics
+
+    metrics[MISSING_OVERVIEW_AFTER_FALLBACK] += 1
+    return _mark_overview_metadata(updated, OVERVIEW_SOURCE_MISSING), requested, metrics
+
+
 def _details_candidate_cap(bucket: CandidateFetchBucket, config: DetailsEnrichmentConfig) -> int:
     target_buffer = max(1, int(math.ceil(float(bucket.quota) * 1.5)))
     return min(int(config.default_limit_per_bucket), target_buffer)
@@ -1495,31 +1640,53 @@ def _enrich_preliminary_entries(
     bucket: CandidateFetchBucket,
     profile: OnboardingTasteProfile,
     requested_for_bucket: int,
-) -> int:
+) -> tuple[int, Counter[str]]:
+    metrics: Counter[str] = Counter()
     config = profile.details_enrichment
     if not isinstance(config, DetailsEnrichmentConfig):
         config = DetailsEnrichmentConfig(default_limit_per_bucket=profile.details_limit).normalized(details_limit=profile.details_limit)
     if config.enabled is False or not entries:
-        return 0
+        for entry in entries:
+            entry["result"] = _ensure_overview_metadata(entry["result"])
+            entry["score_debug"] = compute_candidate_score_debug(
+                entry["result"],
+                bucket,
+                page=int(entry["page"]),
+                index_on_page=int(entry["index_on_page"]),
+            )
+        return 0, metrics
     remaining = max(0, _details_candidate_cap(bucket, config) - int(requested_for_bucket))
-    if remaining <= 0:
-        return 0
     selected = sorted(entries, key=lambda entry: float(entry["score_debug"]["final_score"]), reverse=True)[:remaining]
     requested = 0
     for entry in selected:
+        if requested >= remaining:
+            break
         details, request_count = _fetch_details_for_result(client, entry["result"], bucket, profile, config)
         requested += request_count
         if details is None:
             continue
         enriched_result = _merge_details_into_discover_result(entry["result"], details, media_type=bucket.media_type)
-        entry["result"] = enriched_result
-        entry["score_debug"] = compute_candidate_score_debug(
+        fallback_result, fallback_requests, fallback_metrics = resolve_overview_with_fallback(
             enriched_result,
+            client=client,
+            bucket=bucket,
+            profile=profile,
+            config=config,
+            remaining_request_budget=max(0, remaining - requested),
+        )
+        requested += fallback_requests
+        metrics.update(fallback_metrics)
+        enriched_result = fallback_result
+        entry["result"] = enriched_result
+    for entry in entries:
+        entry["result"] = _ensure_overview_metadata(entry["result"])
+        entry["score_debug"] = compute_candidate_score_debug(
+            entry["result"],
             bucket,
             page=int(entry["page"]),
             index_on_page=int(entry["index_on_page"]),
         )
-    return requested
+    return requested, metrics
 
 
 def build_candidate_record_from_result(
@@ -1558,6 +1725,8 @@ def build_candidate_record_from_result(
         "target_country_weight": bucket.target_country_weight,
         "onboarding_profile_id": int(profile_id),
         "details_enriched": bool(result.get("_details_enriched")),
+        "overview_source": result.get("overview_source") or OVERVIEW_SOURCE_UI_LANGUAGE,
+        "metadata_missing_overview": bool(result.get("metadata_missing_overview")),
         "candidate_score": candidate_score,
         "score_debug": dict(score_debug or {}),
         "fetch_rank": int(fetch_rank),
@@ -1772,6 +1941,7 @@ def run_onboarding_autofill(
     api_requests = 0
     details_requests = 0
     details_requested_by_bucket: Counter[str] = Counter()
+    localization_metrics: Counter[str] = Counter()
     fetch_rank = 0
     rejected_future_count = 0
     duplicate_requests_skipped = 0
@@ -1895,7 +2065,7 @@ def run_onboarding_autofill(
                         })
                         accepted_identities.add((bucket.media_type, int(result["id"])))
                         state.filled += 1
-                    details_delta = _enrich_preliminary_entries(
+                    details_delta, details_metrics = _enrich_preliminary_entries(
                         preliminary_entries,
                         client=client,
                         bucket=bucket,
@@ -1904,6 +2074,7 @@ def run_onboarding_autofill(
                     )
                     details_requests += details_delta
                     details_requested_by_bucket[bucket.bucket_id] += details_delta
+                    localization_metrics.update(details_metrics)
                     for entry in preliminary_entries:
                         score_debug = entry["score_debug"]
                         candidate_score = float(score_debug["final_score"])
@@ -1974,6 +2145,7 @@ def run_onboarding_autofill(
         pool_size=len(created_candidates),
         api_requests=api_requests,
         details_requests=details_requests,
+        **{key: int(localization_metrics.get(key, 0)) for key in LOCALIZATION_METRIC_KEYS},
         cancelled=cancelled,
         warning=warning,
     )
@@ -1984,6 +2156,10 @@ def run_onboarding_autofill(
         pool_size=len(_pool_snapshot(path=path)),
         api_requests=api_requests,
         details_requests=details_requests,
+        localization_fallback_count=int(localization_metrics.get(LOCALIZATION_FALLBACK_COUNT, 0)),
+        overview_fallback_original_language_count=int(localization_metrics.get(OVERVIEW_FALLBACK_ORIGINAL_LANGUAGE_COUNT, 0)),
+        overview_fallback_en_count=int(localization_metrics.get(OVERVIEW_FALLBACK_EN_COUNT, 0)),
+        missing_overview_after_fallback=int(localization_metrics.get(MISSING_OVERVIEW_AFTER_FALLBACK, 0)),
         cancelled=cancelled,
         warning=warning,
         candidates=created_candidates,

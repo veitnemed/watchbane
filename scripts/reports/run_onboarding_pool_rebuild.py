@@ -441,6 +441,10 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         "pool_size": result.pool_size,
         "api_requests": result.api_requests,
         "details_requests": result.details_requests,
+        "localization_fallback_count": result.localization_fallback_count,
+        "overview_fallback_original_language_count": result.overview_fallback_original_language_count,
+        "overview_fallback_en_count": result.overview_fallback_en_count,
+        "missing_overview_after_fallback": result.missing_overview_after_fallback,
         "elapsed_ms": elapsed_ms,
         "planned_counts": result.planned_counts,
         "actual_counts": result.actual_counts,
@@ -475,6 +479,10 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
                 f"- Created/pool: {result['created_count']} / {result['pool_size']}",
                 f"- API requests: {result['api_requests']}",
                 f"- Details requests: {result['details_requests']}",
+                f"- Localization fallback: {result['localization_fallback_count']} "
+                f"(original {result['overview_fallback_original_language_count']}, "
+                f"en {result['overview_fallback_en_count']}, "
+                f"missing {result['missing_overview_after_fallback']})",
                 f"- Elapsed ms: {result['elapsed_ms']}",
                 f"- Country plan: `{result['country_plan']}`",
                 f"- Country actual: `{result['country_actual']}`",

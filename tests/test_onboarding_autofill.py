@@ -243,6 +243,69 @@ class DuplicateDiscoverTmdbClient(FakeTmdbClient):
         return {"results": [dict(item), dict(item)], "total_pages": 1}
 
 
+class MissingOverviewLocalizationTmdbClient(FakeTmdbClient):
+    def __init__(
+        self,
+        *,
+        country: str = "JP",
+        original_language: str = "ja",
+        original_overview: str = "Original language overview",
+        en_overview: str = "English overview",
+    ) -> None:
+        super().__init__()
+        self.country = country
+        self.original_language = original_language
+        self.original_overview = original_overview
+        self.en_overview = en_overview
+
+    def discover(self, endpoint: str, params: dict) -> dict:
+        self.calls.append((endpoint, dict(params)))
+        country = params.get("with_origin_country") or self.country
+        return {
+            "results": [
+                {
+                    "id": 808,
+                    "title": "Missing Overview Movie",
+                    "original_title": "Missing Overview Movie",
+                    "release_date": "2024-01-01",
+                    "poster_path": "/missing-overview.jpg",
+                    "overview": "",
+                    "genre_ids": [18],
+                    "origin_country": [country],
+                    "vote_average": 7.5,
+                    "vote_count": 40,
+                    "popularity": 12,
+                    "original_language": self.original_language,
+                }
+            ],
+            "total_pages": 1,
+        }
+
+    def movie_details(self, tmdb_id: int, language: str = "en", *, append_to_response=None) -> dict:
+        appends = tuple(append_to_response or ())
+        self.details_calls.append((MEDIA_MOVIE, int(tmdb_id), language, appends))
+        overview = ""
+        if language == autofill._original_language_to_tmdb_locale(self.original_language):
+            overview = self.original_overview
+        elif language == "en-US":
+            overview = self.en_overview
+        return {
+            "id": int(tmdb_id),
+            "title": "Missing Overview Movie",
+            "original_title": "Missing Overview Movie",
+            "release_date": "2024-01-01",
+            "overview": overview,
+            "genres": [{"id": 18, "name": "Drama"}],
+            "production_countries": [{"iso_3166_1": self.country, "name": self.country}],
+            "vote_average": 7.5,
+            "vote_count": 40,
+            "popularity": 12,
+            "poster_path": "/missing-overview-details.jpg",
+            "original_language": self.original_language,
+            "external_ids": {"imdb_id": f"tt{int(tmdb_id):07d}"},
+        }
+
+
 def _profile(**overrides) -> OnboardingTasteProfile:
     data = {
         "media_preference": "both",
@@ -1021,6 +1084,130 @@ def test_details_enrichment_can_be_disabled(tmp_path, monkeypatch) -> None:
     assert result.details_requests == 0
     assert client.details_calls == []
     assert all(candidate["details_enriched"] is False for candidate in result.candidates)
+
+
+def test_missing_ru_overview_falls_back_to_original_language(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = MissingOverviewLocalizationTmdbClient(
+        country="JP",
+        original_language="ja",
+        original_overview="Japanese overview",
+        en_overview="English overview",
+    )
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            ui_language="ru",
+            country_selection={"selected_countries": ["JP"], "home_country": "RU"},
+            details_limit=5,
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.details_requests == 2
+    assert [call[2] for call in client.details_calls] == ["ru-RU", "ja-JP"]
+    assert result.localization_fallback_count == 1
+    assert result.overview_fallback_original_language_count == 1
+    assert result.overview_fallback_en_count == 0
+    candidate = result.candidates[0]
+    assert candidate["overview"] == "Japanese overview"
+    assert candidate["overview_source"] == "original_language"
+    assert candidate["metadata_missing_overview"] is False
+    assert candidate["score_debug"]["metadata_overview_penalty"] == 150.0
+
+
+def test_missing_ru_and_original_overview_falls_back_to_en(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = MissingOverviewLocalizationTmdbClient(
+        country="JP",
+        original_language="ja",
+        original_overview="",
+        en_overview="English overview",
+    )
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            ui_language="ru",
+            country_selection={"selected_countries": ["JP"], "home_country": "RU"},
+            details_limit=5,
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.details_requests == 3
+    assert [call[2] for call in client.details_calls] == ["ru-RU", "ja-JP", "en-US"]
+    assert result.localization_fallback_count == 1
+    assert result.overview_fallback_original_language_count == 0
+    assert result.overview_fallback_en_count == 1
+    candidate = result.candidates[0]
+    assert candidate["overview"] == "English overview"
+    assert candidate["overview_source"] == "en-US"
+    assert candidate["metadata_missing_overview"] is False
+    assert candidate["score_debug"]["metadata_overview_penalty"] == 150.0
+
+
+def test_missing_overview_after_fallback_gets_metadata_penalty(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = MissingOverviewLocalizationTmdbClient(
+        country="JP",
+        original_language="ja",
+        original_overview="",
+        en_overview="",
+    )
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            ui_language="ru",
+            country_selection={"selected_countries": ["JP"], "home_country": "RU"},
+            details_limit=5,
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.details_requests == 3
+    assert result.localization_fallback_count == 1
+    assert result.missing_overview_after_fallback == 1
+    candidate = result.candidates[0]
+    assert candidate["overview"] in (None, "")
+    assert candidate["overview_source"] == "missing"
+    assert candidate["metadata_missing_overview"] is True
+    assert candidate["score_debug"]["metadata_overview_penalty"] == 1200.0
+
+
+def test_jp_and_kr_missing_overview_trigger_localization_fallback(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+
+    for country, language, expected_locale in (("JP", "ja", "ja-JP"), ("KR", "ko", "ko-KR")):
+        client = MissingOverviewLocalizationTmdbClient(
+            country=country,
+            original_language=language,
+            original_overview=f"{country} overview",
+        )
+        result = run_onboarding_autofill(
+            _profile(
+                media_preference="movie",
+                ui_language="ru",
+                country_selection={"selected_countries": [country], "home_country": "RU"},
+                details_limit=5,
+            ),
+            client=client,
+            path=tmp_path / f"{country.lower()}.sqlite3",
+            current_year=2026,
+        )
+
+        assert result.localization_fallback_count == 1
+        assert expected_locale in [call[2] for call in client.details_calls]
+        assert result.candidates[0]["overview"] == f"{country} overview"
+        assert result.candidates[0]["overview_source"] == "original_language"
 
 
 def test_acceptance_ru_tv_manual_sweep_contract() -> None:

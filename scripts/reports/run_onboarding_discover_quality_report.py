@@ -330,7 +330,7 @@ def _template_key(request: dict[str, Any]) -> str:
     )
 
 
-def _api_budget_metrics(requests: list[dict[str, Any]], final_candidates: int) -> dict[str, Any]:
+def _api_budget_metrics(requests: list[dict[str, Any]], final_candidates: int, *, details_requests: int) -> dict[str, Any]:
     executed = [request for request in requests if request.get("status") != "skipped_duplicate"]
     templates = {_template_key(request) for request in executed}
     raw_found = sum(int(request.get("returned_count") or 0) for request in executed)
@@ -339,7 +339,6 @@ def _api_budget_metrics(requests: list[dict[str, Any]], final_candidates: int) -
         for request in executed
         if "with_origin_country" not in (request.get("params") or {})
     )
-    details_requests = 0
     template_count = len(templates)
     http_count = len(executed)
     return {
@@ -354,7 +353,7 @@ def _api_budget_metrics(requests: list[dict[str, Any]], final_candidates: int) -
         "final_candidates": final_candidates,
         "accepted_per_discover_template": round(final_candidates / template_count, 4) if template_count else 0.0,
         "accepted_per_discover_http_request": round(final_candidates / http_count, 4) if http_count else 0.0,
-        "accepted_per_details_request": 0.0,
+        "accepted_per_details_request": round(final_candidates / details_requests, 4) if details_requests else 0.0,
         "broad_origin_requests": broad_origin_requests,
         "fallback_used": any(request.get("fallback") not in (None, "", "base") for request in executed),
     }
@@ -382,7 +381,7 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
     country_metrics = _country_metrics(candidates, normalized_profile)
     speed = _speed_stats(client.discover_logs, elapsed_ms)
     candidate_metrics = _candidate_metrics(candidates)
-    api_budget_metrics = _api_budget_metrics(request_rows, result.created_count)
+    api_budget_metrics = _api_budget_metrics(request_rows, result.created_count, details_requests=result.details_requests)
     return {
         "scenario": name,
         "mode": "live" if live else "mock",
@@ -395,6 +394,10 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         "pool_size": result.pool_size,
         "api_requests": result.api_requests,
         "details_requests": result.details_requests,
+        "localization_fallback_count": result.localization_fallback_count,
+        "overview_fallback_original_language_count": result.overview_fallback_original_language_count,
+        "overview_fallback_en_count": result.overview_fallback_en_count,
+        "missing_overview_after_fallback": result.missing_overview_after_fallback,
         "planned_counts": result.planned_counts,
         "actual_counts": result.actual_counts,
         "warnings": result.warnings,
@@ -501,6 +504,7 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
             f"- Created/pool: {result['created_count']} / {result['pool_size']}",
             f"- API requests: {result['api_requests']}; unique/total: {result['requests_unique']} / {result['requests_total']}",
             f"- API budget: templates {result.get('discover_templates_count')}; discover HTTP {result.get('discover_http_requests')}; details {result.get('details_requests')}; broad origin {result.get('broad_origin_requests')}; fallback used {result.get('fallback_used')}",
+            f"- Localization fallback: {result.get('localization_fallback_count')}; original {result.get('overview_fallback_original_language_count')}; en {result.get('overview_fallback_en_count')}; missing {result.get('missing_overview_after_fallback')}",
             f"- Yield: raw discover {result.get('raw_discover_found')}; duplicates removed {result.get('duplicates_removed')}; accepted/template {result.get('accepted_per_discover_template')}; accepted/discover request {result.get('accepted_per_discover_http_request')}",
             f"- Duplicate skipped: {result['duplicate_requests_skipped']}",
             f"- Speed: total {result['elapsed_s']}s; discover avg {result['discover_avg_ms']}ms; p50 {result['discover_p50_ms']}ms; p95 {result['discover_p95_ms']}ms; max {result['discover_max_ms']}ms",
