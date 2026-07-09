@@ -32,6 +32,7 @@ class AppTabsContext:
     watched_tab_view: WatchedTabView
     settings_tab_view: SettingsTabView
     candidate_session: CandidateSearchSession
+    refresh_candidate_filters: Callable[[], None]
     focus_candidates: Callable[[], None]
 
 
@@ -109,11 +110,13 @@ def build_main_tabs(
     registry.register(ShellTabSpec("settings", languages.tr("tabs.settings"), settings_tab_view))
 
     tabs.currentChanged.connect(registry.on_current_changed)
+    refresh_candidate_filters = getattr(candidate_filters_view, "reload_filter_options", lambda: None)
 
     context = AppTabsContext(
         watched_tab_view=watched_tab_view,
         settings_tab_view=settings_tab_view,
         candidate_session=candidate_session,
+        refresh_candidate_filters=refresh_candidate_filters,
         focus_candidates=lambda: registry.focus("candidates"),
     )
     return registry, context

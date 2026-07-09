@@ -26,6 +26,11 @@ from candidates.onboarding.pagination import (
 from candidates.pool.dataset_overlap import build_dataset_title_keys
 from candidates.pool.existing_index import build_existing_candidate_index, discover_item_existing_reason
 from candidates.pool.watched_cleanup import build_watched_signatures, is_watched_candidate
+from candidates.sources.tmdb.scoring import (
+    compute_tmdb_final_score,
+    compute_tmdb_hidden_gem_score,
+    compute_tmdb_quality_score,
+)
 from storage.sqlite import action_repository
 from storage.sqlite.candidate_pool_repository import load_candidate_pool_dict, save_candidate_pool_dict
 from storage.sqlite.onboarding_repository import (
@@ -2099,14 +2104,9 @@ def build_candidate_record_from_result(
         },
         "signals": ["onboarding_autofill"],
     }
-    candidate["quality_score"] = round(
-        float(result.get("vote_average") or 0) * 10 * vote_confidence_for_count(result.get("vote_count"))
-        + min(math.log10(max(float(result.get("vote_count") or 1), 1)) * 10, 50)
-        + min(float(result.get("popularity") or 0), 500) / 10,
-        4,
-    )
-    candidate["hidden_gem_score"] = 0.0
-    candidate["final_score"] = round(candidate_score / 10_000, 4)
+    candidate["quality_score"] = compute_tmdb_quality_score(candidate)
+    candidate["hidden_gem_score"] = compute_tmdb_hidden_gem_score(candidate)
+    candidate["final_score"] = compute_tmdb_final_score(candidate)
     completeness = compute_completeness(candidate)
     candidate["is_complete"] = completeness["is_complete"]
     candidate["missing_fields"] = completeness["missing_fields"]

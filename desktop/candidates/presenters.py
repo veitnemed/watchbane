@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import ROUND_HALF_UP, Decimal
+
 from candidates import service as candidate_service
 from candidates.models.country_schema import candidate_country_for_display
 from candidates.models.genre_schema import normalize_genre_display_labels
@@ -34,6 +36,17 @@ SORT_MODE_LABEL_KEYS = {
 }
 
 
+def _format_final_score_metric_number(value: float) -> str:
+    if 0 <= value <= 1:
+        rounded = Decimal(str(value * 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        return str(int(rounded))
+    if 1 < value <= 10:
+        return f"{value:.1f}"
+    if float(value).is_integer():
+        return str(int(value))
+    return f"{value:.1f}"
+
+
 def candidate_sort_mode_label(sort_mode: str) -> str:
     """Return UI label for a candidate sort mode without changing service constants."""
     key = SORT_MODE_LABEL_KEYS.get(sort_mode)
@@ -59,6 +72,11 @@ def format_candidate_metric_value(candidate: dict, sort_mode: str) -> str:
     value = coerce_candidate_number(candidate.get(field_name))
     if value is None:
         return f"{prefix} —" if prefix else "—"
+    if field_name == "final_score":
+        try:
+            return f"{prefix} {_format_final_score_metric_number(float(value))}"
+        except (TypeError, ValueError):
+            return f"{prefix} {value}"
     if field_name.endswith("_votes"):
         try:
             return f"{prefix} {int(value):,}".replace(",", " ")

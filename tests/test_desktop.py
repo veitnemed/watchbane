@@ -1768,12 +1768,15 @@ def test_normalize_and_format_final_score() -> None:
     from desktop.watched import format_final_score, normalize_final_score
 
     assert normalize_final_score(0.74) == 0.74
+    assert normalize_final_score(8.4) == 0.84
     assert normalize_final_score(74) == 0.74
     assert normalize_final_score(None) == 0.0
     assert format_final_score(0.74) == "Итог 74"
+    assert format_final_score(8.4) == "Итог 84"
     assert format_final_score(74) == "Итог 74"
     assert format_final_score(None) == "Итог —"
     assert final_score_to_stars(0.86) == 4.5
+    assert final_score_to_stars(8.4) == 4.0
     assert final_score_to_stars(60) == 3.0
     assert final_score_to_stars(0.52) == 2.5
     assert final_score_to_stars(0.04) == 0.0
@@ -4968,6 +4971,7 @@ def test_format_candidate_list_label_shows_sort_metric() -> None:
     }
     assert format_candidate_title_line(candidate) == "Test Show (2020)"
     assert format_candidate_metric_value(candidate, "final_score") == "Итог 8.4"
+    assert format_candidate_metric_value({**candidate, "final_score": 0.74}, "final_score") == "Итог 74"
     assert format_candidate_metric_value(candidate, "tmdb_votes") == "TMDb 12 000"
     label = format_candidate_list_label(candidate, "final_score")
     assert "Test Show (2020)" in label
@@ -6084,7 +6088,11 @@ def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch,
             self.invalidate_calls += 1
 
     session = FakeSession()
-    calls = {"focus": 0}
+    calls = {"focus": 0, "refresh_filters": 0}
+
+    def refresh_candidate_filters() -> None:
+        assert session.invalidated is True
+        calls["refresh_filters"] += 1
 
     def focus_candidates() -> None:
         assert session.invalidated is True
@@ -6092,7 +6100,11 @@ def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch,
 
     def fake_build_main_tabs(tabs, parent, *, on_status_message):
         del tabs, parent, on_status_message
-        return object(), SimpleNamespace(candidate_session=session, focus_candidates=focus_candidates)
+        return object(), SimpleNamespace(
+            candidate_session=session,
+            refresh_candidate_filters=refresh_candidate_filters,
+            focus_candidates=focus_candidates,
+        )
 
     monkeypatch.setattr(main_window_module.candidate_service, "should_show_onboarding_autofill", lambda: True)
     monkeypatch.setattr(main_window_module, "build_main_tabs", fake_build_main_tabs)
@@ -6107,10 +6119,12 @@ def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch,
         onboarding.completed.emit({"created_count": 120})
         assert calls["focus"] == 0
         assert session.invalidate_calls == 1
+        assert calls["refresh_filters"] == 1
 
         onboarding.finished.emit(1)
         assert calls["focus"] == 1
         assert session.invalidate_calls == 2
+        assert calls["refresh_filters"] == 2
         assert window._root_stack.currentWidget() is window._main_tabs
     finally:
         window.close()

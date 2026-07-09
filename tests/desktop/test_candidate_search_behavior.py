@@ -56,6 +56,7 @@ class FakeCandidateService:
         self.hidden_candidates: list[dict] = []
         self.applied_filters: list[dict] = []
         self.overview_calls = 0
+        self.chip_options = {"genres": [], "countries": []}
 
     def get_search_overview_view(self) -> dict:
         self.overview_calls += 1
@@ -106,7 +107,7 @@ class FakeCandidateService:
         return {"defaults": dict(DEFAULT_BROWSE_FILTERS)}
 
     def get_search_filter_chip_options_view(self) -> dict:
-        return {"genres": [], "countries": []}
+        return deepcopy(self.chip_options)
 
     def hide_candidate(self, candidate: dict) -> dict:
         self.hidden_candidates.append(deepcopy(candidate))
@@ -145,6 +146,25 @@ def _listed_titles(list_widget: QListView) -> list[str]:
 
 def _listed_count(list_widget: QListView) -> int:
     return list_widget.model().rowCount()
+
+
+def test_filters_view_reload_filter_options_uses_new_pool_genres(qtbot) -> None:
+    service = FakeCandidateService()
+    service.chip_options = {"genres": [{"label": "Drama"}], "countries": []}
+    _service, _session, filters_view, _list_view = _build_views(qtbot, service=service)
+
+    initial_count = len(filters_view._include_genre_selector._chips)
+    service.chip_options = {
+        "genres": [{"label": "Drama"}, {"label": "Comedy"}, {"label": "Animation"}],
+        "countries": [{"code": "JP", "label": "Japan"}],
+    }
+
+    filters_view.reload_filter_options()
+
+    assert initial_count == 1
+    assert len(filters_view._include_genre_selector._chips) == 3
+    assert len(filters_view._exclude_genre_selector._chips) == 3
+    assert filters_view._country_selector._codes_in_order == ["JP"]
 
 
 def test_searchable_candidate_without_kp_imdb_is_visible_in_searchable_mode(qtbot) -> None:

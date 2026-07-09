@@ -75,12 +75,23 @@ class WatchedMoviesWindow(QMainWindow):
         onboarding.setModal(False)
         onboarding.setWindowFlag(Qt.WindowType.Widget, True)
 
+        def refresh_candidate_pool_views() -> None:
+            session = self._tabs_context.candidate_session
+            reload_from_pool = getattr(session, "reload_from_pool", None)
+            if callable(reload_from_pool):
+                reload_from_pool(force=True)
+            else:
+                session.invalidate_pool_cache()
+            refresh_filters = getattr(self._tabs_context, "refresh_candidate_filters", None)
+            if callable(refresh_filters):
+                refresh_filters()
+
         def mark_candidate_pool_changed(_result: object) -> None:
-            self._tabs_context.candidate_session.invalidate_pool_cache()
+            refresh_candidate_pool_views()
             log_event("onboarding.view.completed")
 
         def finish_onboarding(_code: int) -> None:
-            self._tabs_context.candidate_session.invalidate_pool_cache()
+            refresh_candidate_pool_views()
             self._root_stack.setCurrentWidget(self._main_tabs)
             self._tabs_context.focus_candidates()
             log_event("onboarding.view.finished", result_code=_code)

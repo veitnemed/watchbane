@@ -41,9 +41,11 @@ def normalize_final_score(value) -> float:
         score = float(value)
     except (TypeError, ValueError):
         return 0.0
-    if score > 1:
+    if 1 < score <= 10:
+        score = score / 10.0
+    elif score > 10:
         score = score / 100.0
-    return max(0.0, min(1.0, score))
+    return round(max(0.0, min(1.0, score)), 4)
 
 
 def normalize_tmdb_score(value) -> float:

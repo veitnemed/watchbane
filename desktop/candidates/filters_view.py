@@ -171,6 +171,18 @@ class CandidateFiltersView:
     def widget(self) -> QWidget:
         return self._widget
 
+    def reload_filter_options(self) -> None:
+        """Reload pool-derived chip options while preserving the current selection."""
+        selected_countries = self._country_selector.selected_country_codes()
+        selected_include = self._include_genre_selector.selected_genres()
+        selected_exclude = self._exclude_genre_selector.selected_genres()
+        self._apply_filter_defaults(
+            selected_countries=selected_countries,
+            selected_include_genres=selected_include,
+            selected_exclude_genres=selected_exclude,
+            preserve_non_chip_filters=True,
+        )
+
     @property
     def _country_selector(self):
         return self._form.country_selector
@@ -308,7 +320,14 @@ class CandidateFiltersView:
         year_max = None if year_to >= self._year_max else year_to
         return year_min, year_max
 
-    def _apply_filter_defaults(self) -> None:
+    def _apply_filter_defaults(
+        self,
+        *,
+        selected_countries: list[str] | None = None,
+        selected_include_genres: list[str] | None = None,
+        selected_exclude_genres: list[str] | None = None,
+        preserve_non_chip_filters: bool = False,
+    ) -> None:
         defaults_view = self._service.get_search_filter_defaults_view()
         defaults = defaults_view.get("defaults") or {}
         chip_view = self._service.get_search_filter_chip_options_view()
@@ -318,14 +337,24 @@ class CandidateFiltersView:
             if str(item.get("label") or "").strip()
         ]
         genre_labels = _genre_labels_for_language(raw_genre_labels, self._data_language)
+        include_selected = (
+            selected_include_genres
+            if selected_include_genres is not None
+            else defaults.get("include_genres") or []
+        )
+        exclude_selected = (
+            selected_exclude_genres
+            if selected_exclude_genres is not None
+            else defaults.get("exclude_genres") or []
+        )
         self._genre_options = genre_labels
         self._include_genre_selector.set_options(
             genre_labels,
-            _genre_labels_for_language(defaults.get("include_genres") or [], self._data_language),
+            _genre_labels_for_language(include_selected, self._data_language),
         )
         self._exclude_genre_selector.set_options(
             genre_labels,
-            _genre_labels_for_language(defaults.get("exclude_genres") or [], self._data_language),
+            _genre_labels_for_language(exclude_selected, self._data_language),
         )
 
         country_options = [
@@ -342,9 +371,14 @@ class CandidateFiltersView:
             for item in chip_view.get("countries") or []
             if str(item.get("code") or "").strip()
         ]
-        self._country_selector.set_options(country_options, defaults.get("country"))
-        self._set_media_type_from_default(defaults.get("media_type"))
+        self._country_selector.set_options(
+            country_options,
+            selected_countries if selected_countries is not None else defaults.get("country"),
+        )
+        if preserve_non_chip_filters:
+            return
 
+        self._set_media_type_from_default(defaults.get("media_type"))
         self._set_year_slider_from_defaults(defaults.get("year_min"), defaults.get("year_max"))
         set_score_slider_from_default(self._tmdb_score_slider, defaults.get("min_tmdb_score"))
         set_votes_slider_from_default(self._tmdb_votes_slider, defaults.get("min_tmdb_votes"))

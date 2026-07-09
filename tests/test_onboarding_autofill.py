@@ -1735,6 +1735,9 @@ def test_onboarding_candidate_record_includes_score_debug_fields() -> None:
     assert candidate["score_debug"]["vote_confidence"] == 1.0
     assert candidate["score_debug"]["rating_bonus_adjusted"] == 800.0
     assert candidate["score_debug"]["final_score"] == score_debug["final_score"]
+    assert 0 <= candidate["quality_score"] <= 1
+    assert 0 <= candidate["hidden_gem_score"] <= 1
+    assert 0 <= candidate["final_score"] <= 1
 
 
 def test_details_enrichment_dedupes_before_details_requests(tmp_path, monkeypatch) -> None:
