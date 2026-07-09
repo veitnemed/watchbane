@@ -18,6 +18,9 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
+ONBOARDING_REPORT_ROOT = ROOT_DIR / "reports" / "onboarding"
+DEFAULT_REPORT_OUTPUT = ONBOARDING_REPORT_ROOT / "analysis" / "discover_quality_report.md"
+
 from apis import tmdb_api
 from candidates.onboarding import autofill
 from candidates.onboarding.autofill import OnboardingTasteProfile
@@ -767,7 +770,7 @@ def main() -> int:
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT_DIR / "reports" / "onboarding" / "discover_quality_report.md",
+        default=DEFAULT_REPORT_OUTPUT,
     )
     parser.add_argument("--json-output", type=Path)
     parser.add_argument("--tmp-root", type=Path)

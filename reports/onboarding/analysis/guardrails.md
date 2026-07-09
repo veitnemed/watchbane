@@ -51,3 +51,16 @@ Regression guarantees:
   of falling outside selected countries;
 - report metrics count country leakage and wrong-country candidates when an
   off-country row reaches diagnostics.
+
+## report_workspace_hygiene
+
+Step `110` keeps generated onboarding artifacts out of active documentation.
+
+Output contract:
+
+- raw generated payloads and logs live under `reports/onboarding/raw/`;
+- generated analytical markdown lives under `reports/onboarding/analysis/`;
+- before/after snapshots live under `reports/onboarding/baselines/`;
+- UI smoke screenshots live under `screens/tmp_ui/` or
+  `screens/tmp_ui/onboarding/`;
+- `docs/` is reserved for curated documentation, not raw generated reports.

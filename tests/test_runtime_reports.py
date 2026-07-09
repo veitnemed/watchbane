@@ -7,6 +7,8 @@ from diagnostics import runtime_reports
 from scripts.reports import onboarding_compare_report
 from scripts.reports import run_onboarding_discover_quality_report as onboarding_report
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
 
 @dataclass
 class FakeBundle:
@@ -220,3 +222,15 @@ def test_onboarding_compare_report_mentions_failed_scenarios() -> None:
     )
 
     assert "Failed scenarios are present: dark-new-tv-us-gb." in report["analysis_markdown"]
+
+
+def test_onboarding_report_output_hygiene_contract() -> None:
+    assert onboarding_compare_report.RAW_DIR == Path("reports/onboarding/raw")
+    assert onboarding_compare_report.ANALYSIS_DIR == Path("reports/onboarding/analysis")
+    assert onboarding_compare_report.BASELINES_DIR == Path("reports/onboarding/baselines")
+    assert onboarding_report.DEFAULT_REPORT_OUTPUT.relative_to(PROJECT_ROOT) == Path(
+        "reports/onboarding/analysis/discover_quality_report.md"
+    )
+
+    generated_reports_in_docs = sorted((PROJECT_ROOT / "docs").glob("onboarding_*report*.md"))
+    assert generated_reports_in_docs == []
