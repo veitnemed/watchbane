@@ -1,4 +1,4 @@
-﻿# Целевая архитектура
+# Целевая архитектура
 
 Документ описывает архитектуру, к которой должен постепенно прийти `Watchbane`.
 
@@ -207,7 +207,7 @@ genre:
 - dedupe централизован в `candidates`: `deduplicate_pool`, `dedupe_pool_by_similar_titles`, `clean_common_pool_duplicates`;
 - UI показывает `unique_total`; при расхождении с JSON — предупреждение и пункт очистки дублей в console.
 
-Public candidate flow описан в [TMDB_ONLY_CANDIDATE_FLOW.md](TMDB_ONLY_CANDIDATE_FLOW.md). Он требует только `TMDB_TOKEN`, не зависит от KP API и не требует локальный IMDb dataset.
+Public candidate flow описан в [TMDB_ONLY_CANDIDATE_FLOW.md](../contracts/TMDB_ONLY_CANDIDATE_FLOW.md). Он требует только `TMDB_TOKEN`, не зависит от KP API и не требует локальный IMDb dataset.
 
 ## Add / Update / Delete
 
@@ -319,7 +319,7 @@ UI не должен:
 - watched mutations работают через `dataset`;
 - `archive/legacy` не импортируется;
 - новые функции добавляются в правильный слой, а не в самый удобный файл;
-- `docs/PROJECT_MAP.md` совпадает с реальной структурой.
+- `docs/architecture/PROJECT_MAP.md` совпадает с реальной структурой.
 
 ## Ближайшие Этапы
 

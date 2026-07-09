@@ -1,14 +1,14 @@
-﻿# Правила добавления и изменения функционала
+# Правила добавления и изменения функционала
 
 Документ описывает, **куда класть новый код** и **каких зависимостей нельзя нарушать**
 при добавлении или изменении функциональности в Watchbane.
 
 Связанные документы:
-- [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md) - слои и правила зависимостей.
-- [PROJECT_MAP.md](PROJECT_MAP.md) - где какой код лежит сейчас.
-- [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления/изменения записей dataset.
-- [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - контракт внешнего вида PyQt desktop GUI.
-- [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) - что и в каком порядке переносить в PyQt desktop GUI.
+- [ARCHITECTURE_TARGET.md](../architecture/ARCHITECTURE_TARGET.md) - слои и правила зависимостей.
+- [PROJECT_MAP.md](../architecture/PROJECT_MAP.md) - где какой код лежит сейчас.
+- [ADD_RECORD_RULES.md](../contracts/ADD_RECORD_RULES.md) - контракт добавления/изменения записей dataset.
+- [DESKTOP_STYLE_CONTRACT.md](../contracts/DESKTOP_STYLE_CONTRACT.md) - контракт внешнего вида PyQt desktop GUI.
+- [DESKTOP_GUI_ROADMAP.md](../desktop/DESKTOP_GUI_ROADMAP.md) - что и в каком порядке переносить в PyQt desktop GUI.
 
 ## 1. Слои и направление зависимостей
 
@@ -42,7 +42,7 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates  <-  ui
 ## 3. Куда класть новый код
 
 - Новый пункт меню / экран / форма / prompt → `ui/console/` (`global_menu.py`, `interface_funcs.py`, `request.py`, `ui.py`).
-- Новый desktop PyQt экран / карточка / dialog → `desktop/`; visual-polish сверять с [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md).
+- Новый desktop PyQt экран / карточка / dialog → `desktop/`; visual-polish сверять с [DESKTOP_STYLE_CONTRACT.md](../contracts/DESKTOP_STYLE_CONTRACT.md).
 - Новый сценарий над пользовательским dataset (add/update/stats/excel/tags/genre) → `dataset/`.
 - Новая логика пулов кандидатов (сбор, фильтры, dedupe, ranking) → `candidates/`.
 - Новый внешний или локальный источник данных → `apis/`.
@@ -66,7 +66,7 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates  <-  ui
 
 Только через `dataset.storage_movie.add_movie() -> dataset.dataset_records.add_dataset_record()`
 и `dataset.dataset_records.update_dataset_record()`. Подробный контракт — в
-[ADD_RECORD_RULES.md](ADD_RECORD_RULES.md). UI не пишет в dataset напрямую.
+[ADD_RECORD_RULES.md](../contracts/ADD_RECORD_RULES.md). UI не пишет в dataset напрямую.
 
 ### Сохранить теги / pool
 
@@ -89,7 +89,7 @@ UI/CLI регистрируют печать через `candidates.sources.tmdb
 
 Public candidate flow сейчас TMDb-only. Для новых candidate-функций не добавлять внешнее rating enrichment, старые режимы добора или обязательный локальный rating dataset.
 
-Подробный контракт: [TMDB_ONLY_CANDIDATE_FLOW.md](TMDB_ONLY_CANDIDATE_FLOW.md).
+Подробный контракт: [TMDB_ONLY_CANDIDATE_FLOW.md](../contracts/TMDB_ONLY_CANDIDATE_FLOW.md).
 
 ## 5. Чего не делать без отдельного подтверждения
 

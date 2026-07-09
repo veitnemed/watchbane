@@ -1,4 +1,4 @@
-﻿# Карта проекта
+# Карта проекта
 
 `Watchbane` - локальный Python-проект для ведения watched-базы и поиска сериалов/тайтлов через TMDb-only candidate pool.
 
@@ -6,18 +6,18 @@
 
 ## Быстрый вход
 
-- [README.md](README.md) - пользовательское описание проекта.
+- [README.md](../../README.md) - пользовательское описание проекта.
 - [LOGICAL_ARCHITECTURE.md](LOGICAL_ARCHITECTURE.md) - логические зоны проекта без физического переноса файлов.
 - [STRUCTURE_PLAN.md](STRUCTURE_PLAN.md) - план структурной чистки.
 - [REFACTORING_CHECKLIST.md](REFACTORING_CHECKLIST.md) - чеклист безопасного завершения рефакторинга.
-- [DATA_STORAGE_PLAN.md](DATA_STORAGE_PLAN.md) - структура локального хранения данных.
-- [WORKSPACE_HOUSEKEEPING.md](WORKSPACE_HOUSEKEEPING.md) - правила для временных скриншотов, локальных кэшей и больших generated-артефактов.
-- [add_functions.md](add_functions.md) - правила добавления и изменения функционала.
-- [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления и изменения записей.
-- [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - визуальный контракт desktop GUI.
-- [DESKTOP_MODULE_MAP.md](DESKTOP_MODULE_MAP.md) - карта модулей desktop и правила расширения.
-- [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) - roadmap desktop GUI.
-- [TMDB_ONLY_CANDIDATE_FLOW.md](TMDB_ONLY_CANDIDATE_FLOW.md) - TMDb-only candidate contract, migration, refresh and scoring.
+- [DATA_STORAGE_PLAN.md](../storage/DATA_STORAGE_PLAN.md) - структура локального хранения данных.
+- [WORKSPACE_HOUSEKEEPING.md](../operations/WORKSPACE_HOUSEKEEPING.md) - правила для временных скриншотов, локальных кэшей и больших generated-артефактов.
+- [add_functions.md](../project/add_functions.md) - правила добавления и изменения функционала.
+- [ADD_RECORD_RULES.md](../contracts/ADD_RECORD_RULES.md) - контракт добавления и изменения записей.
+- [DESKTOP_STYLE_CONTRACT.md](../contracts/DESKTOP_STYLE_CONTRACT.md) - визуальный контракт desktop GUI.
+- [DESKTOP_MODULE_MAP.md](../desktop/DESKTOP_MODULE_MAP.md) - карта модулей desktop и правила расширения.
+- [DESKTOP_GUI_ROADMAP.md](../desktop/DESKTOP_GUI_ROADMAP.md) - roadmap desktop GUI.
+- [TMDB_ONLY_CANDIDATE_FLOW.md](../contracts/TMDB_ONLY_CANDIDATE_FLOW.md) - TMDb-only candidate contract, migration, refresh and scoring.
 
 ## Слои
 
@@ -62,62 +62,62 @@ common <- config <- storage <- dataset / apis <- candidates <- ui
 
 PyQt desktop GUI для watched-базы, карточки тайтла, поиска кандидатов и настроек.
 
-Структура пакетов: [DESKTOP_MODULE_MAP.md](DESKTOP_MODULE_MAP.md).
+Структура пакетов: [DESKTOP_MODULE_MAP.md](../desktop/DESKTOP_MODULE_MAP.md).
 
-- [desktop/app.py](../desktop/app.py) - главное окно (shell, вкладки).
-- [desktop/watched/](../desktop/watched/) - watched feature (`model`, `tab`, dialogs).
-- [desktop/shared/detail/](../desktop/shared/detail/) - detail card widget.
-- [desktop/candidates/](../desktop/candidates/) - candidate search (`session`, `filters_view`, `list_view`, `presenters`).
-- [desktop/analytics/](../desktop/analytics/) - internal/non-registered analytics helpers; there is no active Information tab.
-- [desktop/shared/widgets/](../desktop/shared/widgets/) - переиспользуемые виджеты (sliders, search, chips).
-- [desktop/theme/](../desktop/theme/) - tokens и QSS builders (`tokens.py`, `styles/`).
+- [desktop/app.py](../../desktop/app.py) - главное окно (shell, вкладки).
+- [desktop/watched/](../../desktop/watched/) - watched feature (`model`, `tab`, dialogs).
+- [desktop/shared/detail/](../../desktop/shared/detail/) - detail card widget.
+- [desktop/candidates/](../../desktop/candidates/) - candidate search (`session`, `filters_view`, `list_view`, `presenters`).
+- [desktop/analytics/](../../desktop/analytics/) - internal/non-registered analytics helpers; there is no active Information tab.
+- [desktop/shared/widgets/](../../desktop/shared/widgets/) - переиспользуемые виджеты (sliders, search, chips).
+- [desktop/theme/](../../desktop/theme/) - tokens и QSS builders (`tokens.py`, `styles/`).
 
 ### `ui/console/`
 
 Консольный интерфейс, меню, prompts и сценарии пользователя.
 
-- [ui/console/console_app.py](../ui/console/console_app.py) - запуск console UI.
-- [ui/console/ui.py](../ui/console/ui.py) - отрисовка меню.
-- [ui/console/global_menu.py](../ui/console/global_menu.py) - тонкая маршрутизация top-level разделов.
-- [ui/console/maintenance_menu.py](../ui/console/maintenance_menu.py) - главный maintenance hub: состояние, backup, metadata/cache, diagnostics.
-- [ui/console/watched_menu.py](../ui/console/watched_menu.py) - просмотренное: show/rename/delete/Excel/add.
-- [ui/console/pool_menu.py](../ui/console/pool_menu.py) - candidate pool: view/search/mark watched, cleanup, import/build.
-- [ui/console/search_hub_menu.py](../ui/console/search_hub_menu.py) - read-only поиск и инспекция.
-- [ui/console/reference_menu.py](../ui/console/reference_menu.py) - справочники, жанры и теги.
-- [ui/console/interface_funcs.py](../ui/console/interface_funcs.py) - compatibility facade и оставшиеся watched-сценарии.
-- [ui/console/api_tools.py](../ui/console/api_tools.py) - диагностика внешних API.
-- [ui/console/sql_tools.py](../ui/console/sql_tools.py) - internal legacy helper для локальной SQL-базы, не публичный candidate-путь.
-- [ui/console/poster_tools.py](../ui/console/poster_tools.py) - обслуживание watched metadata и poster-cache.
-- [ui/console/candidate_pool_tools.py](../ui/console/candidate_pool_tools.py) - обслуживание и диагностика общего candidate pool.
-- [ui/console/tmdb_pool_tools.py](../ui/console/tmdb_pool_tools.py) - TMDb build/import flow для candidate pool.
-- [ui/console/request.py](../ui/console/request.py) - формы и prompts.
-- [ui/console/search_menu.py](../ui/console/search_menu.py) - поиск по candidate pool.
-- [ui/console/candidate_pool_ui.py](../ui/console/candidate_pool_ui.py) - настройки сбора и defaults общего pool.
-- [ui/console/tags_menu.py](../ui/console/tags_menu.py) - управление vibe-тегами.
-- [ui/console/backup_menu.py](../ui/console/backup_menu.py) - backup и restore.
+- [ui/console/console_app.py](../../ui/console/console_app.py) - запуск console UI.
+- [ui/console/ui.py](../../ui/console/ui.py) - отрисовка меню.
+- [ui/console/global_menu.py](../../ui/console/global_menu.py) - тонкая маршрутизация top-level разделов.
+- [ui/console/maintenance_menu.py](../../ui/console/maintenance_menu.py) - главный maintenance hub: состояние, backup, metadata/cache, diagnostics.
+- [ui/console/watched_menu.py](../../ui/console/watched_menu.py) - просмотренное: show/rename/delete/Excel/add.
+- [ui/console/pool_menu.py](../../ui/console/pool_menu.py) - candidate pool: view/search/mark watched, cleanup, import/build.
+- [ui/console/search_hub_menu.py](../../ui/console/search_hub_menu.py) - read-only поиск и инспекция.
+- [ui/console/reference_menu.py](../../ui/console/reference_menu.py) - справочники, жанры и теги.
+- [ui/console/interface_funcs.py](../../ui/console/interface_funcs.py) - compatibility facade и оставшиеся watched-сценарии.
+- [ui/console/api_tools.py](../../ui/console/api_tools.py) - диагностика внешних API.
+- [ui/console/sql_tools.py](../../ui/console/sql_tools.py) - internal legacy helper для локальной SQL-базы, не публичный candidate-путь.
+- [ui/console/poster_tools.py](../../ui/console/poster_tools.py) - обслуживание watched metadata и poster-cache.
+- [ui/console/candidate_pool_tools.py](../../ui/console/candidate_pool_tools.py) - обслуживание и диагностика общего candidate pool.
+- [ui/console/tmdb_pool_tools.py](../../ui/console/tmdb_pool_tools.py) - TMDb build/import flow для candidate pool.
+- [ui/console/request.py](../../ui/console/request.py) - формы и prompts.
+- [ui/console/search_menu.py](../../ui/console/search_menu.py) - поиск по candidate pool.
+- [ui/console/candidate_pool_ui.py](../../ui/console/candidate_pool_ui.py) - настройки сбора и defaults общего pool.
+- [ui/console/tags_menu.py](../../ui/console/tags_menu.py) - управление vibe-тегами.
+- [ui/console/backup_menu.py](../../ui/console/backup_menu.py) - backup и restore.
 
 ### `dataset/`
 
 Watched dataset: добавление, обновление, удаление, meta, Excel, статистика, жанры и теги.
 
-- [dataset/dataset_records.py](../dataset/dataset_records.py) - центральный add/update service.
-- [dataset/storage_movie.py](../dataset/storage_movie.py) - сбор payload и сохранение записи.
-- [dataset/delete_record.py](../dataset/delete_record.py) - безопасное удаление watched-записи.
-- [dataset/title_resolve.py](../dataset/title_resolve.py) - thin facade для TMDb-only add-title и переноса кандидата.
-- [dataset/dataset_stats.py](../dataset/dataset_stats.py) - сводка dataset.
-- [dataset/genre_stats.py](../dataset/genre_stats.py) - просмотр жанров.
-- [dataset/tags_work.py](../dataset/tags_work.py) - мутации тегов.
+- [dataset/dataset_records.py](../../dataset/dataset_records.py) - центральный add/update service.
+- [dataset/storage_movie.py](../../dataset/storage_movie.py) - сбор payload и сохранение записи.
+- [dataset/delete_record.py](../../dataset/delete_record.py) - безопасное удаление watched-записи.
+- [dataset/title_resolve.py](../../dataset/title_resolve.py) - thin facade для TMDb-only add-title и переноса кандидата.
+- [dataset/dataset_stats.py](../../dataset/dataset_stats.py) - сводка dataset.
+- [dataset/genre_stats.py](../../dataset/genre_stats.py) - просмотр жанров.
+- [dataset/tags_work.py](../../dataset/tags_work.py) - мутации тегов.
 
 ### `candidates/`
 
 Поиск и обслуживание кандидатов к просмотру.
 
-- [candidates/service.py](../candidates/service.py) - facade для UI.
-- [candidates/models/](../candidates/models/) - schema, keys, country/genre schema.
-- [candidates/repositories/](../candidates/repositories/) - SQLite-backed facade для load/save pool и criteria.
-- [candidates/pool/](../candidates/pool/) - dedupe, queries, stats, diagnostics, search helpers.
-- [candidates/sources/tmdb/](../candidates/sources/tmdb/) - TMDb Discover/Details build, scoring и import.
-- [candidates/genres.py](../candidates/genres.py) - runtime genre aliases для saved pool.
+- [candidates/service.py](../../candidates/service.py) - facade для UI.
+- [candidates/models/](../../candidates/models/) - schema, keys, country/genre schema.
+- [candidates/repositories/](../../candidates/repositories/) - SQLite-backed facade для load/save pool и criteria.
+- [candidates/pool/](../../candidates/pool/) - dedupe, queries, stats, diagnostics, search helpers.
+- [candidates/sources/tmdb/](../../candidates/sources/tmdb/) - TMDb Discover/Details build, scoring и import.
+- [candidates/genres.py](../../candidates/genres.py) - runtime genre aliases для saved pool.
 
 Инварианты pool:
 
@@ -134,32 +134,32 @@ Watched dataset: добавление, обновление, удаление, m
 
 Внешние источники данных.
 
-- [apis/kp_api.py](../apis/kp_api.py) - internal/non-candidate external API helper, не часть public candidate flow.
-- [apis/tmdb_api.py](../apis/tmdb_api.py) - TMDb Discover/Details.
-- [apis/imdb_sql.py](../apis/imdb_sql.py) - internal/non-candidate local SQL helper, не часть public candidate flow.
-- [apis/sql_title_aliases.json](../apis/sql_title_aliases.json) - alias-справочник для SQL-поиска.
+- [apis/kp_api.py](../../apis/kp_api.py) - internal/non-candidate external API helper, не часть public candidate flow.
+- [apis/tmdb_api.py](../../apis/tmdb_api.py) - TMDb Discover/Details.
+- [apis/imdb_sql.py](../../apis/imdb_sql.py) - internal/non-candidate local SQL helper, не часть public candidate flow.
+- [apis/sql_title_aliases.json](../../apis/sql_title_aliases.json) - alias-справочник для SQL-поиска.
 
 ### `storage/`
 
 Низкоуровневое хранение и нормализация.
 
-- [storage/data.py](../storage/data.py) - dataset/meta: load/save/init, rename title.
-- [storage/files.py](../storage/files.py) - файлы, каталоги, SQLite backup/restore и legacy backup helpers.
-- [storage/runtime.py](../storage/runtime.py) - единая инициализация runtime-каталогов и SQLite schema.
-- [storage/sqlite/](../storage/sqlite/) - SQLite connection, migrations, repositories, diagnostics.
-- [storage/legacy_json/](../storage/legacy_json/) - explicit import/export compatibility for old JSON layouts.
-- [storage/normalize.py](../storage/normalize.py) - нормализация `main_info`, `raw_scores`, `tags_vibe`, `genre`.
+- [storage/data.py](../../storage/data.py) - dataset/meta: load/save/init, rename title.
+- [storage/files.py](../../storage/files.py) - файлы, каталоги, SQLite backup/restore и legacy backup helpers.
+- [storage/runtime.py](../../storage/runtime.py) - единая инициализация runtime-каталогов и SQLite schema.
+- [storage/sqlite/](../../storage/sqlite/) - SQLite connection, migrations, repositories, diagnostics.
+- [storage/legacy_json/](../../storage/legacy_json/) - explicit import/export compatibility for old JSON layouts.
+- [storage/normalize.py](../../storage/normalize.py) - нормализация `main_info`, `raw_scores`, `tags_vibe`, `genre`.
 
 ### `config/`
 
 Константы, схемы и справочники.
 
-- [config/constant.py](../config/constant.py) - пути и runtime-константы.
-- [config/scheme.py](../config/scheme.py) - схема полей.
-- [config/tags.json](../config/tags.json) - vibe-теги.
-- [config/genre_tags.json](../config/genre_tags.json) - жанровые признаки.
-- [config/tags_work.py](../config/tags_work.py) - чтение/валидация тегов.
-- [config/genre_tags.py](../config/genre_tags.py) - чтение/валидация жанров.
+- [config/constant.py](../../config/constant.py) - пути и runtime-константы.
+- [config/scheme.py](../../config/scheme.py) - схема полей.
+- [config/tags.json](../../config/tags.json) - vibe-теги.
+- [config/genre_tags.json](../../config/genre_tags.json) - жанровые признаки.
+- [config/tags_work.py](../../config/tags_work.py) - чтение/валидация тегов.
+- [config/genre_tags.py](../../config/genre_tags.py) - чтение/валидация жанров.
 
 ### `posters/`
 

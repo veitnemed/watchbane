@@ -3,7 +3,7 @@
 [![Tests](https://github.com/veitnemed/watchbane/actions/workflows/tests.yml/badge.svg)](https://github.com/veitnemed/watchbane/actions/workflows/tests.yml)
 [![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/)
 [![PyQt6](https://img.shields.io/badge/desktop-PyQt6-41cd52.svg)](https://www.riverbankcomputing.com/software/pyqt/)
-[![Local first](https://img.shields.io/badge/data-local--first-111827.svg)](docs/DATA_STORAGE_PLAN.md)
+[![Local first](https://img.shields.io/badge/data-local--first-111827.svg)](docs/storage/DATA_STORAGE_PLAN.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 **Local-first movie & series recommendation lab.**
@@ -119,9 +119,9 @@ Watchbane keeps the physical folder layout simple, but treats the project as fou
 
 Start here if you want to understand the code:
 
-- [Logical architecture](docs/LOGICAL_ARCHITECTURE.md)
-- [Project map](docs/PROJECT_MAP.md)
-- [Desktop module map](docs/DESKTOP_MODULE_MAP.md)
+- [Logical architecture](docs/architecture/LOGICAL_ARCHITECTURE.md)
+- [Project map](docs/architecture/PROJECT_MAP.md)
+- [Desktop module map](docs/desktop/DESKTOP_MODULE_MAP.md)
 - [Detailed docs README](docs/README.md)
 
 Architecture goals:
@@ -161,7 +161,7 @@ Desktop interface scale:
 - available scale range is `50%` to `200%`;
 - this is separate from Windows display scaling / OS DPI;
 - scale changes require restarting the desktop app;
-- local component tuning is documented in [UI scaling](docs/ui-scaling.md);
+- local component tuning is documented in [UI scale contract](docs/contracts/UI_SCALE_CONTRACT.md);
 - `QT_SCALE_FACTOR` is a Qt testing/debug override and is not recommended for normal Watchbane use.
 
 Desktop language settings:
@@ -196,7 +196,7 @@ The public recommendation flow is TMDb-only:
 
 The candidate contract does not require KP/IMDb ratings. `imdb_id` may exist only as an external id.
 
-See [TMDb-only candidate flow](docs/TMDB_ONLY_CANDIDATE_FLOW.md) for the full contract, migration scripts, refresh scripts, scoring notes and limitations.
+See [TMDb-only candidate flow](docs/contracts/TMDB_ONLY_CANDIDATE_FLOW.md) for the full contract, migration scripts, refresh scripts, scoring notes and limitations.
 
 ## TMDb-Only Add Title
 
@@ -254,15 +254,15 @@ Possible future layers include learned scoring weights from personal ratings, re
 - Temporary UI screenshots live under `screens/tmp_ui/` and are ignored by git.
 - Legacy experiments live under `archive/` and are not active runtime.
 - Contribution and project hygiene docs live in [`docs/`](docs/).
-- Local cleanup rules are documented in [workspace housekeeping](docs/WORKSPACE_HOUSEKEEPING.md).
+- Local cleanup rules are documented in [workspace housekeeping](docs/operations/WORKSPACE_HOUSEKEEPING.md).
 
 ## Contributing
 
 Issues and focused pull requests are welcome, especially around GUI polish, candidate ranking, metadata quality and offline tests.
 
-- [Contributing](docs/CONTRIBUTING.md)
-- [Security](docs/SECURITY.md)
-- [Code of conduct](docs/CODE_OF_CONDUCT.md)
+- [Contributing](docs/project/CONTRIBUTING.md)
+- [Security](docs/project/SECURITY.md)
+- [Code of conduct](docs/project/CODE_OF_CONDUCT.md)
 
 ## License
 

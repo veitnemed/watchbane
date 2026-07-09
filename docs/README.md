@@ -134,19 +134,54 @@ py -m pytest
 
 ## Документация
 
-- [PROJECT_MAP.md](PROJECT_MAP.md) - карта активных модулей.
-- [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md) - целевая архитектура и правила зависимостей.
-- [STRUCTURE_PLAN.md](STRUCTURE_PLAN.md) - план структурной чистки.
-- [WORKSPACE_HOUSEKEEPING.md](WORKSPACE_HOUSEKEEPING.md) - правила локальной чистки workspace.
-- [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - визуальный контракт desktop GUI.
-- [UI_SCALE_CONTRACT.md](UI_SCALE_CONTRACT.md) - контракт application-level UI scale.
-- [TMDB_ONLY_CANDIDATE_FLOW.md](TMDB_ONLY_CANDIDATE_FLOW.md) - public TMDb-only candidate flow, contract, migration, refresh and scoring.
-- [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления/изменения записей.
-- [onboarding_country_first_10_scenario_quality_report.md](onboarding_country_first_10_scenario_quality_report.md) - последний актуальный onboarding quality report.
+### Architecture
+
+- [PROJECT_MAP.md](architecture/PROJECT_MAP.md) - карта активных модулей.
+- [LOGICAL_ARCHITECTURE.md](architecture/LOGICAL_ARCHITECTURE.md) - логические зоны проекта.
+- [ARCHITECTURE_TARGET.md](architecture/ARCHITECTURE_TARGET.md) - целевая архитектура и правила зависимостей.
+- [STRUCTURE_PLAN.md](architecture/STRUCTURE_PLAN.md) - план структурной чистки.
+- [REFACTORING_CHECKLIST.md](architecture/REFACTORING_CHECKLIST.md) - чеклист структурных правок.
+
+### Contracts
+
+- [ADD_RECORD_RULES.md](contracts/ADD_RECORD_RULES.md) - контракт добавления/изменения записей.
+- [TMDB_ONLY_CANDIDATE_FLOW.md](contracts/TMDB_ONLY_CANDIDATE_FLOW.md) - public TMDb-only candidate flow, migration, refresh and scoring.
+- [DESKTOP_STYLE_CONTRACT.md](contracts/DESKTOP_STYLE_CONTRACT.md) - визуальный контракт desktop GUI.
+- [UI_SCALE_CONTRACT.md](contracts/UI_SCALE_CONTRACT.md) - контракт application-level UI scale.
+- [CHIP_FILTER_WIDGET_CONTRACT.md](contracts/CHIP_FILTER_WIDGET_CONTRACT.md) - контракт chip-фильтров.
+- [DETAIL_CARD_HERO_CONTRACT.md](contracts/DETAIL_CARD_HERO_CONTRACT.md) - строгий контракт hero/detail card.
+- [DETAIL_CARD_VISUAL_CONTRACT.md](contracts/DETAIL_CARD_VISUAL_CONTRACT.md) - визуальный контракт detail card.
+
+### Desktop
+
+- [DESKTOP_MODULE_MAP.md](desktop/DESKTOP_MODULE_MAP.md) - карта desktop-модулей и правила расширения.
+- [DESKTOP_GUI_ROADMAP.md](desktop/DESKTOP_GUI_ROADMAP.md) - roadmap desktop GUI.
+
+### Storage
+
+- [DATA_STORAGE_PLAN.md](storage/DATA_STORAGE_PLAN.md) - структура локального хранения данных.
+
+### Operations
+
+- [WORKSPACE_HOUSEKEEPING.md](operations/WORKSPACE_HOUSEKEEPING.md) - правила локальной чистки workspace.
+- [onboarding_dev_sandbox.md](operations/onboarding_dev_sandbox.md) - dev-флаги и sandbox onboarding flow.
+- [GITHUB_PUBLICATION_CHECKLIST.md](operations/GITHUB_PUBLICATION_CHECKLIST.md) - checklist публикации.
+
+### Project
+
+- [add_functions.md](project/add_functions.md) - правила добавления и изменения функционала.
+- [CONTRIBUTING.md](project/CONTRIBUTING.md) - правила участия.
+- [SECURITY.md](project/SECURITY.md) - security policy.
+- [CODE_OF_CONDUCT.md](project/CODE_OF_CONDUCT.md) - code of conduct.
+- [AGENTS.md](project/AGENTS.md) - краткие агентские правила проекта.
+
+### Reports
+
+- [onboarding_country_first_10_scenario_quality_report.md](reports/onboarding/onboarding_country_first_10_scenario_quality_report.md) - последний актуальный onboarding quality report.
 
 ## Historical reports removed/archived
 
-- Старые generated onboarding reports удалены из активного `docs/`; оставлен только `onboarding_country_first_10_scenario_quality_report.md`.
+- Старые generated onboarding reports удалены из активного `docs/`; оставлен только curated report в `docs/reports/onboarding/`.
 - Закрытый movie-cycle перенесён из `docs/codex_movie_cycle/` в [`archive/docs/codex_movie_cycle/`](../archive/docs/codex_movie_cycle/README.md).
 
 ## Legacy JSON import/export

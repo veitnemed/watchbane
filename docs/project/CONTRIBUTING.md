@@ -34,10 +34,10 @@ py start_console.py
 
 Read more:
 
-- `LOGICAL_ARCHITECTURE.md`
-- `PROJECT_MAP.md`
-- `add_functions.md`
-- `AGENTS.md`
+- [LOGICAL_ARCHITECTURE.md](../architecture/LOGICAL_ARCHITECTURE.md)
+- [PROJECT_MAP.md](../architecture/PROJECT_MAP.md)
+- [add_functions.md](add_functions.md)
+- [AGENTS.md](AGENTS.md)
 
 ## Pull Requests
 

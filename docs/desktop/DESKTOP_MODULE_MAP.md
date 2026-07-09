@@ -5,8 +5,8 @@
 Связанные документы:
 
 - [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) — roadmap функций.
-- [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) — визуальный контракт.
-- [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md) — общая архитектура проекта.
+- [DESKTOP_STYLE_CONTRACT.md](../contracts/DESKTOP_STYLE_CONTRACT.md) — визуальный контракт.
+- [ARCHITECTURE_TARGET.md](../architecture/ARCHITECTURE_TARGET.md) — общая архитектура проекта.
 
 ## Принцип
 
