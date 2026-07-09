@@ -173,9 +173,11 @@ def test_save_then_load_languages(monkeypatch, tmp_path) -> None:
         "ui_scale": 1.25,
         "interface_language": "en",
         "data_language": "ru",
+        "auto_pool_refill": True,
     }
     assert settings.interface_language == "en"
     assert settings.data_language == "ru"
+    assert settings.auto_pool_refill is True
 
 
 def test_save_app_settings_preserves_non_ui_settings(monkeypatch, tmp_path) -> None:

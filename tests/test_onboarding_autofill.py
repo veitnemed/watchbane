@@ -972,7 +972,7 @@ def test_discover_params_use_media_specific_contract() -> None:
 
 
 def test_country_first_sweep_blocks_broad_origin_and_vote_filters() -> None:
-    assert autofill.FALLBACK_ORDER == ("base",)
+    assert autofill.FALLBACK_ORDER == ("base", "relax_genres", "relax_era")
     profile = _profile(ui_language="ru", origin_preference="domestic", include_genres=[18, 9648, 80])
     bucket = next(bucket for bucket in build_fetch_buckets(profile) if bucket.target_country == "RU" and bucket.genre_ids)
     _endpoint, base = build_discover_request(bucket, profile=profile, fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
@@ -982,6 +982,49 @@ def test_country_first_sweep_blocks_broad_origin_and_vote_filters() -> None:
     assert "with_original_language" not in relaxed_origin
     assert "vote_count.gte" not in base
     assert "vote_average.gte" not in base
+    # Relax tiers must keep the country pin and only drop genre/era narrowing.
+    _endpoint, relaxed_genres = build_discover_request(bucket, profile=profile, fallback="relax_genres", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    assert relaxed_genres["with_origin_country"] == "RU"
+    assert "with_genres" not in relaxed_genres
+    assert "vote_count.gte" not in relaxed_genres
+
+
+def test_fallback_relax_era_drops_release_preference_year_bounds() -> None:
+    profile = _profile(media_preference="movie", release_preference="new", include_genres=[18])
+    bucket = next(bucket for bucket in build_fetch_buckets(profile) if bucket.media_type == MEDIA_MOVIE)
+    _endpoint, base = build_discover_request(bucket, profile=profile, fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, relaxed = build_discover_request(bucket, profile=profile, fallback="relax_era", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    assert base["primary_release_date.gte"] == "2022-01-01"
+    assert "primary_release_date.gte" not in relaxed
+    assert relaxed["primary_release_date.lte"] == "2026-07-08"
+    assert "with_genres" not in relaxed
+    assert relaxed["with_origin_country"] == bucket.target_country
+
+
+def test_fallback_order_for_bucket_skips_pointless_tiers() -> None:
+    profile_no_genres = _profile(media_preference="movie", release_preference="mixed")
+    bucket = next(iter(build_fetch_buckets(profile_no_genres)))
+    order = autofill._fallback_order_for_bucket(profile_no_genres, bucket)
+    assert "relax_genres" not in order
+    assert "relax_era" not in order
+
+    profile_full = _profile(media_preference="movie", release_preference="new", include_genres=[18])
+    bucket_full = next(bucket for bucket in build_fetch_buckets(profile_full) if bucket.genre_ids)
+    order_full = autofill._fallback_order_for_bucket(profile_full, bucket_full)
+    assert order_full == ("base", "relax_genres", "relax_era")
+
+
+def test_genre_groups_map_to_media_specific_tmdb_ids() -> None:
+    profile = _profile(media_preference="both", genre_groups=["action_adventure", "thriller"])
+    buckets = build_fetch_buckets(profile)
+    movie_bucket = next(bucket for bucket in buckets if bucket.media_type == MEDIA_MOVIE)
+    tv_bucket = next(bucket for bucket in buckets if bucket.media_type == MEDIA_TV)
+    assert movie_bucket.genre_ids == (28, 12, 53)
+    assert tv_bucket.genre_ids == (10759, 9648, 80)
+    # Explicit include_genres still wins over genre groups.
+    override = _profile(media_preference="movie", genre_groups=["comedy"], include_genres=[18])
+    override_bucket = next(iter(build_fetch_buckets(override)))
+    assert override_bucket.genre_ids == (18,)
 
 
 def test_onboarding_wizard_starts_with_setup_preset_then_editable_questions(qapp) -> None:
@@ -997,9 +1040,10 @@ def test_onboarding_wizard_starts_with_setup_preset_then_editable_questions(qapp
         assert ru_dialog._stack.currentIndex() == 1
         ru_dialog._go_next()
         assert ru_dialog._stack.currentIndex() == ru_dialog._question_start_index()
-        assert ru_dialog._active_questions()[0].key == "country_selection"
+        assert ru_dialog._active_questions()[0].key == "media_preference"
+        assert ru_dialog._active_questions()[1].key == "country_selection"
         assert ru_dialog._active_questions()[2].key == "animation_mode"
-        assert en_dialog._active_questions()[0].key == "country_selection"
+        assert en_dialog._active_questions()[0].key == "media_preference"
     finally:
         ru_dialog.close()
         en_dialog.close()
@@ -1074,8 +1118,8 @@ def test_onboarding_wizard_presets_hide_locked_country_and_animation_questions(q
         buttons = {button.property("answer"): button for button in dialog._preset_group.buttons()}
 
         assert [question.key for question in dialog._active_questions()] == [
-            "country_selection",
             "media_preference",
+            "country_selection",
             "animation_mode",
             "release_preference",
             "vibe_preference",
@@ -1135,8 +1179,10 @@ def test_onboarding_wizard_country_buttons_use_localized_names(qapp) -> None:
     ru_dialog = OnboardingAutofillDialog(ui_language="ru")
     en_dialog = OnboardingAutofillDialog(ui_language="en")
     try:
-        ru_labels = [button.text() for button in ru_dialog._question_pages[0][2].buttons()]
-        en_labels = [button.text() for button in en_dialog._question_pages[0][2].buttons()]
+        ru_group = next(group for question, _page, group in ru_dialog._question_pages if question.key == "country_selection")
+        en_group = next(group for question, _page, group in en_dialog._question_pages if question.key == "country_selection")
+        ru_labels = [button.text() for button in ru_group.buttons()]
+        en_labels = [button.text() for button in en_group.buttons()]
 
         assert ru_labels == ["США", "Россия", "Великобритания", "Южная Корея", "Япония"]
         assert all(code not in " ".join(ru_labels) for code in ("RU", "US", "GB", "KR", "JP"))
@@ -1159,8 +1205,11 @@ def test_onboarding_wizard_country_buttons_are_multi_select(qapp) -> None:
 
     dialog = OnboardingAutofillDialog(ui_language="ru")
     try:
-        dialog._set_page(dialog._question_start_index())
-        group = dialog._question_pages[0][2]
+        country_position = next(
+            index for index, item in enumerate(dialog._question_pages) if item[0].key == "country_selection"
+        )
+        dialog._set_page(dialog._question_start_index() + country_position)
+        question, _page, group = dialog._question_pages[country_position]
         buttons = {button.property("answer"): button for button in group.buttons()}
 
         assert group.exclusive() is False
@@ -1169,7 +1218,7 @@ def test_onboarding_wizard_country_buttons_are_multi_select(qapp) -> None:
         buttons["GB"].click()
 
         assert dialog._answers["country_selection"] == ["US", "RU", "GB"]
-        assert dialog._selected_answer(dialog._question_pages[0][0], group) == ["US", "RU", "GB"]
+        assert dialog._selected_answer(question, group) == ["US", "RU", "GB"]
     finally:
         dialog.close()
 
@@ -1181,7 +1230,7 @@ def test_onboarding_wizard_manual_preset_keeps_five_country_picker_limit(qapp) -
     try:
         buttons = {button.property("answer"): button for button in dialog._preset_group.buttons()}
         buttons[PRESET_MANUAL].click()
-        group = dialog._question_pages[0][2]
+        group = next(group for question, _page, group in dialog._question_pages if question.key == "country_selection")
 
         assert len(group.buttons()) == 5
         assert dialog._country_selection_payload()["max_countries"] == 5
@@ -1349,6 +1398,118 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
         assert result.api_requests <= 20
     finally:
         conn.close()
+
+
+def test_run_autofill_respects_replenish_target(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    result = run_onboarding_autofill(
+        _profile(media_preference="movie"),
+        client=FakeTmdbClient(),
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+        target=30,
+    )
+
+    assert result.created_count == 30
+    assert result.warning is None
+
+
+def test_replenish_skips_without_saved_profile_or_full_pool(monkeypatch) -> None:
+    from candidates import service as candidate_service
+
+    monkeypatch.setattr(candidate_service, "load_last_onboarding_profile", lambda: None)
+    monkeypatch.setattr(candidate_service, "load_candidate_pool", lambda: [])
+
+    view = candidate_service.get_pool_replenish_view()
+    assert view["needs_replenish"] is False
+    assert view["has_profile"] is False
+
+    result = candidate_service.replenish_candidate_pool()
+    assert result["skipped"] is True
+    assert result["created_count"] == 0
+
+    profile_payload = {
+        "media_preference": "movie",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": None,
+        "ui_language": "en",
+        "country_selection": {"selected_countries": ["US"], "home_country": "US"},
+    }
+    monkeypatch.setattr(candidate_service, "load_last_onboarding_profile", lambda: profile_payload)
+    monkeypatch.setattr(
+        candidate_service,
+        "load_candidate_pool",
+        lambda: [{"title": f"t{i}"} for i in range(candidate_service.STARTER_POOL_TARGET)],
+    )
+    assert candidate_service.get_pool_replenish_view()["needs_replenish"] is False
+    assert candidate_service.replenish_candidate_pool()["skipped"] is True
+
+
+def test_replenish_runs_autofill_with_missing_count_as_target(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from candidates import service as candidate_service
+
+    profile_payload = {
+        "media_preference": "movie",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": None,
+        "ui_language": "en",
+        "taste_preset": "hollywood_mainstream",
+        "genre_groups": ["comedy"],
+        "country_selection": {"selected_countries": ["US"], "home_country": "US"},
+    }
+    monkeypatch.setattr(candidate_service, "load_last_onboarding_profile", lambda: profile_payload)
+    monkeypatch.setattr(candidate_service, "load_candidate_pool", lambda: [{"title": f"t{i}"} for i in range(25)])
+
+    captured: dict = {}
+
+    def fake_run(profile, *, progress_callback=None, cancel_checker=None, target=None, **_kwargs):
+        captured["target"] = target
+        captured["genre_groups"] = tuple(profile.genre_groups or ())
+        return SimpleNamespace(
+            ok=True,
+            profile_id=1,
+            created_count=target,
+            pool_size=25 + target,
+            api_requests=3,
+            details_requests=0,
+            adaptive_pages_used=0,
+            pagination_stop_reasons={},
+            localization_fallback_count=0,
+            overview_fallback_original_language_count=0,
+            overview_fallback_en_count=0,
+            missing_overview_after_fallback=0,
+            cancelled=False,
+            warning=None,
+            warnings=[],
+            planned_counts={},
+            actual_counts={},
+            rejected_future_count=0,
+            duplicate_requests_skipped=0,
+            quality_gate_rejected_counts={},
+            quality_gate_rejected_reasons={},
+            preference_conflict_count=0,
+            preference_warning_count=0,
+            preference_conflict_codes=(),
+            preference_auto_fix_applied=False,
+            preference_diagnostics={},
+            candidates=[],
+        )
+
+    monkeypatch.setattr(candidate_service, "run_onboarding_autofill", fake_run)
+
+    view = candidate_service.get_pool_replenish_view()
+    assert view["needs_replenish"] is True
+    assert view["missing"] == candidate_service.STARTER_POOL_TARGET - 25
+
+    result = candidate_service.replenish_candidate_pool()
+    assert result["skipped"] is False
+    assert captured["target"] == candidate_service.STARTER_POOL_TARGET - 25
+    assert captured["genre_groups"] == ("comedy",)
+    assert result["created_count"] == captured["target"]
 
 
 def test_onboarding_request_log_disabled_by_default(tmp_path, monkeypatch) -> None:
