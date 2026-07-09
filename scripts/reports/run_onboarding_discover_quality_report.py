@@ -215,6 +215,7 @@ def _avg(values: list[float]) -> float:
 
 def _candidate_metrics(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     media_counter = Counter(str(item.get("media_type") or "") for item in candidates)
+    quality_counter = Counter(str(item.get("quality_class") or "") for item in candidates)
     tv_candidates = [item for item in candidates if item.get("media_type") == "tv"]
     junk_names = {"soap", "reality", "talk", "news", "kids", "documentary"}
     light_names = {"comedy", "family", "animation", "adventure", "romance", "fantasy", "sci-fi & fantasy"}
@@ -235,6 +236,7 @@ def _candidate_metrics(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     overview_missing = sum(1 for item in candidates if item.get("overview") in (None, ""))
     return {
         "media_counts": dict(media_counter),
+        "quality_counts": dict(quality_counter),
         "avg_tmdb_score": _avg(_number_values(candidates, "tmdb_score")),
         "avg_tmdb_votes": _avg(_number_values(candidates, "tmdb_votes")),
         "avg_popularity": _avg(_number_values(candidates, "tmdb_popularity")),
@@ -268,6 +270,8 @@ def _candidate_row(candidate: dict[str, Any]) -> dict[str, Any]:
         "tmdb_votes": candidate.get("tmdb_votes"),
         "popularity": candidate.get("tmdb_popularity"),
         "final_score": candidate.get("final_score"),
+        "quality_class": candidate.get("quality_class"),
+        "quality_reasons": candidate.get("quality_reasons") or [],
         "fallback": source_query.get("fallback"),
     }
 
@@ -514,6 +518,7 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
             f"- Actual country: `{_json(result.get('country_actual', {}))}`",
             f"- Country hit/leak/wrong: {result.get('country_hit_rate')} / {result.get('country_leakage_rate')} / {result.get('wrong_country_count')}",
             f"- Fallbacks: `{_json(result.get('fallback_counts', {}))}`; fallback share {result.get('fallback_share')}",
+            f"- Quality classes: `{_json(result.get('quality_counts', {}))}`",
             f"- Avg TMDb score/votes/popularity: {result.get('avg_tmdb_score')} / {result.get('avg_tmdb_votes')} / {result.get('avg_popularity')}",
             f"- Vibe hit light/dark: {result.get('light_vibe_hit_rate')} / {result.get('dark_vibe_hit_rate')}",
             f"- Junk/garbage: {result.get('junk_count')} ({result.get('junk_rate')}) / {result.get('garbage_count')} ({result.get('garbage_rate')})",
@@ -523,8 +528,8 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
             "",
             "### Top output sample",
             "",
-            "| Rank | Title | Year | Media | Country | Lang | TMDb | Votes | Popularity | Final | Fallback |",
-            "| ---: | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | --- |",
+            "| Rank | Title | Year | Media | Country | Lang | TMDb | Votes | Popularity | Final | Quality | Reasons | Fallback |",
+            "| ---: | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |",
         ])
         for item in result.get("top_candidates", []):
             lines.append(
@@ -539,6 +544,8 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
                 f"{item.get('tmdb_votes')} | "
                 f"{item.get('popularity')} | "
                 f"{item.get('final_score')} | "
+                f"{item.get('quality_class')} | "
+                f"{', '.join(str(reason) for reason in item.get('quality_reasons') or [])} | "
                 f"{item.get('fallback')} |"
             )
 

@@ -306,6 +306,74 @@ class MissingOverviewLocalizationTmdbClient(FakeTmdbClient):
         }
 
 
+class LowConfidenceMissingOverviewTmdbClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        self.calls.append((endpoint, dict(params)))
+        country = params.get("with_origin_country") or "US"
+        return {
+            "results": [
+                {
+                    "id": 909,
+                    "title": "Low Confidence Missing Overview",
+                    "original_title": "Low Confidence Missing Overview",
+                    "release_date": "2024-01-01",
+                    "poster_path": "/low-confidence.jpg",
+                    "overview": "",
+                    "genre_ids": [18],
+                    "origin_country": [country],
+                    "vote_average": 5.0,
+                    "vote_count": 1,
+                    "popularity": 1,
+                    "original_language": "en",
+                }
+            ],
+            "total_pages": 1,
+        }
+
+    def movie_details(self, tmdb_id: int, language: str = "en", *, append_to_response=None) -> dict:
+        appends = tuple(append_to_response or ())
+        self.details_calls.append((MEDIA_MOVIE, int(tmdb_id), language, appends))
+        return {
+            "id": int(tmdb_id),
+            "title": "Low Confidence Missing Overview",
+            "original_title": "Low Confidence Missing Overview",
+            "release_date": "2024-01-01",
+            "overview": "",
+            "genres": [{"id": 18, "name": "Drama"}],
+            "production_countries": [{"iso_3166_1": "US", "name": "United States"}],
+            "vote_average": 5.0,
+            "vote_count": 1,
+            "popularity": 1,
+            "poster_path": "/low-confidence-details.jpg",
+            "original_language": "en",
+        }
+
+
+class WeakLowVoteTmdbClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        self.calls.append((endpoint, dict(params)))
+        country = params.get("with_origin_country") or "US"
+        return {
+            "results": [
+                {
+                    "id": 707,
+                    "title": "Weak But Useful",
+                    "original_title": "Weak But Useful",
+                    "release_date": "2023-01-01",
+                    "poster_path": "/weak-but-useful.jpg",
+                    "overview": "Useful overview",
+                    "genre_ids": [18],
+                    "origin_country": [country],
+                    "vote_average": 7.0,
+                    "vote_count": 10,
+                    "popularity": 20,
+                    "original_language": "en",
+                }
+            ],
+            "total_pages": 1,
+        }
+
+
 def _profile(**overrides) -> OnboardingTasteProfile:
     data = {
         "media_preference": "both",
@@ -1208,6 +1276,121 @@ def test_jp_and_kr_missing_overview_trigger_localization_fallback(tmp_path, monk
         assert expected_locale in [call[2] for call in client.details_calls]
         assert result.candidates[0]["overview"] == f"{country} overview"
         assert result.candidates[0]["overview_source"] == "original_language"
+
+
+def test_quality_gate_marks_missing_overview_and_missing_poster_as_garbage() -> None:
+    bucket = build_fetch_buckets(_profile(media_preference="movie"))[0]
+    result = {
+        "id": 1,
+        "title": "No Useful Metadata",
+        "release_date": "2024-01-01",
+        "poster_path": "",
+        "overview": "",
+        "genre_ids": [18],
+        "origin_country": [bucket.target_country],
+        "vote_average": 7.0,
+        "vote_count": 100,
+        "popularity": 20,
+        "metadata_missing_overview": True,
+        "overview_source": "missing",
+    }
+
+    decision = autofill.classify_candidate_quality(result, bucket)
+
+    assert decision.quality_class == "garbage"
+    assert "missing_poster_and_overview" in decision.quality_reasons
+
+
+def test_quality_gate_marks_missing_overview_low_confidence_as_garbage() -> None:
+    bucket = build_fetch_buckets(_profile(media_preference="movie"))[0]
+    result = {
+        "id": 2,
+        "title": "Low Confidence",
+        "release_date": "2024-01-01",
+        "poster_path": "/poster.jpg",
+        "overview": "",
+        "genre_ids": [18],
+        "origin_country": [bucket.target_country],
+        "vote_average": 5.0,
+        "vote_count": 5,
+        "popularity": 1,
+        "metadata_missing_overview": True,
+        "overview_source": "missing",
+    }
+
+    decision = autofill.classify_candidate_quality(result, bucket)
+    score_debug = autofill.compute_candidate_score_debug(result, bucket, page=1, index_on_page=0, quality_decision=decision)
+
+    assert decision.quality_class == "garbage"
+    assert "missing_overview_low_confidence" in decision.quality_reasons
+    assert score_debug["garbage_penalty"] == 50000.0
+
+
+def test_quality_gate_blocks_garbage_candidates_from_normal_pool(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = LowConfidenceMissingOverviewTmdbClient()
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_limit=3,
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count == 0
+    assert result.candidates == []
+    assert result.details_requests == 1
+
+
+def test_quality_gate_allows_weak_low_vote_candidates_when_metadata_is_good(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = WeakLowVoteTmdbClient()
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_enrichment={"enabled": False},
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count == 1
+    candidate = result.candidates[0]
+    assert candidate["quality_class"] == "weak"
+    assert "low_votes" in candidate["quality_reasons"]
+    assert candidate["score_debug"]["weak_penalty"] == 350.0
+
+
+def test_quality_report_sample_includes_quality_class_and_reasons() -> None:
+    from scripts.reports import run_onboarding_discover_quality_report as report
+
+    row = report._candidate_row(
+        {
+            "fetch_rank": 1,
+            "title": "Sample",
+            "year": 2024,
+            "media_type": "movie",
+            "target_country": "US",
+            "original_language": "en",
+            "tmdb_score": 7.0,
+            "tmdb_votes": 10,
+            "tmdb_popularity": 20,
+            "final_score": 9.5,
+            "quality_class": "weak",
+            "quality_reasons": ["low_votes"],
+            "source_query": {"fallback": "base"},
+        }
+    )
+
+    assert row["quality_class"] == "weak"
+    assert row["quality_reasons"] == ["low_votes"]
 
 
 def test_acceptance_ru_tv_manual_sweep_contract() -> None:

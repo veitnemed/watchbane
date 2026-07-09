@@ -209,3 +209,41 @@ Metrics:
 - `overview_fallback_original_language_count`
 - `overview_fallback_en_count`
 - `missing_overview_after_fallback`
+
+## Garbage/weak/good quality gate rules
+
+Step `009` adds Candidate Quality Gate v1 after Details/localization enrichment
+and before normal onboarding pool insertion.
+
+Quality classes:
+
+- `good`: passes hard correctness checks and has usable metadata.
+- `weak`: can enter the pool, but receives a ranking penalty.
+- `garbage`: cannot enter the normal onboarding pool.
+
+Garbage reasons:
+
+- `wrong_country`
+- `wrong_media_type`
+- `junk_genre`
+- `missing_poster_and_overview`
+- `missing_overview_low_confidence`
+- `suspicious_adult_title`
+- `duplicate_like`
+- `emergency_fallback_outside_selected_countries`
+- `no_useful_metadata`
+
+Weak reasons:
+
+- `low_votes`
+- `fallback_overview`
+- `rating_0`
+- `very_new_little_metadata`
+- `no_external_id`
+- `low_popularity`
+
+Candidate records now include `quality_class` and `quality_reasons`. The
+`score_debug` payload includes quality-aware bonuses and penalties, including
+`country_bonus`, `media_bonus`, `year_bonus`, `vibe_bonus`, `genre_bonus`,
+`metadata_bonus`, `localization_bonus`, `overview_penalty`, `poster_penalty`,
+`low_confidence_penalty`, `junk_penalty`, `garbage_penalty`, and `final_score`.

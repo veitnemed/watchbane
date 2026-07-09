@@ -134,6 +134,21 @@ TMDB_LOCALE_BY_LANGUAGE_CODE = {
     "zh": "zh-CN",
 }
 
+QUALITY_GOOD = "good"
+QUALITY_WEAK = "weak"
+QUALITY_GARBAGE = "garbage"
+
+SUSPICIOUS_ADULT_TITLE_TERMS = (
+    "18+",
+    "adult",
+    "erotic",
+    "erotica",
+    "nude",
+    "porn",
+    "sex tape",
+    "xxx",
+)
+
 ProgressCallback = Callable[[dict[str, Any]], None]
 CancelChecker = Callable[[], bool]
 
@@ -569,6 +584,13 @@ class _BucketState:
     filled: int = 0
     request_index: int = 0
     exhausted: bool = False
+
+
+@dataclass(frozen=True)
+class CandidateQualityDecision:
+    quality_class: str
+    quality_reasons: tuple[str, ...]
+    penalty: float
 
 
 @dataclass(frozen=True)
@@ -1421,50 +1443,208 @@ def _overview_metadata_penalty(result: dict[str, Any]) -> tuple[float, str, bool
     return 0.0, source or OVERVIEW_SOURCE_UI_LANGUAGE, False
 
 
+def _result_genre_ids(result: dict[str, Any]) -> set[int]:
+    genre_ids: set[int] = set()
+    for value in result.get("genre_ids") or ():
+        try:
+            genre_ids.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return genre_ids
+
+
+def _candidate_title_text(result: dict[str, Any], media_type: str) -> str:
+    title_key, original_title_key = _title_field(media_type)
+    return " ".join(
+        str(value or "")
+        for value in (
+            result.get(title_key),
+            result.get(original_title_key),
+            result.get("title"),
+            result.get("name"),
+        )
+        if str(value or "").strip()
+    ).casefold()
+
+
+def _has_external_id(result: dict[str, Any]) -> bool:
+    external_ids = result.get("external_ids")
+    if isinstance(external_ids, dict) and any(str(value or "").strip() for value in external_ids.values()):
+        return True
+    return bool(str(result.get("imdb_id") or "").strip())
+
+
+def _selected_country_codes(profile: OnboardingTasteProfile | None) -> set[str]:
+    if profile is None:
+        return set()
+    selection = profile.country_selection
+    if isinstance(selection, CountrySelection):
+        return {str(code).strip().upper() for code in selection.selected_countries if str(code).strip()}
+    if isinstance(selection, dict):
+        return {
+            str(code).strip().upper()
+            for code in selection.get("selected_countries") or ()
+            if str(code).strip()
+        }
+    return set()
+
+
+def classify_candidate_quality(
+    result: dict[str, Any],
+    bucket: CandidateFetchBucket,
+    *,
+    profile: OnboardingTasteProfile | None = None,
+    fallback: str = FALLBACK_BASE,
+    current_year: int | None = None,
+) -> CandidateQualityDecision:
+    result = _ensure_overview_metadata(result)
+    reasons: list[str] = []
+    weak_reasons: list[str] = []
+    country_codes = _result_country_codes(result)
+    if bucket.target_country and country_codes and bucket.target_country not in country_codes:
+        reasons.append("wrong_country")
+    result_media_type = str(result.get("media_type") or "").strip()
+    if result_media_type and result_media_type != bucket.media_type:
+        reasons.append("wrong_media_type")
+    if bucket.media_type == MEDIA_TV and _result_genre_ids(result).intersection(TV_JUNK_GENRE_IDS):
+        reasons.append("junk_genre")
+
+    missing_overview = bool(result.get("metadata_missing_overview")) or not _has_overview(result)
+    missing_poster = result.get("poster_path") in (None, "")
+    vote_count = int(_result_number(result, "vote_count") or 0)
+    popularity = float(_result_number(result, "popularity") or 0)
+    vote_average = float(_result_number(result, "vote_average") or 0)
+    if missing_overview and missing_poster:
+        reasons.append("missing_poster_and_overview")
+    if missing_overview and vote_count <= 5 and popularity < 5:
+        reasons.append("missing_overview_low_confidence")
+    title_text = _candidate_title_text(result, bucket.media_type)
+    if not bool(result.get("adult")) and any(term in title_text for term in SUSPICIOUS_ADULT_TITLE_TERMS):
+        reasons.append("suspicious_adult_title")
+    if bool(result.get("_duplicate_like")):
+        reasons.append("duplicate_like")
+    selected_countries = _selected_country_codes(profile)
+    if fallback != FALLBACK_BASE and selected_countries and country_codes and selected_countries.isdisjoint(country_codes):
+        reasons.append("emergency_fallback_outside_selected_countries")
+    if (
+        not title_text
+        and missing_overview
+        and missing_poster
+        and vote_count <= 0
+        and popularity <= 0
+        and vote_average <= 0
+    ):
+        reasons.append("no_useful_metadata")
+
+    if vote_count <= 20:
+        weak_reasons.append("low_votes")
+    if result.get("overview_source") in {OVERVIEW_SOURCE_ORIGINAL_LANGUAGE, OVERVIEW_SOURCE_EN}:
+        weak_reasons.append("fallback_overview")
+    if vote_average <= 0:
+        weak_reasons.append("rating_0")
+    result_year = _result_year(result, bucket.media_type)
+    if current_year is not None and result_year is not None and result_year >= int(current_year) - 1 and vote_count <= 20:
+        weak_reasons.append("very_new_little_metadata")
+    if not _has_external_id(result):
+        weak_reasons.append("no_external_id")
+    if popularity < 5:
+        weak_reasons.append("low_popularity")
+
+    if reasons:
+        ordered_reasons = tuple(dict.fromkeys(reasons))
+        return CandidateQualityDecision(QUALITY_GARBAGE, ordered_reasons, 50000.0)
+    if weak_reasons:
+        ordered_weak = tuple(dict.fromkeys(weak_reasons))
+        return CandidateQualityDecision(QUALITY_WEAK, ordered_weak, 350.0)
+    return CandidateQualityDecision(QUALITY_GOOD, (), 0.0)
+
+
 def compute_candidate_score_debug(
     result: dict[str, Any],
     bucket: CandidateFetchBucket,
     *,
     page: int,
     index_on_page: int,
+    quality_decision: CandidateQualityDecision | None = None,
 ) -> dict[str, Any]:
     vote_average = float(result.get("vote_average") or 0)
     vote_count = float(result.get("vote_count") or 0)
     popularity = float(result.get("popularity") or 0)
     metadata_overview_penalty, overview_source, metadata_missing_overview = _overview_metadata_penalty(result)
+    quality_decision = quality_decision or classify_candidate_quality(result, bucket)
     vote_confidence = vote_confidence_for_count(vote_count)
     rating_bonus_raw = vote_average * 100
     rating_bonus_adjusted = rating_bonus_raw * vote_confidence
     vote_count_bonus = min(math.log10(max(vote_count, 1)) * 100, 500)
     popularity_bonus = min(popularity, 500)
+    country_codes = _result_country_codes(result)
+    country_bonus = 300.0 if bucket.target_country and bucket.target_country in country_codes else 0.0
+    media_bonus = 200.0
     bucket_priority_score = int(bucket.quota_weight * 10_000)
     result_year = _result_year(result, bucket.media_type) or 0
-    freshness_score = 0
+    year_bonus = 0.0
     if bucket.era == ERA_NEW_SWEEP:
-        freshness_score = max(0, result_year - 2021) * 20
+        year_bonus = max(0, result_year - 2021) * 20
+    elif bucket.era == ERA_CLASSIC_SWEEP and CLASSIC_START_YEAR <= result_year <= CLASSIC_END_YEAR:
+        year_bonus = 100.0
+    vibe_bonus = 0.0
+    genre_bonus = 150.0 if set(bucket.genre_ids or ()).intersection(_result_genre_ids(result)) else 0.0
+    metadata_bonus = 100.0 if _has_overview(result) and result.get("poster_path") not in (None, "") else 0.0
+    localization_bonus = 50.0 if overview_source == OVERVIEW_SOURCE_UI_LANGUAGE and _has_overview(result) else 0.0
+    poster_penalty = 400.0 if result.get("poster_path") in (None, "") else 0.0
+    low_confidence_penalty = 300.0 if vote_count <= 5 and popularity < 5 else 0.0
+    junk_penalty = 1000.0 if "junk_genre" in quality_decision.quality_reasons else 0.0
+    garbage_penalty = quality_decision.penalty if quality_decision.quality_class == QUALITY_GARBAGE else 0.0
+    weak_penalty = quality_decision.penalty if quality_decision.quality_class == QUALITY_WEAK else 0.0
     fetch_order_penalty = int(page) * 20 + int(index_on_page)
     final_score = (
         100000
         + bucket_priority_score
+        + country_bonus
+        + media_bonus
+        + year_bonus
+        + vibe_bonus
+        + genre_bonus
+        + metadata_bonus
+        + localization_bonus
         + rating_bonus_adjusted
         + vote_count_bonus
         + popularity_bonus
-        + freshness_score
         - fetch_order_penalty
         - metadata_overview_penalty
+        - poster_penalty
+        - low_confidence_penalty
+        - junk_penalty
+        - garbage_penalty
+        - weak_penalty
     )
     return {
+        "country_bonus": round(country_bonus, 4),
+        "media_bonus": round(media_bonus, 4),
+        "year_bonus": round(float(year_bonus), 4),
+        "vibe_bonus": round(vibe_bonus, 4),
+        "genre_bonus": round(genre_bonus, 4),
         "rating_bonus_raw": round(rating_bonus_raw, 4),
         "vote_confidence": round(vote_confidence, 4),
         "rating_bonus_adjusted": round(rating_bonus_adjusted, 4),
+        "metadata_bonus": round(metadata_bonus, 4),
+        "localization_bonus": round(localization_bonus, 4),
         "vote_count_bonus": round(vote_count_bonus, 4),
         "popularity_bonus": round(popularity_bonus, 4),
         "bucket_priority_score": float(bucket_priority_score),
-        "freshness_score": round(float(freshness_score), 4),
+        "freshness_score": round(float(year_bonus), 4),
         "fetch_order_penalty": round(float(fetch_order_penalty), 4),
         "metadata_overview_penalty": round(metadata_overview_penalty, 4),
+        "overview_penalty": round(metadata_overview_penalty, 4),
+        "poster_penalty": round(poster_penalty, 4),
+        "low_confidence_penalty": round(low_confidence_penalty, 4),
+        "junk_penalty": round(junk_penalty, 4),
+        "garbage_penalty": round(garbage_penalty, 4),
+        "weak_penalty": round(weak_penalty, 4),
         "metadata_missing_overview": metadata_missing_overview,
         "overview_source": overview_source,
+        "quality_class": quality_decision.quality_class,
+        "quality_reasons": list(quality_decision.quality_reasons),
         "final_score": round(final_score, 4),
     }
 
@@ -1567,7 +1747,11 @@ def _merge_details_into_discover_result(
     if genre_ids:
         updated["genre_ids"] = genre_ids
     if country_codes:
-        updated["origin_country"] = country_codes
+        existing_country_codes = _result_country_codes(updated)
+        if existing_country_codes:
+            updated["details_country_codes"] = country_codes
+        else:
+            updated["origin_country"] = country_codes
     external_ids = details.get("external_ids") if isinstance(details.get("external_ids"), dict) else {}
     if external_ids:
         updated["external_ids"] = dict(external_ids)
@@ -1713,6 +1897,9 @@ def build_candidate_record_from_result(
         country_codes.append(bucket.target_country)
     if bucket.origin == ORIGIN_DOMESTIC and bucket.home_country not in country_codes:
         country_codes.append(bucket.home_country)
+    score_debug = dict(score_debug or {})
+    quality_class = str(score_debug.get("quality_class") or QUALITY_GOOD)
+    quality_reasons = score_debug.get("quality_reasons") if isinstance(score_debug.get("quality_reasons"), list) else []
 
     candidate = {
         "media_type": bucket.media_type,
@@ -1727,8 +1914,10 @@ def build_candidate_record_from_result(
         "details_enriched": bool(result.get("_details_enriched")),
         "overview_source": result.get("overview_source") or OVERVIEW_SOURCE_UI_LANGUAGE,
         "metadata_missing_overview": bool(result.get("metadata_missing_overview")),
+        "quality_class": quality_class,
+        "quality_reasons": list(quality_reasons),
         "candidate_score": candidate_score,
-        "score_debug": dict(score_debug or {}),
+        "score_debug": score_debug,
         "fetch_rank": int(fetch_rank),
         "criteria_name": COMMON_POOL_CRITERIA_NAME,
         "tmdb_id": result.get("id"),
@@ -2076,6 +2265,27 @@ def run_onboarding_autofill(
                     details_requested_by_bucket[bucket.bucket_id] += details_delta
                     localization_metrics.update(details_metrics)
                     for entry in preliminary_entries:
+                        quality_decision = classify_candidate_quality(
+                            entry["result"],
+                            bucket,
+                            profile=profile,
+                            fallback=fallback,
+                            current_year=current_year,
+                        )
+                        entry["score_debug"] = compute_candidate_score_debug(
+                            entry["result"],
+                            bucket,
+                            page=int(entry["page"]),
+                            index_on_page=int(entry["index_on_page"]),
+                            quality_decision=quality_decision,
+                        )
+                        if quality_decision.quality_class == QUALITY_GARBAGE:
+                            rejected_count += 1
+                            state.filled = max(0, state.filled - 1)
+                            tmdb_id = entry["result"].get("id")
+                            if str(tmdb_id or "").strip().isdigit():
+                                accepted_identities.discard((bucket.media_type, int(tmdb_id)))
+                            continue
                         score_debug = entry["score_debug"]
                         candidate_score = float(score_debug["final_score"])
                         candidate = build_candidate_record_from_result(
