@@ -1203,6 +1203,69 @@ def _result_year(result: dict[str, Any], media_type: str) -> int | None:
     return tmdb_api.get_year(result.get(_date_field(media_type)))
 
 
+def vote_confidence_for_count(vote_count: Any) -> float:
+    try:
+        count = int(float(vote_count or 0))
+    except (TypeError, ValueError):
+        count = 0
+    if count <= 0:
+        return 0.15
+    if count <= 5:
+        return 0.25
+    if count <= 20:
+        return 0.45
+    if count <= 50:
+        return 0.65
+    if count <= 100:
+        return 0.8
+    if count < 300:
+        return 0.9
+    return 1.0
+
+
+def compute_candidate_score_debug(
+    result: dict[str, Any],
+    bucket: CandidateFetchBucket,
+    *,
+    page: int,
+    index_on_page: int,
+) -> dict[str, float]:
+    vote_average = float(result.get("vote_average") or 0)
+    vote_count = float(result.get("vote_count") or 0)
+    popularity = float(result.get("popularity") or 0)
+    vote_confidence = vote_confidence_for_count(vote_count)
+    rating_bonus_raw = vote_average * 100
+    rating_bonus_adjusted = rating_bonus_raw * vote_confidence
+    vote_count_bonus = min(math.log10(max(vote_count, 1)) * 100, 500)
+    popularity_bonus = min(popularity, 500)
+    bucket_priority_score = int(bucket.quota_weight * 10_000)
+    result_year = _result_year(result, bucket.media_type) or 0
+    freshness_score = 0
+    if bucket.era == ERA_NEW_SWEEP:
+        freshness_score = max(0, result_year - 2021) * 20
+    fetch_order_penalty = int(page) * 20 + int(index_on_page)
+    final_score = (
+        100000
+        + bucket_priority_score
+        + rating_bonus_adjusted
+        + vote_count_bonus
+        + popularity_bonus
+        + freshness_score
+        - fetch_order_penalty
+    )
+    return {
+        "rating_bonus_raw": round(rating_bonus_raw, 4),
+        "vote_confidence": round(vote_confidence, 4),
+        "rating_bonus_adjusted": round(rating_bonus_adjusted, 4),
+        "vote_count_bonus": round(vote_count_bonus, 4),
+        "popularity_bonus": round(popularity_bonus, 4),
+        "bucket_priority_score": float(bucket_priority_score),
+        "freshness_score": round(float(freshness_score), 4),
+        "fetch_order_penalty": round(float(fetch_order_penalty), 4),
+        "final_score": round(final_score, 4),
+    }
+
+
 def compute_candidate_score(
     result: dict[str, Any],
     bucket: CandidateFetchBucket,
@@ -1210,17 +1273,8 @@ def compute_candidate_score(
     page: int,
     index_on_page: int,
 ) -> float:
-    vote_average = float(result.get("vote_average") or 0)
-    vote_count = float(result.get("vote_count") or 0)
-    popularity = float(result.get("popularity") or 0)
-    bucket_priority_score = int(bucket.quota_weight * 10_000)
-    tmdb_quality_score = vote_average * 100 + min(math.log10(max(vote_count, 1)) * 100, 500) + min(popularity, 500)
-    result_year = _result_year(result, bucket.media_type) or 0
-    freshness_score = 0
-    if bucket.era == ERA_NEW_SWEEP:
-        freshness_score = max(0, result_year - 2021) * 20
-    fetch_order_penalty = int(page) * 20 + int(index_on_page)
-    return round(100000 + bucket_priority_score + tmdb_quality_score + freshness_score - fetch_order_penalty, 4)
+    debug = compute_candidate_score_debug(result, bucket, page=page, index_on_page=index_on_page)
+    return float(debug["final_score"])
 
 
 def build_candidate_record_from_result(
@@ -1230,6 +1284,7 @@ def build_candidate_record_from_result(
     genre_lookup: dict[str, dict[int, str]],
     profile_id: int,
     candidate_score: float,
+    score_debug: dict[str, Any] | None = None,
     fetch_rank: int,
     fallback: str = FALLBACK_BASE,
 ) -> dict[str, Any]:
@@ -1258,6 +1313,7 @@ def build_candidate_record_from_result(
         "target_country_weight": bucket.target_country_weight,
         "onboarding_profile_id": int(profile_id),
         "candidate_score": candidate_score,
+        "score_debug": dict(score_debug or {}),
         "fetch_rank": int(fetch_rank),
         "criteria_name": COMMON_POOL_CRITERIA_NAME,
         "tmdb_id": result.get("id"),
@@ -1293,7 +1349,7 @@ def build_candidate_record_from_result(
         "signals": ["onboarding_autofill"],
     }
     candidate["quality_score"] = round(
-        float(result.get("vote_average") or 0) * 10
+        float(result.get("vote_average") or 0) * 10 * vote_confidence_for_count(result.get("vote_count"))
         + min(math.log10(max(float(result.get("vote_count") or 1), 1)) * 10, 50)
         + min(float(result.get("popularity") or 0), 500) / 10,
         4,
@@ -1573,18 +1629,20 @@ def run_onboarding_autofill(
                             rejected_count += 1
                             continue
                         fetch_rank += 1
-                        candidate_score = compute_candidate_score(
+                        score_debug = compute_candidate_score_debug(
                             result,
                             bucket,
                             page=page,
                             index_on_page=index_on_page,
                         )
+                        candidate_score = float(score_debug["final_score"])
                         candidate = build_candidate_record_from_result(
                             result,
                             bucket,
                             genre_lookup=genre_lookup,
                             profile_id=profile_id,
                             candidate_score=candidate_score,
+                            score_debug=score_debug,
                             fetch_rank=fetch_rank,
                             fallback=fallback,
                         )

@@ -120,3 +120,23 @@ Step `004` wires `animation_mode` into initial TMDb Discover params.
 Country-first `with_origin_country`, onboarding `sort_by=popularity.desc`, TV junk
 genre excludes, and the no `vote_count.gte` / `vote_average.gte` initial
 Discover guardrail remain unchanged.
+
+## Vote confidence scoring formula
+
+Step `006` adds a local scoring multiplier for TMDb rating confidence. This is
+not a rejection filter and is not sent to Discover.
+
+| Vote count | Confidence |
+| ---: | ---: |
+| `0` | `0.15` |
+| `1-5` | `0.25` |
+| `6-20` | `0.45` |
+| `21-50` | `0.65` |
+| `51-100` | `0.80` |
+| `101-299` | `0.90` |
+| `300+` | `1.00` |
+
+Scoring debug now includes `rating_bonus_raw`, `vote_confidence`,
+`rating_bonus_adjusted`, and `final_score`. The adjusted rating contribution is
+`rating_bonus_raw * vote_confidence`, so a perfect score with one vote cannot
+outrank a broadly supported strong rating solely through the rating value.

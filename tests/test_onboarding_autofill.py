@@ -813,6 +813,79 @@ def test_low_vote_candidate_is_not_filtered_before_local_scoring(tmp_path, monke
     ) is True
 
 
+def test_vote_confidence_scales_rating_bonus_without_rejection() -> None:
+    bucket = build_fetch_buckets(_profile(media_preference="movie"))[0]
+    low_vote = {
+        "id": 1,
+        "title": "Tiny Perfect",
+        "release_date": "2024-01-01",
+        "vote_average": 10.0,
+        "vote_count": 1,
+        "popularity": 0,
+    }
+    strong = {
+        "id": 2,
+        "title": "Strong Eight",
+        "release_date": "2024-01-01",
+        "vote_average": 8.0,
+        "vote_count": 500,
+        "popularity": 0,
+    }
+    empty = {
+        "id": 3,
+        "title": "No Votes",
+        "release_date": "2024-01-01",
+        "vote_average": 0,
+        "vote_count": 0,
+        "popularity": 0,
+    }
+
+    low_debug = autofill.compute_candidate_score_debug(low_vote, bucket, page=1, index_on_page=0)
+    strong_debug = autofill.compute_candidate_score_debug(strong, bucket, page=1, index_on_page=0)
+    empty_debug = autofill.compute_candidate_score_debug(empty, bucket, page=1, index_on_page=0)
+
+    assert autofill.vote_confidence_for_count(0) == 0.15
+    assert low_debug["vote_confidence"] == 0.25
+    assert strong_debug["vote_confidence"] == 1.0
+    assert low_debug["rating_bonus_raw"] == 1000.0
+    assert low_debug["rating_bonus_adjusted"] == 250.0
+    assert low_debug["rating_bonus_adjusted"] < strong_debug["rating_bonus_adjusted"]
+    assert low_debug["final_score"] < strong_debug["final_score"]
+    assert empty_debug["rating_bonus_adjusted"] == 0.0
+
+
+def test_onboarding_candidate_record_includes_score_debug_fields() -> None:
+    bucket = build_fetch_buckets(_profile(media_preference="movie"))[0]
+    result = {
+        "id": 42,
+        "title": "Debug Movie",
+        "original_title": "Debug Movie",
+        "release_date": "2024-01-01",
+        "overview": "Overview",
+        "genre_ids": [18],
+        "origin_country": [bucket.target_country],
+        "vote_average": 8.0,
+        "vote_count": 500,
+        "popularity": 50,
+    }
+    score_debug = autofill.compute_candidate_score_debug(result, bucket, page=1, index_on_page=0)
+
+    candidate = autofill.build_candidate_record_from_result(
+        result,
+        bucket,
+        genre_lookup={MEDIA_MOVIE: {18: "Drama"}, MEDIA_TV: {}},
+        profile_id=1,
+        candidate_score=float(score_debug["final_score"]),
+        score_debug=score_debug,
+        fetch_rank=1,
+    )
+
+    assert candidate["score_debug"]["rating_bonus_raw"] == 800.0
+    assert candidate["score_debug"]["vote_confidence"] == 1.0
+    assert candidate["score_debug"]["rating_bonus_adjusted"] == 800.0
+    assert candidate["score_debug"]["final_score"] == score_debug["final_score"]
+
+
 def test_acceptance_ru_tv_manual_sweep_contract() -> None:
     profile = _profile(
         media_preference="tv",
