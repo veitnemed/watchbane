@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 from urllib.request import getproxies
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -26,7 +26,7 @@ from apis import tmdb_api as api_tmdb
 
 
 TMDB_GENRE_CACHE_PATH = ROOT_DIR / "data" / "cache" / "tmdb" / "tmdb_genre.json"
-REPORT_DIR = ROOT_DIR / "reports" / "genre_reports"
+REPORT_DIR = ROOT_DIR / "reports" / "quality" / "genre"
 STATUS_MATCHED = "matched"
 STATUS_NOT_FOUND = "not_found"
 STATUS_NO_GENRES = "no_genres"

@@ -171,7 +171,17 @@ Read-only экспорт watched/add-title карточек.
 
 ### `scripts/`
 
-Ручные diagnostic/build utilities.
+Ручные entrypoints разложены по назначению; переиспользуемая логика должна жить
+в активных слоях, а не в CLI-обёртках.
+
+- `scripts/migrations/` - explicit migration/import/export utilities.
+- `scripts/tmdb/` - TMDb build, refresh, backfill and network probes.
+- `scripts/reports/` - generated report builders and quality diagnostics.
+- `scripts/screenshots/` - local UI screenshot capture helpers.
+- `scripts/jobs/` - long-running maintenance jobs.
+- `scripts/duplicates/` - manual duplicate inspection tools.
+
+Правила output path: [REPORT_OUTPUT_POLICY.md](../operations/REPORT_OUTPUT_POLICY.md).
 
 ### `tests/`
 

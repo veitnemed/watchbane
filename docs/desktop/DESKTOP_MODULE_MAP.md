@@ -183,7 +183,7 @@ class TabView(Protocol):
 - Data localization живет в `dataset/language.py`; desktop read models и presenters принимают `data_language` и должны иметь safe fallback на `ru`/legacy fields.
 - Desktop TMDb flows получают locale через app setting `data_language` (`ru -> ru-RU`, `en -> en-US`) и сохраняют фактический locale в `source_query.language`.
 - Настройки языков доступны в `Настройки -> Интерфейс -> Язык`; для первого стабильного варианта смена применяется после restart или перезагрузки экранов.
-- Старые локальные JSON без `localized.en` обновляются через `scripts/backfill_watched_localized_from_tmdb.py`; backfill добавляет только localized layer, делает backup рядом с JSON и не переименовывает dataset keys.
+- Старые локальные JSON без `localized.en` обновляются через `scripts/tmdb/backfill_watched_localized_from_tmdb.py`; backfill добавляет только localized layer, делает backup рядом с JSON и не переименовывает dataset keys.
 
 Шаблон добавления вкладки:
 
@@ -220,7 +220,7 @@ registry.register(ShellTabSpec("feature_id", tr("tabs.feature"), feature_view))
 | Переиспользуемый виджет без domain | `shared/widgets/` |
 | UI label/button/message/placeholder | `i18n/catalog.py` + `tr("feature.key")` |
 | Отображаемые localized data/title/overview/genre/country | `dataset/language.py` + read model/presenter `data_language` parameter |
-| Backfill localized data для старого watched/candidate JSON | `dataset/migrations/tmdb_localized.py` + `scripts/backfill_watched_localized_from_tmdb.py` |
+| Backfill localized data для старого watched/candidate JSON | `dataset/migrations/tmdb_localized.py` + `scripts/tmdb/backfill_watched_localized_from_tmdb.py` |
 | Desktop TMDb request language | `desktop/settings/app_settings.language_to_tmdb_locale()` at desktop boundary, pass locale into `dataset`/`candidates` service |
 | Новый цвет/радиус/семантический font token | `theme/tokens.py` |
 | Новый размер, margin, spacing, min/max width/height | `theme/layout.py` + scaling helpers |

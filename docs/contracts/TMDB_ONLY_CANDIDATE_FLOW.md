@@ -113,8 +113,8 @@ Not removed:
 One-time migration for existing `data/candidates/pool.json`:
 
 ```powershell
-py scripts/migrate_candidate_pool_tmdb_only.py --dry-run
-py scripts/migrate_candidate_pool_tmdb_only.py --apply
+py scripts/migrations/migrate_candidate_pool_tmdb_only.py --dry-run
+py scripts/migrations/migrate_candidate_pool_tmdb_only.py --apply
 ```
 
 Behavior:
@@ -133,11 +133,11 @@ Behavior:
 Refresh current pool from TMDb Details:
 
 ```powershell
-py scripts/refresh_candidate_pool_from_tmdb.py --dry-run
-py scripts/refresh_candidate_pool_from_tmdb.py --apply
-py scripts/refresh_candidate_pool_from_tmdb.py --dry-run --limit 50
-py scripts/refresh_candidate_pool_from_tmdb.py --apply --only-missing
-py scripts/refresh_candidate_pool_from_tmdb.py --apply --force-refresh
+py scripts/tmdb/refresh_candidate_pool_from_tmdb.py --dry-run
+py scripts/tmdb/refresh_candidate_pool_from_tmdb.py --apply
+py scripts/tmdb/refresh_candidate_pool_from_tmdb.py --dry-run --limit 50
+py scripts/tmdb/refresh_candidate_pool_from_tmdb.py --apply --only-missing
+py scripts/tmdb/refresh_candidate_pool_from_tmdb.py --apply --force-refresh
 ```
 
 Behavior:
@@ -154,8 +154,8 @@ Behavior:
 Migrate watched raw scores to the TMDb-only schema:
 
 ```powershell
-py scripts/migrate_watched_raw_scores_tmdb_only.py --dry-run
-py scripts/migrate_watched_raw_scores_tmdb_only.py --apply
+py scripts/migrations/migrate_watched_raw_scores_tmdb_only.py --dry-run
+py scripts/migrations/migrate_watched_raw_scores_tmdb_only.py --apply
 ```
 
 Behavior:
@@ -168,11 +168,11 @@ Behavior:
 Refresh watched metadata and TMDb raw scores:
 
 ```powershell
-py scripts/refresh_watched_from_tmdb.py --dry-run
-py scripts/refresh_watched_from_tmdb.py --apply
-py scripts/refresh_watched_from_tmdb.py --dry-run --limit 50
-py scripts/refresh_watched_from_tmdb.py --apply --only-missing
-py scripts/refresh_watched_from_tmdb.py --apply --force-refresh
+py scripts/tmdb/refresh_watched_from_tmdb.py --dry-run
+py scripts/tmdb/refresh_watched_from_tmdb.py --apply
+py scripts/tmdb/refresh_watched_from_tmdb.py --dry-run --limit 50
+py scripts/tmdb/refresh_watched_from_tmdb.py --apply --only-missing
+py scripts/tmdb/refresh_watched_from_tmdb.py --apply --force-refresh
 ```
 
 Behavior:

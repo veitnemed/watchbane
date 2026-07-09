@@ -14,14 +14,14 @@ from time import perf_counter
 from typing import Any
 from urllib.parse import urlencode
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from apis import tmdb_api
 from candidates.onboarding import autofill
 from candidates.onboarding.autofill import OnboardingTasteProfile
-from scripts.run_onboarding_pool_rebuild import (
+from scripts.reports.run_onboarding_pool_rebuild import (
     MockTmdbClient,
     SCENARIOS,
     _country_metrics,
@@ -569,7 +569,11 @@ def main() -> int:
     parser.add_argument("--require-live", action="store_true", help="Fail when --live has no credentials.")
     parser.add_argument("--current-year", type=int, default=date.today().year)
     parser.add_argument("--sample-limit", type=int, default=12, help="Top output rows per scenario.")
-    parser.add_argument("--output", type=Path, default=ROOT_DIR / "docs" / "onboarding_discover_quality_report.md")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=ROOT_DIR / "reports" / "onboarding" / "discover_quality_report.md",
+    )
     parser.add_argument("--json-output", type=Path)
     parser.add_argument("--tmp-root", type=Path)
     args = parser.parse_args()

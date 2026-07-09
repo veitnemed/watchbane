@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from candidates.repositories import pool_repository
-from scripts import refresh_candidate_pool_from_tmdb as refresh
+from scripts.tmdb import refresh_candidate_pool_from_tmdb as refresh
 
 
 def _details(tmdb_id: int, title: str = "Show", year: int = 2020) -> dict:

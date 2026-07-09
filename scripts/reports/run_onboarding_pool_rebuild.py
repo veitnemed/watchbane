@@ -1,8 +1,8 @@
 """Run onboarding candidate-pool scenarios in an isolated SQLite database.
 
 Examples:
-    py scripts/run_onboarding_pool_rebuild.py --mock --all --output docs/onboarding_pool_mock_report.md
-    py scripts/run_onboarding_pool_rebuild.py --live --all --require-live --output docs/onboarding_pool_live_report.md
+    py scripts/reports/run_onboarding_pool_rebuild.py --mock --all --output reports/onboarding/pool_mock_report.md
+    py scripts/reports/run_onboarding_pool_rebuild.py --live --all --require-live --output reports/onboarding/pool_live_report.md
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import sys
 import tempfile
 from typing import Any
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 

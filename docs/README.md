@@ -1,4 +1,4 @@
-﻿# Watchbane
+# Watchbane
 
 Локальный Python-проект для ведения личного списка просмотренных фильмов и сериалов, поиска новых тайтлов, работы с candidate pool и desktop-интерфейсом.
 
@@ -86,8 +86,8 @@ TMDb candidate pool:
 CLI-примеры:
 
 ```powershell
-python scripts/build_candidate_pool.py --country RU --pages 3 --details-limit 50 --mode quality
-python scripts/build_candidate_pool.py --country KR --pages 3 --details-limit 50 --mode hidden_gems
+python scripts/tmdb/build_candidate_pool.py --country RU --pages 3 --details-limit 50 --mode quality
+python scripts/tmdb/build_candidate_pool.py --country KR --pages 3 --details-limit 50 --mode hidden_gems
 ```
 
 ## Добавление записи
@@ -191,9 +191,9 @@ py -m pytest
 SQLite is canonical runtime storage. Legacy JSON is explicit compatibility only:
 
 ```powershell
-py scripts/migrate_json_to_sqlite.py --dry-run
-py scripts/migrate_json_to_sqlite.py --apply
-py scripts/export_sqlite_to_json.py --output-dir data/exports/legacy-json
+py scripts/migrations/migrate_json_to_sqlite.py --dry-run
+py scripts/migrations/migrate_json_to_sqlite.py --apply
+py scripts/migrations/export_sqlite_to_json.py --output-dir data/exports/legacy-json
 ```
 
 For recovery, restore a SQLite backup from `data/backups/` first. Legacy JSON

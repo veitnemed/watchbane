@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 BACKUP_ROOT = ROOT_DIR / "data" / "backups"
 
 

@@ -29,8 +29,8 @@ If either flag is enabled:
 For isolated pool rebuild checks without touching the active profile:
 
 ```powershell
-py scripts\run_onboarding_pool_rebuild.py --mock --all --output screens\tmp_ui\onboarding\pool_mock_report.md
-py scripts\run_onboarding_pool_rebuild.py --live --all --require-live --output screens\tmp_ui\onboarding\pool_live_report.md
+py scripts\reports\run_onboarding_pool_rebuild.py --mock --all --output reports\onboarding\pool_mock_report.md
+py scripts\reports\run_onboarding_pool_rebuild.py --live --all --require-live --output reports\onboarding\pool_live_report.md
 ```
 
 The scenario runner writes each scenario into a temporary SQLite database and does not print TMDb credentials.

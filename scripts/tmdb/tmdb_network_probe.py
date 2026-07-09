@@ -24,8 +24,8 @@ from urllib.parse import urlencode, urlsplit
 from urllib.request import ProxyHandler, Request, build_opener, getproxies, urlopen
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-LOG_DIR = ROOT_DIR / "reports" / "network_logs"
+ROOT_DIR = Path(__file__).resolve().parents[2]
+LOG_DIR = ROOT_DIR / "reports" / "network"
 HOSTS = ("api.themoviedb.org", "www.themoviedb.org")
 URLS = (
     "https://api.themoviedb.org/3/configuration",

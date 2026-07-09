@@ -1,8 +1,8 @@
 """Capture native screenshots for the fullscreen onboarding flow.
 
 Examples:
-    py scripts/capture_onboarding.py --step welcome --scale 1.0
-    py scripts/capture_onboarding.py --step plan --language ru --output screens/tmp_ui/onboarding/plan.png
+    py scripts/screenshots/capture_onboarding.py --step welcome --scale 1.0
+    py scripts/screenshots/capture_onboarding.py --step plan --language ru --output screens/tmp_ui/onboarding/plan.png
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import sys
 import time
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 

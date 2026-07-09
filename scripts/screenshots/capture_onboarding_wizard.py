@@ -1,7 +1,7 @@
 """Capture a native screenshot of the onboarding autofill wizard.
 
 Example:
-    py scripts/capture_onboarding_wizard.py --scale 1.0 --output screens/tmp_ui/onboarding/wizard_scale100.png
+    py scripts/screenshots/capture_onboarding_wizard.py --scale 1.0 --output screens/tmp_ui/onboarding/wizard_scale100.png
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import sys
 import time
 from pathlib import Path
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 

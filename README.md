@@ -175,7 +175,7 @@ Desktop language settings:
 Existing local JSON created before bilingual data support can be backfilled from TMDb locale responses:
 
 ```powershell
-py scripts/backfill_watched_localized_from_tmdb.py --target all --language en
+py scripts/tmdb/backfill_watched_localized_from_tmdb.py --target all --language en
 ```
 
 The backfill adds `localized.en.title/overview`, creates backups next to the JSON files and keeps dataset keys and legacy fields unchanged.
@@ -225,12 +225,12 @@ The constructor supports watched titles and candidate pool data, bar/function ch
 Useful maintenance commands:
 
 ```powershell
-py scripts/migrate_candidate_pool_tmdb_only.py --dry-run
-py scripts/refresh_candidate_pool_from_tmdb.py --dry-run
-py scripts/migrate_watched_raw_scores_tmdb_only.py --dry-run
-py scripts/refresh_watched_from_tmdb.py --dry-run
-py scripts/migrate_json_to_sqlite.py --dry-run
-py scripts/export_sqlite_to_json.py --output-dir data/exports/legacy-json
+py scripts/migrations/migrate_candidate_pool_tmdb_only.py --dry-run
+py scripts/tmdb/refresh_candidate_pool_from_tmdb.py --dry-run
+py scripts/migrations/migrate_watched_raw_scores_tmdb_only.py --dry-run
+py scripts/tmdb/refresh_watched_from_tmdb.py --dry-run
+py scripts/migrations/migrate_json_to_sqlite.py --dry-run
+py scripts/migrations/export_sqlite_to_json.py --output-dir data/exports/legacy-json
 ```
 
 SQLite recovery path:
