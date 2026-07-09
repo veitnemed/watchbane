@@ -73,8 +73,11 @@ SCENARIO_SUMMARY_FIELDS = (
     "low_vote_candidates_count",
     "weak_candidates_count",
     "garbage_candidates_count",
+    "quality_gate_garbage_rejected_count",
     "garbage_rate",
     "garbage_reasons",
+    "quality_gate_rejected_reasons",
+    "quality_class_distribution",
     "adaptive_pages_used",
     "pagination_stop_reasons",
     "broad_origin_requests",
@@ -155,6 +158,7 @@ class InstrumentedTmdbClient:
         self.diagnostics = tmdb_api.TmdbRequestDiagnostics()
         self.discover_logs: list[dict[str, Any]] = []
         self.genre_logs: list[dict[str, Any]] = []
+        self.details_logs: list[dict[str, Any]] = []
 
     def movie_genres(self, language: str = "en") -> list[dict[str, Any]]:
         started = perf_counter()
@@ -240,6 +244,70 @@ class InstrumentedTmdbClient:
             raise
         finally:
             self.discover_logs.append(log_entry)
+
+    def _details(
+        self,
+        media_type: str,
+        tmdb_id: int,
+        language: str = "en",
+        *,
+        append_to_response=None,
+    ) -> dict[str, Any]:
+        started = perf_counter()
+        appends = tuple(append_to_response or ())
+        log_entry: dict[str, Any] = {
+            "media_type": media_type,
+            "tmdb_id": int(tmdb_id),
+            "language": language,
+            "append_to_response": list(appends),
+            "elapsed_ms": 0.0,
+            "error": None,
+        }
+        try:
+            if self.live:
+                payload = (
+                    tmdb_api.get_movie_details(
+                        int(tmdb_id),
+                        language=language,
+                        append_to_response=append_to_response,
+                    )
+                    if media_type == autofill.MEDIA_MOVIE
+                    else tmdb_api.get_tv_details(
+                        int(tmdb_id),
+                        language=language,
+                        append_to_response=append_to_response,
+                    )
+                )
+            else:
+                payload = (
+                    self.mock.movie_details(
+                        int(tmdb_id),
+                        language=language,
+                        append_to_response=append_to_response,
+                    )
+                    if media_type == autofill.MEDIA_MOVIE
+                    else self.mock.tv_details(
+                        int(tmdb_id),
+                        language=language,
+                        append_to_response=append_to_response,
+                    )
+                )
+            log_entry["elapsed_ms"] = round((perf_counter() - started) * 1000, 1)
+            return payload
+        except Exception as error:
+            log_entry.update({
+                "elapsed_ms": round((perf_counter() - started) * 1000, 1),
+                "error": str(error),
+            })
+            raise
+        finally:
+            self.details_logs.append(log_entry)
+
+    def movie_details(self, tmdb_id: int, language: str = "en", *, append_to_response=None) -> dict[str, Any]:
+        return self._details(autofill.MEDIA_MOVIE, int(tmdb_id), language, append_to_response=append_to_response)
+
+    def tv_details(self, tmdb_id: int, language: str = "en", *, append_to_response=None) -> dict[str, Any]:
+        return self._details(autofill.MEDIA_TV, int(tmdb_id), language, append_to_response=append_to_response)
 
 
 def _percentile(values: list[float], percentile: float) -> float:
@@ -343,6 +411,30 @@ def _candidate_metrics(candidates: list[dict[str, Any]]) -> dict[str, Any]:
         "dark_vibe_hit_rate": round(dark_hits / total, 4) if total else 0.0,
         "garbage_count": junk_count + poster_missing + overview_missing,
         "garbage_rate": round(int(quality_counter.get("garbage", 0)) / total, 4) if total else 0.0,
+    }
+
+
+def _quality_gate_metrics(result: Any, candidate_metrics: dict[str, Any]) -> dict[str, Any]:
+    rejected_counts = Counter({
+        str(key): int(value)
+        for key, value in (getattr(result, "quality_gate_rejected_counts", None) or {}).items()
+    })
+    rejected_reasons = {
+        str(key): int(value)
+        for key, value in (getattr(result, "quality_gate_rejected_reasons", None) or {}).items()
+    }
+    final_counts = Counter({
+        str(key): int(value)
+        for key, value in (candidate_metrics.get("quality_counts") or {}).items()
+    })
+    distribution = dict(final_counts)
+    for key, value in rejected_counts.items():
+        distribution[f"rejected_{key}"] = int(value)
+    return {
+        "quality_gate_rejected_counts": dict(rejected_counts),
+        "quality_gate_garbage_rejected_count": int(rejected_counts.get("garbage", 0)),
+        "quality_gate_rejected_reasons": rejected_reasons,
+        "quality_class_distribution": distribution,
     }
 
 
@@ -501,6 +593,7 @@ def _report_schema_summary(
     details_requests = int(getattr(result, "details_requests", 0) or 0)
     request_diagnostics = dict(request_diagnostics or {})
     preference_diagnostics = dict(getattr(result, "preference_diagnostics", {}) or {})
+    quality_gate_metrics = _quality_gate_metrics(result, candidate_metrics)
     summary = {
         "selected_countries": list(selection.get("selected_countries") or []),
         "country_plan": dict((result.planned_counts or {}).get("country", {})),
@@ -523,8 +616,11 @@ def _report_schema_summary(
         "low_vote_candidates_count": candidate_metrics.get("low_vote_candidates_count", 0),
         "weak_candidates_count": candidate_metrics.get("weak_candidates_count", 0),
         "garbage_candidates_count": candidate_metrics.get("garbage_candidates_count", 0),
+        "quality_gate_garbage_rejected_count": quality_gate_metrics.get("quality_gate_garbage_rejected_count", 0),
         "garbage_rate": candidate_metrics.get("garbage_rate", 0.0),
         "garbage_reasons": candidate_metrics.get("garbage_reasons", {}),
+        "quality_gate_rejected_reasons": quality_gate_metrics.get("quality_gate_rejected_reasons", {}),
+        "quality_class_distribution": quality_gate_metrics.get("quality_class_distribution", {}),
         "adaptive_pages_used": int(getattr(result, "adaptive_pages_used", 0) or 0),
         "pagination_stop_reasons": dict(getattr(result, "pagination_stop_reasons", {}) or {}),
         "broad_origin_requests": api_budget_metrics.get("broad_origin_requests", 0),
@@ -570,6 +666,7 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
     country_metrics = _country_metrics(candidates, normalized_profile)
     speed = _speed_stats(client.discover_logs, elapsed_ms)
     candidate_metrics = _candidate_metrics(candidates)
+    quality_gate_metrics = _quality_gate_metrics(result, candidate_metrics)
     api_budget_metrics = _api_budget_metrics(request_rows, result.created_count, details_requests=result.details_requests)
     request_diagnostics = client.diagnostics.as_dict()
     schema_summary = _report_schema_summary(
@@ -614,6 +711,7 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         "genre_requests": client.genre_logs,
         "discover_requests": request_rows,
         "request_diagnostics": request_diagnostics,
+        "details_requests_log": client.details_logs,
         "top_candidates": _top_candidates(candidates, limit=sample_limit),
         "schema_version": 1,
         "scenario_summary_fields": list(SCENARIO_SUMMARY_FIELDS),
@@ -622,6 +720,7 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         **request_metrics,
         **country_metrics,
         **candidate_metrics,
+        **quality_gate_metrics,
         **api_budget_metrics,
         **schema_summary,
     }
@@ -729,7 +828,7 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
             f"- Actual country: `{_json(result.get('country_actual', {}))}`",
             f"- Country hit/leak/wrong: {result.get('country_hit_rate')} / {result.get('country_leakage_rate')} / {result.get('wrong_country_count')}",
             f"- Fallbacks: `{_json(result.get('fallback_counts', {}))}`; fallback share {result.get('fallback_share')}",
-            f"- Quality classes: weak {result.get('weak_candidates_count')}; garbage {result.get('garbage_candidates_count')} ({result.get('garbage_rate')}); reasons `{_json(result.get('garbage_reasons') or {})}`",
+            f"- Quality classes: `{_json(result.get('quality_class_distribution') or result.get('quality_counts') or {})}`; final weak {result.get('weak_candidates_count')}; final garbage {result.get('garbage_candidates_count')} ({result.get('garbage_rate')}); rejected garbage {result.get('quality_gate_garbage_rejected_count')}; reasons `{_json(result.get('quality_gate_rejected_reasons') or result.get('garbage_reasons') or {})}`",
             f"- Vote confidence avg / low-vote candidates: {result.get('vote_confidence_avg')} / {result.get('low_vote_candidates_count')}",
             f"- Avg TMDb score/votes/popularity: {result.get('avg_tmdb_score')} / {result.get('avg_tmdb_votes')} / {result.get('avg_popularity')}",
             f"- Vibe hit light/dark: {result.get('light_vibe_hit_rate')} / {result.get('dark_vibe_hit_rate')}",

@@ -273,6 +273,8 @@ def build_onboarding_candidate_pool(
         "actual_counts": result.actual_counts,
         "rejected_future_count": result.rejected_future_count,
         "duplicate_requests_skipped": result.duplicate_requests_skipped,
+        "quality_gate_rejected_counts": result.quality_gate_rejected_counts or {},
+        "quality_gate_rejected_reasons": result.quality_gate_rejected_reasons or {},
         "preference_conflict_count": result.preference_conflict_count,
         "preference_warning_count": result.preference_warning_count,
         "preference_conflict_codes": list(result.preference_conflict_codes),

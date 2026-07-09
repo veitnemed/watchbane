@@ -219,7 +219,7 @@ class DuplicateDiscoverTmdbClient(FakeTmdbClient):
                 "original_title": "Duplicate Movie",
                 "release_date": "2024-01-01",
                 "poster_path": "/dup.jpg",
-                "overview": "Overview",
+                "overview": "",
                 "genre_ids": [18],
                 "origin_country": [country],
                 "vote_average": 8.0,
@@ -234,7 +234,7 @@ class DuplicateDiscoverTmdbClient(FakeTmdbClient):
                 "original_name": "Duplicate Series",
                 "first_air_date": "2024-01-01",
                 "poster_path": "/dup.jpg",
-                "overview": "Overview",
+                "overview": "",
                 "genre_ids": [18],
                 "origin_country": [country],
                 "vote_average": 8.0,
@@ -256,7 +256,7 @@ class DuplicateAcrossPagesTmdbClient(FakeTmdbClient):
             "original_title": "Duplicate Across Pages",
             "release_date": "2024-01-01",
             "poster_path": "/duplicate-pages.jpg",
-            "overview": "Overview",
+            "overview": "",
             "genre_ids": [18],
             "origin_country": [country],
             "vote_average": 7.0,
@@ -281,7 +281,7 @@ class DuplicateTitleDifferentIdsTmdbClient(FakeTmdbClient):
                     "original_title": "Duplicate-Like Title",
                     "release_date": "2024-01-01",
                     "poster_path": f"/duplicate-like-{tmdb_id}.jpg",
-                    "overview": "Overview",
+                    "overview": "",
                     "genre_ids": [18],
                     "origin_country": [country],
                     "vote_average": 7.0,
@@ -449,6 +449,64 @@ class WeakLowVoteTmdbClient(FakeTmdbClient):
                 }
             ],
             "total_pages": 1,
+        }
+
+
+class DetailsPriorityTmdbClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        self.calls.append((endpoint, dict(params)))
+        country = params.get("with_origin_country") or "JP"
+        return {
+            "results": [
+                {
+                    "id": 1001,
+                    "title": "Complete High Score",
+                    "original_title": "Complete High Score",
+                    "release_date": "2024-01-01",
+                    "poster_path": "/complete.jpg",
+                    "overview": "Complete overview",
+                    "genre_ids": [18],
+                    "origin_country": [country],
+                    "vote_average": 8.5,
+                    "vote_count": 1000,
+                    "popularity": 80,
+                    "original_language": "ja",
+                },
+                {
+                    "id": 1002,
+                    "title": "Missing Overview Lower Score",
+                    "original_title": "Missing Overview Lower Score",
+                    "release_date": "2024-01-01",
+                    "poster_path": "/missing.jpg",
+                    "overview": "",
+                    "genre_ids": [18],
+                    "origin_country": [country],
+                    "vote_average": 6.5,
+                    "vote_count": 40,
+                    "popularity": 12,
+                    "original_language": "ja",
+                },
+            ],
+            "total_pages": 1,
+        }
+
+    def movie_details(self, tmdb_id: int, language: str = "en", *, append_to_response=None) -> dict:
+        appends = tuple(append_to_response or ())
+        self.details_calls.append((MEDIA_MOVIE, int(tmdb_id), language, appends))
+        return {
+            "id": int(tmdb_id),
+            "title": "Missing Overview Lower Score",
+            "original_title": "Missing Overview Lower Score",
+            "release_date": "2024-01-01",
+            "overview": "Japanese overview" if language == "ja-JP" else "",
+            "genres": [{"id": 18, "name": "Drama"}],
+            "production_countries": [{"iso_3166_1": "JP", "name": "Japan"}],
+            "vote_average": 6.5,
+            "vote_count": 40,
+            "popularity": 12,
+            "poster_path": "/missing.jpg",
+            "original_language": "ja",
+            "external_ids": {"imdb_id": f"tt{int(tmdb_id):07d}"},
         }
 
 
@@ -1804,12 +1862,13 @@ def test_details_enrichment_skips_existing_pool_candidate_before_details(tmp_pat
 
 def test_details_enrichment_respects_details_limit_per_bucket(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
-    client = FakeTmdbClient()
+    client = LocalizedScenarioTmdbClient(country="JP")
 
     result = run_onboarding_autofill(
         _profile(
             media_preference="movie",
-            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            ui_language="ru",
+            country_selection={"selected_countries": ["JP"], "home_country": "RU"},
             details_limit=3,
         ),
         client=client,
@@ -1820,6 +1879,27 @@ def test_details_enrichment_respects_details_limit_per_bucket(tmp_path, monkeypa
     assert result.details_requests == 3
     assert len(client.details_calls) == 3
     assert all(call[0] == MEDIA_MOVIE for call in client.details_calls)
+
+
+def test_details_enrichment_prioritizes_missing_overview_over_external_id_only(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = DetailsPriorityTmdbClient()
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            ui_language="ru",
+            country_selection={"selected_countries": ["JP"], "home_country": "RU"},
+            details_limit=1,
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.details_requests == 1
+    assert [call[1] for call in client.details_calls] == [1002]
+    assert result.localization_fallback_count == 1
 
 
 def test_details_enrichment_limit_includes_localization_fallback_requests(tmp_path, monkeypatch) -> None:
@@ -2085,10 +2165,22 @@ def test_quality_gate_marks_wrong_country_media_junk_and_adult_title_as_garbage(
     assert junk_decision.quality_class == "garbage"
     assert "junk_genre" in junk_decision.quality_reasons
 
-    adult_like = {**base, "title": "Erotic Night", "adult": False}
+    adult_like = {
+        **base,
+        "title": "Erotic Night",
+        "overview": "",
+        "overview_source": "missing",
+        "metadata_missing_overview": True,
+        "adult": False,
+    }
     adult_decision = autofill.classify_candidate_quality(adult_like, movie_bucket)
     assert adult_decision.quality_class == "garbage"
     assert "suspicious_adult_title" in adult_decision.quality_reasons
+
+    adult_flag = {**base, "adult": True}
+    adult_flag_decision = autofill.classify_candidate_quality(adult_flag, movie_bucket)
+    assert adult_flag_decision.quality_class == "garbage"
+    assert "adult_content" in adult_flag_decision.quality_reasons
 
 
 def test_quality_gate_duplicate_like_flag_is_garbage() -> None:
@@ -2144,6 +2236,27 @@ def test_quality_gate_fallback_overview_low_votes_and_rating_zero_are_weak_not_g
     rating_decision = autofill.classify_candidate_quality(rating_zero, bucket)
     assert rating_decision.quality_class == "weak"
     assert "rating_0" in rating_decision.quality_reasons
+
+
+def test_quality_gate_no_external_id_alone_does_not_make_strong_candidate_weak() -> None:
+    bucket = build_fetch_buckets(_profile(media_preference="movie"))[0]
+    result = {
+        "id": 13,
+        "title": "Strong Candidate",
+        "release_date": "2024-01-01",
+        "poster_path": "/poster.jpg",
+        "overview": "Useful overview",
+        "genre_ids": [18],
+        "origin_country": [bucket.target_country],
+        "vote_average": 8.0,
+        "vote_count": 500,
+        "popularity": 50,
+    }
+
+    decision = autofill.classify_candidate_quality(result, bucket)
+
+    assert decision.quality_class == "good"
+    assert "no_external_id" not in decision.quality_reasons
 
 
 def test_quality_gate_blocks_garbage_candidates_from_normal_pool(tmp_path, monkeypatch) -> None:

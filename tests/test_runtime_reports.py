@@ -133,6 +133,8 @@ def test_onboarding_report_summary_schema_includes_details_and_localization_metr
         missing_overview_after_fallback=0,
         adaptive_pages_used=1,
         pagination_stop_reasons={"quota_full": 1},
+        quality_gate_rejected_counts={"garbage": 2},
+        quality_gate_rejected_reasons={"missing_overview_low_confidence": 2},
         preference_diagnostics={
             "preference_conflict_count": 1,
             "preference_warning_count": 1,
@@ -182,6 +184,9 @@ def test_onboarding_report_summary_schema_includes_details_and_localization_metr
     assert summary["overview_fallback_en_count"] == 1
     assert summary["vote_confidence_avg"] == 0.625
     assert summary["weak_candidates_count"] == 1
+    assert summary["quality_gate_garbage_rejected_count"] == 2
+    assert summary["quality_gate_rejected_reasons"] == {"missing_overview_low_confidence": 2}
+    assert summary["quality_class_distribution"] == {"weak": 1, "good": 1, "rejected_garbage": 2}
     assert summary["adaptive_pages_used"] == 1
     assert summary["request_timeout_count"] == 1
     assert summary["request_retry_count"] == 1

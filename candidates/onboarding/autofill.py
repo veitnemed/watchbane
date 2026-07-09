@@ -661,6 +661,8 @@ class AutofillResult:
     actual_counts: dict[str, dict[str, int]]
     rejected_future_count: int = 0
     duplicate_requests_skipped: int = 0
+    quality_gate_rejected_counts: dict[str, int] | None = None
+    quality_gate_rejected_reasons: dict[str, int] | None = None
     preference_conflict_count: int = 0
     preference_warning_count: int = 0
     preference_conflict_codes: tuple[str, ...] = ()
@@ -1365,8 +1367,6 @@ def candidate_rejection_reason(
         normalized_tmdb_id = int(tmdb_id)
     except (TypeError, ValueError):
         return "bad_id"
-    if result.get("poster_path") in (None, ""):
-        return "missing_poster"
     release_date = _parse_iso_date(result.get(_date_field(bucket.media_type)))
     result_year = _result_year(result, bucket.media_type)
     if release_date is not None and release_date > current_date:
@@ -1532,6 +1532,21 @@ def _has_external_id(result: dict[str, Any]) -> bool:
     return bool(str(result.get("imdb_id") or "").strip())
 
 
+def _missing_poster(result: dict[str, Any]) -> bool:
+    return result.get("poster_path") in (None, "")
+
+
+def _missing_overview_after_metadata(result: dict[str, Any]) -> bool:
+    return bool(result.get("metadata_missing_overview")) or not _has_overview(result)
+
+
+def _low_vote_weak_metadata(result: dict[str, Any]) -> bool:
+    vote_count = int(_result_number(result, "vote_count") or 0)
+    popularity = float(_result_number(result, "popularity") or 0)
+    vote_average = float(_result_number(result, "vote_average") or 0)
+    return vote_count <= 5 and (popularity < 5 or vote_average <= 0 or _missing_poster(result) or not _has_overview(result))
+
+
 def _selected_country_codes(profile: OnboardingTasteProfile | None) -> set[str]:
     if profile is None:
         return set()
@@ -1567,8 +1582,8 @@ def classify_candidate_quality(
     if bucket.media_type == MEDIA_TV and _result_genre_ids(result).intersection(TV_JUNK_GENRE_IDS):
         reasons.append("junk_genre")
 
-    missing_overview = bool(result.get("metadata_missing_overview")) or not _has_overview(result)
-    missing_poster = result.get("poster_path") in (None, "")
+    missing_overview = _missing_overview_after_metadata(result)
+    missing_poster = _missing_poster(result)
     vote_count = int(_result_number(result, "vote_count") or 0)
     popularity = float(_result_number(result, "popularity") or 0)
     vote_average = float(_result_number(result, "vote_average") or 0)
@@ -1577,7 +1592,11 @@ def classify_candidate_quality(
     if missing_overview and vote_count <= 5 and popularity < 5:
         reasons.append("missing_overview_low_confidence")
     title_text = _candidate_title_text(result, bucket.media_type)
-    if not bool(result.get("adult")) and any(term in title_text for term in SUSPICIOUS_ADULT_TITLE_TERMS):
+    if bool(result.get("adult")):
+        reasons.append("adult_content")
+    if any(term in title_text for term in SUSPICIOUS_ADULT_TITLE_TERMS) and (
+        missing_overview or missing_poster or vote_count <= 5 or popularity < 5
+    ):
         reasons.append("suspicious_adult_title")
     if bool(result.get("_duplicate_like")):
         reasons.append("duplicate_like")
@@ -1596,6 +1615,8 @@ def classify_candidate_quality(
 
     if vote_count <= 20:
         weak_reasons.append("low_votes")
+    if missing_overview:
+        weak_reasons.append("missing_overview")
     if result.get("overview_source") in {OVERVIEW_SOURCE_ORIGINAL_LANGUAGE, OVERVIEW_SOURCE_EN}:
         weak_reasons.append("fallback_overview")
     if vote_average <= 0:
@@ -1603,10 +1624,12 @@ def classify_candidate_quality(
     result_year = _result_year(result, bucket.media_type)
     if current_year is not None and result_year is not None and result_year >= int(current_year) - 1 and vote_count <= 20:
         weak_reasons.append("very_new_little_metadata")
-    if not _has_external_id(result):
-        weak_reasons.append("no_external_id")
     if popularity < 5:
         weak_reasons.append("low_popularity")
+    if missing_poster:
+        weak_reasons.append("missing_poster")
+    if weak_reasons and not _has_external_id(result):
+        weak_reasons.append("no_external_id")
 
     if reasons:
         ordered_reasons = tuple(dict.fromkeys(reasons))
@@ -1870,6 +1893,59 @@ def resolve_overview_with_fallback(
     return _mark_overview_metadata(updated, OVERVIEW_SOURCE_MISSING), requested, metrics
 
 
+def _details_enrichment_reasons(
+    result: dict[str, Any],
+    bucket: CandidateFetchBucket,
+    profile: OnboardingTasteProfile,
+    config: DetailsEnrichmentConfig,
+) -> tuple[str, ...]:
+    del bucket
+    reasons: list[str] = []
+    missing_overview = not _has_overview(result) or str(result.get("overview_source") or "") == OVERVIEW_SOURCE_MISSING
+    missing_poster = _missing_poster(result)
+    if missing_overview:
+        reasons.append("missing_overview")
+    if missing_poster:
+        reasons.append("missing_poster")
+    if _low_vote_weak_metadata(result):
+        reasons.append("low_vote_weak_metadata")
+
+    ui_locale = _ui_language_to_tmdb_locale(profile.ui_language)
+    original_locale = _original_language_to_tmdb_locale(result.get("original_language"))
+    country_codes = set(_result_country_codes(result))
+    if missing_overview and (
+        (original_locale is not None and original_locale != ui_locale)
+        or bool(country_codes.intersection({"JP", "KR"}))
+    ):
+        reasons.append("non_ui_language_missing_overview")
+    if reasons and config.fetch_external_ids and not _has_external_id(result):
+        reasons.append("external_ids_for_enriched_candidate")
+    return tuple(dict.fromkeys(reasons))
+
+
+def _details_enrichment_priority(
+    result: dict[str, Any],
+    bucket: CandidateFetchBucket,
+    profile: OnboardingTasteProfile,
+    config: DetailsEnrichmentConfig,
+) -> tuple[int, int, int]:
+    reasons = set(_details_enrichment_reasons(result, bucket, profile, config))
+    if not reasons:
+        return (0, 0, 0)
+    priority = 100
+    if "non_ui_language_missing_overview" in reasons:
+        priority += 50
+    if "missing_overview" in reasons:
+        priority += 40
+    if "missing_poster" in reasons:
+        priority += 25
+    if "low_vote_weak_metadata" in reasons:
+        priority += 15
+    if "external_ids_for_enriched_candidate" in reasons:
+        priority += 5
+    return (1, priority, len(reasons))
+
+
 def _details_candidate_cap(bucket: CandidateFetchBucket, config: DetailsEnrichmentConfig) -> int:
     target_buffer = max(1, int(math.ceil(float(bucket.quota) * 1.5)))
     return min(int(config.default_limit_per_bucket), target_buffer)
@@ -1898,7 +1974,18 @@ def _enrich_preliminary_entries(
             )
         return 0, metrics
     remaining = max(0, _details_candidate_cap(bucket, config) - int(requested_for_bucket))
-    selected = sorted(entries, key=lambda entry: float(entry["score_debug"]["final_score"]), reverse=True)[:remaining]
+    selected = [
+        entry
+        for entry in sorted(
+            entries,
+            key=lambda entry: (
+                _details_enrichment_priority(entry["result"], bucket, profile, config),
+                float(entry["score_debug"]["final_score"]),
+            ),
+            reverse=True,
+        )
+        if _details_enrichment_priority(entry["result"], bucket, profile, config)[0] > 0
+    ][:remaining]
     requested = 0
     for entry in selected:
         if requested >= remaining:
@@ -2227,6 +2314,8 @@ def run_onboarding_autofill(
     fetch_rank = 0
     rejected_future_count = 0
     duplicate_requests_skipped = 0
+    quality_gate_rejected_counts: Counter[str] = Counter()
+    quality_gate_rejected_reasons: Counter[str] = Counter()
     executed_request_keys: set[str] = set()
 
     def is_cancelled() -> bool:
@@ -2382,6 +2471,9 @@ def run_onboarding_autofill(
                             quality_decision=quality_decision,
                         )
                         if quality_decision.quality_class == QUALITY_GARBAGE:
+                            quality_gate_rejected_counts[QUALITY_GARBAGE] += 1
+                            for reason in quality_decision.quality_reasons:
+                                quality_gate_rejected_reasons[str(reason)] += 1
                             rejected_count += 1
                             state.filled = max(0, state.filled - 1)
                             tmdb_id = entry["result"].get("id")
@@ -2489,6 +2581,8 @@ def run_onboarding_autofill(
         actual_counts=actual_counts,
         rejected_future_count=rejected_future_count,
         duplicate_requests_skipped=duplicate_requests_skipped,
+        quality_gate_rejected_counts=dict(quality_gate_rejected_counts),
+        quality_gate_rejected_reasons=dict(quality_gate_rejected_reasons),
         preference_conflict_count=int(preference_diagnostics.get("preference_conflict_count") or 0),
         preference_warning_count=int(preference_diagnostics.get("preference_warning_count") or 0),
         preference_conflict_codes=tuple(preference_diagnostics.get("preference_conflict_codes") or ()),
