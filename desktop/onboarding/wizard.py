@@ -14,10 +14,12 @@ from PyQt6.QtWidgets import (
     QDialog,
     QFrame,
     QGraphicsOpacityEffect,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QProgressBar,
+    QScrollArea,
     QSizePolicy,
     QStackedWidget,
     QVBoxLayout,
@@ -26,6 +28,21 @@ from PyQt6.QtWidgets import (
 
 from candidates import service as candidate_service
 from candidates.models import country_reference
+from candidates.onboarding.taste_presets import (
+    ANIMATION_MODE_ANIMATION_ONLY,
+    ANIMATION_MODE_ANY,
+    ANIMATION_MODE_LIVE_ACTION_ONLY,
+    PRESET_ANIME,
+    PRESET_BRITISH_EUROPEAN_DETECTIVE,
+    PRESET_DARK_THRILLER_CRIME,
+    PRESET_FAMILY_ANIMATION,
+    PRESET_HOLLYWOOD_MAINSTREAM,
+    PRESET_K_DRAMA,
+    PRESET_MANUAL,
+    PRESET_RUSSIAN_MAINSTREAM,
+    PRESET_TURKISH_DRAMAS,
+    get_taste_preset,
+)
 from desktop.settings.app_settings import AppSettings, get_persisted_data_language, normalize_ui_scale, save_app_settings
 from desktop.onboarding.worker import OnboardingAutofillWorker
 from desktop.shared.widgets.genre_chip_selector import FlowLayout
@@ -71,6 +88,86 @@ ONBOARDING_SCALE_PRESETS: tuple[tuple[float, str], ...] = (
 )
 ONBOARDING_COUNTRY_CODES: tuple[str, ...] = ("US", "RU", "GB", "KR", "JP")
 ONBOARDING_COUNTRY_DEFAULT: tuple[str, ...] = ("US",)
+ONBOARDING_COUNTRY_PICKER_LIMIT = 5
+
+
+@dataclass(frozen=True)
+class _PresetCard:
+    key: str
+    title_ru: str
+    title_en: str
+    description_ru: str
+    description_en: str
+
+
+_PRESET_CARDS: tuple[_PresetCard, ...] = (
+    _PresetCard(
+        PRESET_MANUAL,
+        "Вручную",
+        "Manual",
+        "Выберите страны сами.",
+        "Choose countries yourself.",
+    ),
+    _PresetCard(
+        PRESET_HOLLYWOOD_MAINSTREAM,
+        "Голливуд",
+        "Hollywood",
+        "США, фильмы и сериалы.",
+        "US movies and series.",
+    ),
+    _PresetCard(
+        PRESET_RUSSIAN_MAINSTREAM,
+        "Российское",
+        "Russian",
+        "Фильмы и сериалы РФ.",
+        "Russian movies and series.",
+    ),
+    _PresetCard(
+        PRESET_ANIME,
+        "Аниме",
+        "Anime",
+        "Япония, анимация.",
+        "Japan animation.",
+    ),
+    _PresetCard(
+        PRESET_K_DRAMA,
+        "K-драмы",
+        "K-dramas",
+        "Корея, сериалы, без анимации.",
+        "Korean live-action series.",
+    ),
+    _PresetCard(
+        PRESET_TURKISH_DRAMAS,
+        "Турецкие драмы",
+        "Turkish dramas",
+        "Турция, сериалы.",
+        "Turkey live-action series.",
+    ),
+    _PresetCard(
+        PRESET_BRITISH_EUROPEAN_DETECTIVE,
+        "Европейский детектив",
+        "European detective",
+        "Детективы Европы.",
+        "European detective series.",
+    ),
+    _PresetCard(
+        PRESET_FAMILY_ANIMATION,
+        "Семейная анимация",
+        "Family animation",
+        "Семейный animation-пул.",
+        "Family animation pool.",
+    ),
+    _PresetCard(
+        PRESET_DARK_THRILLER_CRIME,
+        "Мрачный криминал",
+        "Dark crime",
+        "Криминал и триллеры.",
+        "Crime and thriller pool.",
+    ),
+)
+
+
+_PRESET_CARDS_BY_KEY = {card.key: card for card in _PRESET_CARDS}
 
 
 @dataclass(frozen=True)
@@ -96,6 +193,16 @@ _QUESTIONS: tuple[_Question, ...] = (
             ("movie", "Фильмы", "Movies"),
             ("tv", "Сериалы", "Series"),
             ("both", "Не важно", "No preference"),
+        ),
+    ),
+    _Question(
+        key="animation_mode",
+        title_ru="РљР°Рє РѕС‚РЅРѕСЃРёРјСЃСЏ Рє Р°РЅРёРјР°С†РёРё?",
+        title_en="How should animation be handled?",
+        options=(
+            (ANIMATION_MODE_ANY, "РќРµ РІР°Р¶РЅРѕ", "No preference"),
+            (ANIMATION_MODE_ANIMATION_ONLY, "РўРѕР»СЊРєРѕ Р°РЅРёРјР°С†РёСЏ", "Animation only"),
+            (ANIMATION_MODE_LIVE_ACTION_ONLY, "Р‘РµР· Р°РЅРёРјР°С†РёРё", "Live action only"),
         ),
     ),
     _Question(
@@ -191,6 +298,30 @@ QPushButton#onboardingOption:checked {{
 }}
 QPushButton#onboardingOption:checked:focus {{
     border-color: {COLOR_ACCENT};
+}}
+QScrollArea#onboardingPresetScroll,
+QScrollArea#onboardingPresetScroll QWidget#onboardingPresetViewport {{
+    background-color: transparent;
+    border: 0;
+}}
+QPushButton#onboardingPresetCard {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_BUTTON)}px;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {font_px(FONT_BASE)}px;
+    font-weight: 650;
+    padding: {px(12)}px {px(14)}px;
+    text-align: left;
+}}
+QPushButton#onboardingPresetCard:hover {{
+    background-color: {COLOR_CARD_ALT};
+    border-color: {COLOR_BORDER_HOVER};
+}}
+QPushButton#onboardingPresetCard:checked {{
+    background-color: {COLOR_CARD_ALT};
+    border-color: {COLOR_ACCENT};
+    color: {COLOR_TEXT};
 }}
 QWidget#onboardingCountryChipHost {{
     background-color: transparent;
@@ -332,7 +463,9 @@ class OnboardingAutofillDialog(QDialog):
         self._ui_language = "en" if str(ui_language or "").casefold().startswith("en") else "ru"
         self._ui_scale = normalize_ui_scale(get_ui_scale())
         self._answers: dict[str, Any] = {}
+        self._apply_preset_defaults(PRESET_MANUAL)
         self._question_pages: list[tuple[_Question, QWidget, QButtonGroup]] = []
+        self._preset_group: QButtonGroup | None = None
         self._worker: OnboardingAutofillWorker | None = None
         self._fade_animation: QPropertyAnimation | None = None
         self._last_result: dict[str, Any] = {}
@@ -369,6 +502,8 @@ class OnboardingAutofillDialog(QDialog):
 
         self._setup_page = self._build_setup_page()
         self._stack.addWidget(self._setup_page)
+        self._preset_page = self._build_preset_page()
+        self._stack.addWidget(self._preset_page)
         for question in self._active_questions():
             self._add_question_page(question)
         self._plan_page = self._build_plan_page()
@@ -413,6 +548,38 @@ class OnboardingAutofillDialog(QDialog):
         self._resize_for_launch()
         super().showEvent(event)
 
+    def _current_preset_key(self) -> str:
+        key = str(self._answers.get("taste_preset") or PRESET_MANUAL).strip()
+        return key if key in _PRESET_CARDS_BY_KEY else PRESET_MANUAL
+
+    def _preset_title(self, key: str) -> str:
+        card = _PRESET_CARDS_BY_KEY.get(key) or _PRESET_CARDS_BY_KEY[PRESET_MANUAL]
+        return self._text(card.title_ru, card.title_en)
+
+    def _preset_card_text(self, card: _PresetCard) -> str:
+        return f"{self._text(card.title_ru, card.title_en)}\n{self._text(card.description_ru, card.description_en)}"
+
+    def _apply_preset_defaults(self, key: str) -> None:
+        preset_key = str(key or PRESET_MANUAL).strip()
+        self._answers["taste_preset"] = preset_key if preset_key in _PRESET_CARDS_BY_KEY else PRESET_MANUAL
+        preset = get_taste_preset(self._answers["taste_preset"])
+        if preset is None:
+            self._answers.update({
+                "country_selection": list(ONBOARDING_COUNTRY_DEFAULT),
+                "media_preference": "both",
+                "animation_mode": ANIMATION_MODE_ANY,
+                "release_preference": "mixed",
+                "vibe_preference": "mixed",
+            })
+            return
+        self._answers.update({
+            "country_selection": list(preset.countries[:ONBOARDING_COUNTRY_PICKER_LIMIT]),
+            "media_preference": preset.media_type,
+            "animation_mode": preset.animation_mode,
+            "release_preference": preset.release_preference,
+            "vibe_preference": preset.vibe,
+        })
+
     def _active_questions(self) -> list[_Question]:
         return list(_QUESTIONS)
 
@@ -442,18 +609,32 @@ class OnboardingAutofillDialog(QDialog):
         else:
             items = []
         selected: list[str] = []
-        allowed = set(ONBOARDING_COUNTRY_CODES)
+        preset = get_taste_preset(self._current_preset_key())
+        preset_countries = tuple(preset.countries) if preset is not None else ()
+        allowed = set(ONBOARDING_COUNTRY_CODES) | set(preset_countries)
         for item in items:
             code = str(item or "").strip().upper()
             if code in allowed and code not in selected:
                 selected.append(code)
+            if len(selected) >= ONBOARDING_COUNTRY_PICKER_LIMIT:
+                break
         return selected or list(ONBOARDING_COUNTRY_DEFAULT)
+
+    def _country_option_codes(self) -> tuple[str, ...]:
+        result: list[str] = []
+        for code in [*self._selected_country_codes(), *ONBOARDING_COUNTRY_CODES]:
+            normalized = str(code or "").strip().upper()
+            if normalized and normalized not in result:
+                result.append(normalized)
+            if len(result) >= ONBOARDING_COUNTRY_PICKER_LIMIT:
+                break
+        return tuple(result)
 
     def _selected_country_codes(self) -> list[str]:
         return self._normalized_country_answers()
 
     def _question_start_index(self) -> int:
-        return 1
+        return 2
 
     def _plan_index(self) -> int:
         return self._question_start_index() + len(self._question_pages)
@@ -570,6 +751,63 @@ class OnboardingAutofillDialog(QDialog):
         self._update_setup_text()
         return page
 
+    def _build_preset_page(self) -> QWidget:
+        page = QWidget()
+        page.setObjectName("onboardingPage")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(scale_px(SPACING_LARGE))
+
+        eyebrow = QLabel(self._text("РЎС‚Р°СЂС‚РѕРІС‹Р№ РїСЂРµСЃРµС‚", "Starter preset"))
+        eyebrow.setObjectName("onboardingEyebrow")
+        layout.addWidget(eyebrow)
+
+        title = QLabel(self._text("Р’С‹Р±РµСЂРёС‚Рµ РЅР°РїСЂР°РІР»РµРЅРёРµ РїСѓР»Р°", "Choose the starter pool direction"))
+        title.setObjectName("onboardingTitle")
+        title.setWordWrap(True)
+        layout.addWidget(title)
+
+        subtitle = QLabel(self._text(
+            "РџСЂРµСЃРµС‚ Р·Р°РґР°С‘С‚ СЃС‚СЂР°РЅС‹, С‚РёРї РјРµРґРёР°, Р°РЅРёРјР°С†РёСЋ Рё РІР°Р№Р±. РќР° СЃР»РµРґСѓСЋС‰РёС… С€Р°РіР°С… РІСЃС‘ РјРѕР¶РЅРѕ РёР·РјРµРЅРёС‚СЊ.",
+            "A preset fills countries, media type, animation mode and vibe. You can edit everything next.",
+        ))
+        subtitle.setObjectName("onboardingSubtitle")
+        subtitle.setWordWrap(True)
+        layout.addWidget(subtitle)
+
+        scroll = QScrollArea()
+        scroll.setObjectName("onboardingPresetScroll")
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        viewport = QWidget()
+        viewport.setObjectName("onboardingPresetViewport")
+        grid = QGridLayout(viewport)
+        grid.setContentsMargins(0, 0, scale_px(4), 0)
+        grid.setHorizontalSpacing(scale_px(SPACING_MEDIUM))
+        grid.setVerticalSpacing(scale_px(SPACING_MEDIUM))
+
+        self._preset_group = QButtonGroup(self)
+        self._preset_group.setExclusive(True)
+        for index, card in enumerate(_PRESET_CARDS):
+            button = QPushButton(self._preset_card_text(card))
+            button.setObjectName("onboardingPresetCard")
+            button.setCheckable(True)
+            button.setProperty("answer", card.key)
+            button.setProperty("preset_key", card.key)
+            button.setMinimumHeight(scale_px(76))
+            button.setMinimumWidth(scale_px(280))
+            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            button.setChecked(card.key == self._current_preset_key())
+            self._preset_group.addButton(button)
+            grid.addWidget(button, index // 2, index % 2)
+        self._preset_group.buttonClicked.connect(self._on_preset_selected)
+
+        scroll.setWidget(viewport)
+        layout.addWidget(scroll, 1)
+        return page
+
     def _update_setup_text(self) -> None:
         if hasattr(self, "_setup_eyebrow"):
             self._setup_eyebrow.setText(self._text("Первый запуск", "First launch"))
@@ -638,6 +876,17 @@ class OnboardingAutofillDialog(QDialog):
             self._stack.removeWidget(widget)
             widget.deleteLater()
         self._question_pages.clear()
+        self._preset_page = self._build_preset_page()
+        self._stack.addWidget(self._preset_page)
+        self._rebuild_edit_pages(current_index=current)
+
+    def _rebuild_edit_pages(self, *, current_index: int | None = None) -> None:
+        current = self._stack.currentIndex() if current_index is None else current_index
+        while self._stack.count() > self._question_start_index():
+            widget = self._stack.widget(self._question_start_index())
+            self._stack.removeWidget(widget)
+            widget.deleteLater()
+        self._question_pages.clear()
         for question in self._active_questions():
             self._add_question_page(question)
         self._plan_page = self._build_plan_page()
@@ -694,7 +943,7 @@ class OnboardingAutofillDialog(QDialog):
                 v_spacing=scale_px(SPACING_SMALL),
             )
             chips_host.setLayout(flow)
-            for code in ONBOARDING_COUNTRY_CODES:
+            for code in self._country_option_codes():
                 button = QPushButton(self._country_name(code))
                 button.setObjectName("onboardingCountryChip")
                 button.setCheckable(True)
@@ -706,6 +955,7 @@ class OnboardingAutofillDialog(QDialog):
                 flow.addWidget(button)
             options_layout.addWidget(chips_host)
         else:
+            selected_value = str(self._answers.get(question.key) or "").strip()
             for value, label_ru, label_en in question.options:
                 button = QPushButton(self._text(label_ru, label_en))
                 button.setObjectName("onboardingOption")
@@ -713,6 +963,7 @@ class OnboardingAutofillDialog(QDialog):
                 button.setProperty("answer", value)
                 button.setMinimumHeight(scale_px(58))
                 button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+                button.setChecked(value == selected_value)
                 group.addButton(button)
                 options_layout.addWidget(button)
         layout.addLayout(options_layout)
@@ -839,12 +1090,24 @@ class OnboardingAutofillDialog(QDialog):
         layout.addLayout(actions)
         return page
 
+    def _answer_label(self, key: str, value: Any) -> str:
+        normalized = str(value or "").strip()
+        for question in _QUESTIONS:
+            if question.key != key:
+                continue
+            for option_value, label_ru, label_en in question.options:
+                if option_value == normalized:
+                    return self._text(label_ru, label_en)
+        return normalized or "-"
+
     def _format_plan_summary(self) -> str:
-        plan = candidate_service.get_onboarding_autofill_plan_view(self._profile())
+        profile = self._profile()
+        plan = candidate_service.get_onboarding_autofill_plan_view(profile)
         quotas = plan.get("quotas") or {}
         media = quotas.get("media_type") or {}
         release = quotas.get("release") or {}
         vibe = quotas.get("vibe") or {}
+        preset_key = str(profile.get("taste_preset") or PRESET_MANUAL)
         country_plan = plan.get("country_plan") if isinstance(plan.get("country_plan"), dict) else {}
         country_counts = country_plan or quotas.get("country") or {}
         country_line = ", ".join(
@@ -852,6 +1115,26 @@ class OnboardingAutofillDialog(QDialog):
             for country, count in country_counts.items()
         )
         lines = [
+            self._text(
+                f"Пресет: {self._preset_title(preset_key)} ({preset_key})",
+                f"Preset: {self._preset_title(preset_key)} ({preset_key})",
+            ),
+            self._text(
+                f"Медиа: {self._answer_label('media_preference', profile.get('media_preference'))}",
+                f"Media: {self._answer_label('media_preference', profile.get('media_preference'))}",
+            ),
+            self._text(
+                f"Анимация: {self._answer_label('animation_mode', profile.get('animation_mode'))}",
+                f"Animation: {self._answer_label('animation_mode', profile.get('animation_mode'))}",
+            ),
+            self._text(
+                f"Релиз: {self._answer_label('release_preference', profile.get('release_preference'))}",
+                f"Release: {self._answer_label('release_preference', profile.get('release_preference'))}",
+            ),
+            self._text(
+                f"Вайб: {self._answer_label('vibe_preference', profile.get('vibe_preference'))}",
+                f"Vibe: {self._answer_label('vibe_preference', profile.get('vibe_preference'))}",
+            ),
             self._text(f"Цель: {plan.get('target')} кандидатов", f"Target: {plan.get('target')} candidates"),
             self._text(f"Страны: {country_line or '-'}", f"Countries: {country_line or '-'}"),
             self._text(f"Фильмы: {media.get('movie', 0)}, сериалы: {media.get('tv', 0)}", f"Movies: {media.get('movie', 0)}, series: {media.get('tv', 0)}"),
@@ -1011,6 +1294,12 @@ class OnboardingAutofillDialog(QDialog):
         question, _page, group = self._question_pages[index]
         return question, group
 
+    def _on_preset_selected(self, button: QPushButton) -> None:
+        preset_key = str(button.property("answer") or PRESET_MANUAL).strip()
+        self._apply_preset_defaults(preset_key)
+        self._rebuild_edit_pages(current_index=self._stack.currentIndex())
+        self._sync_controls()
+
     def _on_option_selected(self, key: str) -> None:
         current = self._current_question()
         if current is None:
@@ -1034,9 +1323,11 @@ class OnboardingAutofillDialog(QDialog):
         self._back_button.setEnabled(index > 0 and not loading_or_final)
         current = self._current_question()
         on_setup = index == 0
+        on_preset = index == 1
         on_plan = index == self._plan_index()
         self._next_button.setEnabled(
             on_setup
+            or on_preset
             or on_plan
             or (current is not None and self._selected_answer(current[0], current[1]) is not None)
         )
@@ -1054,6 +1345,9 @@ class OnboardingAutofillDialog(QDialog):
         index = self._stack.currentIndex()
         if index == 0:
             self._set_page(1)
+            return
+        if index == 1:
+            self._set_page(self._question_start_index())
             return
         if index == self._plan_index():
             self._start_autofill()
@@ -1078,7 +1372,7 @@ class OnboardingAutofillDialog(QDialog):
             "selected_countries": countries,
             "country_weights": {country: weight for country in countries},
             "exclude_home_country": False,
-            "max_countries": len(ONBOARDING_COUNTRY_CODES),
+            "max_countries": ONBOARDING_COUNTRY_PICKER_LIMIT,
             "primary_country": countries[0],
             "secondary_country": countries[1] if len(countries) > 1 else None,
         }
@@ -1095,8 +1389,10 @@ class OnboardingAutofillDialog(QDialog):
         else:
             origin_preference = None
         return {
+            "taste_preset": self._current_preset_key(),
             "ui_language": self._ui_language,
             "media_preference": self._answers.get("media_preference") or "both",
+            "animation_mode": self._answers.get("animation_mode") or ANIMATION_MODE_ANY,
             "release_preference": self._answers.get("release_preference") or "mixed",
             "vibe_preference": self._answers.get("vibe_preference") or "mixed",
             "origin_preference": origin_preference,

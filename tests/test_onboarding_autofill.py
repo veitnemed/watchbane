@@ -30,6 +30,7 @@ from candidates.onboarding.taste_presets import (
     PRESET_ANIME,
     PRESET_FAMILY_ANIMATION,
     PRESET_K_DRAMA,
+    PRESET_MANUAL,
     PRESET_TURKISH_DRAMAS,
     taste_preset_to_profile_payload,
 )
@@ -392,19 +393,76 @@ def test_country_first_sweep_blocks_broad_origin_and_vote_filters() -> None:
     assert "vote_average.gte" not in base
 
 
-def test_onboarding_wizard_starts_with_country_question_for_all_languages(qapp) -> None:
+def test_onboarding_wizard_starts_with_setup_preset_then_editable_questions(qapp) -> None:
     from desktop.onboarding import OnboardingAutofillDialog
 
     ru_dialog = OnboardingAutofillDialog(ui_language="ru")
     en_dialog = OnboardingAutofillDialog(ui_language="en")
     try:
-        assert len(ru_dialog._active_questions()) == 4
-        assert len(en_dialog._active_questions()) == 4
+        assert len(ru_dialog._active_questions()) == 5
+        assert len(en_dialog._active_questions()) == 5
+        assert ru_dialog._stack.currentIndex() == 0
+        ru_dialog._go_next()
+        assert ru_dialog._stack.currentIndex() == 1
+        ru_dialog._go_next()
+        assert ru_dialog._stack.currentIndex() == ru_dialog._question_start_index()
         assert ru_dialog._active_questions()[0].key == "country_selection"
+        assert ru_dialog._active_questions()[2].key == "animation_mode"
         assert en_dialog._active_questions()[0].key == "country_selection"
     finally:
         ru_dialog.close()
         en_dialog.close()
+
+
+def test_onboarding_wizard_preset_card_labels_are_localized(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    en_dialog = OnboardingAutofillDialog(ui_language="en")
+    ru_dialog = OnboardingAutofillDialog(ui_language="ru")
+    try:
+        en_labels = [button.text() for button in en_dialog._preset_group.buttons()]
+        ru_labels = [button.text() for button in ru_dialog._preset_group.buttons()]
+
+        assert any("Anime" in label and "Japan" in label for label in en_labels)
+        assert any("Manual" in label and "Choose countries" in label for label in en_labels)
+        assert not any("Anime" in label for label in ru_labels)
+    finally:
+        en_dialog.close()
+        ru_dialog.close()
+
+
+def test_onboarding_wizard_anime_preset_sets_profile_defaults(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="en")
+    try:
+        buttons = {button.property("answer"): button for button in dialog._preset_group.buttons()}
+        buttons[PRESET_ANIME].click()
+        profile = dialog._profile()
+
+        assert profile["taste_preset"] == PRESET_ANIME
+        assert profile["country_selection"]["selected_countries"] == ["JP"]
+        assert profile["animation_mode"] == ANIMATION_MODE_ANIMATION_ONLY
+        assert profile["media_preference"] == "both"
+    finally:
+        dialog.close()
+
+
+def test_onboarding_wizard_k_drama_preset_sets_profile_defaults(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="en")
+    try:
+        buttons = {button.property("answer"): button for button in dialog._preset_group.buttons()}
+        buttons[PRESET_K_DRAMA].click()
+        profile = dialog._profile()
+
+        assert profile["taste_preset"] == PRESET_K_DRAMA
+        assert profile["country_selection"]["selected_countries"] == ["KR"]
+        assert profile["animation_mode"] == ANIMATION_MODE_LIVE_ACTION_ONLY
+        assert profile["media_preference"] == "tv"
+    finally:
+        dialog.close()
 
 
 def test_onboarding_wizard_profile_contains_explicit_country_selection(qapp) -> None:
@@ -453,7 +511,7 @@ def test_onboarding_wizard_country_buttons_are_multi_select(qapp) -> None:
 
     dialog = OnboardingAutofillDialog(ui_language="ru")
     try:
-        dialog._set_page(1)
+        dialog._set_page(dialog._question_start_index())
         group = dialog._question_pages[0][2]
         buttons = {button.property("answer"): button for button in group.buttons()}
 
@@ -464,6 +522,21 @@ def test_onboarding_wizard_country_buttons_are_multi_select(qapp) -> None:
 
         assert dialog._answers["country_selection"] == ["US", "RU", "GB"]
         assert dialog._selected_answer(dialog._question_pages[0][0], group) == ["US", "RU", "GB"]
+    finally:
+        dialog.close()
+
+
+def test_onboarding_wizard_manual_preset_keeps_five_country_picker_limit(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="en")
+    try:
+        buttons = {button.property("answer"): button for button in dialog._preset_group.buttons()}
+        buttons[PRESET_MANUAL].click()
+        group = dialog._question_pages[0][2]
+
+        assert len(group.buttons()) == 5
+        assert dialog._country_selection_payload()["max_countries"] == 5
     finally:
         dialog.close()
 
@@ -538,6 +611,24 @@ def test_onboarding_wizard_plan_summary_localizes_country_counts(qapp) -> None:
         assert "Страны: США: 60, Великобритания: 60" in summary
         assert "US:" not in summary
         assert "GB:" not in summary
+    finally:
+        dialog.close()
+
+
+def test_onboarding_wizard_plan_summary_shows_preset_axes(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="en")
+    try:
+        buttons = {button.property("answer"): button for button in dialog._preset_group.buttons()}
+        buttons[PRESET_ANIME].click()
+        summary = dialog._format_plan_summary()
+
+        assert "Preset: Anime (anime)" in summary
+        assert "Countries: Japan: 120" in summary
+        assert "Media: No preference" in summary
+        assert "Animation: Animation only" in summary
+        assert "Movies: 60, series: 60" in summary
     finally:
         dialog.close()
 
