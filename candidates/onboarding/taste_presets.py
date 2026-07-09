@@ -37,21 +37,44 @@ RELEASE_NEW = "new"
 RELEASE_MIXED = "mixed"
 RELEASE_PREFERENCES = frozenset({RELEASE_CLASSIC, RELEASE_NEW, RELEASE_MIXED})
 
+GENRE_GROUP_ACTION_ADVENTURE = "action_adventure"
+GENRE_GROUP_ADVENTURE = "adventure"
 GENRE_GROUP_ANIME = "anime"
 GENRE_GROUP_DRAMA = "drama"
 GENRE_GROUP_ROMANCE = "romance"
-GENRE_GROUP_ACTION = "action"
 GENRE_GROUP_COMEDY = "comedy"
+GENRE_GROUP_CRIME = "crime"
+GENRE_GROUP_DETECTIVE = "detective"
+GENRE_GROUP_FAMILY = "family"
+GENRE_GROUP_FANTASY = "fantasy"
+GENRE_GROUP_HORROR = "horror"
+GENRE_GROUP_MYSTERY = "mystery"
+GENRE_GROUP_THRILLER = "thriller"
 GENRE_GROUPS = frozenset({
+    GENRE_GROUP_ACTION_ADVENTURE,
+    GENRE_GROUP_ADVENTURE,
     GENRE_GROUP_ANIME,
     GENRE_GROUP_DRAMA,
     GENRE_GROUP_ROMANCE,
-    GENRE_GROUP_ACTION,
     GENRE_GROUP_COMEDY,
+    GENRE_GROUP_CRIME,
+    GENRE_GROUP_DETECTIVE,
+    GENRE_GROUP_FAMILY,
+    GENRE_GROUP_FANTASY,
+    GENRE_GROUP_HORROR,
+    GENRE_GROUP_MYSTERY,
+    GENRE_GROUP_THRILLER,
 })
 
+PRESET_HOLLYWOOD_MAINSTREAM = "hollywood_mainstream"
+PRESET_RUSSIAN_MAINSTREAM = "russian_mainstream"
 PRESET_ANIME = "anime"
 PRESET_K_DRAMA = "k_drama"
+PRESET_TURKISH_DRAMAS = "turkish_dramas"
+PRESET_BRITISH_EUROPEAN_DETECTIVE = "british_european_detective"
+PRESET_FAMILY_ANIMATION = "family_animation"
+PRESET_DARK_THRILLER_CRIME = "dark_thriller_crime"
+PRESET_MANUAL = "manual"
 
 
 def normalize_country_codes(
@@ -148,12 +171,38 @@ class TastePreset:
 
 
 PRESETS: dict[str, TastePreset] = {
+    PRESET_HOLLYWOOD_MAINSTREAM: TastePreset(
+        preset_id=PRESET_HOLLYWOOD_MAINSTREAM,
+        media_type=MEDIA_TYPE_BOTH,
+        animation_mode=ANIMATION_MODE_ANY,
+        countries=("US",),
+        genre_groups=(GENRE_GROUP_ACTION_ADVENTURE, GENRE_GROUP_COMEDY, GENRE_GROUP_DRAMA),
+        vibe=VIBE_MIXED,
+        release_preference=RELEASE_MIXED,
+        home_country="US",
+    ),
+    PRESET_RUSSIAN_MAINSTREAM: TastePreset(
+        preset_id=PRESET_RUSSIAN_MAINSTREAM,
+        media_type=MEDIA_TYPE_BOTH,
+        animation_mode=ANIMATION_MODE_ANY,
+        countries=("RU",),
+        genre_groups=(GENRE_GROUP_DRAMA, GENRE_GROUP_COMEDY, GENRE_GROUP_CRIME),
+        vibe=VIBE_MIXED,
+        release_preference=RELEASE_MIXED,
+        home_country="RU",
+    ),
     PRESET_ANIME: TastePreset(
         preset_id=PRESET_ANIME,
         media_type=MEDIA_TYPE_BOTH,
         animation_mode=ANIMATION_MODE_ANIMATION_ONLY,
         countries=("JP",),
-        genre_groups=(GENRE_GROUP_ANIME,),
+        genre_groups=(
+            GENRE_GROUP_ACTION_ADVENTURE,
+            GENRE_GROUP_FANTASY,
+            GENRE_GROUP_DRAMA,
+            GENRE_GROUP_ROMANCE,
+            GENRE_GROUP_COMEDY,
+        ),
         vibe=VIBE_MIXED,
         release_preference=RELEASE_MIXED,
         home_country="US",
@@ -163,7 +212,53 @@ PRESETS: dict[str, TastePreset] = {
         media_type=MEDIA_TYPE_TV,
         animation_mode=ANIMATION_MODE_LIVE_ACTION_ONLY,
         countries=("KR",),
-        genre_groups=(GENRE_GROUP_DRAMA, GENRE_GROUP_ROMANCE),
+        genre_groups=(
+            GENRE_GROUP_DRAMA,
+            GENRE_GROUP_ROMANCE,
+            GENRE_GROUP_COMEDY,
+            GENRE_GROUP_CRIME,
+            GENRE_GROUP_THRILLER,
+        ),
+        vibe=VIBE_MIXED,
+        release_preference=RELEASE_MIXED,
+        home_country="US",
+    ),
+    PRESET_TURKISH_DRAMAS: TastePreset(
+        preset_id=PRESET_TURKISH_DRAMAS,
+        media_type=MEDIA_TYPE_TV,
+        animation_mode=ANIMATION_MODE_LIVE_ACTION_ONLY,
+        countries=("TR",),
+        genre_groups=(GENRE_GROUP_DRAMA, GENRE_GROUP_ROMANCE, GENRE_GROUP_FAMILY),
+        vibe=VIBE_MIXED,
+        release_preference=RELEASE_MIXED,
+        home_country="US",
+    ),
+    PRESET_BRITISH_EUROPEAN_DETECTIVE: TastePreset(
+        preset_id=PRESET_BRITISH_EUROPEAN_DETECTIVE,
+        media_type=MEDIA_TYPE_TV,
+        animation_mode=ANIMATION_MODE_LIVE_ACTION_ONLY,
+        countries=("GB", "FR", "DE", "IT", "ES"),
+        genre_groups=(GENRE_GROUP_DETECTIVE, GENRE_GROUP_CRIME, GENRE_GROUP_MYSTERY, GENRE_GROUP_THRILLER),
+        vibe=VIBE_DARK,
+        release_preference=RELEASE_MIXED,
+        home_country="US",
+    ),
+    PRESET_FAMILY_ANIMATION: TastePreset(
+        preset_id=PRESET_FAMILY_ANIMATION,
+        media_type=MEDIA_TYPE_BOTH,
+        animation_mode=ANIMATION_MODE_ANIMATION_ONLY,
+        countries=("US", "JP", "RU"),
+        genre_groups=(GENRE_GROUP_FAMILY, GENRE_GROUP_COMEDY, GENRE_GROUP_ADVENTURE, GENRE_GROUP_FANTASY),
+        vibe=VIBE_LIGHT,
+        release_preference=RELEASE_MIXED,
+        home_country="US",
+    ),
+    PRESET_DARK_THRILLER_CRIME: TastePreset(
+        preset_id=PRESET_DARK_THRILLER_CRIME,
+        media_type=MEDIA_TYPE_BOTH,
+        animation_mode=ANIMATION_MODE_ANY,
+        countries=("US", "GB", "KR", "JP", "RU"),
+        genre_groups=(GENRE_GROUP_CRIME, GENRE_GROUP_MYSTERY, GENRE_GROUP_THRILLER, GENRE_GROUP_HORROR, GENRE_GROUP_DRAMA),
         vibe=VIBE_MIXED,
         release_preference=RELEASE_MIXED,
         home_country="US",
@@ -174,6 +269,31 @@ PRESETS: dict[str, TastePreset] = {
 def get_taste_preset(preset_id: str) -> TastePreset | None:
     preset = PRESETS.get(str(preset_id or "").strip())
     return preset.normalized() if preset is not None else None
+
+
+def taste_preset_to_profile_payload(
+    preset_id: str,
+    overrides: dict[str, Any] | None = None,
+    *,
+    ui_language: str = "en",
+) -> dict[str, Any]:
+    """Return current onboarding profile payload for a preset key."""
+    overrides = dict(overrides or {})
+    preset = get_taste_preset(preset_id)
+    if preset is None or preset.preset_id == PRESET_MANUAL:
+        countries = overrides.pop("countries", None) or overrides.pop("selected_countries", None) or ("US",)
+        preset = manual_taste_preset(
+            countries,
+            media_type=overrides.pop("media_type", MEDIA_TYPE_BOTH),
+            animation_mode=overrides.pop("animation_mode", ANIMATION_MODE_ANY),
+            genre_groups=overrides.pop("genre_groups", ()),
+            vibe=overrides.pop("vibe", VIBE_MIXED),
+            release_preference=overrides.pop("release_preference", RELEASE_MIXED),
+            home_country=overrides.pop("home_country", DEFAULT_HOME_COUNTRY),
+        )
+    payload = preset.to_profile_kwargs(ui_language=str(overrides.pop("ui_language", ui_language)))
+    payload.update(overrides)
+    return payload
 
 
 def manual_taste_preset(

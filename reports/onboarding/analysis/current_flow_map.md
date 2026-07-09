@@ -89,3 +89,20 @@ Step `002` adds a small serializable domain contract in
   `animation_mode="live_action_only"`, and `media_type="tv"`.
 - `to_profile_kwargs()` bridges presets to the current `OnboardingTasteProfile`
   constructor without changing Discover behavior.
+
+## Starter presets added
+
+Step `003` expands the contract into the starter preset catalog and adds
+`taste_preset_to_profile_payload()`.
+
+| Preset | Countries | Animation mode | Media | Genre groups |
+| --- | --- | --- | --- | --- |
+| `hollywood_mainstream` | `US` | `any` | `both` | `action_adventure`, `comedy`, `drama` |
+| `russian_mainstream` | `RU` | `any` | `both` | `drama`, `comedy`, `crime` |
+| `anime` | `JP` | `animation_only` | `both` | `action_adventure`, `fantasy`, `drama`, `romance`, `comedy` |
+| `k_drama` | `KR` | `live_action_only` | `tv` | `drama`, `romance`, `comedy`, `crime`, `thriller` |
+| `turkish_dramas` | `TR` | `live_action_only` | `tv` | `drama`, `romance`, `family` |
+| `british_european_detective` | `GB`, `FR`, `DE`, `IT`, `ES` | `live_action_only` | `tv` | `detective`, `crime`, `mystery`, `thriller` |
+| `family_animation` | `US`, `JP`, `RU` | `animation_only` | `both` | `family`, `comedy`, `adventure`, `fantasy` |
+| `dark_thriller_crime` | `US`, `GB`, `KR`, `JP`, `RU` | `any` | `both` | `crime`, `mystery`, `thriller`, `horror`, `drama` |
+| `manual` | picker payload, capped at 5 | override or `any` | override or `both` | override |
