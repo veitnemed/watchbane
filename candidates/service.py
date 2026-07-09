@@ -253,6 +253,7 @@ def build_onboarding_candidate_pool(
         "planned_counts": result.planned_counts,
         "actual_counts": result.actual_counts,
         "rejected_future_count": result.rejected_future_count,
+        "duplicate_requests_skipped": result.duplicate_requests_skipped,
         "candidates": result.candidates,
     }
 

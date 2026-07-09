@@ -23,6 +23,8 @@ if str(ROOT_DIR) not in sys.path:
 from apis import tmdb_api
 from candidates.onboarding import autofill
 from candidates.onboarding.autofill import MEDIA_MOVIE, MEDIA_TV, OnboardingTasteProfile
+from candidates.models import country_schema
+from storage.sqlite.onboarding_repository import load_autofill_request_audits
 
 
 MOVIE_GENRES = [
@@ -50,27 +52,145 @@ TV_GENRES = [
 ]
 
 
+def _country_selection(
+    *,
+    mode: str,
+    home_country: str,
+    selected_countries: list[str],
+    country_weights: dict[str, float],
+    exclude_home_country: bool = False,
+) -> dict[str, Any]:
+    return {
+        "mode": mode,
+        "home_country": home_country,
+        "selected_countries": selected_countries,
+        "country_weights": country_weights,
+        "exclude_home_country": exclude_home_country,
+        "max_countries": len(selected_countries),
+        "primary_country": selected_countries[0] if selected_countries else None,
+        "secondary_country": selected_countries[1] if len(selected_countries) > 1 else None,
+    }
+
+
+FOREIGN_RU_SELECTION = _country_selection(
+    mode="preset_foreign",
+    home_country="RU",
+    selected_countries=["US", "GB"],
+    country_weights={"US": 0.90, "GB": 0.10},
+    exclude_home_country=True,
+)
+
+
 SCENARIOS: dict[str, dict[str, Any]] = {
-    "ru-balanced": {
+    "ru-foreign-new-movies-us-gb": {
+        "ui_language": "ru",
+        "media_preference": "movie",
+        "release_preference": "new",
+        "vibe_preference": "mixed",
+        "origin_preference": "foreign",
+        "country_selection": FOREIGN_RU_SELECTION,
+    },
+    "ru-foreign-new-tv-us-gb": {
+        "ui_language": "ru",
+        "media_preference": "tv",
+        "release_preference": "new",
+        "vibe_preference": "mixed",
+        "origin_preference": "foreign",
+        "country_selection": FOREIGN_RU_SELECTION,
+    },
+    "ru-mixed-ru-us": {
         "ui_language": "ru",
         "media_preference": "both",
         "release_preference": "mixed",
         "vibe_preference": "mixed",
         "origin_preference": "mixed",
+        "country_selection": _country_selection(
+            mode="preset_mixed",
+            home_country="RU",
+            selected_countries=["RU", "US"],
+            country_weights={"RU": 0.15, "US": 0.85},
+        ),
     },
-    "ru-domestic-movie-classic-light": {
+    "ru-manual-us-kr": {
+        "ui_language": "ru",
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "foreign",
+        "country_selection": _country_selection(
+            mode="country_pair",
+            home_country="RU",
+            selected_countries=["US", "KR"],
+            country_weights={"US": 0.70, "KR": 0.30},
+        ),
+    },
+    "ru-manual-jp-kr": {
+        "ui_language": "ru",
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "foreign",
+        "country_selection": _country_selection(
+            mode="country_pair",
+            home_country="RU",
+            selected_countries=["JP", "KR"],
+            country_weights={"JP": 0.50, "KR": 0.50},
+        ),
+    },
+    "ru-domestic-ru-only": {
         "ui_language": "ru",
         "media_preference": "movie",
         "release_preference": "classic",
         "vibe_preference": "light",
         "origin_preference": "domestic",
+        "country_selection": _country_selection(
+            mode="single_country",
+            home_country="RU",
+            selected_countries=["RU"],
+            country_weights={"RU": 1.0},
+        ),
     },
-    "en-tv-new-dark": {
+    "en-country-pair-us-gb": {
         "ui_language": "en",
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": None,
+        "country_selection": _country_selection(
+            mode="country_pair",
+            home_country="US",
+            selected_countries=["US", "GB"],
+            country_weights={"US": 0.90, "GB": 0.10},
+        ),
+    },
+    "dark-new-tv-us-gb": {
+        "ui_language": "ru",
         "media_preference": "tv",
         "release_preference": "new",
         "vibe_preference": "dark",
-        "origin_preference": None,
+        "origin_preference": "foreign",
+        "country_selection": FOREIGN_RU_SELECTION,
+    },
+    "light-new-movies-us-gb": {
+        "ui_language": "ru",
+        "media_preference": "movie",
+        "release_preference": "new",
+        "vibe_preference": "light",
+        "origin_preference": "foreign",
+        "country_selection": FOREIGN_RU_SELECTION,
+    },
+    "classic-movies-fr-it": {
+        "ui_language": "ru",
+        "media_preference": "movie",
+        "release_preference": "classic",
+        "vibe_preference": "mixed",
+        "origin_preference": "foreign",
+        "country_selection": _country_selection(
+            mode="country_pair",
+            home_country="RU",
+            selected_countries=["FR", "IT"],
+            country_weights={"FR": 0.50, "IT": 0.50},
+        ),
     },
 }
 
@@ -96,6 +216,7 @@ class MockTmdbClient:
         genre_ids = [int(item) for item in genre_text.split("|") if item.isdigit()]
         if not genre_ids:
             genre_ids = [35] if media_type == MEDIA_MOVIE else [18]
+        country = str(params.get("with_origin_country") or "US")
         results = []
         for index in range(20):
             tmdb_id = call_index * 1000 + index
@@ -109,6 +230,7 @@ class MockTmdbClient:
                         "poster_path": f"/movie{tmdb_id}.jpg",
                         "overview": "Mock overview",
                         "genre_ids": genre_ids,
+                        "origin_country": [country],
                         "vote_average": 7.2,
                         "vote_count": 1200,
                         "popularity": 50,
@@ -122,7 +244,7 @@ class MockTmdbClient:
                         "name": f"Mock Series {tmdb_id}",
                         "original_name": f"Mock Series {tmdb_id}",
                         "first_air_date": f"{year}-01-01",
-                        "origin_country": ["RU"] if params.get("with_origin_country") == "RU" else ["US"],
+                        "origin_country": [country],
                         "poster_path": f"/series{tmdb_id}.jpg",
                         "overview": "Mock overview",
                         "genre_ids": genre_ids,
@@ -152,6 +274,85 @@ def _counter(candidates: list[dict[str, Any]], key: str) -> dict[str, int]:
     return dict(counter)
 
 
+def _candidate_country_codes(candidate: dict[str, Any]) -> list[str]:
+    return country_schema.normalize_country_filter_list(
+        candidate.get("country_codes")
+        or candidate.get("countries")
+        or candidate.get("target_country")
+    )
+
+
+def _country_metrics(candidates: list[dict[str, Any]], profile: dict[str, Any]) -> dict[str, Any]:
+    selection = profile.get("country_selection") if isinstance(profile.get("country_selection"), dict) else {}
+    selected = set(country_schema.normalize_country_filter_list(selection.get("selected_countries")))
+    home_country = country_schema.normalize_country_filter(selection.get("home_country")) or ""
+    exclude_home_country = bool(selection.get("exclude_home_country"))
+    hit_count = 0
+    leakage_count = 0
+    wrong_country_count = 0
+    country_actual: Counter[str] = Counter()
+
+    for candidate in candidates:
+        target_country = country_schema.normalize_country_filter(candidate.get("target_country"))
+        country_codes = _candidate_country_codes(candidate)
+        if target_country:
+            country_actual[target_country] += 1
+        if target_country in selected and (not country_codes or target_country in country_codes):
+            hit_count += 1
+        elif selected and not (set(country_codes) & selected):
+            wrong_country_count += 1
+        if exclude_home_country and home_country and home_country in country_codes:
+            leakage_count += 1
+
+    total = len(candidates)
+    return {
+        "country_actual": dict(country_actual),
+        "country_hit_count": hit_count,
+        "country_hit_rate": round(hit_count / total, 4) if total else 0.0,
+        "country_leakage_count": leakage_count,
+        "country_leakage_rate": round(leakage_count / total, 4) if total else 0.0,
+        "wrong_country_count": wrong_country_count,
+    }
+
+
+def _request_metrics(audits: list[dict[str, Any]]) -> dict[str, Any]:
+    unique_requests: set[str] = set()
+    without_country = 0
+    duplicate_skipped = 0
+    executed_count = 0
+    for audit in audits:
+        if audit.get("status") == "skipped_duplicate":
+            duplicate_skipped += 1
+            continue
+        executed_count += 1
+        params = dict(audit.get("params") or {})
+        params.pop("_fallback", None)
+        if "with_origin_country" not in params:
+            without_country += 1
+        unique_requests.add(json.dumps(
+            {"endpoint": audit.get("endpoint"), "params": params},
+            sort_keys=True,
+            ensure_ascii=False,
+        ))
+    return {
+        "requests_total": executed_count,
+        "requests_unique": len(unique_requests),
+        "requests_without_country": without_country,
+        "duplicate_requests_observed": max(0, executed_count - len(unique_requests)),
+        "duplicate_requests_skipped": duplicate_skipped,
+    }
+
+
+def _fallback_share(actual_counts: dict[str, dict[str, int]], total: int) -> float:
+    fallback_counts = actual_counts.get("fallback", {})
+    fallback_total = sum(
+        int(count)
+        for fallback, count in fallback_counts.items()
+        if fallback != autofill.FALLBACK_BASE
+    )
+    return round(fallback_total / total, 4) if total else 0.0
+
+
 def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_root: Path) -> dict[str, Any]:
     db_path = tmp_root / f"{name}.sqlite3"
     profile = OnboardingTasteProfile(**profile_data)
@@ -166,11 +367,15 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
     finished_at = datetime.now(timezone.utc)
     elapsed_ms = round((finished_at - started_at).total_seconds() * 1000, 1)
     candidates = result.candidates
+    normalized_profile = profile.normalized().as_repository_dict()
+    audits = load_autofill_request_audits(result.profile_id, path=db_path)
+    country_metrics = _country_metrics(candidates, normalized_profile)
+    request_metrics = _request_metrics(audits)
     return {
         "scenario": name,
         "mode": "live" if live else "mock",
         "db_path": str(db_path),
-        "profile": profile.normalized().as_repository_dict(),
+        "profile": normalized_profile,
         "ok": result.ok,
         "created_count": result.created_count,
         "pool_size": result.pool_size,
@@ -178,9 +383,13 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         "elapsed_ms": elapsed_ms,
         "planned_counts": result.planned_counts,
         "actual_counts": result.actual_counts,
+        "country_plan": result.planned_counts.get("country", {}),
+        **country_metrics,
+        **request_metrics,
         "warnings": result.warnings,
         "rejected_future_count": result.rejected_future_count,
         "top_fallback_counts": result.actual_counts.get("fallback", {}),
+        "fallback_share": _fallback_share(result.actual_counts, result.created_count),
         "candidate_media_counts": _counter(candidates, "media_type"),
         "candidate_origin_counts": _counter(candidates, "origin_bucket"),
     }
@@ -205,11 +414,20 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
                 f"- Created/pool: {result['created_count']} / {result['pool_size']}",
                 f"- API requests: {result['api_requests']}",
                 f"- Elapsed ms: {result['elapsed_ms']}",
+                f"- Country plan: `{result['country_plan']}`",
+                f"- Country actual: `{result['country_actual']}`",
+                f"- Country hit rate: {result['country_hit_rate']}",
+                f"- Country leakage: {result['country_leakage_count']} ({result['country_leakage_rate']})",
+                f"- Wrong country: {result['wrong_country_count']}",
+                f"- Requests unique/total: {result['requests_unique']} / {result['requests_total']}",
+                f"- Requests without country: {result['requests_without_country']}",
+                f"- Duplicate requests skipped: {result['duplicate_requests_skipped']}",
                 f"- Planned media: `{result['planned_counts'].get('media_type', {})}`",
                 f"- Actual media: `{result['actual_counts'].get('media_type', {})}`",
                 f"- Planned origin: `{result['planned_counts'].get('origin', {})}`",
                 f"- Actual origin: `{result['actual_counts'].get('origin', {})}`",
                 f"- Fallbacks: `{result['top_fallback_counts']}`",
+                f"- Fallback share: {result['fallback_share']}",
                 f"- Future rejected: {result['rejected_future_count']}",
                 f"- Warnings: `{result['warnings']}`",
                 "",

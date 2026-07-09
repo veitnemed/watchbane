@@ -42,6 +42,7 @@ class OnboardingAutofillWorker(QThread):
             cancelled=result.get("cancelled"),
             planned_counts=result.get("planned_counts"),
             actual_counts=result.get("actual_counts"),
+            duplicate_requests_skipped=result.get("duplicate_requests_skipped"),
             warning=result.get("warning"),
         )
         self.finished_with_result.emit(result)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
+import json
 import math
 from pathlib import Path
 from typing import Any, Callable, Protocol
@@ -420,6 +421,7 @@ class AutofillResult:
     planned_counts: dict[str, dict[str, int]]
     actual_counts: dict[str, dict[str, int]]
     rejected_future_count: int = 0
+    duplicate_requests_skipped: int = 0
 
 
 def _choice(value: Any, allowed: set[str], default: str) -> str:
@@ -960,6 +962,20 @@ def build_discover_request(
     return _endpoint(bucket.media_type), params
 
 
+def canonical_discover_request_key(endpoint: str, params: dict[str, Any]) -> str:
+    canonical_params = {
+        str(key): value
+        for key, value in params.items()
+        if not str(key).startswith("_")
+    }
+    return json.dumps(
+        {"endpoint": str(endpoint), "params": canonical_params},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
 def _discover_candidate_stub(result: dict[str, Any], media_type: str) -> dict[str, Any]:
     title_key, original_title_key = _title_field(media_type)
     date_key = _date_field(media_type)
@@ -1366,6 +1382,8 @@ def run_onboarding_autofill(
     api_requests = 0
     fetch_rank = 0
     rejected_future_count = 0
+    duplicate_requests_skipped = 0
+    executed_request_keys: set[str] = set()
 
     def is_cancelled() -> bool:
         return bool(cancel_checker is not None and cancel_checker())
@@ -1411,11 +1429,32 @@ def run_onboarding_autofill(
                     total_buckets=len(states),
                     fallback=fallback,
                 )
+                page = int(params.get("page") or 1)
+                request_key = canonical_discover_request_key(endpoint, params)
+                if request_key in executed_request_keys:
+                    duplicate_requests_skipped += 1
+                    save_autofill_request_audit(
+                        {
+                            "onboarding_profile_id": profile_id,
+                            "bucket_id": bucket.bucket_id,
+                            "endpoint": endpoint,
+                            "params": {**params, "_fallback": fallback},
+                            "page": page,
+                            "status": "skipped_duplicate",
+                            "accepted_count": 0,
+                            "rejected_count": 0,
+                            "error_text": None,
+                        },
+                        path=path,
+                    )
+                    state.request_index += 1
+                    progressed = True
+                    continue
+                executed_request_keys.add(request_key)
                 accepted_batch: list[dict[str, Any]] = []
                 rejected_count = 0
                 status = "ok"
                 error_text = None
-                page = int(params.get("page") or 1)
                 try:
                     payload = client.discover(endpoint, params)
                     api_requests += 1
@@ -1533,4 +1572,5 @@ def run_onboarding_autofill(
         planned_counts=planned_counts,
         actual_counts=actual_counts,
         rejected_future_count=rejected_future_count,
+        duplicate_requests_skipped=duplicate_requests_skipped,
     )

@@ -325,7 +325,7 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
             for row in conn.execute("SELECT media_type, COUNT(*) AS count FROM candidate_records GROUP BY media_type")
         }
         assert profile_count == 1
-        assert request_count == result.api_requests
+        assert request_count == result.api_requests + result.duplicate_requests_skipped
         assert candidate_count == autofill.STARTER_POOL_TARGET
         assert media_counts[MEDIA_MOVIE] == 60
         assert media_counts[MEDIA_TV] == 60
@@ -335,6 +335,8 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
         assert row["onboarding_profile_id"] == result.profile_id
         assert row["candidate_score"] > 0
         assert row["fetch_rank"] > 0
+        assert len(client.calls) == result.api_requests
+        assert len({autofill.canonical_discover_request_key(endpoint, params) for endpoint, params in client.calls}) == result.api_requests
     finally:
         conn.close()
 
@@ -481,6 +483,7 @@ def test_request_audit_rows_are_loadable(tmp_path, monkeypatch) -> None:
     audits = load_autofill_request_audits(result.profile_id, path=db_path)
 
     assert result.created_count == 0
-    assert len(audits) == result.api_requests
+    assert len(audits) == result.api_requests + result.duplicate_requests_skipped
+    assert sum(1 for audit in audits if audit["status"] == "skipped_duplicate") == result.duplicate_requests_skipped
     assert audits[0]["endpoint"] in {"/discover/movie", "/discover/tv"}
     assert isinstance(audits[0]["params"], dict)
