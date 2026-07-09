@@ -6,8 +6,12 @@ from datetime import date
 
 from candidates.onboarding import autofill
 from candidates.onboarding.autofill import (
+    ANIMATION_MODE_ANIMATION_ONLY,
+    ANIMATION_MODE_ANY,
+    ANIMATION_MODE_LIVE_ACTION_ONLY,
     MEDIA_MOVIE,
     MEDIA_TV,
+    TMDB_ANIMATION_GENRE_ID,
     OnboardingTasteProfile,
     build_country_plan,
     build_discover_request,
@@ -21,6 +25,13 @@ from candidates.onboarding.autofill import (
     resolve_tmdb_genre_ids,
     run_onboarding_autofill,
     vibe_weights,
+)
+from candidates.onboarding.taste_presets import (
+    PRESET_ANIME,
+    PRESET_FAMILY_ANIMATION,
+    PRESET_K_DRAMA,
+    PRESET_TURKISH_DRAMAS,
+    taste_preset_to_profile_payload,
 )
 from storage.sqlite.connection import connect
 from storage.sqlite.onboarding_repository import load_autofill_request_audits
@@ -175,6 +186,11 @@ def _quota_by(buckets, field: str) -> Counter:
     return result
 
 
+def _genre_filter_ids(params: dict, key: str) -> set[int]:
+    text = str(params.get(key) or "")
+    return {int(item) for item in text.replace("|", ",").split(",") if item.isdigit()}
+
+
 def test_media_preference_quota_weights_are_country_first_and_explicit() -> None:
     assert media_weights("movie") == {MEDIA_MOVIE: 1.0}
     assert media_weights("tv") == {MEDIA_TV: 1.0}
@@ -255,6 +271,92 @@ def test_multiple_include_genres_are_or_by_default_and_strict_when_explicit() ->
     bucket = build_fetch_buckets(strict)[0]
     _endpoint, params = build_discover_request(bucket, profile=strict, fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert params["with_genres"] == "18,9648,80"
+
+
+def test_animation_only_forces_animation_genre_without_or_leakage() -> None:
+    profile = _profile(animation_mode=ANIMATION_MODE_ANIMATION_ONLY, include_genres=[18, 80])
+    bucket = build_fetch_buckets(profile)[0]
+
+    _endpoint, params = build_discover_request(
+        bucket,
+        profile=profile,
+        fallback="base",
+        request_index=0,
+        current_year=2026,
+        current_date=date(2026, 7, 8),
+    )
+
+    assert params["with_genres"] == str(TMDB_ANIMATION_GENRE_ID)
+    assert "|" not in params["with_genres"]
+    assert "vote_count.gte" not in params
+    assert "vote_average.gte" not in params
+
+
+def test_live_action_only_excludes_animation_and_keeps_tv_junk_excludes() -> None:
+    profile = _profile(media_preference="tv", animation_mode=ANIMATION_MODE_LIVE_ACTION_ONLY)
+    bucket = build_fetch_buckets(profile)[0]
+
+    endpoint, params = build_discover_request(
+        bucket,
+        profile=profile,
+        fallback="base",
+        request_index=0,
+        current_year=2026,
+        current_date=date(2026, 7, 8),
+    )
+
+    assert endpoint == "/discover/tv"
+    excluded = _genre_filter_ids(params, "without_genres")
+    assert TMDB_ANIMATION_GENRE_ID in excluded
+    assert set(autofill.TV_JUNK_GENRE_IDS).issubset(excluded)
+    assert "vote_count.gte" not in params
+    assert "vote_average.gte" not in params
+
+
+def test_animation_any_does_not_force_or_exclude_animation() -> None:
+    profile = _profile(media_preference="movie", animation_mode=ANIMATION_MODE_ANY)
+    bucket = build_fetch_buckets(profile)[0]
+
+    _endpoint, params = build_discover_request(
+        bucket,
+        profile=profile,
+        fallback="base",
+        request_index=0,
+        current_year=2026,
+        current_date=date(2026, 7, 8),
+    )
+
+    assert "with_genres" not in params
+    assert TMDB_ANIMATION_GENRE_ID not in _genre_filter_ids(params, "without_genres")
+
+
+def test_starter_presets_feed_animation_mode_into_discover_contract() -> None:
+    expected = {
+        PRESET_ANIME: ("JP", ANIMATION_MODE_ANIMATION_ONLY, "both"),
+        PRESET_K_DRAMA: ("KR", ANIMATION_MODE_LIVE_ACTION_ONLY, "tv"),
+        PRESET_TURKISH_DRAMAS: ("TR", ANIMATION_MODE_LIVE_ACTION_ONLY, "tv"),
+        PRESET_FAMILY_ANIMATION: ("US", ANIMATION_MODE_ANIMATION_ONLY, "both"),
+    }
+
+    for preset_key, (country, animation_mode, media_preference) in expected.items():
+        profile = OnboardingTasteProfile(**taste_preset_to_profile_payload(preset_key)).normalized()
+        bucket = next(bucket for bucket in build_fetch_buckets(profile) if bucket.target_country == country)
+        _endpoint, params = build_discover_request(
+            bucket,
+            profile=profile,
+            fallback="base",
+            request_index=0,
+            current_year=2026,
+            current_date=date(2026, 7, 8),
+        )
+
+        assert profile.country_selection.selected_countries[0] == country
+        assert profile.animation_mode == animation_mode
+        assert profile.media_preference == media_preference
+        if animation_mode == ANIMATION_MODE_ANIMATION_ONLY:
+            assert params["with_genres"] == str(TMDB_ANIMATION_GENRE_ID)
+        else:
+            assert TMDB_ANIMATION_GENRE_ID in _genre_filter_ids(params, "without_genres")
 
 
 def test_discover_params_use_media_specific_contract() -> None:

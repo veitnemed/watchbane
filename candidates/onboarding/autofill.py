@@ -53,8 +53,12 @@ ORIGIN_FOREIGN = "foreign"
 VIBE_LIGHT = "light"
 VIBE_DARK = "dark"
 VIBE_MIXED = "mixed"
+ANIMATION_MODE_ANY = "any"
+ANIMATION_MODE_ANIMATION_ONLY = "animation_only"
+ANIMATION_MODE_LIVE_ACTION_ONLY = "live_action_only"
 INCLUDE_GENRE_MODE_OR = "or"
 INCLUDE_GENRE_MODE_AND = "and"
+TMDB_ANIMATION_GENRE_ID = 16
 TV_JUNK_GENRE_IDS = (10766, 10764, 10767, 10763, 10762, 99)
 
 COUNTRY_SELECTION_MODE_COUNTRY_PAIR = "country_pair"
@@ -341,6 +345,7 @@ class OnboardingTasteProfile:
     origin_preference: str | None
     ui_language: str
     country_selection: CountrySelection | dict[str, Any] | None = None
+    animation_mode: str = ANIMATION_MODE_ANY
     include_genres: tuple[int, ...] | list[int] | None = None
     include_genre_mode: str = INCLUDE_GENRE_MODE_OR
     exclude_genres: tuple[int, ...] | list[int] | None = None
@@ -354,6 +359,11 @@ class OnboardingTasteProfile:
         media_preference = _choice(self.media_preference, {"movie", "tv", "both"}, "both")
         release_preference = _choice(self.release_preference, {"classic", "new", "mixed"}, "mixed")
         vibe_preference = _choice(self.vibe_preference, {"light", "dark", "mixed"}, "mixed")
+        animation_mode = _choice(
+            self.animation_mode,
+            {ANIMATION_MODE_ANY, ANIMATION_MODE_ANIMATION_ONLY, ANIMATION_MODE_LIVE_ACTION_ONLY},
+            ANIMATION_MODE_ANY,
+        )
         include_genre_mode = _choice(self.include_genre_mode, {INCLUDE_GENRE_MODE_OR, INCLUDE_GENRE_MODE_AND}, INCLUDE_GENRE_MODE_OR)
         origin_preference = self.origin_preference
         if ui_language != "ru":
@@ -372,6 +382,7 @@ class OnboardingTasteProfile:
             origin_preference=origin_preference,
             ui_language=ui_language,
             country_selection=country_selection,
+            animation_mode=animation_mode,
             include_genres=_normalize_int_tuple(self.include_genres),
             include_genre_mode=include_genre_mode,
             exclude_genres=_normalize_int_tuple(self.exclude_genres),
@@ -908,6 +919,45 @@ def _endpoint(media_type: str) -> str:
     return "/discover/movie" if media_type == MEDIA_MOVIE else "/discover/tv"
 
 
+def _append_unique_genre_ids(*groups: tuple[int, ...]) -> tuple[int, ...]:
+    result: list[int] = []
+    for group in groups:
+        for genre_id in group:
+            value = int(genre_id)
+            if value > 0 and value not in result:
+                result.append(value)
+    return tuple(result)
+
+
+def _genre_filter_params(profile: OnboardingTasteProfile, bucket: CandidateFetchBucket) -> dict[str, str]:
+    include_genres = tuple(bucket.genre_ids or ())
+    excluded_genres = tuple(profile.exclude_genres or ())
+    if bucket.media_type == MEDIA_TV:
+        excluded_genres = _append_unique_genre_ids(excluded_genres, TV_JUNK_GENRE_IDS)
+
+    if profile.animation_mode == ANIMATION_MODE_ANIMATION_ONLY:
+        return {
+            "with_genres": str(TMDB_ANIMATION_GENRE_ID),
+            "without_genres": ",".join(
+                str(genre_id)
+                for genre_id in excluded_genres
+                if genre_id != TMDB_ANIMATION_GENRE_ID
+            ),
+        }
+
+    if profile.animation_mode == ANIMATION_MODE_LIVE_ACTION_ONLY:
+        include_genres = tuple(genre_id for genre_id in include_genres if genre_id != TMDB_ANIMATION_GENRE_ID)
+        excluded_genres = _append_unique_genre_ids(excluded_genres, (TMDB_ANIMATION_GENRE_ID,))
+
+    params: dict[str, str] = {}
+    if include_genres:
+        separator = "," if profile.include_genre_mode == INCLUDE_GENRE_MODE_AND else "|"
+        params["with_genres"] = separator.join(str(genre_id) for genre_id in include_genres)
+    if excluded_genres:
+        params["without_genres"] = ",".join(str(genre_id) for genre_id in excluded_genres)
+    return params
+
+
 def _year_field(media_type: str) -> str:
     return "primary_release_year" if media_type == MEDIA_MOVIE else "first_air_date_year"
 
@@ -998,15 +1048,11 @@ def build_discover_request(
     if bucket.target_country:
         params["with_origin_country"] = bucket.target_country
 
-    if bucket.genre_ids:
-        separator = "," if profile.include_genre_mode == INCLUDE_GENRE_MODE_AND else "|"
-        params["with_genres"] = separator.join(str(genre_id) for genre_id in bucket.genre_ids)
-
-    excluded_genres = tuple(profile.exclude_genres or ())
-    if bucket.media_type == MEDIA_TV and not excluded_genres:
-        excluded_genres = TV_JUNK_GENRE_IDS
-    if excluded_genres:
-        params["without_genres"] = ",".join(str(genre_id) for genre_id in excluded_genres)
+    params.update({
+        key: value
+        for key, value in _genre_filter_params(profile, bucket).items()
+        if value
+    })
     return _endpoint(bucket.media_type), params
 
 

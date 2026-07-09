@@ -160,6 +160,7 @@ class TastePreset:
         country_selection["mode"] = COUNTRY_SELECTION_MODE_CUSTOM
         return {
             "media_preference": normalized.media_type,
+            "animation_mode": normalized.animation_mode,
             "release_preference": normalized.release_preference,
             "vibe_preference": normalized.vibe,
             "origin_preference": None,

@@ -106,3 +106,17 @@ Step `003` expands the contract into the starter preset catalog and adds
 | `family_animation` | `US`, `JP`, `RU` | `animation_only` | `both` | `family`, `comedy`, `adventure`, `fantasy` |
 | `dark_thriller_crime` | `US`, `GB`, `KR`, `JP`, `RU` | `any` | `both` | `crime`, `mystery`, `thriller`, `horror`, `drama` |
 | `manual` | picker payload, capped at 5 | override or `any` | override or `both` | override |
+
+## Animation mode behavior
+
+Step `004` wires `animation_mode` into initial TMDb Discover params.
+
+| Mode | Discover behavior |
+| --- | --- |
+| `animation_only` | forces `with_genres=16` without OR-merging other genres |
+| `live_action_only` | adds TMDb Animation `16` to `without_genres` |
+| `any` | leaves animation unconstrained unless already present in explicit genre filters |
+
+Country-first `with_origin_country`, onboarding `sort_by=popularity.desc`, TV junk
+genre excludes, and the no `vote_count.gte` / `vote_average.gte` initial
+Discover guardrail remain unchanged.
