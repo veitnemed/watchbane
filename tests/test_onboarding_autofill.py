@@ -435,6 +435,27 @@ def _genre_filter_ids(params: dict, key: str) -> set[int]:
     return {int(item) for item in text.replace("|", ",").split(",") if item.isdigit()}
 
 
+def _assert_no_initial_discover_vote_filters(profile: OnboardingTasteProfile, *, expected_countries: set[str] | None = None) -> None:
+    profile = profile.normalized()
+    seen_countries: set[str] = set()
+    for bucket in build_fetch_buckets(profile):
+        _endpoint, params = build_discover_request(
+            bucket,
+            profile=profile,
+            fallback="base",
+            request_index=0,
+            current_year=2026,
+            current_date=date(2026, 7, 8),
+        )
+        if bucket.target_country:
+            seen_countries.add(bucket.target_country)
+            assert params.get("with_origin_country") == bucket.target_country
+        assert "vote_count.gte" not in params, (bucket.bucket_id, params)
+        assert "vote_average.gte" not in params, (bucket.bucket_id, params)
+    if expected_countries is not None:
+        assert expected_countries.issubset(seen_countries)
+
+
 def test_media_preference_quota_weights_are_country_first_and_explicit() -> None:
     assert media_weights("movie") == {MEDIA_MOVIE: 1.0}
     assert media_weights("tv") == {MEDIA_TV: 1.0}
@@ -493,6 +514,53 @@ def test_country_first_profile_replaces_broad_origin_defaults() -> None:
     assert foreign_countries == {"US": 60, "GB": 60}
     assert mixed_countries == {"RU": 60, "US": 60}
     assert en_countries == {"US": 60, "GB": 60}
+
+
+def test_initial_onboarding_discover_never_uses_vote_or_rating_filters_across_variants() -> None:
+    selected_countries = {"US", "KR", "JP"}
+    for media_preference in ("movie", "tv", "both"):
+        for release_preference in ("new", "mixed", "classic"):
+            for vibe_preference in ("light", "dark", "mixed"):
+                for animation_mode in (
+                    ANIMATION_MODE_ANY,
+                    ANIMATION_MODE_ANIMATION_ONLY,
+                    ANIMATION_MODE_LIVE_ACTION_ONLY,
+                ):
+                    _assert_no_initial_discover_vote_filters(
+                        _profile(
+                            media_preference=media_preference,
+                            release_preference=release_preference,
+                            vibe_preference=vibe_preference,
+                            animation_mode=animation_mode,
+                            country_selection={"selected_countries": sorted(selected_countries), "home_country": "RU"},
+                        ),
+                        expected_countries=selected_countries,
+                    )
+
+    for preset_key in (
+        PRESET_ANIME,
+        PRESET_FAMILY_ANIMATION,
+        PRESET_K_DRAMA,
+        PRESET_TURKISH_DRAMAS,
+        PRESET_MANUAL,
+    ):
+        overrides = (
+            {
+                "selected_countries": sorted(selected_countries),
+                "home_country": "RU",
+            }
+            if preset_key == PRESET_MANUAL
+            else {}
+        )
+        payload = taste_preset_to_profile_payload(
+            preset_key,
+            overrides,
+            ui_language="ru",
+        )
+        _assert_no_initial_discover_vote_filters(
+            OnboardingTasteProfile(**payload),
+            expected_countries=selected_countries if preset_key == PRESET_MANUAL else None,
+        )
 
 
 def test_bucket_quotas_sum_exactly_to_target() -> None:
