@@ -1369,6 +1369,7 @@ def candidate_rejection_reason(
     *,
     existing_index: dict[str, Any],
     accepted_identities: set[tuple[str, int]],
+    accepted_title_keys: set[str] | None = None,
     hidden_or_rejected_identities: set[str],
     watched_signatures: set[str],
     dataset_title_keys: set[str],
@@ -1401,6 +1402,9 @@ def candidate_rejection_reason(
         return "existing"
 
     candidate_stub = _discover_candidate_stub(result, bucket.media_type)
+    candidate_title_key = title_identity_key(candidate_stub)
+    if accepted_title_keys is not None and candidate_title_key != "|" and candidate_title_key in accepted_title_keys:
+        return "duplicate_like_batch"
     if is_watched_candidate(
         candidate_stub,
         watched_signatures=watched_signatures,
@@ -1428,6 +1432,7 @@ def accept_candidate(
         bucket,
         existing_index=existing_index,
         accepted_identities=accepted_identities,
+        accepted_title_keys=None,
         hidden_or_rejected_identities=hidden_or_rejected_identities,
         watched_signatures=watched_signatures,
         dataset_title_keys=dataset_title_keys,
@@ -2212,6 +2217,7 @@ def run_onboarding_autofill(
     pool = _pool_snapshot(path=path)
     created_candidates: list[dict[str, Any]] = []
     accepted_identities: set[tuple[str, int]] = set()
+    accepted_title_keys: set[str] = set()
     existing_index = build_existing_candidate_index(pool)
     hidden_or_rejected = _load_hidden_or_rejected_identities(path=path)
     try:
@@ -2337,6 +2343,7 @@ def run_onboarding_autofill(
                             bucket,
                             existing_index=existing_index,
                             accepted_identities=accepted_identities,
+                            accepted_title_keys=accepted_title_keys,
                             hidden_or_rejected_identities=hidden_or_rejected,
                             watched_signatures=watched_signatures,
                             dataset_title_keys=dataset_title_keys,
@@ -2362,6 +2369,9 @@ def run_onboarding_autofill(
                             "index_on_page": index_on_page,
                         })
                         accepted_identities.add((bucket.media_type, int(result["id"])))
+                        accepted_title_key = title_identity_key(_discover_candidate_stub(result, bucket.media_type))
+                        if accepted_title_key != "|":
+                            accepted_title_keys.add(accepted_title_key)
                         state.filled += 1
                     details_delta, details_metrics = _enrich_preliminary_entries(
                         preliminary_entries,
@@ -2394,6 +2404,9 @@ def run_onboarding_autofill(
                             tmdb_id = entry["result"].get("id")
                             if str(tmdb_id or "").strip().isdigit():
                                 accepted_identities.discard((bucket.media_type, int(tmdb_id)))
+                            accepted_title_key = title_identity_key(_discover_candidate_stub(entry["result"], bucket.media_type))
+                            if accepted_title_key != "|":
+                                accepted_title_keys.discard(accepted_title_key)
                             continue
                         score_debug = entry["score_debug"]
                         candidate_score = float(score_debug["final_score"])

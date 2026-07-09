@@ -5,6 +5,7 @@ from itertools import combinations
 from datetime import date
 
 from candidates.onboarding import autofill
+from candidates.models.keys import pool_entry_key, title_identity_key
 from candidates.onboarding.autofill import (
     ANIMATION_MODE_ANIMATION_ONLY,
     ANIMATION_MODE_ANY,
@@ -35,6 +36,7 @@ from candidates.onboarding.taste_presets import (
     taste_preset_to_profile_payload,
 )
 from storage.sqlite.connection import connect
+from storage.sqlite.candidate_pool_repository import save_candidate_pool_dict
 from storage.sqlite.onboarding_repository import load_autofill_request_audits
 
 
@@ -241,6 +243,82 @@ class DuplicateDiscoverTmdbClient(FakeTmdbClient):
                 "original_language": "en",
             }
         return {"results": [dict(item), dict(item)], "total_pages": 1}
+
+
+class DuplicateAcrossPagesTmdbClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        self.calls.append((endpoint, dict(params)))
+        page = int(params.get("page") or 1)
+        country = params.get("with_origin_country") or "US"
+        item = {
+            "id": 202,
+            "title": "Duplicate Across Pages",
+            "original_title": "Duplicate Across Pages",
+            "release_date": "2024-01-01",
+            "poster_path": "/duplicate-pages.jpg",
+            "overview": "Overview",
+            "genre_ids": [18],
+            "origin_country": [country],
+            "vote_average": 7.0,
+            "vote_count": 100,
+            "popularity": 30,
+            "original_language": "en",
+        }
+        return {"results": [dict(item)] if page <= 2 else [], "total_pages": 2}
+
+
+class DuplicateTitleDifferentIdsTmdbClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        self.calls.append((endpoint, dict(params)))
+        page = int(params.get("page") or 1)
+        country = params.get("with_origin_country") or "US"
+        tmdb_id = 300 + page
+        return {
+            "results": [
+                {
+                    "id": tmdb_id,
+                    "title": "Duplicate-Like Title",
+                    "original_title": "Duplicate-Like Title",
+                    "release_date": "2024-01-01",
+                    "poster_path": f"/duplicate-like-{tmdb_id}.jpg",
+                    "overview": "Overview",
+                    "genre_ids": [18],
+                    "origin_country": [country],
+                    "vote_average": 7.0,
+                    "vote_count": 100,
+                    "popularity": 30,
+                    "original_language": "en",
+                }
+            ]
+            if page <= 2
+            else [],
+            "total_pages": 2,
+        }
+
+
+class SingleWatchedLikeTmdbClient(FakeTmdbClient):
+    def discover(self, endpoint: str, params: dict) -> dict:
+        self.calls.append((endpoint, dict(params)))
+        country = params.get("with_origin_country") or "US"
+        return {
+            "results": [
+                {
+                    "id": 404,
+                    "title": "Already Watched",
+                    "original_title": "Already Watched",
+                    "release_date": "2024-01-01",
+                    "poster_path": "/already-watched.jpg",
+                    "overview": "Overview",
+                    "genre_ids": [18],
+                    "origin_country": [country],
+                    "vote_average": 7.0,
+                    "vote_count": 100,
+                    "popularity": 30,
+                    "original_language": "en",
+                }
+            ],
+            "total_pages": 1,
+        }
 
 
 class MissingOverviewLocalizationTmdbClient(FakeTmdbClient):
@@ -1286,6 +1364,107 @@ def test_details_enrichment_dedupes_before_details_requests(tmp_path, monkeypatc
     assert result.candidates[0]["imdb_id"] == "tt0000101"
 
 
+def test_details_enrichment_dedupes_raw_tmdb_id_across_pages_before_details(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = DuplicateAcrossPagesTmdbClient()
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_limit=10,
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count == 1
+    assert result.details_requests == 1
+    assert [(media, tmdb_id) for media, tmdb_id, _language, _appends in client.details_calls] == [(MEDIA_MOVIE, 202)]
+
+
+def test_details_enrichment_dedupes_title_year_before_details_for_different_tmdb_ids(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = DuplicateTitleDifferentIdsTmdbClient()
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_limit=10,
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count == 1
+    assert result.details_requests == 1
+    assert len(client.details_calls) == 1
+    assert client.details_calls[0][1] == 301
+
+
+def test_details_enrichment_skips_already_watched_before_details(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(
+        autofill,
+        "build_watched_signatures",
+        lambda: {title_identity_key({"title": "Already Watched", "year": 2024})},
+    )
+    monkeypatch.setattr(autofill, "build_dataset_title_keys", lambda: set())
+    client = SingleWatchedLikeTmdbClient()
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_limit=10,
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count == 0
+    assert result.details_requests == 0
+    assert client.details_calls == []
+
+
+def test_details_enrichment_skips_existing_pool_candidate_before_details(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    db_path = tmp_path / "watchbane.sqlite3"
+    existing = {
+        "media_type": MEDIA_MOVIE,
+        "tmdb_id": 404,
+        "title": "Already Watched",
+        "year": 2024,
+        "release_date": "2024-01-01",
+        "tmdb_score": 7.0,
+        "tmdb_votes": 100,
+        "genres": ["Drama"],
+        "countries": ["US"],
+        "country_codes": ["US"],
+    }
+    save_candidate_pool_dict({pool_entry_key(existing): existing}, path=db_path, purge_watched=False)
+    client = SingleWatchedLikeTmdbClient()
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_limit=10,
+        ),
+        client=client,
+        path=db_path,
+        current_year=2026,
+    )
+
+    assert result.created_count == 0
+    assert result.details_requests == 0
+    assert client.details_calls == []
+
+
 def test_details_enrichment_respects_details_limit_per_bucket(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
     client = FakeTmdbClient()
@@ -1304,6 +1483,32 @@ def test_details_enrichment_respects_details_limit_per_bucket(tmp_path, monkeypa
     assert result.details_requests == 3
     assert len(client.details_calls) == 3
     assert all(call[0] == MEDIA_MOVIE for call in client.details_calls)
+
+
+def test_details_enrichment_limit_includes_localization_fallback_requests(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = MissingOverviewLocalizationTmdbClient(
+        country="JP",
+        original_language="ja",
+        original_overview="",
+        en_overview="English overview",
+    )
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            ui_language="ru",
+            country_selection={"selected_countries": ["JP"], "home_country": "RU"},
+            details_limit=2,
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.details_requests == 2
+    assert [call[2] for call in client.details_calls] == ["ru-RU", "ja-JP"]
+    assert all(call[2] != "en-US" for call in client.details_calls)
 
 
 def test_details_enrichment_can_be_disabled(tmp_path, monkeypatch) -> None:
