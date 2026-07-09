@@ -48,6 +48,52 @@ SCENARIO_ORDER = (
     "en-country-pair-us-gb",
 )
 
+SCENARIO_SUMMARY_FIELDS = (
+    "selected_countries",
+    "country_plan",
+    "country_actual",
+    "country_hit_rate",
+    "country_leakage",
+    "media_plan",
+    "media_actual",
+    "media_hit_rate",
+    "discover_templates",
+    "discover_http_requests",
+    "details_requests",
+    "external_ids_requests",
+    "details_enrichment_enabled",
+    "localization_fallback_count",
+    "overview_fallback_original_language_count",
+    "overview_fallback_en_count",
+    "missing_overview_after_fallback",
+    "vote_confidence_avg",
+    "low_vote_candidates_count",
+    "weak_candidates_count",
+    "garbage_candidates_count",
+    "garbage_rate",
+    "garbage_reasons",
+    "adaptive_pages_used",
+    "pagination_stop_reasons",
+    "broad_origin_requests",
+    "fallback_used",
+    "request_timeout_count",
+    "request_retry_count",
+)
+
+CANDIDATE_SAMPLE_FIELDS = (
+    "title",
+    "country",
+    "media",
+    "year",
+    "rating",
+    "votes",
+    "vote_confidence",
+    "overview_source",
+    "quality_class",
+    "quality_reasons",
+    "final_score",
+)
+
 
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, sort_keys=True)
@@ -213,9 +259,18 @@ def _avg(values: list[float]) -> float:
     return round(sum(values) / len(values), 4) if values else 0.0
 
 
+def _number_or_zero(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _candidate_metrics(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     media_counter = Counter(str(item.get("media_type") or "") for item in candidates)
     quality_counter = Counter(str(item.get("quality_class") or "") for item in candidates)
+    garbage_reasons: Counter[str] = Counter()
+    vote_confidences: list[float] = []
     tv_candidates = [item for item in candidates if item.get("media_type") == "tv"]
     junk_names = {"soap", "reality", "talk", "news", "kids", "documentary"}
     light_names = {"comedy", "family", "animation", "adventure", "romance", "fantasy", "sci-fi & fantasy"}
@@ -225,6 +280,15 @@ def _candidate_metrics(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     dark_hits = 0
     for candidate in candidates:
         genres = {str(value or "").strip().casefold() for value in candidate.get("genres") or []}
+        score_debug = candidate.get("score_debug") if isinstance(candidate.get("score_debug"), dict) else {}
+        if score_debug.get("vote_confidence") not in (None, ""):
+            try:
+                vote_confidences.append(float(score_debug.get("vote_confidence")))
+            except (TypeError, ValueError):
+                pass
+        if candidate.get("quality_class") == "garbage":
+            for reason in candidate.get("quality_reasons") or []:
+                garbage_reasons[str(reason)] += 1
         if genres & junk_names:
             junk_count += 1
         if genres & light_names:
@@ -242,6 +306,11 @@ def _candidate_metrics(candidates: list[dict[str, Any]]) -> dict[str, Any]:
         "avg_popularity": _avg(_number_values(candidates, "tmdb_popularity")),
         "avg_candidate_score": _avg(_number_values(candidates, "candidate_score")),
         "avg_final_score": _avg(_number_values(candidates, "final_score")),
+        "vote_confidence_avg": _avg(vote_confidences),
+        "low_vote_candidates_count": sum(1 for item in candidates if _number_or_zero(item.get("tmdb_votes")) <= 20),
+        "weak_candidates_count": int(quality_counter.get("weak", 0)),
+        "garbage_candidates_count": int(quality_counter.get("garbage", 0)),
+        "garbage_reasons": dict(garbage_reasons),
         "poster_missing_count": poster_missing,
         "overview_missing_count": overview_missing,
         "tv_count": len(tv_candidates),
@@ -252,12 +321,13 @@ def _candidate_metrics(candidates: list[dict[str, Any]]) -> dict[str, Any]:
         "light_vibe_hit_rate": round(light_hits / total, 4) if total else 0.0,
         "dark_vibe_hit_rate": round(dark_hits / total, 4) if total else 0.0,
         "garbage_count": junk_count + poster_missing + overview_missing,
-        "garbage_rate": round((junk_count + poster_missing + overview_missing) / total, 4) if total else 0.0,
+        "garbage_rate": round(int(quality_counter.get("garbage", 0)) / total, 4) if total else 0.0,
     }
 
 
 def _candidate_row(candidate: dict[str, Any]) -> dict[str, Any]:
     source_query = candidate.get("source_query") if isinstance(candidate.get("source_query"), dict) else {}
+    score_debug = candidate.get("score_debug") if isinstance(candidate.get("score_debug"), dict) else {}
     return {
         "rank": candidate.get("fetch_rank"),
         "title": candidate.get("title"),
@@ -266,8 +336,12 @@ def _candidate_row(candidate: dict[str, Any]) -> dict[str, Any]:
         "country": candidate.get("target_country"),
         "countries": candidate.get("country_codes") or candidate.get("countries") or [],
         "language": candidate.get("original_language"),
+        "rating": candidate.get("tmdb_score"),
+        "votes": candidate.get("tmdb_votes"),
         "tmdb_score": candidate.get("tmdb_score"),
         "tmdb_votes": candidate.get("tmdb_votes"),
+        "vote_confidence": score_debug.get("vote_confidence"),
+        "overview_source": candidate.get("overview_source") or score_debug.get("overview_source"),
         "popularity": candidate.get("tmdb_popularity"),
         "final_score": candidate.get("final_score"),
         "quality_class": candidate.get("quality_class"),
@@ -363,6 +437,80 @@ def _api_budget_metrics(requests: list[dict[str, Any]], final_candidates: int, *
     }
 
 
+def _details_enrichment_enabled(profile: dict[str, Any]) -> bool:
+    details_config = profile.get("details_enrichment")
+    if isinstance(details_config, dict):
+        return bool(details_config.get("enabled", True))
+    return True
+
+
+def _external_ids_requests(profile: dict[str, Any], details_requests: int) -> int:
+    details_config = profile.get("details_enrichment")
+    if isinstance(details_config, dict) and details_config.get("fetch_external_ids", True) is False:
+        return 0
+    return int(details_requests) if _details_enrichment_enabled(profile) else 0
+
+
+def _media_hit_rate(media_plan: dict[str, int], media_actual: dict[str, int]) -> float:
+    total_actual = sum(int(value) for value in media_actual.values())
+    if total_actual <= 0:
+        return 0.0
+    planned_media = {str(key) for key, value in media_plan.items() if int(value) > 0}
+    hit_count = sum(int(count) for media, count in media_actual.items() if str(media) in planned_media)
+    return round(hit_count / total_actual, 4)
+
+
+def _request_timeout_count(requests: list[dict[str, Any]]) -> int:
+    return sum(1 for request in requests if "timeout" in str(request.get("error") or "").casefold())
+
+
+def _report_schema_summary(
+    *,
+    profile: dict[str, Any],
+    result: Any,
+    country_metrics: dict[str, Any],
+    candidate_metrics: dict[str, Any],
+    api_budget_metrics: dict[str, Any],
+    request_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    selection = profile.get("country_selection") if isinstance(profile.get("country_selection"), dict) else {}
+    media_plan = dict((result.planned_counts or {}).get("media_type", {}))
+    media_actual = dict((result.actual_counts or {}).get("media_type", {}))
+    details_requests = int(getattr(result, "details_requests", 0) or 0)
+    summary = {
+        "selected_countries": list(selection.get("selected_countries") or []),
+        "country_plan": dict((result.planned_counts or {}).get("country", {})),
+        "country_actual": country_metrics.get("country_actual", {}),
+        "country_hit_rate": country_metrics.get("country_hit_rate", 0.0),
+        "country_leakage": country_metrics.get("country_leakage_count", 0),
+        "media_plan": media_plan,
+        "media_actual": media_actual,
+        "media_hit_rate": _media_hit_rate(media_plan, media_actual),
+        "discover_templates": api_budget_metrics.get("discover_templates_count", 0),
+        "discover_http_requests": api_budget_metrics.get("discover_http_requests", 0),
+        "details_requests": details_requests,
+        "external_ids_requests": _external_ids_requests(profile, details_requests),
+        "details_enrichment_enabled": _details_enrichment_enabled(profile),
+        "localization_fallback_count": int(getattr(result, "localization_fallback_count", 0) or 0),
+        "overview_fallback_original_language_count": int(getattr(result, "overview_fallback_original_language_count", 0) or 0),
+        "overview_fallback_en_count": int(getattr(result, "overview_fallback_en_count", 0) or 0),
+        "missing_overview_after_fallback": int(getattr(result, "missing_overview_after_fallback", 0) or 0),
+        "vote_confidence_avg": candidate_metrics.get("vote_confidence_avg", 0.0),
+        "low_vote_candidates_count": candidate_metrics.get("low_vote_candidates_count", 0),
+        "weak_candidates_count": candidate_metrics.get("weak_candidates_count", 0),
+        "garbage_candidates_count": candidate_metrics.get("garbage_candidates_count", 0),
+        "garbage_rate": candidate_metrics.get("garbage_rate", 0.0),
+        "garbage_reasons": candidate_metrics.get("garbage_reasons", {}),
+        "adaptive_pages_used": int(getattr(result, "adaptive_pages_used", 0) or 0),
+        "pagination_stop_reasons": dict(getattr(result, "pagination_stop_reasons", {}) or {}),
+        "broad_origin_requests": api_budget_metrics.get("broad_origin_requests", 0),
+        "fallback_used": api_budget_metrics.get("fallback_used", False),
+        "request_timeout_count": _request_timeout_count(request_rows),
+        "request_retry_count": 0,
+    }
+    return {field: summary.get(field) for field in SCENARIO_SUMMARY_FIELDS}
+
+
 def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_root: Path, current_year: int, sample_limit: int) -> dict[str, Any]:
     db_path = tmp_root / f"{name}.sqlite3"
     profile = OnboardingTasteProfile(**profile_data)
@@ -386,6 +534,14 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
     speed = _speed_stats(client.discover_logs, elapsed_ms)
     candidate_metrics = _candidate_metrics(candidates)
     api_budget_metrics = _api_budget_metrics(request_rows, result.created_count, details_requests=result.details_requests)
+    schema_summary = _report_schema_summary(
+        profile=normalized_profile,
+        result=result,
+        country_metrics=country_metrics,
+        candidate_metrics=candidate_metrics,
+        api_budget_metrics=api_budget_metrics,
+        request_rows=request_rows,
+    )
     return {
         "scenario": name,
         "mode": "live" if live else "mock",
@@ -414,11 +570,15 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         "genre_requests": client.genre_logs,
         "discover_requests": request_rows,
         "top_candidates": _top_candidates(candidates, limit=sample_limit),
+        "schema_version": 1,
+        "scenario_summary_fields": list(SCENARIO_SUMMARY_FIELDS),
+        "candidate_sample_fields": list(CANDIDATE_SAMPLE_FIELDS),
         **speed,
         **request_metrics,
         **country_metrics,
         **candidate_metrics,
         **api_budget_metrics,
+        **schema_summary,
     }
 
 
@@ -509,10 +669,12 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
             f"- Profile: `{_json(result['profile'])}`",
             f"- Created/pool: {result['created_count']} / {result['pool_size']}",
             f"- API requests: {result['api_requests']}; unique/total: {result['requests_unique']} / {result['requests_total']}",
-            f"- API budget: templates {result.get('discover_templates_count')}; discover HTTP {result.get('discover_http_requests')}; details {result.get('details_requests')}; broad origin {result.get('broad_origin_requests')}; fallback used {result.get('fallback_used')}",
+            f"- API budget: templates {result.get('discover_templates')}; discover HTTP {result.get('discover_http_requests')}; details {result.get('details_requests')}; external IDs {result.get('external_ids_requests')}; broad origin {result.get('broad_origin_requests')}; fallback used {result.get('fallback_used')}",
+            f"- Details enrichment enabled: {result.get('details_enrichment_enabled')}",
             f"- Adaptive pages used: {result.get('adaptive_pages_used')}; stop reasons `{_json(result.get('pagination_stop_reasons') or {})}`",
             f"- Localization fallback: {result.get('localization_fallback_count')}; original {result.get('overview_fallback_original_language_count')}; en {result.get('overview_fallback_en_count')}; missing {result.get('missing_overview_after_fallback')}",
             f"- Yield: raw discover {result.get('raw_discover_found')}; duplicates removed {result.get('duplicates_removed')}; accepted/template {result.get('accepted_per_discover_template')}; accepted/discover request {result.get('accepted_per_discover_http_request')}",
+            f"- Timeouts/retries: {result.get('request_timeout_count')} / {result.get('request_retry_count')}",
             f"- Duplicate skipped: {result['duplicate_requests_skipped']}",
             f"- Speed: total {result['elapsed_s']}s; discover avg {result['discover_avg_ms']}ms; p50 {result['discover_p50_ms']}ms; p95 {result['discover_p95_ms']}ms; max {result['discover_max_ms']}ms",
             f"- Planned media: `{_json(result['planned_counts'].get('media_type', {}))}`",
@@ -521,7 +683,8 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
             f"- Actual country: `{_json(result.get('country_actual', {}))}`",
             f"- Country hit/leak/wrong: {result.get('country_hit_rate')} / {result.get('country_leakage_rate')} / {result.get('wrong_country_count')}",
             f"- Fallbacks: `{_json(result.get('fallback_counts', {}))}`; fallback share {result.get('fallback_share')}",
-            f"- Quality classes: `{_json(result.get('quality_counts', {}))}`",
+            f"- Quality classes: weak {result.get('weak_candidates_count')}; garbage {result.get('garbage_candidates_count')} ({result.get('garbage_rate')}); reasons `{_json(result.get('garbage_reasons') or {})}`",
+            f"- Vote confidence avg / low-vote candidates: {result.get('vote_confidence_avg')} / {result.get('low_vote_candidates_count')}",
             f"- Avg TMDb score/votes/popularity: {result.get('avg_tmdb_score')} / {result.get('avg_tmdb_votes')} / {result.get('avg_popularity')}",
             f"- Vibe hit light/dark: {result.get('light_vibe_hit_rate')} / {result.get('dark_vibe_hit_rate')}",
             f"- Junk/garbage: {result.get('junk_count')} ({result.get('junk_rate')}) / {result.get('garbage_count')} ({result.get('garbage_rate')})",
@@ -531,8 +694,8 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
             "",
             "### Top output sample",
             "",
-            "| Rank | Title | Year | Media | Country | Lang | TMDb | Votes | Popularity | Final | Quality | Reasons | Fallback |",
-            "| ---: | --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | --- |",
+            "| Rank | Title | Year | Media | Country | Lang | Rating | Votes | Confidence | Overview | Final | Quality | Reasons | Fallback |",
+            "| ---: | --- | ---: | --- | --- | --- | ---: | ---: | ---: | --- | ---: | --- | --- | --- |",
         ])
         for item in result.get("top_candidates", []):
             lines.append(
@@ -543,9 +706,10 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
                 f"{item.get('media')} | "
                 f"{item.get('country')} | "
                 f"{item.get('language')} | "
-                f"{item.get('tmdb_score')} | "
-                f"{item.get('tmdb_votes')} | "
-                f"{item.get('popularity')} | "
+                f"{item.get('rating')} | "
+                f"{item.get('votes')} | "
+                f"{item.get('vote_confidence')} | "
+                f"{item.get('overview_source')} | "
                 f"{item.get('final_score')} | "
                 f"{item.get('quality_class')} | "
                 f"{', '.join(str(reason) for reason in item.get('quality_reasons') or [])} | "
