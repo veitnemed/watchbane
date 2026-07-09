@@ -75,3 +75,17 @@ Step: `001_baseline_current_flow_report`
 - Add adaptive pagination.
 - Add timeout/retry/outlier diagnostics.
 - Add baseline comparison reports.
+
+## TastePreset contract added
+
+Step `002` adds a small serializable domain contract in
+`candidates/onboarding/taste_presets.py`.
+
+- `TastePreset` covers media type, animation mode, countries, symbolic genre
+  groups, vibe, and release preference.
+- `anime` can express `countries=["JP"]`, `animation_mode="animation_only"`,
+  and `media_type="both"`.
+- `k_drama` can express `countries=["KR"]`,
+  `animation_mode="live_action_only"`, and `media_type="tv"`.
+- `to_profile_kwargs()` bridges presets to the current `OnboardingTasteProfile`
+  constructor without changing Discover behavior.

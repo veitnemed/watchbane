@@ -17,6 +17,16 @@ from candidates.onboarding.autofill import (
     should_start_onboarding_autofill,
     vibe_weights,
 )
+from candidates.onboarding.taste_presets import (
+    ANIMATION_MODE_ANIMATION_ONLY,
+    ANIMATION_MODE_ANY,
+    ANIMATION_MODE_LIVE_ACTION_ONLY,
+    PRESET_ANIME,
+    PRESET_K_DRAMA,
+    TastePreset,
+    get_taste_preset,
+    manual_taste_preset,
+)
 
 __all__ = [
     "MAX_TMDB_REQUESTS",
@@ -34,4 +44,12 @@ __all__ = [
     "run_onboarding_autofill",
     "should_start_onboarding_autofill",
     "vibe_weights",
+    "ANIMATION_MODE_ANIMATION_ONLY",
+    "ANIMATION_MODE_ANY",
+    "ANIMATION_MODE_LIVE_ACTION_ONLY",
+    "PRESET_ANIME",
+    "PRESET_K_DRAMA",
+    "TastePreset",
+    "get_taste_preset",
+    "manual_taste_preset",
 ]
