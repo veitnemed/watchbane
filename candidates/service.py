@@ -10,7 +10,9 @@ from app.core import ranking as search_ranking
 from app.core import storage as search_storage
 from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
 from candidates.onboarding.autofill import (
+    CountrySelection,
     OnboardingTasteProfile,
+    build_country_plan,
     build_fetch_buckets,
     media_weights,
     origin_weights,
@@ -232,6 +234,7 @@ def build_onboarding_candidate_pool(
             vibe_preference=profile.get("vibe_preference"),
             origin_preference=profile.get("origin_preference"),
             ui_language=profile.get("ui_language"),
+            country_selection=profile.get("country_selection"),
         )
     result = run_onboarding_autofill(
         taste_profile,
@@ -263,6 +266,7 @@ def _normalize_onboarding_profile(profile: OnboardingTasteProfile | dict) -> Onb
         vibe_preference=profile.get("vibe_preference"),
         origin_preference=profile.get("origin_preference"),
         ui_language=profile.get("ui_language"),
+        country_selection=profile.get("country_selection"),
     ).normalized()
 
 
@@ -288,6 +292,7 @@ def get_onboarding_autofill_plan_view(profile: OnboardingTasteProfile | dict) ->
             "media_type": quota_by("media_type"),
             "release": quota_by("era"),
             "vibe": quota_by("vibe"),
+            "country": quota_by("target_country"),
             "origin": quota_by("origin"),
             "original_language": quota_by("original_language"),
         },
@@ -296,7 +301,22 @@ def get_onboarding_autofill_plan_view(profile: OnboardingTasteProfile | dict) ->
             "release": release_weights(taste_profile.release_preference),
             "vibe": vibe_weights(taste_profile.vibe_preference),
             "origin": origin_weights(taste_profile.origin_preference, ui_language=taste_profile.ui_language),
+            "country": (
+                taste_profile.country_selection.country_weights
+                if isinstance(taste_profile.country_selection, CountrySelection)
+                else {}
+            ),
         },
+        "country_selection": (
+            taste_profile.country_selection.as_repository_dict()
+            if isinstance(taste_profile.country_selection, CountrySelection)
+            else {}
+        ),
+        "country_plan": (
+            build_country_plan(taste_profile.country_selection, sum(int(bucket.quota) for bucket in buckets))
+            if isinstance(taste_profile.country_selection, CountrySelection)
+            else {}
+        ),
     }
 
 

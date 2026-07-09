@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Protocol
 
 from apis import tmdb_api
+from candidates.models import country_schema
 from candidates.models.genre_schema import build_genre_keys
 from candidates.models.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key, title_identity_key
 from candidates.models.schema import compute_completeness, normalize_candidate_record
@@ -46,6 +47,15 @@ ORIGIN_DOMESTIC = "domestic"
 ORIGIN_FOREIGN = "foreign"
 VIBE_LIGHT = "light"
 VIBE_DARK = "dark"
+
+COUNTRY_SELECTION_MODE_COUNTRY_PAIR = "country_pair"
+COUNTRY_SELECTION_MODE_SINGLE = "single_country"
+COUNTRY_SELECTION_MODE_PRESET_FOREIGN = "preset_foreign"
+COUNTRY_SELECTION_MODE_PRESET_MIXED = "preset_mixed"
+COUNTRY_SELECTION_MODE_CUSTOM = "custom"
+DEFAULT_HOME_COUNTRY = "RU"
+DEFAULT_FOREIGN_COUNTRIES = ("US", "GB")
+DEFAULT_EN_COUNTRIES = ("US", "GB")
 
 MOVIE_LIGHT_GENRES = ("Comedy", "Romance", "Fantasy", "Family", "Adventure")
 MOVIE_DARK_GENRES = ("Drama", "Thriller", "Action", "Crime", "Mystery")
@@ -116,6 +126,214 @@ class TmdbAutofillClient:
         return tmdb_api.get_tv_genre_list(language=language, token=self._token)
 
 
+def _normalize_country_code(value: Any) -> str:
+    code = str(value or "").strip().upper()
+    if len(code) == 2 and code.isascii() and code.isalpha():
+        return code
+    return ""
+
+
+def _normalize_country_weights(countries: list[str], weights: dict[str, Any] | None) -> dict[str, float]:
+    if len(countries) == 0:
+        return {}
+    raw_weights = weights if isinstance(weights, dict) else {}
+    normalized: dict[str, float] = {}
+    for country in countries:
+        try:
+            value = float(raw_weights.get(country, 0.0))
+        except (TypeError, ValueError):
+            value = 0.0
+        normalized[country] = max(0.0, value)
+    total = sum(normalized.values())
+    if total <= 0:
+        equal = 1.0 / len(countries)
+        return {country: equal for country in countries}
+    return {country: value / total for country, value in normalized.items()}
+
+
+@dataclass(frozen=True)
+class CountrySelection:
+    mode: str
+    home_country: str
+    selected_countries: tuple[str, ...]
+    country_weights: dict[str, float]
+    exclude_home_country: bool
+    max_countries: int = 2
+    primary_country: str | None = None
+    secondary_country: str | None = None
+
+    def normalized(self) -> "CountrySelection":
+        max_countries = max(1, int(self.max_countries or 2))
+        home_country = _normalize_country_code(self.home_country) or DEFAULT_HOME_COUNTRY
+        countries: list[str] = []
+        for value in self.selected_countries or ():
+            code = _normalize_country_code(value)
+            if code and code not in countries:
+                countries.append(code)
+            if len(countries) >= max_countries:
+                break
+        if not countries:
+            countries = [home_country]
+
+        weights = _normalize_country_weights(countries, self.country_weights)
+        primary = _normalize_country_code(self.primary_country) or countries[0]
+        if primary not in countries:
+            primary = countries[0]
+        secondary = _normalize_country_code(self.secondary_country)
+        if secondary not in countries or secondary == primary:
+            secondary = next((country for country in countries if country != primary), None)
+        mode = str(self.mode or COUNTRY_SELECTION_MODE_COUNTRY_PAIR).strip() or COUNTRY_SELECTION_MODE_COUNTRY_PAIR
+        if len(countries) == 1 and mode == COUNTRY_SELECTION_MODE_COUNTRY_PAIR:
+            mode = COUNTRY_SELECTION_MODE_SINGLE
+        return CountrySelection(
+            mode=mode,
+            home_country=home_country,
+            selected_countries=tuple(countries),
+            country_weights=weights,
+            exclude_home_country=bool(self.exclude_home_country),
+            max_countries=max_countries,
+            primary_country=primary,
+            secondary_country=secondary,
+        )
+
+    def as_repository_dict(self) -> dict[str, Any]:
+        normalized = self.normalized()
+        return {
+            "mode": normalized.mode,
+            "home_country": normalized.home_country,
+            "selected_countries": list(normalized.selected_countries),
+            "country_weights": dict(normalized.country_weights),
+            "exclude_home_country": normalized.exclude_home_country,
+            "max_countries": normalized.max_countries,
+            "primary_country": normalized.primary_country,
+            "secondary_country": normalized.secondary_country,
+        }
+
+
+def country_selection_for_foreign_ru() -> CountrySelection:
+    return CountrySelection(
+        mode=COUNTRY_SELECTION_MODE_PRESET_FOREIGN,
+        home_country=DEFAULT_HOME_COUNTRY,
+        selected_countries=DEFAULT_FOREIGN_COUNTRIES,
+        country_weights={"US": 0.90, "GB": 0.10},
+        exclude_home_country=True,
+        primary_country="US",
+        secondary_country="GB",
+    ).normalized()
+
+
+def country_selection_for_mixed_ru() -> CountrySelection:
+    return CountrySelection(
+        mode=COUNTRY_SELECTION_MODE_PRESET_MIXED,
+        home_country=DEFAULT_HOME_COUNTRY,
+        selected_countries=("RU", "US"),
+        country_weights={"RU": 0.15, "US": 0.85},
+        exclude_home_country=False,
+        primary_country="RU",
+        secondary_country="US",
+    ).normalized()
+
+
+def country_selection_for_single(country: str, *, home_country: str = DEFAULT_HOME_COUNTRY) -> CountrySelection:
+    code = _normalize_country_code(country) or _normalize_country_code(home_country) or DEFAULT_HOME_COUNTRY
+    return CountrySelection(
+        mode=COUNTRY_SELECTION_MODE_SINGLE,
+        home_country=home_country,
+        selected_countries=(code,),
+        country_weights={code: 1.0},
+        exclude_home_country=False,
+        max_countries=1,
+        primary_country=code,
+    ).normalized()
+
+
+def country_selection_for_manual(
+    home_country: str,
+    countries: list[str] | tuple[str, ...],
+    *,
+    ratio_preset: str = "70/30",
+) -> CountrySelection:
+    normalized_countries: list[str] = []
+    for value in countries:
+        code = _normalize_country_code(value)
+        if code and code not in normalized_countries:
+            normalized_countries.append(code)
+        if len(normalized_countries) >= 2:
+            break
+    if len(normalized_countries) == 0:
+        return country_selection_for_single(home_country, home_country=home_country)
+    if len(normalized_countries) == 1:
+        return country_selection_for_single(normalized_countries[0], home_country=home_country)
+
+    preset = str(ratio_preset or "70/30").strip()
+    if preset == "90/10":
+        weights = {normalized_countries[0]: 0.90, normalized_countries[1]: 0.10}
+    elif preset == "50/50":
+        weights = {normalized_countries[0]: 0.50, normalized_countries[1]: 0.50}
+    else:
+        weights = {normalized_countries[0]: 0.70, normalized_countries[1]: 0.30}
+    return CountrySelection(
+        mode=COUNTRY_SELECTION_MODE_COUNTRY_PAIR,
+        home_country=home_country,
+        selected_countries=tuple(normalized_countries),
+        country_weights=weights,
+        exclude_home_country=False,
+        primary_country=normalized_countries[0],
+        secondary_country=normalized_countries[1],
+    ).normalized()
+
+
+def build_country_plan(selection: CountrySelection, pool_size: int) -> dict[str, int]:
+    normalized = selection.normalized()
+    countries = list(normalized.selected_countries)
+    raw = {
+        country: int(pool_size) * float(normalized.country_weights.get(country, 0.0))
+        for country in countries
+    }
+    floors = {country: int(value) for country, value in raw.items()}
+    remainder = int(pool_size) - sum(floors.values())
+    primary = normalized.primary_country or (countries[0] if countries else None)
+    if remainder > 0 and primary in floors:
+        floors[primary] += remainder
+    return floors
+
+
+def _coerce_country_selection(value: Any, *, ui_language: str, origin_preference: str | None) -> CountrySelection:
+    if isinstance(value, CountrySelection):
+        return value.normalized()
+    if isinstance(value, dict):
+        selected = value.get("selected_countries") or value.get("countries") or ()
+        if isinstance(selected, str):
+            selected = [part.strip() for part in selected.replace(",", " ").split()]
+        return CountrySelection(
+            mode=value.get("mode") or COUNTRY_SELECTION_MODE_CUSTOM,
+            home_country=value.get("home_country") or DEFAULT_HOME_COUNTRY,
+            selected_countries=tuple(selected),
+            country_weights=value.get("country_weights") or {},
+            exclude_home_country=bool(value.get("exclude_home_country")),
+            max_countries=int(value.get("max_countries") or 2),
+            primary_country=value.get("primary_country"),
+            secondary_country=value.get("secondary_country"),
+        ).normalized()
+
+    language = str(ui_language or "").strip().casefold()
+    if language == "ru":
+        if origin_preference == "foreign":
+            return country_selection_for_foreign_ru()
+        if origin_preference == "domestic":
+            return country_selection_for_single(DEFAULT_HOME_COUNTRY)
+        return country_selection_for_mixed_ru()
+    return CountrySelection(
+        mode=COUNTRY_SELECTION_MODE_COUNTRY_PAIR,
+        home_country="US",
+        selected_countries=DEFAULT_EN_COUNTRIES,
+        country_weights={"US": 0.90, "GB": 0.10},
+        exclude_home_country=False,
+        primary_country="US",
+        secondary_country="GB",
+    ).normalized()
+
+
 @dataclass(frozen=True)
 class OnboardingTasteProfile:
     media_preference: str
@@ -123,6 +341,7 @@ class OnboardingTasteProfile:
     vibe_preference: str
     origin_preference: str | None
     ui_language: str
+    country_selection: CountrySelection | dict[str, Any] | None = None
 
     def normalized(self) -> "OnboardingTasteProfile":
         ui_language = str(self.ui_language or "ru").strip().casefold() or "ru"
@@ -134,16 +353,27 @@ class OnboardingTasteProfile:
             origin_preference = None
         else:
             origin_preference = _choice(origin_preference, {"foreign", "domestic", "mixed"}, "mixed")
+        country_selection = _coerce_country_selection(
+            self.country_selection,
+            ui_language=ui_language,
+            origin_preference=origin_preference,
+        )
         return OnboardingTasteProfile(
             media_preference=media_preference,
             release_preference=release_preference,
             vibe_preference=vibe_preference,
             origin_preference=origin_preference,
             ui_language=ui_language,
+            country_selection=country_selection,
         )
 
     def as_repository_dict(self) -> dict[str, Any]:
-        return asdict(self.normalized())
+        normalized = self.normalized()
+        data = asdict(normalized)
+        selection = normalized.country_selection
+        if isinstance(selection, CountrySelection):
+            data["country_selection"] = selection.as_repository_dict()
+        return data
 
 
 @dataclass(frozen=True)
@@ -155,12 +385,17 @@ class CandidateFetchBucket:
     original_language: str | None
     quota: int
     quota_weight: float
+    target_country: str | None = None
+    target_country_weight: float = 0.0
+    home_country: str = DEFAULT_HOME_COUNTRY
+    exclude_home_country: bool = False
     genre_ids: tuple[int, ...] = ()
 
     @property
     def bucket_id(self) -> str:
         language = self.original_language or "any"
-        return f"{self.media_type}:{self.era}:{self.vibe}:{self.origin}:{language}"
+        country = self.target_country or "any"
+        return f"{country}:{self.media_type}:{self.era}:{self.vibe}:{self.origin}:{language}"
 
 
 @dataclass
@@ -355,6 +590,85 @@ def _allocate_bucket_quotas(
     return quotas
 
 
+def _allocate_country_bucket_quotas(
+    raw_quotas: dict[tuple[str, str, str, str], float],
+    *,
+    country_plan: dict[str, int],
+    media_targets: dict[str, int],
+    era_targets: dict[str, int],
+    vibe_targets: dict[str, int],
+    target: int,
+) -> dict[tuple[str, str, str, str], int]:
+    quotas = {key: int(value) for key, value in raw_quotas.items()}
+    current = {
+        "country": Counter(),
+        "media_type": Counter(),
+        "era": Counter(),
+        "vibe": Counter(),
+    }
+    for key, quota in quotas.items():
+        if quota <= 0:
+            continue
+        country, media_type, era_name, vibe_name = key
+        current["country"][country] += quota
+        current["media_type"][media_type] += quota
+        current["era"][era_name] += quota
+        current["vibe"][vibe_name] += quota
+
+    ranked_keys = sorted(
+        raw_quotas,
+        key=lambda key: (raw_quotas[key] - int(raw_quotas[key]), stable_bucket_key(key)),
+        reverse=True,
+    )
+    targets = {
+        "country": country_plan,
+        "media_type": media_targets,
+        "era": era_targets,
+        "vibe": vibe_targets,
+    }
+
+    def can_add(key: tuple[str, str, str, str], dimensions: tuple[str, ...]) -> bool:
+        country, media_type, era_name, vibe_name = key
+        values = {
+            "country": country,
+            "media_type": media_type,
+            "era": era_name,
+            "vibe": vibe_name,
+        }
+        for dimension in dimensions:
+            value = values[dimension]
+            if current[dimension][value] >= int(targets[dimension].get(value, 0)):
+                return False
+        return True
+
+    remaining = int(target) - sum(quotas.values())
+    while remaining > 0 and ranked_keys:
+        selected = None
+        for dimensions in (
+            ("country", "media_type", "era", "vibe"),
+            ("country", "media_type", "vibe"),
+            ("country", "media_type"),
+            ("country",),
+        ):
+            for key in ranked_keys:
+                if can_add(key, dimensions):
+                    selected = key
+                    break
+            if selected is not None:
+                break
+        if selected is None:
+            selected = ranked_keys[0]
+
+        quotas[selected] += 1
+        country, media_type, era_name, vibe_name = selected
+        current["country"][country] += 1
+        current["media_type"][media_type] += 1
+        current["era"][era_name] += 1
+        current["vibe"][vibe_name] += 1
+        remaining -= 1
+    return quotas
+
+
 def _current_year() -> int:
     return datetime.now(timezone.utc).year
 
@@ -422,42 +736,57 @@ def build_fetch_buckets(
     media = media_weights(profile.media_preference)
     era = release_weights(profile.release_preference)
     vibe = vibe_weights(profile.vibe_preference)
-    origin = origin_weights(profile.origin_preference, ui_language=profile.ui_language)
+    country_selection = profile.country_selection
+    if not isinstance(country_selection, CountrySelection):
+        country_selection = _coerce_country_selection(
+            country_selection,
+            ui_language=profile.ui_language,
+            origin_preference=profile.origin_preference,
+        )
+    country_selection = country_selection.normalized()
+    country_plan = build_country_plan(country_selection, target)
     genre_ids = genre_ids or {}
 
-    raw_quotas: dict[tuple[str, str, str, str, str | None], float] = {}
-    quota_weights: dict[tuple[str, str, str, str, str | None], float] = {}
-    for media_type, media_weight in media.items():
-        for era_name, era_weight in era.items():
-            for vibe_name, vibe_weight in vibe.items():
-                for origin_name, origin_weight in origin.items():
-                    if origin_name == ORIGIN_FOREIGN:
-                        for language, language_weight in FOREIGN_LANGUAGE_BUCKETS:
-                            key = (media_type, era_name, vibe_name, origin_name, language)
-                            quota_weight = media_weight * era_weight * vibe_weight * origin_weight * language_weight
-                            quota_weights[key] = quota_weight
-                            raw_quotas[key] = target * quota_weight
-                    else:
-                        key = (media_type, era_name, vibe_name, origin_name, None)
-                        quota_weight = media_weight * era_weight * vibe_weight * origin_weight
-                        quota_weights[key] = quota_weight
-                        raw_quotas[key] = target * quota_weight
+    raw_quotas: dict[tuple[str, str, str, str], float] = {}
+    quota_weights: dict[tuple[str, str, str, str], float] = {}
+    for target_country, country_quota in country_plan.items():
+        for media_type, media_weight in media.items():
+            for era_name, era_weight in era.items():
+                for vibe_name, vibe_weight in vibe.items():
+                    key = (target_country, media_type, era_name, vibe_name)
+                    country_weight = float(country_selection.country_weights.get(target_country, 0.0))
+                    quota_weight = country_weight * media_weight * era_weight * vibe_weight
+                    quota_weights[key] = quota_weight
+                    raw_quotas[key] = country_quota * media_weight * era_weight * vibe_weight
 
-    quotas = _allocate_bucket_quotas(raw_quotas, profile=profile, target=target)
+    quotas = _allocate_country_bucket_quotas(
+        raw_quotas,
+        country_plan=country_plan,
+        media_targets=_allocate_weighted(media, target),
+        era_targets=_allocate_weighted(era, target),
+        vibe_targets=_allocate_weighted(vibe, target),
+        target=target,
+    )
     buckets: list[CandidateFetchBucket] = []
     for key, quota in quotas.items():
         if quota <= 0:
             continue
-        media_type, era_name, vibe_name, origin_name, language = key
+        target_country, media_type, era_name, vibe_name = key
+        country_weight = float(country_selection.country_weights.get(target_country, 0.0))
+        origin_name = ORIGIN_DOMESTIC if target_country == country_selection.home_country else ORIGIN_FOREIGN
         buckets.append(
             CandidateFetchBucket(
                 media_type=media_type,
                 era=era_name,
                 vibe=vibe_name,
                 origin=origin_name,
-                original_language=language,
+                original_language=None,
                 quota=quota,
                 quota_weight=quota_weights[key],
+                target_country=target_country,
+                target_country_weight=country_weight,
+                home_country=country_selection.home_country,
+                exclude_home_country=country_selection.exclude_home_country,
                 genre_ids=tuple(genre_ids.get(media_type, {}).get(vibe_name, ())),
             )
         )
@@ -543,6 +872,8 @@ def _vote_count_for_fallback(bucket: CandidateFetchBucket, fallback: str) -> int
 
 
 def _is_hard_origin_bucket(profile: OnboardingTasteProfile, bucket: CandidateFetchBucket) -> bool:
+    if bucket.target_country:
+        return True
     return (
         str(profile.ui_language or "").strip().casefold() == "ru"
         and bucket.origin in {ORIGIN_DOMESTIC, ORIGIN_FOREIGN}
@@ -615,7 +946,9 @@ def build_discover_request(
     if effective_no_genres is False and bucket.genre_ids:
         params["with_genres"] = "|".join(str(genre_id) for genre_id in bucket.genre_ids)
 
-    if effective_any_origin is False:
+    if bucket.target_country:
+        params["with_origin_country"] = bucket.target_country
+    elif effective_any_origin is False:
         if bucket.origin == ORIGIN_DOMESTIC:
             params.update(_domestic_filter_for_fallback(fallback))
         elif bucket.origin == ORIGIN_FOREIGN and bucket.original_language:
@@ -660,6 +993,15 @@ def _result_number(result: dict[str, Any], key: str) -> float | None:
         return None
 
 
+def _result_country_codes(result: dict[str, Any]) -> list[str]:
+    return country_schema.normalize_country_filter_list(
+        result.get("origin_country")
+        or result.get("production_countries")
+        or result.get("country_codes")
+        or result.get("countries")
+    )
+
+
 def candidate_rejection_reason(
     result: dict[str, Any],
     bucket: CandidateFetchBucket,
@@ -695,6 +1037,11 @@ def candidate_rejection_reason(
         return "low_score"
     if bucket.era == ERA_TOP_ALL_TIME and vote_count < _base_vote_count(bucket):
         return "low_votes"
+    country_codes = _result_country_codes(result)
+    if bucket.target_country and country_codes and bucket.target_country not in country_codes:
+        return "wrong_country"
+    if bucket.exclude_home_country and bucket.home_country in country_codes:
+        return "home_country_excluded"
     if (bucket.media_type, normalized_tmdb_id) in accepted_identities:
         return "duplicate_batch"
     if discover_item_existing_reason(result, existing_index, media_type=bucket.media_type) is not None:
@@ -792,9 +1139,11 @@ def build_candidate_record_from_result(
         if str(genre_id).strip().lstrip("-").isdigit()
     ]
     genre_names = [name for name in genre_names if name]
-    country_codes = list(result.get("origin_country") or [])
-    if bucket.origin == ORIGIN_DOMESTIC and "RU" not in country_codes:
-        country_codes.append("RU")
+    country_codes = _result_country_codes(result)
+    if bucket.target_country and len(country_codes) == 0:
+        country_codes.append(bucket.target_country)
+    if bucket.origin == ORIGIN_DOMESTIC and bucket.home_country not in country_codes:
+        country_codes.append(bucket.home_country)
 
     candidate = {
         "media_type": bucket.media_type,
@@ -803,6 +1152,8 @@ def build_candidate_record_from_result(
         "source_version": 3,
         "source_bucket_id": bucket.bucket_id,
         "origin_bucket": bucket.origin,
+        "target_country": bucket.target_country,
+        "target_country_weight": bucket.target_country_weight,
         "onboarding_profile_id": int(profile_id),
         "candidate_score": candidate_score,
         "fetch_rank": int(fetch_rank),
@@ -832,6 +1183,8 @@ def build_candidate_record_from_result(
             "era": bucket.era,
             "vibe": bucket.vibe,
             "origin": bucket.origin,
+            "target_country": bucket.target_country,
+            "target_country_weight": bucket.target_country_weight,
             "original_language": bucket.original_language,
             "fallback": fallback,
         },
@@ -882,6 +1235,7 @@ def planned_counts_for_profile(
         "media_type": totals("media_type"),
         "release": totals("era"),
         "vibe": totals("vibe"),
+        "country": totals("target_country"),
         "origin": totals("origin"),
         "original_language": totals("original_language"),
     }
@@ -892,6 +1246,7 @@ def actual_counts_for_candidates(candidates: list[dict[str, Any]]) -> dict[str, 
         "media_type": Counter(),
         "release": Counter(),
         "vibe": Counter(),
+        "country": Counter(),
         "origin": Counter(),
         "original_language": Counter(),
         "fallback": Counter(),
@@ -907,6 +1262,9 @@ def actual_counts_for_candidates(candidates: list[dict[str, Any]]) -> dict[str, 
         vibe = source_query.get("vibe")
         if vibe:
             counters["vibe"][str(vibe)] += 1
+        target_country = candidate.get("target_country") or source_query.get("target_country")
+        if target_country:
+            counters["country"][str(target_country)] += 1
         origin = candidate.get("origin_bucket") or source_query.get("origin")
         if origin:
             counters["origin"][str(origin)] += 1
@@ -942,6 +1300,10 @@ def _build_warnings(
         actual = int(actual_counts.get("media_type", {}).get(media_type, 0))
         if actual < int(planned):
             warnings.append(f"Media quota underfilled: {media_type} planned {planned}, actual {actual}.")
+    for country, planned in sorted(planned_counts.get("country", {}).items()):
+        actual = int(actual_counts.get("country", {}).get(country, 0))
+        if actual < int(planned):
+            warnings.append(f"Country quota underfilled: {country} planned {planned}, actual {actual}.")
     if str(profile.ui_language or "").strip().casefold() == "ru":
         for origin in (ORIGIN_DOMESTIC, ORIGIN_FOREIGN):
             planned = int(planned_counts.get("origin", {}).get(origin, 0))

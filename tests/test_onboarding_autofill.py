@@ -8,8 +8,12 @@ from candidates.onboarding.autofill import (
     MEDIA_MOVIE,
     MEDIA_TV,
     OnboardingTasteProfile,
+    build_country_plan,
     build_discover_request,
     build_fetch_buckets,
+    country_selection_for_foreign_ru,
+    country_selection_for_manual,
+    country_selection_for_mixed_ru,
     media_weights,
     origin_weights,
     release_weights,
@@ -66,6 +70,7 @@ class FakeTmdbClient:
         genre_ids = [int(item) for item in genre_text.split("|") if item.isdigit()]
         if not genre_ids:
             genre_ids = [35] if media == MEDIA_MOVIE else [18]
+        country = params.get("with_origin_country") or "US"
         results = []
         for index in range(20):
             tmdb_id = call_index * 1000 + index
@@ -80,6 +85,7 @@ class FakeTmdbClient:
                         "poster_path": f"/m{tmdb_id}.jpg",
                         "overview": "Overview",
                         "genre_ids": genre_ids,
+                        "origin_country": [country],
                         "vote_average": 7.2,
                         "vote_count": 1200,
                         "popularity": 50,
@@ -93,7 +99,7 @@ class FakeTmdbClient:
                         "name": f"Series {tmdb_id}",
                         "original_name": f"Series {tmdb_id}",
                         "first_air_date": f"{year}-01-01",
-                        "origin_country": ["RU"] if params.get("with_origin_country") == "RU" else ["US"],
+                        "origin_country": [country],
                         "poster_path": f"/t{tmdb_id}.jpg",
                         "overview": "Overview",
                         "genre_ids": genre_ids,
@@ -199,18 +205,22 @@ def test_vibe_preference_quotas_are_70_30_and_50_50() -> None:
     assert _quota_by(build_fetch_buckets(_profile(vibe_preference="dark")), "vibe") == {"light": 36, "dark": 84}
 
 
-def test_ru_origin_preferences_create_domestic_foreign_quotas_and_non_ru_uses_any() -> None:
-    assert origin_weights("domestic", ui_language="ru") == {"domestic": 0.70, "foreign": 0.30}
+def test_country_selection_presets_create_contract_quotas() -> None:
+    assert build_country_plan(country_selection_for_foreign_ru(), 120) == {"US": 108, "GB": 12}
+    assert build_country_plan(country_selection_for_mixed_ru(), 120) == {"RU": 18, "US": 102}
+    assert build_country_plan(country_selection_for_manual("RU", ["US", "KR"]), 120) == {"US": 84, "KR": 36}
+    assert build_country_plan(country_selection_for_manual("RU", ["US", "KR"], ratio_preset="90/10"), 120) == {"US": 108, "KR": 12}
+
+
+def test_country_first_profile_replaces_broad_origin_defaults() -> None:
     assert origin_weights("foreign", ui_language="ru") == {"domestic": 0.30, "foreign": 0.70}
-    assert origin_weights("mixed", ui_language="ru") == {"domestic": 0.50, "foreign": 0.50}
     assert origin_weights(None, ui_language="en") == {"any": 1.0}
-    domestic = _quota_by(build_fetch_buckets(_profile(ui_language="ru", origin_preference="domestic")), "origin")
-    foreign = _quota_by(build_fetch_buckets(_profile(ui_language="ru", origin_preference="foreign")), "origin")
-    assert domestic["domestic"] == 84
-    assert domestic["foreign"] == 36
-    assert foreign["domestic"] == 36
-    assert foreign["foreign"] == 84
-    assert set(_quota_by(build_fetch_buckets(_profile(ui_language="en")), "origin")) == {"any"}
+    foreign_countries = _quota_by(build_fetch_buckets(_profile(ui_language="ru", origin_preference="foreign")), "target_country")
+    mixed_countries = _quota_by(build_fetch_buckets(_profile(ui_language="ru", origin_preference="mixed")), "target_country")
+    en_countries = _quota_by(build_fetch_buckets(_profile(ui_language="en")), "target_country")
+    assert foreign_countries == {"US": 108, "GB": 12}
+    assert mixed_countries == {"RU": 18, "US": 102}
+    assert en_countries == {"US": 108, "GB": 12}
 
 
 def test_bucket_quotas_sum_exactly_to_target() -> None:
@@ -234,32 +244,32 @@ def test_discover_params_use_media_specific_contract() -> None:
     movie = next(bucket for bucket in build_fetch_buckets(_profile(media_preference="movie", release_preference="new")) if bucket.media_type == MEDIA_MOVIE and bucket.era == "new_sweep")
     endpoint, params = build_discover_request(movie, profile=_profile(media_preference="movie", release_preference="new"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert endpoint == "/discover/movie"
+    assert params["with_origin_country"] == movie.target_country
     assert params["primary_release_year"] == 2026
     assert params["primary_release_date.lte"] == "2026-07-08"
     assert params["include_adult"] is False
     tv = next(bucket for bucket in build_fetch_buckets(_profile(media_preference="tv", release_preference="new")) if bucket.media_type == MEDIA_TV and bucket.era == "new_sweep")
     endpoint, params = build_discover_request(tv, profile=_profile(media_preference="tv", release_preference="new"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert endpoint == "/discover/tv"
+    assert params["with_origin_country"] == tv.target_country
     assert params["first_air_date_year"] == 2026
     assert params["first_air_date.lte"] == "2026-07-08"
 
 
-def test_fallback_order_relaxes_origin_before_genres_and_votes() -> None:
+def test_country_first_fallback_keeps_origin_country_before_genres_and_votes() -> None:
     assert autofill.FALLBACK_ORDER.index("relax_origin") < autofill.FALLBACK_ORDER.index("relax_genres")
     assert autofill.FALLBACK_ORDER.index("relax_genres") < autofill.FALLBACK_ORDER.index("relax_votes_mid")
     profile = _profile(ui_language="ru", origin_preference="domestic", vibe_preference="light")
     genre_ids = resolve_tmdb_genre_ids(FakeTmdbClient())
-    bucket = next(bucket for bucket in build_fetch_buckets(profile, genre_ids=genre_ids) if bucket.origin == "domestic" and bucket.genre_ids)
+    bucket = next(bucket for bucket in build_fetch_buckets(profile, genre_ids=genre_ids) if bucket.target_country == "RU" and bucket.genre_ids)
     _endpoint, base = build_discover_request(bucket, profile=profile, fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     _endpoint, relaxed_origin = build_discover_request(bucket, profile=profile, fallback="relax_origin", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     _endpoint, relaxed_genres = build_discover_request(bucket, profile=profile, fallback="relax_genres", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     _endpoint, relaxed_era = build_discover_request(bucket, profile=profile, fallback="relax_era", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert base["with_origin_country"] == "RU"
     assert relaxed_origin["with_origin_country"] == "RU"
-    assert relaxed_origin["with_original_language"] == "ru"
     assert "with_genres" in relaxed_origin
     assert relaxed_genres["with_origin_country"] == "RU"
-    assert relaxed_genres["with_original_language"] == "ru"
     assert "with_genres" not in relaxed_genres
     assert relaxed_era["with_origin_country"] == "RU"
     assert "with_original_language" not in relaxed_era
@@ -374,8 +384,10 @@ def test_onboarding_plan_view_has_target_quotas_without_api_calls() -> None:
     assert plan["target"] == autofill.STARTER_POOL_TARGET
     assert plan["quotas"]["media_type"][MEDIA_MOVIE] == 84
     assert plan["quotas"]["media_type"][MEDIA_TV] == 36
-    assert plan["quotas"]["origin"]["foreign"] == 84
-    assert plan["quotas"]["origin"]["domestic"] == 36
+    assert plan["quotas"]["country"] == {"US": 108, "GB": 12}
+    assert plan["country_plan"] == {"US": 108, "GB": 12}
+    assert plan["country_selection"]["exclude_home_country"] is True
+    assert plan["quotas"]["origin"] == {"foreign": 120}
 
 
 def test_candidate_identity_is_media_type_plus_tmdb_id() -> None:
