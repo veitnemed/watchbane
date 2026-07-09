@@ -1776,6 +1776,8 @@ def test_normalize_and_format_final_score() -> None:
     assert final_score_to_stars(0.86) == 4.5
     assert final_score_to_stars(60) == 3.0
     assert final_score_to_stars(0.52) == 2.5
+    assert final_score_to_stars(0.04) == 0.0
+    assert final_score_to_stars(0.05) == 0.5
     assert final_score_to_stars(None) is None
 
 

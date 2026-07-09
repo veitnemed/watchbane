@@ -305,6 +305,84 @@ def test_onboarding_wizard_profile_contains_explicit_country_selection(qapp) -> 
         dialog.close()
 
 
+def test_onboarding_wizard_country_buttons_use_localized_names(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    ru_dialog = OnboardingAutofillDialog(ui_language="ru")
+    en_dialog = OnboardingAutofillDialog(ui_language="en")
+    try:
+        ru_labels = [button.text() for button in ru_dialog._question_pages[0][2].buttons()]
+        en_labels = [button.text() for button in en_dialog._question_pages[0][2].buttons()]
+
+        assert ru_labels == [
+            "Зарубежное: США + Великобритания",
+            "Смешанное: Россия + США",
+            "Без предпочтений: США",
+        ]
+        assert all(code not in " ".join(ru_labels) for code in ("RU", "US", "GB", "KR"))
+        assert en_labels == [
+            "Foreign: United States + United Kingdom",
+            "Mixed: United States + South Korea",
+            "No preference: United States",
+        ]
+        assert "US + GB" not in " ".join(en_labels)
+        assert "RU" not in " ".join(en_labels)
+    finally:
+        ru_dialog.close()
+        en_dialog.close()
+
+
+def test_onboarding_wizard_no_preference_uses_us_only_without_ru(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="ru")
+    try:
+        dialog._answers["country_preference"] = "any"
+        profile = dialog._profile()
+
+        assert profile["origin_preference"] == "foreign"
+        assert profile["country_selection"]["selected_countries"] == ["US"]
+        assert profile["country_selection"]["country_weights"] == {"US": 1.0}
+        assert profile["country_selection"]["exclude_home_country"] is True
+        assert profile["country_selection"]["primary_country"] == "US"
+    finally:
+        dialog.close()
+
+
+def test_onboarding_wizard_scale_preview_has_sample_widgets(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame, QLabel, QPushButton
+
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="ru")
+    try:
+        preview = dialog.findChild(QFrame, "onboardingScalePreview")
+        action = dialog.findChild(QPushButton, "onboardingScalePreviewAction")
+        chips = dialog.findChildren(QLabel, "onboardingScalePreviewChip")
+
+        assert preview is not None
+        assert action is not None
+        assert action.text() == "Кнопка"
+        assert [chip.text() for chip in chips] == ["Страна", "Жанр", "Оценка"]
+    finally:
+        dialog.close()
+
+
+def test_onboarding_wizard_plan_summary_localizes_country_counts(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="ru")
+    try:
+        dialog._answers["country_preference"] = "foreign"
+        summary = dialog._format_plan_summary()
+
+        assert "Страны: США: 108, Великобритания: 12" in summary
+        assert "US:" not in summary
+        assert "GB:" not in summary
+    finally:
+        dialog.close()
+
+
 def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
     db_path = tmp_path / "watchbane.sqlite3"

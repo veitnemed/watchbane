@@ -94,7 +94,7 @@ def final_score_to_stars(value) -> float | None:
         * Decimal("10")
     )
     stars = float(rounded_tens / Decimal("20"))
-    return max(0.5, min(5.0, stars))
+    return max(0.0, min(5.0, stars))
 
 
 def _hex_to_rgb(color: str) -> tuple[int, int, int]:

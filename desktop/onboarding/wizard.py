@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
 )
 
 from candidates import service as candidate_service
+from candidates.models import country_reference
 from desktop.settings.app_settings import AppSettings, get_persisted_data_language, normalize_ui_scale, save_app_settings
 from desktop.onboarding.worker import OnboardingAutofillWorker
 from desktop.theme.scaling import font_px, get_ui_scale, scale_px
@@ -83,9 +84,9 @@ _QUESTIONS: tuple[_Question, ...] = (
         title_ru="Какие страны ищем?",
         title_en="Which countries should Watchbane search?",
         options=(
-            ("foreign", "Зарубежное: US + GB", "US + GB"),
-            ("mixed", "Смешанное: RU + US", "US + KR"),
-            ("domestic", "Только RU", "US only"),
+            ("foreign", "Зарубежное", "Foreign"),
+            ("mixed", "Смешанное", "Mixed"),
+            ("any", "Без предпочтений", "No preference"),
         ),
     ),
     _Question(
@@ -247,7 +248,6 @@ QLabel#onboardingWarning {{
     padding: {px(10)}px {px(12)}px;
 }}
 QLabel#onboardingPlanSummary,
-QLabel#onboardingScalePreview,
 QLabel#onboardingFinalSummary {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
@@ -255,6 +255,42 @@ QLabel#onboardingFinalSummary {{
     color: {COLOR_TEXT_SOFT};
     font-size: {font_px(FONT_BASE)}px;
     padding: {px(12)}px {px(14)}px;
+}}
+QFrame#onboardingScalePreview {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_BUTTON)}px;
+}}
+QLabel#onboardingScalePreviewHeader {{
+    background-color: transparent;
+    border: 0;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_DIALOG_TITLE)}px;
+    font-weight: 750;
+}}
+QLabel#onboardingScalePreviewMeta {{
+    background-color: transparent;
+    border: 0;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_BASE)}px;
+}}
+QLabel#onboardingScalePreviewChip {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_BUTTON)}px;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 650;
+    padding: {px(6)}px {px(10)}px;
+}}
+QPushButton#onboardingScalePreviewAction {{
+    background-color: {COLOR_ACCENT};
+    border: 1px solid {COLOR_ACCENT};
+    border-radius: {px(RADIUS_BUTTON)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_BASE)}px;
+    font-weight: 700;
+    padding: {px(9)}px {px(14)}px;
 }}
 """
 
@@ -361,6 +397,40 @@ class OnboardingAutofillDialog(QDialog):
     def _text(self, ru: str, en: str) -> str:
         return en if self._ui_language == "en" else ru
 
+    def _country_name(self, code: str) -> str:
+        labels = (
+            country_reference.ENGLISH_COUNTRY_NAME_BY_ISO2
+            if self._ui_language == "en"
+            else country_reference.COUNTRY_NAME_BY_ISO2
+        )
+        normalized = str(code or "").strip().upper()
+        return labels.get(normalized, normalized)
+
+    def _country_names(self, *codes: str) -> str:
+        return " + ".join(self._country_name(code) for code in codes)
+
+    def _country_option_label(self, value: str, label_ru: str, label_en: str) -> str:
+        if value == "foreign":
+            return self._text(
+                f"{label_ru}: {self._country_names('US', 'GB')}",
+                f"{label_en}: {self._country_names('US', 'GB')}",
+            )
+        if value == "mixed":
+            if self._ui_language == "ru":
+                return f"{label_ru}: {self._country_names('RU', 'US')}"
+            return f"{label_en}: {self._country_names('US', 'KR')}"
+        if value == "any":
+            return self._text(
+                f"{label_ru}: {self._country_name('US')}",
+                f"{label_en}: {self._country_name('US')}",
+            )
+        return self._text(label_ru, label_en)
+
+    def _question_option_label(self, question: _Question, value: str, label_ru: str, label_en: str) -> str:
+        if question.key == "country_preference":
+            return self._country_option_label(value, label_ru, label_en)
+        return self._text(label_ru, label_en)
+
     def _question_start_index(self) -> int:
         return 1
 
@@ -433,9 +503,47 @@ class OnboardingAutofillDialog(QDialog):
         self._scale_group.buttonClicked.connect(self._on_scale_selected)
         layout.addLayout(scale_row)
 
-        self._scale_preview = QLabel("")
+        self._scale_preview = QFrame()
         self._scale_preview.setObjectName("onboardingScalePreview")
-        self._scale_preview.setWordWrap(True)
+        self._scale_preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        preview_layout = QVBoxLayout(self._scale_preview)
+        preview_layout.setContentsMargins(scale_px(14), scale_px(12), scale_px(14), scale_px(12))
+        preview_layout.setSpacing(scale_px(SPACING_SMALL))
+
+        self._scale_preview_title = QLabel("")
+        self._scale_preview_title.setObjectName("onboardingScalePreviewHeader")
+        self._scale_preview_title.setWordWrap(True)
+        preview_layout.addWidget(self._scale_preview_title)
+
+        preview_middle = QHBoxLayout()
+        preview_middle.setContentsMargins(0, 0, 0, 0)
+        preview_middle.setSpacing(scale_px(SPACING_MEDIUM))
+        self._scale_preview_meta = QLabel("")
+        self._scale_preview_meta.setObjectName("onboardingScalePreviewMeta")
+        self._scale_preview_meta.setWordWrap(True)
+        self._scale_preview_meta.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        preview_middle.addWidget(self._scale_preview_meta, 1)
+        preview_layout.addLayout(preview_middle)
+
+        chips_row = QHBoxLayout()
+        chips_row.setContentsMargins(0, 0, 0, 0)
+        chips_row.setSpacing(scale_px(SPACING_SMALL))
+        self._scale_preview_chips: list[QLabel] = []
+        for _ in range(3):
+            chip = QLabel("")
+            chip.setObjectName("onboardingScalePreviewChip")
+            chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            chip.setMinimumHeight(scale_px(28))
+            chip.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+            self._scale_preview_chips.append(chip)
+            chips_row.addWidget(chip)
+        chips_row.addStretch(1)
+        self._scale_preview_action = QPushButton("")
+        self._scale_preview_action.setObjectName("onboardingScalePreviewAction")
+        self._scale_preview_action.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._scale_preview_action.setMinimumHeight(scale_px(36))
+        chips_row.addWidget(self._scale_preview_action)
+        preview_layout.addLayout(chips_row)
         layout.addWidget(self._scale_preview)
         layout.addStretch(1)
         self._update_setup_text()
@@ -453,12 +561,25 @@ class OnboardingAutofillDialog(QDialog):
                 self._back_button.setText(self._text("Назад", "Back"))
                 self._footer_skip_button.setText(self._text("Пропустить", "Skip"))
                 self._next_button.setText(self._text("Далее", "Next"))
-        if hasattr(self, "_scale_preview"):
+        if hasattr(self, "_scale_preview_title"):
             percent = int(round(float(self._ui_scale) * 100))
-            self._scale_preview.setText(self._text(
-                f"Предпросмотр: карточки, кнопки и текст будут открываться примерно на {percent}%.",
-                f"Preview: cards, buttons and text will open at about {percent}%.",
+            self._scale_preview_title.setText(self._text(
+                f"Пример карточки на {percent}%",
+                f"Sample card at {percent}%",
             ))
+            self._scale_preview_meta.setText(self._text(
+                "Так будут выглядеть текст, чипы и кнопка.",
+                "This is how text, chips and buttons will look.",
+            ))
+            self._scale_preview_meta.setVisible(float(self._ui_scale) < 1.30)
+            self._scale_preview_action.setText(self._text("Кнопка", "Button"))
+            chip_labels = (
+                ("Страна", "Жанр", "Оценка")
+                if self._ui_language == "ru"
+                else ("Country", "Genre", "Score")
+            )
+            for chip, text in zip(self._scale_preview_chips, chip_labels, strict=True):
+                chip.setText(text)
 
     def _on_language_selected(self, button: QPushButton) -> None:
         value = str(button.property("answer") or "").strip().casefold()
@@ -486,6 +607,7 @@ class OnboardingAutofillDialog(QDialog):
         app = QApplication.instance()
         if app is not None:
             app.setStyleSheet(app.styleSheet())
+        self.setStyleSheet(_wizard_style())
         self._update_setup_text()
 
     def _rebuild_question_and_result_pages(self) -> None:
@@ -534,7 +656,7 @@ class OnboardingAutofillDialog(QDialog):
         options_layout.setContentsMargins(0, scale_px(SPACING_SMALL), 0, 0)
         options_layout.setSpacing(scale_px(SPACING_MEDIUM))
         for value, label_ru, label_en in question.options:
-            button = QPushButton(self._text(label_ru, label_en))
+            button = QPushButton(self._question_option_label(question, value, label_ru, label_en))
             button.setObjectName("onboardingOption")
             button.setCheckable(True)
             button.setProperty("answer", value)
@@ -675,7 +797,7 @@ class OnboardingAutofillDialog(QDialog):
         country_plan = plan.get("country_plan") if isinstance(plan.get("country_plan"), dict) else {}
         country_counts = country_plan or quotas.get("country") or {}
         country_line = ", ".join(
-            f"{country}: {int(count)}"
+            f"{self._country_name(country)}: {int(count)}"
             for country, count in country_counts.items()
         )
         lines = [
@@ -702,8 +824,9 @@ class OnboardingAutofillDialog(QDialog):
         for value in actual_counts:
             if value not in keys:
                 keys.append(value)
+        display_key = self._country_name if key == "country" else str
         parts = [
-            f"{value}: {int(actual_counts.get(value, 0))}/{int(planned_counts.get(value, 0))}"
+            f"{display_key(value)}: {int(actual_counts.get(value, 0))}/{int(planned_counts.get(value, 0))}"
             for value in keys
         ]
         label = self._text(label_ru, label_en)
@@ -889,15 +1012,15 @@ class OnboardingAutofillDialog(QDialog):
     def _country_selection_payload(self) -> dict[str, Any]:
         preference = self._answers.get("country_preference") or "foreign"
         if self._ui_language == "ru":
-            if preference == "domestic":
+            if preference in {"any", "domestic"}:
                 return {
                     "mode": "single_country",
                     "home_country": "RU",
-                    "selected_countries": ["RU"],
-                    "country_weights": {"RU": 1.0},
-                    "exclude_home_country": False,
+                    "selected_countries": ["US"],
+                    "country_weights": {"US": 1.0},
+                    "exclude_home_country": True,
                     "max_countries": 1,
-                    "primary_country": "RU",
+                    "primary_country": "US",
                     "secondary_country": None,
                 }
             if preference == "mixed":
@@ -922,7 +1045,7 @@ class OnboardingAutofillDialog(QDialog):
                 "secondary_country": "GB",
             }
 
-        if preference == "domestic":
+        if preference in {"any", "domestic"}:
             return {
                 "mode": "single_country",
                 "home_country": "US",
@@ -957,12 +1080,17 @@ class OnboardingAutofillDialog(QDialog):
 
     def _profile(self) -> dict[str, Any]:
         country_preference = self._answers.get("country_preference") or "foreign"
+        origin_preference = (
+            country_preference
+            if self._ui_language == "ru" and country_preference in {"foreign", "mixed"}
+            else ("foreign" if self._ui_language == "ru" else None)
+        )
         return {
             "ui_language": self._ui_language,
             "media_preference": self._answers.get("media_preference") or "both",
             "release_preference": self._answers.get("release_preference") or "mixed",
             "vibe_preference": self._answers.get("vibe_preference") or "mixed",
-            "origin_preference": country_preference if self._ui_language == "ru" else None,
+            "origin_preference": origin_preference,
             "country_selection": self._country_selection_payload(),
         }
 
