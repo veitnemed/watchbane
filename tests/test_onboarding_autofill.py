@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from itertools import combinations
 from datetime import date
 
+import pytest
+
+import candidates.onboarding.request_log as request_log
 from candidates.onboarding import autofill
 from candidates.models.keys import pool_entry_key, title_identity_key
 from candidates.onboarding.autofill import (
@@ -168,6 +172,11 @@ class EmptyTmdbClient(FakeTmdbClient):
     def discover(self, endpoint: str, params: dict) -> dict:
         self.calls.append((endpoint, dict(params)))
         return {"results": [], "total_pages": 1}
+
+
+class FailingGenreTmdbClient(FakeTmdbClient):
+    def movie_genres(self, language: str = "en") -> list[dict]:
+        raise RuntimeError("boom token=secret-token db=D:\\runtime\\watchbane.sqlite3")
 
 
 class ScarceTvTmdbClient(FakeTmdbClient):
@@ -660,6 +669,14 @@ def _candidate_quality_rate(candidates: list[dict], quality_class: str) -> float
         return 0.0
     count = sum(1 for candidate in candidates if candidate.get("quality_class") == quality_class)
     return round(count / len(candidates), 4)
+
+
+def _read_jsonl(path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
 
 def _dark_vibe_hit_rate(candidates: list[dict]) -> float:
@@ -1332,6 +1349,136 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
         assert result.api_requests <= 20
     finally:
         conn.close()
+
+
+def test_onboarding_request_log_disabled_by_default(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    log_path = tmp_path / "reports" / "onboarding_request_log.jsonl"
+    monkeypatch.setattr(request_log, "DEFAULT_LOG_PATH", log_path)
+    monkeypatch.delenv(request_log.ENV_FLAG, raising=False)
+
+    result = run_onboarding_autofill(
+        _profile(media_preference="movie"),
+        client=FakeTmdbClient(),
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count == autofill.STARTER_POOL_TARGET
+    assert log_path.exists() is False
+
+
+def test_onboarding_request_log_enabled_writes_one_sanitized_jsonl_entry(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    log_path = tmp_path / "reports" / "onboarding_request_log.jsonl"
+    db_path = tmp_path / "runtime" / "watchbane.sqlite3"
+    monkeypatch.setattr(request_log, "DEFAULT_LOG_PATH", log_path)
+    monkeypatch.setenv(request_log.ENV_FLAG, "1")
+    client = FakeTmdbClient()
+    client.api_key = "secret-token"
+
+    result = run_onboarding_autofill(
+        _profile(
+            taste_preset=PRESET_MANUAL,
+            media_preference="movie",
+            animation_mode=ANIMATION_MODE_LIVE_ACTION_ONLY,
+            country_selection=country_selection_for_manual("US", ["US"]).as_repository_dict(),
+            include_genres=(18,),
+            exclude_genres=(35,),
+            min_year=2010,
+            max_year=2024,
+        ),
+        client=client,
+        path=db_path,
+        current_year=2026,
+    )
+
+    lines = _read_jsonl(log_path)
+    raw = log_path.read_text(encoding="utf-8")
+    assert len(lines) == 1
+    entry = lines[0]
+    assert entry["status"] == "success"
+    assert entry["selected_countries"] == ["US"]
+    assert entry["selected_preset"] == PRESET_MANUAL
+    assert entry["media_type"] == "movie"
+    assert entry["animation_mode"] == ANIMATION_MODE_LIVE_ACTION_ONLY
+    assert entry["target_pool_size"] == autofill.STARTER_POOL_TARGET
+    assert entry["generated_candidates_count"] == result.created_count
+    assert entry["country_hit_rate"] == 1.0
+    assert entry["country_plan"] == {"US": 120}
+    assert entry["country_actual"] == {"US": result.created_count}
+    assert entry["media_actual"] == {"movie": result.created_count}
+    assert entry["discover_http_requests"] > 0
+    assert entry["details_requests"] == result.details_requests
+    assert "secret-token" not in raw
+    assert "api_key" not in raw
+    assert str(db_path) not in raw
+    assert str(tmp_path) not in raw
+
+
+def test_onboarding_request_log_sanitizer_removes_tokens_paths_and_control_chars() -> None:
+    sanitized = request_log.sanitize_log_entry({
+        "api_key": "secret-token",
+        "tmdb_token": "secret-token",
+        "error_message": "bad\x00 token=secret-token path D:\\runtime\\watchbane.sqlite3",
+        "nested": {"authorization": "Bearer secret-token", "safe": "ok"},
+    })
+
+    dumped = json.dumps(sanitized, ensure_ascii=False)
+    assert "api_key" not in dumped
+    assert "tmdb_token" not in dumped
+    assert "authorization" not in dumped
+    assert "secret-token" not in dumped
+    assert "D:\\runtime" not in dumped
+    assert "\x00" not in dumped
+    assert sanitized["nested"]["safe"] == "ok"
+
+
+def test_onboarding_request_log_write_warning_does_not_break_generation(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv(request_log.ENV_FLAG, "1")
+    monkeypatch.setattr(autofill.request_log, "append_onboarding_request_log", lambda _entry: "request log failed")
+
+    result = run_onboarding_autofill(
+        _profile(media_preference="movie"),
+        client=FakeTmdbClient(),
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.ok is True
+    assert result.created_count == autofill.STARTER_POOL_TARGET
+    assert "request log failed" in result.warnings
+    assert result.warning and "request log failed" in result.warning
+
+
+def test_onboarding_request_log_failure_case_writes_failure_status(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    log_path = tmp_path / "reports" / "onboarding_request_log.jsonl"
+    db_path = tmp_path / "runtime" / "watchbane.sqlite3"
+    monkeypatch.setattr(request_log, "DEFAULT_LOG_PATH", log_path)
+    monkeypatch.setenv(request_log.ENV_FLAG, "1")
+
+    with pytest.raises(RuntimeError):
+        run_onboarding_autofill(
+            _profile(media_preference="movie"),
+            client=FailingGenreTmdbClient(),
+            path=db_path,
+            current_year=2026,
+        )
+
+    lines = _read_jsonl(log_path)
+    raw = log_path.read_text(encoding="utf-8")
+    assert len(lines) == 1
+    entry = lines[0]
+    assert entry["status"] == "failure"
+    assert entry["error_class"] == "RuntimeError"
+    assert entry["generated_candidates_count"] == 0
+    assert entry["target_pool_size"] == autofill.STARTER_POOL_TARGET
+    assert "secret-token" not in raw
+    assert str(db_path) not in raw
+    assert str(tmp_path) not in raw
+    assert "<redacted_path>" in entry["error_message"]
 
 
 def test_run_autofill_keeps_tv_quota_when_tv_is_preferred(tmp_path, monkeypatch) -> None:

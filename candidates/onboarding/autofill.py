@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime, timezone
 import json
 import math
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Callable, Protocol
 
 from apis import tmdb_api
@@ -23,6 +24,7 @@ from candidates.onboarding.pagination import (
     MAX_DISCOVER_PAGES,
     PaginationConfig,
 )
+import candidates.onboarding.request_log as request_log
 from candidates.pool.dataset_overlap import build_dataset_title_keys
 from candidates.pool.existing_index import build_existing_candidate_index, discover_item_existing_reason
 from candidates.pool.watched_cleanup import build_watched_signatures, is_watched_candidate
@@ -37,6 +39,7 @@ from storage.sqlite.onboarding_repository import (
     complete_onboarding_profile,
     create_onboarding_profile,
     has_completed_onboarding_profile,
+    load_autofill_request_audits,
     save_autofill_request_audit,
 )
 
@@ -2268,7 +2271,7 @@ def _save_pool_incremental(
     save_candidate_pool_dict(pool, path=path)
 
 
-def run_onboarding_autofill(
+def _run_onboarding_autofill_impl(
     profile: OnboardingTasteProfile,
     *,
     client: TmdbClientProtocol | None = None,
@@ -2589,3 +2592,191 @@ def run_onboarding_autofill(
         preference_auto_fix_applied=bool(preference_diagnostics.get("auto_fix_applied")),
         preference_diagnostics=preference_diagnostics,
     )
+
+
+def _profile_selected_countries(profile: OnboardingTasteProfile) -> list[str]:
+    selection = profile.country_selection
+    if isinstance(selection, CountrySelection):
+        return list(selection.selected_countries)
+    if isinstance(selection, dict):
+        return [str(country).strip().upper() for country in selection.get("selected_countries") or [] if str(country).strip()]
+    return []
+
+
+def _safe_int_dict(values: dict[str, Any] | None) -> dict[str, int]:
+    result: dict[str, int] = {}
+    for key, value in (values or {}).items():
+        try:
+            result[str(key)] = int(value or 0)
+        except (TypeError, ValueError):
+            result[str(key)] = 0
+    return result
+
+
+def _country_hit_rate_for_log(result: AutofillResult) -> float:
+    created_count = int(result.created_count or 0)
+    if created_count <= 0:
+        return 0.0
+    country_plan = _safe_int_dict((result.planned_counts or {}).get("country", {}))
+    country_actual = _safe_int_dict((result.actual_counts or {}).get("country", {}))
+    planned_countries = {country for country, count in country_plan.items() if int(count) > 0}
+    if not planned_countries:
+        return 0.0
+    hit_count = sum(int(country_actual.get(country, 0)) for country in planned_countries)
+    return round(hit_count / created_count, 4)
+
+
+def _request_audit_metrics_for_log(profile_id: int, path: str | Path | None) -> dict[str, Any]:
+    try:
+        audits = load_autofill_request_audits(profile_id, path=path)
+    except Exception:
+        audits = []
+    executed = [audit for audit in audits if audit.get("status") != "skipped_duplicate"]
+    broad_origin_requests = sum(
+        1
+        for audit in executed
+        if "with_origin_country" not in (audit.get("params") or {})
+    )
+    fallback_used = any(
+        (audit.get("params") or {}).get("_fallback") not in (None, "", FALLBACK_BASE)
+        for audit in executed
+    )
+    return {
+        "discover_http_requests": len(executed),
+        "broad_origin_requests": broad_origin_requests,
+        "fallback_used": bool(fallback_used),
+    }
+
+
+def _quality_counts_for_log(result: AutofillResult) -> dict[str, int]:
+    weak_count = sum(1 for candidate in result.candidates if candidate.get("quality_class") == QUALITY_WEAK)
+    accepted_garbage_count = sum(1 for candidate in result.candidates if candidate.get("quality_class") == QUALITY_GARBAGE)
+    rejected_garbage_count = int((result.quality_gate_rejected_counts or {}).get(QUALITY_GARBAGE, 0) or 0)
+    return {
+        "weak_candidates_count": weak_count,
+        "garbage_candidates_count": accepted_garbage_count + rejected_garbage_count,
+    }
+
+
+def _build_onboarding_request_log_entry(
+    profile: OnboardingTasteProfile,
+    *,
+    duration_ms: int,
+    result: AutofillResult | None = None,
+    status: str,
+    error: Exception | None = None,
+    path: str | Path | None = None,
+) -> request_log.OnboardingRequestLogEntry:
+    profile = profile.normalized()
+    country_plan: dict[str, int] = {}
+    country_actual: dict[str, int] = {}
+    media_actual: dict[str, int] = {}
+    generated_count = 0
+    country_hit_rate = 0.0
+    details_requests = 0
+    missing_overview_count = 0
+    warnings: list[str] = []
+    audit_metrics = {
+        "discover_http_requests": 0,
+        "broad_origin_requests": 0,
+        "fallback_used": False,
+    }
+    quality_counts = {
+        "weak_candidates_count": 0,
+        "garbage_candidates_count": 0,
+    }
+    if result is not None:
+        generated_count = int(result.created_count or 0)
+        country_plan = _safe_int_dict((result.planned_counts or {}).get("country", {}))
+        country_actual = _safe_int_dict((result.actual_counts or {}).get("country", {}))
+        media_actual = _safe_int_dict((result.actual_counts or {}).get("media_type", {}))
+        country_hit_rate = _country_hit_rate_for_log(result)
+        details_requests = int(result.details_requests or 0)
+        missing_overview_count = int(result.missing_overview_after_fallback or 0)
+        warnings = [str(warning) for warning in result.warnings or []]
+        audit_metrics = _request_audit_metrics_for_log(result.profile_id, path)
+        quality_counts = _quality_counts_for_log(result)
+
+    return request_log.OnboardingRequestLogEntry(
+        timestamp=request_log.utc_timestamp(),
+        app_version=None,
+        git_commit=request_log.current_git_commit(),
+        ui_language=profile.ui_language,
+        selected_preset=profile.taste_preset,
+        media_type=profile.media_preference,
+        animation_mode=profile.animation_mode,
+        selected_countries=_profile_selected_countries(profile),
+        origin_preference=profile.origin_preference,
+        release_preference=profile.release_preference,
+        vibe=profile.vibe_preference,
+        include_genres=[int(value) for value in profile.include_genres or ()],
+        exclude_genres=[int(value) for value in profile.exclude_genres or ()],
+        min_year=profile.min_year,
+        max_year=profile.max_year,
+        target_pool_size=STARTER_POOL_TARGET,
+        generated_candidates_count=generated_count,
+        country_plan=country_plan,
+        country_actual=country_actual,
+        media_actual=media_actual,
+        country_hit_rate=country_hit_rate,
+        fallback_used=bool(audit_metrics["fallback_used"]),
+        broad_origin_requests=int(audit_metrics["broad_origin_requests"]),
+        discover_http_requests=int(audit_metrics["discover_http_requests"]),
+        details_requests=details_requests,
+        missing_overview_count=missing_overview_count,
+        weak_candidates_count=int(quality_counts["weak_candidates_count"]),
+        garbage_candidates_count=int(quality_counts["garbage_candidates_count"]),
+        warnings=warnings,
+        duration_ms=max(0, int(duration_ms)),
+        status=status,
+        error_class=error.__class__.__name__ if error is not None else None,
+        error_message=str(error) if error is not None else None,
+    )
+
+
+def run_onboarding_autofill(
+    profile: OnboardingTasteProfile,
+    *,
+    client: TmdbClientProtocol | None = None,
+    path: str | Path | None = None,
+    progress_callback: ProgressCallback | None = None,
+    cancel_checker: CancelChecker | None = None,
+    current_year: int | None = None,
+) -> AutofillResult:
+    normalized_profile = profile.normalized()
+    started_at = perf_counter()
+    try:
+        result = _run_onboarding_autofill_impl(
+            normalized_profile,
+            client=client,
+            path=path,
+            progress_callback=progress_callback,
+            cancel_checker=cancel_checker,
+            current_year=current_year,
+        )
+    except Exception as error:
+        duration_ms = int(round((perf_counter() - started_at) * 1000))
+        entry = _build_onboarding_request_log_entry(
+            normalized_profile,
+            duration_ms=duration_ms,
+            result=None,
+            status="failure",
+            error=error,
+            path=path,
+        )
+        request_log.append_onboarding_request_log(entry)
+        raise
+
+    duration_ms = int(round((perf_counter() - started_at) * 1000))
+    entry = _build_onboarding_request_log_entry(
+        normalized_profile,
+        duration_ms=duration_ms,
+        result=result,
+        status="success" if result.ok else "cancelled",
+        path=path,
+    )
+    log_warning = request_log.append_onboarding_request_log(entry)
+    if log_warning:
+        warnings = [*result.warnings, log_warning]
+        result = replace(result, warnings=warnings, warning="\n".join(warnings))
+    return result
