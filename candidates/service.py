@@ -244,6 +244,7 @@ def build_onboarding_candidate_pool(
             discover_pages=profile.get("discover_pages", 3),
             details_limit=profile.get("details_limit", 50),
             details_enrichment=profile.get("details_enrichment"),
+            pagination=profile.get("pagination"),
         )
     result = run_onboarding_autofill(
         taste_profile,
@@ -257,6 +258,8 @@ def build_onboarding_candidate_pool(
         "pool_size": result.pool_size,
         "api_requests": result.api_requests,
         "details_requests": result.details_requests,
+        "adaptive_pages_used": result.adaptive_pages_used,
+        "pagination_stop_reasons": result.pagination_stop_reasons,
         "localization_fallback_count": result.localization_fallback_count,
         "overview_fallback_original_language_count": result.overview_fallback_original_language_count,
         "overview_fallback_en_count": result.overview_fallback_en_count,
@@ -291,6 +294,7 @@ def _normalize_onboarding_profile(profile: OnboardingTasteProfile | dict) -> Onb
         discover_pages=profile.get("discover_pages", 3),
         details_limit=profile.get("details_limit", 50),
         details_enrichment=profile.get("details_enrichment"),
+        pagination=profile.get("pagination"),
     ).normalized()
 
 

@@ -247,3 +247,38 @@ Candidate records now include `quality_class` and `quality_reasons`. The
 `country_bonus`, `media_bonus`, `year_bonus`, `vibe_bonus`, `genre_bonus`,
 `metadata_bonus`, `localization_bonus`, `overview_penalty`, `poster_penalty`,
 `low_confidence_penalty`, `junk_penalty`, `garbage_penalty`, and `final_score`.
+
+## Adaptive pagination rules
+
+Step `010` replaces the old fixed page cap with a deterministic pagination
+policy per bucket.
+
+Config defaults:
+
+```text
+pagination:
+  default_pages: 3
+  normal_max_pages: 5
+  adaptive_max_pages: 10
+  continue_if_accepted_per_page_gte: 8
+  stop_if_accepted_per_page_lt: 3
+  stop_if_quota_full: true
+```
+
+Behavior:
+
+1. Each bucket can always try the default window.
+2. After the default window, a bucket stops early on low accepted yield.
+3. A bucket can continue through the normal max while yield remains useful.
+4. If the bucket is still underfilled at the normal max and accepted yield is
+   high, adaptive pages are allowed up to the adaptive max.
+5. Selected-country `with_origin_country` sweeps continue before any fallback
+   path can be considered.
+6. Existing `MAX_TMDB_REQUESTS` remains the global API budget guard.
+
+Diagnostics:
+
+- `adaptive_pages_used` counts executed pages beyond `normal_max_pages`.
+- `pagination_stop_reasons` records bucket-level stop causes such as
+  `quota_full`, `low_yield`, `normal_max_pages`, `adaptive_max_pages`,
+  `empty_page`, `tmdb_total_pages`, and `error`.

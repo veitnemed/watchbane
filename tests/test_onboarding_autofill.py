@@ -374,6 +374,43 @@ class WeakLowVoteTmdbClient(FakeTmdbClient):
         }
 
 
+class PagedYieldTmdbClient(FakeTmdbClient):
+    def __init__(self, *, accepted_per_page: int, total_pages: int = 10, country: str = "US") -> None:
+        super().__init__()
+        self.accepted_per_page = accepted_per_page
+        self.total_pages = total_pages
+        self.country = country
+
+    def discover(self, endpoint: str, params: dict) -> dict:
+        self.calls.append((endpoint, dict(params)))
+        media = MEDIA_MOVIE if endpoint == "/discover/movie" else MEDIA_TV
+        page = int(params.get("page") or 1)
+        country = params.get("with_origin_country") or self.country
+        title_key = "title" if media == MEDIA_MOVIE else "name"
+        original_title_key = "original_title" if media == MEDIA_MOVIE else "original_name"
+        date_key = "release_date" if media == MEDIA_MOVIE else "first_air_date"
+        results = []
+        for index in range(self.accepted_per_page):
+            tmdb_id = page * 1000 + index
+            results.append(
+                {
+                    "id": tmdb_id,
+                    title_key: f"Paged {media} {tmdb_id}",
+                    original_title_key: f"Paged {media} {tmdb_id}",
+                    date_key: "2024-01-01",
+                    "poster_path": f"/paged{tmdb_id}.jpg",
+                    "overview": "Useful overview",
+                    "genre_ids": [18],
+                    "origin_country": [country],
+                    "vote_average": 7.0,
+                    "vote_count": 100,
+                    "popularity": 30,
+                    "original_language": "en",
+                }
+            )
+        return {"results": results, "total_pages": self.total_pages}
+
+
 def _profile(**overrides) -> OnboardingTasteProfile:
     data = {
         "media_preference": "both",
@@ -892,6 +929,71 @@ def test_run_autofill_keeps_tv_quota_when_tv_is_preferred(tmp_path, monkeypatch)
     assert result.warning is None
 
 
+def test_adaptive_pagination_continues_when_yield_is_high_and_quota_underfilled(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = PagedYieldTmdbClient(accepted_per_page=20, total_pages=10, country="US")
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_enrichment={"enabled": False},
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    pages = [params["page"] for _endpoint, params in client.calls]
+    assert result.created_count == autofill.STARTER_POOL_TARGET
+    assert max(pages) == 6
+    assert result.adaptive_pages_used == 1
+
+
+def test_adaptive_pagination_stops_when_yield_is_low(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = PagedYieldTmdbClient(accepted_per_page=2, total_pages=10, country="US")
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            country_selection={"selected_countries": ["US"], "home_country": "US"},
+            details_enrichment={"enabled": False},
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    pages = [params["page"] for _endpoint, params in client.calls]
+    assert pages == [1, 2, 3]
+    assert result.created_count == 6
+    assert result.pagination_stop_reasons["low_yield"] == 1
+    assert result.adaptive_pages_used == 0
+
+
+def test_selected_country_underfill_keeps_country_first_while_yield_is_high(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = PagedYieldTmdbClient(accepted_per_page=20, total_pages=10, country="KR")
+
+    result = run_onboarding_autofill(
+        _profile(
+            media_preference="movie",
+            ui_language="ru",
+            country_selection={"selected_countries": ["KR"], "home_country": "RU"},
+            details_enrichment={"enabled": False},
+        ),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count == autofill.STARTER_POOL_TARGET
+    assert result.adaptive_pages_used == 1
+    assert all(params.get("with_origin_country") == "KR" for _endpoint, params in client.calls)
+    assert all("vote_count.gte" not in params and "vote_average.gte" not in params for _endpoint, params in client.calls)
+
+
 def test_run_autofill_underfills_scarce_tv_without_movie_overfill(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
     db_path = tmp_path / "watchbane.sqlite3"
@@ -906,6 +1008,8 @@ def test_run_autofill_underfills_scarce_tv_without_movie_overfill(tmp_path, monk
     assert result.actual_counts.get("media_type", {}).get(MEDIA_MOVIE, 0) == 0
     assert result.actual_counts["media_type"].get(MEDIA_TV, 0) == 0
     assert result.created_count == 0
+    assert result.adaptive_pages_used == 0
+    assert result.pagination_stop_reasons["empty_page"] >= 1
     assert "Media quota underfilled: tv planned 120, actual 0." in result.warnings
 
 

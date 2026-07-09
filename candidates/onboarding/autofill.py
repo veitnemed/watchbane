@@ -34,6 +34,7 @@ MAX_TMDB_REQUESTS = 180
 RESULTS_PER_TMDB_PAGE = 20
 DEFAULT_DISCOVER_PAGES = 3
 MAX_DISCOVER_PAGES = 5
+ADAPTIVE_MAX_DISCOVER_PAGES = 10
 DEFAULT_DETAILS_LIMIT_PER_TEMPLATE = 50
 
 ERA_TOP_ALL_TIME = "top_all_time"
@@ -313,6 +314,13 @@ def _coerce_bool(value: Any, default: bool) -> bool:
     return default
 
 
+def _coerce_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
+
+
 @dataclass(frozen=True)
 class DetailsEnrichmentConfig:
     enabled: bool = True
@@ -334,6 +342,43 @@ class DetailsEnrichmentConfig:
             fetch_external_ids=bool(self.fetch_external_ids),
             fetch_tv_seasons_basic=bool(self.fetch_tv_seasons_basic),
             lazy_tv_details_on_card_open=bool(self.lazy_tv_details_on_card_open),
+        )
+
+    def as_repository_dict(self) -> dict[str, Any]:
+        return asdict(self.normalized())
+
+
+@dataclass(frozen=True)
+class PaginationConfig:
+    default_pages: int = DEFAULT_DISCOVER_PAGES
+    normal_max_pages: int = MAX_DISCOVER_PAGES
+    adaptive_max_pages: int = ADAPTIVE_MAX_DISCOVER_PAGES
+    continue_if_accepted_per_page_gte: int = 8
+    stop_if_accepted_per_page_lt: int = 3
+    stop_if_quota_full: bool = True
+
+    def normalized(self, *, discover_pages: int = DEFAULT_DISCOVER_PAGES) -> "PaginationConfig":
+        try:
+            default_pages = int(self.default_pages or discover_pages or DEFAULT_DISCOVER_PAGES)
+        except (TypeError, ValueError):
+            default_pages = int(discover_pages or DEFAULT_DISCOVER_PAGES)
+        try:
+            normal_max_pages = int(self.normal_max_pages or MAX_DISCOVER_PAGES)
+        except (TypeError, ValueError):
+            normal_max_pages = MAX_DISCOVER_PAGES
+        try:
+            adaptive_max_pages = int(self.adaptive_max_pages or ADAPTIVE_MAX_DISCOVER_PAGES)
+        except (TypeError, ValueError):
+            adaptive_max_pages = ADAPTIVE_MAX_DISCOVER_PAGES
+        normal_max_pages = max(default_pages, normal_max_pages)
+        adaptive_max_pages = max(normal_max_pages, adaptive_max_pages)
+        return PaginationConfig(
+            default_pages=max(1, default_pages),
+            normal_max_pages=max(1, normal_max_pages),
+            adaptive_max_pages=max(1, adaptive_max_pages),
+            continue_if_accepted_per_page_gte=max(0, _coerce_int(self.continue_if_accepted_per_page_gte, 8)),
+            stop_if_accepted_per_page_lt=max(0, _coerce_int(self.stop_if_accepted_per_page_lt, 3)),
+            stop_if_quota_full=bool(self.stop_if_quota_full),
         )
 
     def as_repository_dict(self) -> dict[str, Any]:
@@ -487,6 +532,25 @@ def _coerce_details_enrichment_config(
     return DetailsEnrichmentConfig(default_limit_per_bucket=details_limit).normalized(details_limit=details_limit)
 
 
+def _coerce_pagination_config(
+    value: PaginationConfig | dict[str, Any] | None,
+    *,
+    discover_pages: int,
+) -> PaginationConfig:
+    if isinstance(value, PaginationConfig):
+        return value.normalized(discover_pages=discover_pages)
+    if isinstance(value, dict):
+        return PaginationConfig(
+            default_pages=_coerce_int(value.get("default_pages") or discover_pages, discover_pages),
+            normal_max_pages=_coerce_int(value.get("normal_max_pages") or MAX_DISCOVER_PAGES, MAX_DISCOVER_PAGES),
+            adaptive_max_pages=_coerce_int(value.get("adaptive_max_pages") or ADAPTIVE_MAX_DISCOVER_PAGES, ADAPTIVE_MAX_DISCOVER_PAGES),
+            continue_if_accepted_per_page_gte=_coerce_int(value.get("continue_if_accepted_per_page_gte") or 8, 8),
+            stop_if_accepted_per_page_lt=_coerce_int(value.get("stop_if_accepted_per_page_lt") or 3, 3),
+            stop_if_quota_full=_coerce_bool(value.get("stop_if_quota_full"), True),
+        ).normalized(discover_pages=discover_pages)
+    return PaginationConfig(default_pages=discover_pages).normalized(discover_pages=discover_pages)
+
+
 @dataclass(frozen=True)
 class OnboardingTasteProfile:
     media_preference: str
@@ -504,6 +568,7 @@ class OnboardingTasteProfile:
     discover_pages: int = DEFAULT_DISCOVER_PAGES
     details_limit: int = DEFAULT_DETAILS_LIMIT_PER_TEMPLATE
     details_enrichment: DetailsEnrichmentConfig | dict[str, Any] | None = None
+    pagination: PaginationConfig | dict[str, Any] | None = None
 
     def normalized(self) -> "OnboardingTasteProfile":
         ui_language = str(self.ui_language or "ru").strip().casefold() or "ru"
@@ -526,9 +591,10 @@ class OnboardingTasteProfile:
             ui_language=ui_language,
             origin_preference=origin_preference,
         )
-        discover_pages = max(1, min(MAX_DISCOVER_PAGES, int(self.discover_pages or DEFAULT_DISCOVER_PAGES)))
+        discover_pages = max(1, min(ADAPTIVE_MAX_DISCOVER_PAGES, int(self.discover_pages or DEFAULT_DISCOVER_PAGES)))
         details_limit = max(1, int(self.details_limit or DEFAULT_DETAILS_LIMIT_PER_TEMPLATE))
         details_enrichment = _coerce_details_enrichment_config(self.details_enrichment, details_limit=details_limit)
+        pagination = _coerce_pagination_config(self.pagination, discover_pages=discover_pages)
         return OnboardingTasteProfile(
             media_preference=media_preference,
             release_preference=release_preference,
@@ -545,6 +611,7 @@ class OnboardingTasteProfile:
             discover_pages=discover_pages,
             details_limit=details_limit,
             details_enrichment=details_enrichment,
+            pagination=pagination,
         )
 
     def as_repository_dict(self) -> dict[str, Any]:
@@ -584,6 +651,8 @@ class _BucketState:
     filled: int = 0
     request_index: int = 0
     exhausted: bool = False
+    last_accepted_count: int = 0
+    stop_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -601,6 +670,8 @@ class AutofillResult:
     pool_size: int
     api_requests: int
     details_requests: int
+    adaptive_pages_used: int
+    pagination_stop_reasons: dict[str, int]
     localization_fallback_count: int
     overview_fallback_original_language_count: int
     overview_fallback_en_count: int
@@ -2041,6 +2112,36 @@ def actual_counts_for_candidates(candidates: list[dict[str, Any]]) -> dict[str, 
     return {name: dict(counter) for name, counter in counters.items()}
 
 
+def _pagination_config(profile: OnboardingTasteProfile) -> PaginationConfig:
+    config = profile.pagination
+    if isinstance(config, PaginationConfig):
+        return config.normalized(discover_pages=profile.discover_pages)
+    return PaginationConfig(default_pages=profile.discover_pages).normalized(discover_pages=profile.discover_pages)
+
+
+def _pagination_stop_reason(profile: OnboardingTasteProfile, state: _BucketState) -> str | None:
+    config = _pagination_config(profile)
+    if config.stop_if_quota_full and state.filled >= state.bucket.quota:
+        return "quota_full"
+    if state.request_index < config.default_pages:
+        return None
+    if state.last_accepted_count < config.stop_if_accepted_per_page_lt:
+        return "low_yield"
+    if state.request_index < config.normal_max_pages:
+        return None
+    if state.filled < state.bucket.quota and state.last_accepted_count >= config.continue_if_accepted_per_page_gte:
+        if state.request_index < config.adaptive_max_pages:
+            return None
+        return "adaptive_max_pages"
+    return "normal_max_pages"
+
+
+def _mark_bucket_exhausted(state: _BucketState, reason: str, stop_reasons: Counter[str]) -> None:
+    state.exhausted = True
+    state.stop_reason = reason
+    stop_reasons[reason] += 1
+
+
 def should_start_onboarding_autofill(*, path: str | Path | None = None) -> bool:
     if has_completed_onboarding_profile(path=path):
         return False
@@ -2127,6 +2228,9 @@ def run_onboarding_autofill(
     buckets = build_fetch_buckets(profile, genre_ids=genre_ids)
     planned_counts = planned_counts_for_profile(profile, genre_ids=genre_ids)
     states = [_BucketState(bucket=bucket) for bucket in sorted(buckets, key=lambda item: bucket_priority_key(item, profile))]
+    pagination_config = _pagination_config(profile)
+    pagination_stop_reasons: Counter[str] = Counter()
+    adaptive_pages_used = 0
     api_requests = 0
     details_requests = 0
     details_requested_by_bucket: Counter[str] = Counter()
@@ -2143,18 +2247,20 @@ def run_onboarding_autofill(
         for state in states:
             state.request_index = 0
             state.exhausted = False
+            state.last_accepted_count = 0
+            state.stop_reason = None
         while len(created_candidates) < STARTER_POOL_TARGET and api_requests < MAX_TMDB_REQUESTS:
             progressed = False
             for state in states:
                 if len(created_candidates) >= STARTER_POOL_TARGET or api_requests >= MAX_TMDB_REQUESTS:
                     break
-                if state.filled >= state.bucket.quota or state.exhausted:
+                if state.exhausted:
                     continue
                 if fallback not in _fallback_order_for_bucket(profile, state.bucket):
                     continue
-                page_limit = max(int(profile.discover_pages or DEFAULT_DISCOVER_PAGES), MAX_DISCOVER_PAGES)
-                if state.request_index >= page_limit:
-                    state.exhausted = True
+                stop_reason = _pagination_stop_reason(profile, state)
+                if stop_reason is not None:
+                    _mark_bucket_exhausted(state, stop_reason, pagination_stop_reasons)
                     continue
                 if is_cancelled():
                     cancelled = True
@@ -2188,6 +2294,7 @@ def run_onboarding_autofill(
                 request_key = canonical_discover_request_key(endpoint, params)
                 if request_key in executed_request_keys:
                     duplicate_requests_skipped += 1
+                    state.last_accepted_count = 0
                     save_autofill_request_audit(
                         {
                             "onboarding_profile_id": profile_id,
@@ -2211,13 +2318,15 @@ def run_onboarding_autofill(
                 rejected_count = 0
                 status = "ok"
                 error_text = None
+                if page > pagination_config.normal_max_pages:
+                    adaptive_pages_used += 1
                 try:
                     payload = client.discover(endpoint, params)
                     api_requests += 1
                     results = payload.get("results") if isinstance(payload, dict) else []
                     results = results if isinstance(results, list) else []
                     if not results:
-                        state.exhausted = True
+                        _mark_bucket_exhausted(state, "empty_page", pagination_stop_reasons)
                     for index_on_page, result in enumerate(results):
                         if len(created_candidates) + len(preliminary_entries) >= STARTER_POOL_TARGET:
                             break
@@ -2301,12 +2410,13 @@ def run_onboarding_autofill(
                         accepted_batch.append(candidate)
                     total_pages = int((payload or {}).get("total_pages") or page)
                     if page >= total_pages:
-                        state.exhausted = True
+                        if state.exhausted is False:
+                            _mark_bucket_exhausted(state, "tmdb_total_pages", pagination_stop_reasons)
                 except Exception as error:
                     api_requests += 1
                     status = "error"
                     error_text = str(error)
-                    state.exhausted = True
+                    _mark_bucket_exhausted(state, "error", pagination_stop_reasons)
                 finally:
                     save_autofill_request_audit(
                         {
@@ -2323,6 +2433,7 @@ def run_onboarding_autofill(
                         path=path,
                     )
                 state.request_index += 1
+                state.last_accepted_count = len(accepted_batch)
                 progressed = True
                 if accepted_batch:
                     _emit(progress_callback, stage=4, message="Убираем повторы", profile_id=profile_id)
@@ -2355,6 +2466,8 @@ def run_onboarding_autofill(
         pool_size=len(created_candidates),
         api_requests=api_requests,
         details_requests=details_requests,
+        adaptive_pages_used=adaptive_pages_used,
+        pagination_stop_reasons=dict(pagination_stop_reasons),
         **{key: int(localization_metrics.get(key, 0)) for key in LOCALIZATION_METRIC_KEYS},
         cancelled=cancelled,
         warning=warning,
@@ -2366,6 +2479,8 @@ def run_onboarding_autofill(
         pool_size=len(_pool_snapshot(path=path)),
         api_requests=api_requests,
         details_requests=details_requests,
+        adaptive_pages_used=adaptive_pages_used,
+        pagination_stop_reasons=dict(pagination_stop_reasons),
         localization_fallback_count=int(localization_metrics.get(LOCALIZATION_FALLBACK_COUNT, 0)),
         overview_fallback_original_language_count=int(localization_metrics.get(OVERVIEW_FALLBACK_ORIGINAL_LANGUAGE_COUNT, 0)),
         overview_fallback_en_count=int(localization_metrics.get(OVERVIEW_FALLBACK_EN_COUNT, 0)),
