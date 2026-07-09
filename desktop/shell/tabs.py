@@ -115,7 +115,7 @@ def build_main_tabs(
         watched_tab_view=watched_tab_view,
         settings_tab_view=settings_tab_view,
         candidate_session=candidate_session,
-        refresh_candidate_filters=candidate_filters_view.refresh_filter_options,
+        refresh_candidate_filters=getattr(candidate_filters_view, "refresh_filter_options", lambda: None),
         focus_candidates=lambda: registry.focus("candidates"),
     )
     return registry, context

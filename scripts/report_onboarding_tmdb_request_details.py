@@ -44,7 +44,19 @@ def _countries(result: dict[str, Any]) -> list[str]:
     values = result.get("origin_country") or []
     if isinstance(values, str):
         values = [values]
-    return [str(value).strip().upper() for value in values if str(value).strip()]
+    countries = [str(value).strip().upper() for value in values if str(value).strip()]
+    production_countries = result.get("production_countries") or []
+    if isinstance(production_countries, dict):
+        production_countries = [production_countries]
+    for value in production_countries:
+        if isinstance(value, dict):
+            code = value.get("iso_3166_1")
+        else:
+            code = value
+        code_text = str(code or "").strip().upper()
+        if code_text and code_text not in countries:
+            countries.append(code_text)
+    return countries
 
 
 def _genre_names(result: dict[str, Any], genre_lookup: dict[int, str]) -> list[str]:
@@ -82,15 +94,56 @@ def _fit_flags(result: dict[str, Any], endpoint: str, params: dict[str, Any], ge
         if str(item).strip().lstrip("-").isdigit()
     }
     countries = _countries(result)
+    requested_origin_country = str(params.get("with_origin_country") or "").strip().upper()
     requested_language = str(params.get("with_original_language") or "").strip().casefold()
+    if requested_origin_country == "RU":
+        request_origin_match = True
+        metadata_origin_match: bool | None = "RU" in countries if countries else None
+        if "RU" in countries:
+            origin_country_match = True
+            origin_evidence = "result_metadata"
+        elif media_type == MEDIA_MOVIE and not countries:
+            origin_country_match = True
+            origin_evidence = "unknown_but_request_filtered"
+        else:
+            origin_country_match = False
+            origin_evidence = "foreign_metadata"
+    else:
+        request_origin_match = True
+        metadata_origin_match = True
+        origin_country_match = True
+        origin_evidence = "not_requested"
+
+    language_match = not requested_language or str(result.get("original_language") or "").strip().casefold() == requested_language
+    vote_count_match = int(result.get("vote_count") or 0) >= int(params.get("vote_count.gte") or 0)
     flags = {
         "year_match": requested_year is None or year == requested_year,
         "genre_match": not genre_filter or bool(result_genres & genre_filter),
-        "origin_country_match": params.get("with_origin_country") != "RU" or "RU" in countries,
-        "language_match": not requested_language or str(result.get("original_language") or "").strip().casefold() == requested_language,
-        "vote_count_match": int(result.get("vote_count") or 0) >= int(params.get("vote_count.gte") or 0),
+        "origin_country_match": origin_country_match,
+        "origin_evidence": origin_evidence,
+        "language_match": language_match,
+        "vote_count_match": vote_count_match,
         "has_poster": bool(result.get("poster_path")),
         "genres": _genre_names(result, genre_lookup),
+        "request_filter_fit": {
+            "origin_country_match": request_origin_match,
+            "language_filter_present": bool(requested_language),
+            "year_filter_present": requested_year is not None,
+            "genre_filter_present": bool(genre_filter),
+            "vote_count_filter_present": params.get("vote_count.gte") is not None,
+        },
+        "result_metadata_fit": {
+            "origin_country_match": metadata_origin_match,
+            "language_match": language_match,
+            "year_match": requested_year is None or year == requested_year,
+            "genre_match": not genre_filter or bool(result_genres & genre_filter),
+            "vote_count_match": vote_count_match,
+        },
+        "final_pool_fit": {
+            "origin_country_match": origin_country_match,
+            "language_match": language_match,
+            "has_poster": bool(result.get("poster_path")),
+        },
     }
     hard_keys = ("origin_country_match", "language_match", "has_poster")
     soft_keys = ("year_match", "genre_match", "vote_count_match")
@@ -184,6 +237,7 @@ def _final_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "vote_average": candidate.get("tmdb_score"),
                 "vote_count": candidate.get("tmdb_votes"),
                 "candidate_score": candidate.get("candidate_score"),
+                "score_debug": candidate.get("score_debug"),
                 "source_stage": candidate.get("source_stage"),
                 "origin_bucket": candidate.get("origin_bucket"),
                 "source_bucket_id": candidate.get("source_bucket_id"),
@@ -210,6 +264,7 @@ def _markdown(payload: dict[str, Any]) -> str:
                 f"- Profile: `{json.dumps(scenario['profile'], ensure_ascii=False)}`",
                 f"- Created: {scenario['created']} / {scenario['target']}",
                 f"- Requests: {scenario['api_requests']}",
+                f"- Request stats: `{scenario['request_stats']}`",
                 f"- Planned media: `{scenario['planned_counts'].get('media_type', {})}`",
                 f"- Actual media: `{scenario['actual_counts'].get('media_type', {})}`",
                 f"- Planned origin: `{scenario['planned_counts'].get('origin', {})}`",
@@ -219,13 +274,13 @@ def _markdown(payload: dict[str, Any]) -> str:
                 "",
                 "### Final Ranked Pool",
                 "",
-                "| Rank | Title | Type | Country | Year | Genres | Votes | Score | Source |",
-                "| ---: | --- | --- | --- | ---: | --- | ---: | ---: | --- |",
+                "| Rank | Title | Type | Country | Year | Genres | Votes | Score | Score debug | Source |",
+                "| ---: | --- | --- | --- | ---: | --- | ---: | ---: | --- | --- |",
             ]
         )
         for row in scenario["final_ranked_candidates"]:
             lines.append(
-                "| {rank} | {title} | {media} | {country} | {year} | {genres} | {votes} | {score} | {source} |".format(
+                "| {rank} | {title} | {media} | {country} | {year} | {genres} | {votes} | {score} | {score_debug} | {source} |".format(
                     rank=row["final_rank"],
                     title=str(row["title"] or "").replace("|", "/"),
                     media=row["media_type"],
@@ -234,6 +289,7 @@ def _markdown(payload: dict[str, Any]) -> str:
                     genres=", ".join(row["genres"] or []).replace("|", "/"),
                     votes=row["vote_count"] or 0,
                     score=row["candidate_score"] or 0,
+                    score_debug=json.dumps(row["score_debug"] or {}, ensure_ascii=False, sort_keys=True).replace("|", "/"),
                     source=row["source_stage"],
                 )
             )
@@ -254,7 +310,7 @@ def _markdown(payload: dict[str, Any]) -> str:
             for row in request["results"]:
                 fit = row["fit"]
                 lines.append(
-                    "| {rank} | {title} | {country} | {year} | {genres} | {votes} | {avg} | {lang} | hard={hard}, soft={soft}, score={score} |".format(
+                    "| {rank} | {title} | {country} | {year} | {genres} | {votes} | {avg} | {lang} | hard={hard}, soft={soft}, score={score}, origin={origin_evidence} |".format(
                         rank=row["rank"],
                         title=str(row["title"] or "").replace("|", "/"),
                         country=", ".join(row["country"] or []),
@@ -266,6 +322,7 @@ def _markdown(payload: dict[str, Any]) -> str:
                         hard=fit.get("hard_fit"),
                         soft=fit.get("soft_fit"),
                         score=fit.get("fit_score"),
+                        origin_evidence=fit.get("origin_evidence"),
                     )
                 )
             lines.append("")
@@ -315,6 +372,7 @@ def main() -> int:
                 "created": result.created_count,
                 "pool_size": result.pool_size,
                 "api_requests": result.api_requests,
+                "request_stats": result.request_stats,
                 "planned_counts": result.planned_counts,
                 "actual_counts": result.actual_counts,
                 "source_stats": result.source_stats,

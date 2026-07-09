@@ -45,6 +45,7 @@ class OnboardingAutofillWorker(QThread):
             planned_counts=result.get("planned_counts"),
             actual_counts=result.get("actual_counts"),
             source_stats=result.get("source_stats"),
+            request_stats=result.get("request_stats"),
             strategy=result.get("strategy"),
             warning=result.get("warning"),
         )

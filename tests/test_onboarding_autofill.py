@@ -351,9 +351,10 @@ def test_discover_params_use_media_specific_contract() -> None:
     assert params["first_air_date.lte"] == "2026-07-08"
 
 
-def test_fallback_order_relaxes_origin_before_genres_and_votes() -> None:
-    assert autofill.FALLBACK_ORDER.index("relax_origin") < autofill.FALLBACK_ORDER.index("relax_genres")
-    assert autofill.FALLBACK_ORDER.index("relax_genres") < autofill.FALLBACK_ORDER.index("relax_votes_mid")
+def test_fallback_order_uses_staged_ru_domestic_relaxation() -> None:
+    assert autofill.FALLBACK_ORDER.index("relax_origin") < autofill.FALLBACK_ORDER.index("relax_era")
+    assert autofill.FALLBACK_ORDER.index("relax_era") < autofill.FALLBACK_ORDER.index("relax_votes_mid")
+    assert autofill.FALLBACK_ORDER.index("relax_votes_zero") < autofill.FALLBACK_ORDER.index("relax_genres")
     profile = _profile(ui_language="ru", origin_preference="domestic", vibe_preference="light")
     genre_ids = resolve_tmdb_genre_ids(FakeTmdbClient())
     bucket = next(bucket for bucket in build_fetch_buckets(profile, genre_ids=genre_ids) if bucket.origin == "domestic" and bucket.genre_ids)
@@ -361,6 +362,7 @@ def test_fallback_order_relaxes_origin_before_genres_and_votes() -> None:
     _endpoint, relaxed_origin = build_discover_request(bucket, profile=profile, fallback="relax_origin", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     _endpoint, relaxed_genres = build_discover_request(bucket, profile=profile, fallback="relax_genres", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     _endpoint, relaxed_era = build_discover_request(bucket, profile=profile, fallback="relax_era", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, relaxed_language = build_discover_request(bucket, profile=profile, fallback="relax_language", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert base["with_origin_country"] == "RU"
     assert relaxed_origin["with_origin_country"] == "RU"
     assert relaxed_origin["with_original_language"] == "ru"
@@ -369,7 +371,10 @@ def test_fallback_order_relaxes_origin_before_genres_and_votes() -> None:
     assert relaxed_genres["with_original_language"] == "ru"
     assert "with_genres" not in relaxed_genres
     assert relaxed_era["with_origin_country"] == "RU"
-    assert "with_original_language" not in relaxed_era
+    assert relaxed_era["with_original_language"] == "ru"
+    assert "with_genres" in relaxed_era
+    assert relaxed_language["with_origin_country"] == "RU"
+    assert "with_original_language" not in relaxed_language
 
 
 def test_strategy_order_switches_seed_and_focused_stages() -> None:
@@ -379,6 +384,92 @@ def test_strategy_order_switches_seed_and_focused_stages() -> None:
     assert "quality_seed" not in autofill.query_stage_order_for_strategy(profile, "baseline_quota_fix")
     assert autofill.query_stage_order_for_strategy(profile, "broad_top_seed")[:2] == ("origin_top_seed", "quality_seed")
     assert autofill.query_stage_order_for_strategy(profile, "focused_first")[:3] == ("base", "origin_top_seed", "quality_seed")
+
+
+def test_request_cache_key_normalizes_params_and_ignores_debug_fields() -> None:
+    left = autofill.canonical_discover_request_key(
+        "/discover/movie",
+        {"page": 1, "with_genres": "35|18", "_debug": True, "api_key": "secret"},
+    )
+    right = autofill.canonical_discover_request_key(
+        "/discover/movie",
+        {"with_genres": "18,35", "page": 1},
+    )
+
+    assert left == right
+
+
+def test_ru_domestic_relaxation_lowers_vote_thresholds_without_crossing_origin() -> None:
+    profile = _profile(
+        ui_language="ru",
+        origin_preference="domestic",
+        media_preference="movie",
+        release_preference="classic",
+        vibe_preference="light",
+    )
+    genre_ids = resolve_tmdb_genre_ids(FakeTmdbClient())
+    buckets = build_fetch_buckets(profile, genre_ids=genre_ids)
+    classic_bucket = next(
+        bucket
+        for bucket in buckets
+        if bucket.media_type == MEDIA_MOVIE and bucket.origin == "domestic" and bucket.era == "classic_sweep" and bucket.genre_ids
+    )
+    top_bucket = next(
+        bucket
+        for bucket in buckets
+        if bucket.media_type == MEDIA_MOVIE and bucket.origin == "domestic" and bucket.era == "top_all_time" and bucket.genre_ids
+    )
+
+    _endpoint, base = build_discover_request(classic_bucket, profile=profile, fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, relax_era = build_discover_request(classic_bucket, profile=profile, fallback="relax_era", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    assert base["with_origin_country"] == "RU"
+    assert base["with_original_language"] == "ru"
+    assert "primary_release_year" in base
+    assert "primary_release_year" not in relax_era
+    assert relax_era["with_origin_country"] == "RU"
+    assert relax_era["with_original_language"] == "ru"
+    assert "with_genres" in relax_era
+
+    _endpoint, base_top = build_discover_request(top_bucket, profile=profile, fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, mid = build_discover_request(top_bucket, profile=profile, fallback="relax_votes_mid", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, low = build_discover_request(top_bucket, profile=profile, fallback="relax_votes_low", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, tiny = build_discover_request(top_bucket, profile=profile, fallback="relax_votes_tiny", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, zero = build_discover_request(top_bucket, profile=profile, fallback="relax_votes_zero", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, relax_genres = build_discover_request(top_bucket, profile=profile, fallback="relax_genres", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    _endpoint, relax_language = build_discover_request(top_bucket, profile=profile, fallback="relax_language", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    assert [base_top["vote_count.gte"], mid["vote_count.gte"], low["vote_count.gte"], tiny["vote_count.gte"], zero["vote_count.gte"]] == [1000, 300, 100, 50, 0]
+    assert zero["with_origin_country"] == "RU"
+    assert zero["with_original_language"] == "ru"
+    assert "with_genres" in zero
+    assert "with_genres" not in relax_genres
+    assert relax_genres["with_original_language"] == "ru"
+    assert relax_language["with_origin_country"] == "RU"
+    assert "with_original_language" not in relax_language
+
+
+def test_movie_discover_ru_request_without_country_is_unknown_not_foreign() -> None:
+    from scripts.report_onboarding_tmdb_request_details import _fit_flags
+
+    fit = _fit_flags(
+        {
+            "id": 7,
+            "title": "Request Filtered RU Movie",
+            "release_date": "2024-01-01",
+            "genre_ids": [18],
+            "vote_count": 500,
+            "poster_path": "/p.jpg",
+            "original_language": "ru",
+        },
+        "/discover/movie",
+        {"with_origin_country": "RU", "with_original_language": "ru", "vote_count.gte": 100},
+        {18: "Drama"},
+    )
+
+    assert fit["origin_country_match"] is True
+    assert fit["origin_evidence"] == "unknown_but_request_filtered"
+    assert fit["hard_fit"] is True
+    assert fit["request_filter_fit"]["origin_country_match"] is True
+    assert fit["result_metadata_fit"]["origin_country_match"] is None
 
 
 def test_run_autofill_accepts_strategy_param_and_reports_source_stats(tmp_path, monkeypatch) -> None:
@@ -407,6 +498,28 @@ def test_run_autofill_accepts_strategy_param_and_reports_source_stats(tmp_path, 
     assert broad.source_stats
 
 
+def test_run_autofill_dedupes_repeated_requests_within_one_run(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = EmptyTmdbClient()
+    db_path = tmp_path / "watchbane.sqlite3"
+
+    result = run_onboarding_autofill(
+        _profile(media_preference="both"),
+        client=client,
+        path=db_path,
+        current_year=2026,
+        strategy="broad_top_seed",
+    )
+    audits = load_autofill_request_audits(result.profile_id, path=db_path)
+
+    assert result.created_count == 0
+    assert result.request_stats["requests_total"] == len(audits)
+    assert result.request_stats["requests_unique"] == len(client.calls)
+    assert result.request_stats["cache_hits"] > 0
+    assert result.request_stats["requests_duplicate_skipped"] == result.request_stats["cache_hits"]
+    assert any(row["status"] == "cache_hit" and row["params"].get("_cache_hit") is True for row in audits)
+
+
 def test_broad_seed_pages_do_not_starve_focused_queries(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
     client = MultiPageEmptySeedClient()
@@ -426,8 +539,8 @@ def test_broad_seed_pages_do_not_starve_focused_queries(tmp_path, monkeypatch) -
     assert focused_calls
     for media_type, actual in result.actual_counts["media_type"].items():
         assert actual <= result.planned_counts["media_type"][media_type]
-    assert result.created_count < autofill.STARTER_POOL_TARGET
-    assert result.warnings
+    assert result.created_count == autofill.STARTER_POOL_TARGET
+    assert result.warning is None
 
 
 def test_onboarding_wizard_origin_question_depends_on_ui_language(qapp) -> None:
@@ -456,6 +569,20 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
     assert result.actual_counts["source_stage"]
     assert sum(result.source_stats.values()) == result.created_count
     assert result.source_stats == result.actual_counts["source_stage"]
+    assert result.request_stats["requests_unique"] == result.api_requests
+    assert {
+        "base_quality",
+        "vote_bonus",
+        "popularity_bonus",
+        "media_bonus",
+        "origin_bonus",
+        "release_bonus",
+        "vibe_bonus",
+        "source_bonus",
+        "fallback_penalty",
+        "diversity_penalty",
+        "final_score",
+    } <= set(result.candidates[0]["score_debug"])
     conn = connect(db_path)
     try:
         profile_count = conn.execute("SELECT COUNT(*) AS count FROM onboarding_profiles").fetchone()["count"]
@@ -466,7 +593,9 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
             for row in conn.execute("SELECT media_type, COUNT(*) AS count FROM candidate_records GROUP BY media_type")
         }
         assert profile_count == 1
-        assert request_count == result.api_requests
+        assert request_count == result.request_stats["requests_total"]
+        assert result.api_requests == result.request_stats["requests_unique"]
+        assert len(client.calls) == result.request_stats["requests_unique"]
         assert candidate_count == autofill.STARTER_POOL_TARGET
         assert media_counts[MEDIA_MOVIE] == 60
         assert media_counts[MEDIA_TV] == 60
@@ -478,6 +607,21 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
         assert row["fetch_rank"] > 0
     finally:
         conn.close()
+
+
+def test_broad_quality_seed_is_capped_to_twenty_percent(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    result = run_onboarding_autofill(
+        _profile(media_preference="both"),
+        client=FakeTmdbClient(),
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+        strategy="broad_top_seed",
+    )
+
+    assert result.created_count == autofill.STARTER_POOL_TARGET
+    assert result.source_stats.get("quality_seed", 0) <= int(autofill.STARTER_POOL_TARGET * autofill.QUALITY_SEED_MAX_SHARE)
+    assert result.request_stats["quality_seed_limit_applied"] == 1
 
 
 def test_run_autofill_keeps_tv_quota_when_tv_is_preferred(tmp_path, monkeypatch) -> None:
@@ -710,6 +854,7 @@ def test_request_audit_rows_are_loadable(tmp_path, monkeypatch) -> None:
     audits = load_autofill_request_audits(result.profile_id, path=db_path)
 
     assert result.created_count == 0
-    assert len(audits) == result.api_requests
+    assert len(audits) == result.request_stats["requests_total"]
+    assert result.api_requests == result.request_stats["requests_unique"]
     assert audits[0]["endpoint"] in {"/discover/movie", "/discover/tv"}
     assert isinstance(audits[0]["params"], dict)

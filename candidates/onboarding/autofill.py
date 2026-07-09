@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import copy
 from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
+import json
 import math
 from pathlib import Path
 from typing import Any, Callable, Protocol
@@ -70,8 +72,11 @@ DOMESTIC_FILTER = {
 FALLBACK_BASE = "base"
 FALLBACK_RELAX_ORIGIN = "relax_origin"
 FALLBACK_RELAX_GENRES = "relax_genres"
+FALLBACK_RELAX_LANGUAGE = "relax_language"
 FALLBACK_RELAX_VOTES_MID = "relax_votes_mid"
 FALLBACK_RELAX_VOTES_LOW = "relax_votes_low"
+FALLBACK_RELAX_VOTES_TINY = "relax_votes_tiny"
+FALLBACK_RELAX_VOTES_ZERO = "relax_votes_zero"
 FALLBACK_RELAX_ERA = "relax_era"
 FALLBACK_POPULAR = "popular"
 
@@ -83,6 +88,7 @@ SOURCE_STAGE_ORIGIN_TOP_SEED = "origin_top_seed"
 SOURCE_STAGE_QUALITY_SEED = "quality_seed"
 SOURCE_STAGE_FOCUSED = "focused"
 SOURCE_STAGE_FALLBACK = "fallback"
+QUALITY_SEED_MAX_SHARE = 0.20
 
 STRATEGY_BASELINE_QUOTA_FIX = "baseline_quota_fix"
 STRATEGY_BROAD_TOP_SEED = "broad_top_seed"
@@ -101,10 +107,13 @@ SUPPORTED_AUTOFILL_STRATEGIES = (
 FALLBACK_ORDER = (
     FALLBACK_BASE,
     FALLBACK_RELAX_ORIGIN,
-    FALLBACK_RELAX_GENRES,
+    FALLBACK_RELAX_ERA,
     FALLBACK_RELAX_VOTES_MID,
     FALLBACK_RELAX_VOTES_LOW,
-    FALLBACK_RELAX_ERA,
+    FALLBACK_RELAX_VOTES_TINY,
+    FALLBACK_RELAX_VOTES_ZERO,
+    FALLBACK_RELAX_GENRES,
+    FALLBACK_RELAX_LANGUAGE,
     FALLBACK_POPULAR,
 )
 
@@ -210,6 +219,7 @@ class AutofillResult:
     actual_counts: dict[str, dict[str, int]]
     source_stats: dict[str, int]
     rejection_counts: dict[str, int]
+    request_stats: dict[str, int]
     rejected_future_count: int = 0
 
 
@@ -525,6 +535,63 @@ def bucket_priority_key(bucket: CandidateFetchBucket, profile: OnboardingTastePr
     )
 
 
+_VOLATILE_REQUEST_PARAM_TOKENS = ("token", "api_key", "authorization", "debug")
+
+
+def _normalize_request_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _normalize_request_value(value[key]) for key in sorted(value)}
+    if isinstance(value, (list, tuple, set)):
+        return sorted(_normalize_request_value(item) for item in value)
+    if isinstance(value, str):
+        text = value.strip()
+        if "|" in text or "," in text:
+            parts = [part.strip() for part in text.replace(",", "|").split("|") if part.strip()]
+            return "|".join(sorted(parts))
+        return text
+    return value
+
+
+def canonical_discover_request_key(endpoint: str, params: dict[str, Any]) -> str:
+    normalized_params = {
+        str(key): _normalize_request_value(value)
+        for key, value in params.items()
+        if not str(key).startswith("_")
+        and not any(token in str(key).casefold() for token in _VOLATILE_REQUEST_PARAM_TOKENS)
+    }
+    return json.dumps(
+        {"endpoint": str(endpoint), "params": normalized_params},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _state_remaining(state: _BucketState) -> int:
+    return max(0, int(state.bucket.quota) - int(state.filled))
+
+
+def _state_deficit_priority_key(
+    profile: OnboardingTasteProfile,
+    state: _BucketState,
+    states: list[_BucketState],
+) -> tuple[Any, ...]:
+    bucket = state.bucket
+    remaining = _state_remaining(state)
+    media_deficit = sum(_state_remaining(item) for item in states if item.bucket.media_type == bucket.media_type)
+    origin_deficit = 0
+    if _is_hard_origin_bucket(profile, bucket):
+        origin_deficit = sum(_state_remaining(item) for item in states if item.bucket.origin == bucket.origin)
+    combined_deficit = remaining + media_deficit + origin_deficit
+    return (
+        -combined_deficit,
+        -origin_deficit,
+        -media_deficit,
+        -remaining,
+        bucket_priority_key(bucket, profile),
+    )
+
+
 def _ui_language_to_tmdb_locale(ui_language: str) -> str:
     return "ru-RU" if str(ui_language or "").strip().casefold() == "ru" else "en-US"
 
@@ -559,13 +626,17 @@ def _vote_count_for_fallback(bucket: CandidateFetchBucket, fallback: str) -> int
     if fallback == FALLBACK_POPULAR:
         return None
     base = _base_vote_count(bucket)
-    if fallback in {FALLBACK_BASE, FALLBACK_RELAX_ORIGIN, FALLBACK_RELAX_GENRES}:
+    if fallback in {FALLBACK_BASE, FALLBACK_RELAX_ORIGIN, FALLBACK_RELAX_ERA}:
         return base
     if fallback == FALLBACK_RELAX_VOTES_MID:
         if bucket.media_type == MEDIA_MOVIE:
             return min(base, 300)
         return min(base, 100)
-    return 100 if bucket.media_type == MEDIA_MOVIE else 50
+    if fallback == FALLBACK_RELAX_VOTES_LOW:
+        return min(base, 100 if bucket.media_type == MEDIA_MOVIE else 50)
+    if fallback == FALLBACK_RELAX_VOTES_TINY:
+        return min(base, 50 if bucket.media_type == MEDIA_MOVIE else 20)
+    return 0
 
 
 def _is_hard_origin_bucket(profile: OnboardingTasteProfile, bucket: CandidateFetchBucket) -> bool:
@@ -629,17 +700,37 @@ def query_stage_order_for_strategy(profile: OnboardingTasteProfile, strategy: st
         return (FALLBACK_BASE, *SEED_ORDER, *FALLBACK_ORDER[1:])
     if normalized_strategy == STRATEGY_HYBRID_QUALITY_FOCUSED:
         if _is_mixed_profile(profile):
-            return (*SEED_ORDER, *FALLBACK_ORDER)
+            return (SEED_ORIGIN_TOP, FALLBACK_BASE, SEED_QUALITY, *FALLBACK_ORDER[1:])
         return (FALLBACK_BASE, *SEED_ORDER, *FALLBACK_ORDER[1:])
     if normalized_strategy == STRATEGY_STRICT_UNDERFILL:
         return (FALLBACK_BASE,)
-    return (*SEED_ORDER, *FALLBACK_ORDER)
+    return (SEED_ORIGIN_TOP, SEED_QUALITY, *FALLBACK_ORDER)
 
 
 def _domestic_filter_for_fallback(fallback: str) -> dict[str, str]:
-    if fallback in {FALLBACK_RELAX_VOTES_LOW, FALLBACK_RELAX_ERA, FALLBACK_POPULAR}:
+    if fallback in {FALLBACK_RELAX_LANGUAGE, FALLBACK_POPULAR}:
         return {"with_origin_country": "RU"}
     return dict(DOMESTIC_FILTER)
+
+
+def _relaxation_stage_for_query(query_stage: str, bucket: CandidateFetchBucket) -> int:
+    if query_stage == SEED_ORIGIN_TOP:
+        return 5 if bucket.origin == ORIGIN_DOMESTIC else 0
+    if query_stage == SEED_QUALITY:
+        return 0
+    stage_map = {
+        FALLBACK_BASE: 0,
+        FALLBACK_RELAX_ORIGIN: 0,
+        FALLBACK_RELAX_ERA: 1,
+        FALLBACK_RELAX_VOTES_MID: 2,
+        FALLBACK_RELAX_VOTES_LOW: 2,
+        FALLBACK_RELAX_VOTES_TINY: 2,
+        FALLBACK_RELAX_VOTES_ZERO: 2,
+        FALLBACK_RELAX_GENRES: 3,
+        FALLBACK_RELAX_LANGUAGE: 4,
+        FALLBACK_POPULAR: 5,
+    }
+    return stage_map.get(query_stage, 0)
 
 
 def _years_for_bucket(bucket: CandidateFetchBucket, current_year: int) -> list[int]:
@@ -667,13 +758,12 @@ def build_discover_request(
         _date_lte_field(bucket.media_type): current_date.isoformat(),
     }
 
+    relaxation_stage = _relaxation_stage_for_query(fallback, bucket)
     effective_popular = fallback == FALLBACK_POPULAR
-    effective_relax_era = fallback in {FALLBACK_RELAX_ERA, FALLBACK_POPULAR}
+    effective_relax_era = relaxation_stage >= 1
     effective_no_genres = fallback in {
         FALLBACK_RELAX_GENRES,
-        FALLBACK_RELAX_VOTES_MID,
-        FALLBACK_RELAX_VOTES_LOW,
-        FALLBACK_RELAX_ERA,
+        FALLBACK_RELAX_LANGUAGE,
         FALLBACK_POPULAR,
     }
     effective_any_origin = fallback == FALLBACK_RELAX_ORIGIN and not _is_hard_origin_bucket(profile, bucket)
@@ -887,24 +977,126 @@ def _result_year(result: dict[str, Any], media_type: str) -> int | None:
     return tmdb_api.get_year(result.get(_date_field(media_type)))
 
 
+def _result_genre_names(
+    result: dict[str, Any],
+    media_type: str,
+    genre_lookup: dict[str, dict[int, str]],
+) -> set[str]:
+    names: set[str] = set()
+    lookup = genre_lookup.get(media_type, {})
+    for genre_id in result.get("genre_ids") or []:
+        try:
+            name = lookup.get(int(genre_id))
+        except (TypeError, ValueError):
+            name = None
+        if name:
+            names.add(str(name))
+    return names
+
+
+def quality_seed_profile_penalty(
+    result: dict[str, Any],
+    bucket: CandidateFetchBucket,
+    *,
+    profile: OnboardingTasteProfile,
+    genre_lookup: dict[str, dict[int, str]],
+) -> tuple[int, list[str]]:
+    reasons: list[str] = []
+    result_year = _result_year(result, bucket.media_type)
+    if profile.release_preference == "new" and result_year is not None and result_year < NEW_START_YEAR:
+        reasons.append("old_for_new_profile")
+
+    genre_names = {name.casefold() for name in _result_genre_names(result, bucket.media_type, genre_lookup)}
+    if bucket.media_type == MEDIA_MOVIE:
+        light_names = {name.casefold() for name in MOVIE_LIGHT_GENRES}
+        dark_names = {name.casefold() for name in MOVIE_DARK_GENRES}
+    else:
+        light_names = {name.casefold() for name in TV_LIGHT_GENRES}
+        dark_names = {name.casefold() for name in TV_DARK_GENRES}
+    if profile.vibe_preference == VIBE_LIGHT and genre_names & dark_names:
+        reasons.append("heavy_genre_for_light_profile")
+    if profile.vibe_preference == VIBE_DARK and genre_names & light_names and not genre_names & dark_names:
+        reasons.append("light_genre_for_dark_profile")
+
+    return 750 * len(reasons), reasons
+
+
+def candidate_score_debug(
+    result: dict[str, Any],
+    bucket: CandidateFetchBucket,
+    *,
+    page: int,
+    index_on_page: int,
+    source_stage: str = SOURCE_STAGE_FOCUSED,
+    quality_seed_penalty: int = 0,
+) -> dict[str, Any]:
+    vote_average = float(result.get("vote_average") or 0)
+    vote_count = float(result.get("vote_count") or 0)
+    popularity = float(result.get("popularity") or 0)
+    base_score = 100000
+    base_quality = vote_average * 100
+    vote_bonus = min(math.log10(max(vote_count, 1)) * 100, 500)
+    popularity_bonus = min(popularity, 500)
+    bucket_priority_bonus = int(bucket.quota_weight * 10_000)
+    result_year = _result_year(result, bucket.media_type) or 0
+    release_bonus = 0
+    if bucket.era == ERA_NEW_SWEEP:
+        release_bonus = max(0, result_year - 2021) * 20
+    source_bonus = 0
+    if source_stage == SOURCE_STAGE_ORIGIN_TOP_SEED:
+        source_bonus = 20
+    fallback_penalty = 0
+    if source_stage == SOURCE_STAGE_FALLBACK:
+        fallback_penalty = 40
+    diversity_penalty = int(page) * 20 + int(index_on_page)
+    final_score = round(
+        base_score
+        + bucket_priority_bonus
+        + base_quality
+        + vote_bonus
+        + popularity_bonus
+        + release_bonus
+        + source_bonus
+        - fallback_penalty
+        - diversity_penalty
+        - int(quality_seed_penalty),
+        4,
+    )
+    return {
+        "base_quality": round(base_quality, 4),
+        "vote_bonus": round(vote_bonus, 4),
+        "popularity_bonus": round(popularity_bonus, 4),
+        "media_bonus": bucket_priority_bonus,
+        "origin_bonus": 0,
+        "release_bonus": release_bonus,
+        "vibe_bonus": 0,
+        "source_bonus": source_bonus,
+        "fallback_penalty": fallback_penalty,
+        "diversity_penalty": diversity_penalty,
+        "quality_seed_penalty": int(quality_seed_penalty),
+        "final_score": final_score,
+    }
+
+
 def compute_candidate_score(
     result: dict[str, Any],
     bucket: CandidateFetchBucket,
     *,
     page: int,
     index_on_page: int,
+    source_stage: str = SOURCE_STAGE_FOCUSED,
+    quality_seed_penalty: int = 0,
 ) -> float:
-    vote_average = float(result.get("vote_average") or 0)
-    vote_count = float(result.get("vote_count") or 0)
-    popularity = float(result.get("popularity") or 0)
-    bucket_priority_score = int(bucket.quota_weight * 10_000)
-    tmdb_quality_score = vote_average * 100 + min(math.log10(max(vote_count, 1)) * 100, 500) + min(popularity, 500)
-    result_year = _result_year(result, bucket.media_type) or 0
-    freshness_score = 0
-    if bucket.era == ERA_NEW_SWEEP:
-        freshness_score = max(0, result_year - 2021) * 20
-    fetch_order_penalty = int(page) * 20 + int(index_on_page)
-    return round(100000 + bucket_priority_score + tmdb_quality_score + freshness_score - fetch_order_penalty, 4)
+    return float(
+        candidate_score_debug(
+            result,
+            bucket,
+            page=page,
+            index_on_page=index_on_page,
+            source_stage=source_stage,
+            quality_seed_penalty=quality_seed_penalty,
+        )["final_score"]
+    )
 
 
 def build_candidate_record_from_result(
@@ -917,6 +1109,8 @@ def build_candidate_record_from_result(
     fetch_rank: int,
     fallback: str = FALLBACK_BASE,
     source_stage: str = SOURCE_STAGE_FOCUSED,
+    score_debug: dict[str, Any] | None = None,
+    quality_seed_penalty_reasons: list[str] | None = None,
 ) -> dict[str, Any]:
     title_key, original_title_key = _title_field(bucket.media_type)
     date_key = _date_field(bucket.media_type)
@@ -970,9 +1164,14 @@ def build_candidate_record_from_result(
             "original_language": bucket.original_language,
             "fallback": fallback,
             "source_stage": source_stage,
+            "relaxation_stage": _relaxation_stage_for_query(fallback, bucket),
         },
         "signals": ["onboarding_autofill"],
     }
+    if score_debug is not None:
+        candidate["score_debug"] = dict(score_debug)
+    if quality_seed_penalty_reasons:
+        candidate["quality_seed_penalty_reasons"] = list(quality_seed_penalty_reasons)
     candidate["quality_score"] = round(
         float(result.get("vote_average") or 0) * 10
         + min(math.log10(max(float(result.get("vote_count") or 1), 1)) * 10, 50)
@@ -1147,9 +1346,24 @@ def run_onboarding_autofill(
     fetch_rank = 0
     rejected_future_count = 0
     rejection_counts: Counter[str] = Counter()
+    request_cache: dict[str, dict[str, Any]] = {}
+    request_stats: Counter[str] = Counter()
+    source_stage_counts: Counter[str] = Counter()
+    quality_seed_limit = int(STARTER_POOL_TARGET * QUALITY_SEED_MAX_SHARE)
 
     def is_cancelled() -> bool:
         return bool(cancel_checker is not None and cancel_checker())
+
+    def target_deficit(state: _BucketState) -> dict[str, int]:
+        bucket = state.bucket
+        origin_deficit = 0
+        if _is_hard_origin_bucket(profile, bucket):
+            origin_deficit = sum(_state_remaining(item) for item in states if item.bucket.origin == bucket.origin)
+        return {
+            "bucket": _state_remaining(state),
+            "media": sum(_state_remaining(item) for item in states if item.bucket.media_type == bucket.media_type),
+            "origin": origin_deficit,
+        }
 
     for query_stage in query_stage_order_for_strategy(profile, strategy):
         for state in states:
@@ -1157,7 +1371,7 @@ def run_onboarding_autofill(
             state.exhausted = False
         while len(created_candidates) < STARTER_POOL_TARGET and api_requests < MAX_TMDB_REQUESTS:
             progressed = False
-            for state in states:
+            for state in sorted(states, key=lambda item: _state_deficit_priority_key(profile, item, states)):
                 if len(created_candidates) >= STARTER_POOL_TARGET or api_requests >= MAX_TMDB_REQUESTS:
                     break
                 if state.filled >= state.bucket.quota or state.exhausted:
@@ -1169,6 +1383,16 @@ def run_onboarding_autofill(
                     break
                 bucket = state.bucket
                 source_stage = _source_stage_for_query(query_stage)
+                if source_stage == SOURCE_STAGE_QUALITY_SEED:
+                    quality_seed_bucket_limit = max(0, int(bucket.quota) - 1)
+                    if (
+                        source_stage_counts[SOURCE_STAGE_QUALITY_SEED] >= quality_seed_limit
+                        or state.filled >= quality_seed_bucket_limit
+                    ):
+                        rejection_counts["quality_seed_limit_applied"] += 1
+                        request_stats["quality_seed_limit_applied"] = 1
+                        state.exhausted = True
+                        continue
                 if query_stage in SEED_ORDER:
                     endpoint, params = build_quality_seed_request(
                         bucket,
@@ -1209,18 +1433,41 @@ def run_onboarding_autofill(
                 status = "ok"
                 error_text = None
                 page = int(params.get("page") or 1)
+                request_key = canonical_discover_request_key(endpoint, params)
+                cache_hit = False
+                quality_limit_reached = False
                 try:
-                    payload = client.discover(endpoint, params)
-                    api_requests += 1
+                    request_stats["requests_total"] += 1
+                    if request_key in request_cache:
+                        payload = copy.deepcopy(request_cache[request_key])
+                        cache_hit = True
+                        status = "cache_hit"
+                        request_stats["cache_hits"] += 1
+                        request_stats["requests_duplicate_skipped"] += 1
+                    else:
+                        request_stats["requests_unique"] += 1
+                        api_requests += 1
+                        payload = client.discover(endpoint, params)
+                        request_cache[request_key] = copy.deepcopy(payload)
                     results = payload.get("results") if isinstance(payload, dict) else []
                     results = results if isinstance(results, list) else []
                     if not results:
+                        request_stats["zero_result_requests"] += 1
                         state.exhausted = True
                     for index_on_page, result in enumerate(results):
                         if len(created_candidates) + len(accepted_batch) >= STARTER_POOL_TARGET:
                             break
                         if state.filled + len(accepted_batch) >= state.bucket.quota:
                             break
+                        if source_stage == SOURCE_STAGE_QUALITY_SEED:
+                            if source_stage_counts[SOURCE_STAGE_QUALITY_SEED] + len(accepted_batch) >= quality_seed_limit:
+                                quality_limit_reached = True
+                                request_stats["quality_seed_limit_applied"] = 1
+                                break
+                            if state.filled + len(accepted_batch) >= max(0, int(state.bucket.quota) - 1):
+                                quality_limit_reached = True
+                                request_stats["quality_seed_limit_applied"] = 1
+                                break
                         if query_stage in SEED_ORDER and not _seed_candidate_matches_hard_bucket(
                             result,
                             bucket,
@@ -1247,12 +1494,26 @@ def run_onboarding_autofill(
                             rejected_count += 1
                             continue
                         fetch_rank += 1
-                        candidate_score = compute_candidate_score(
+                        quality_seed_penalty = 0
+                        quality_seed_penalty_reasons: list[str] = []
+                        if source_stage == SOURCE_STAGE_QUALITY_SEED:
+                            quality_seed_penalty, quality_seed_penalty_reasons = quality_seed_profile_penalty(
+                                result,
+                                bucket,
+                                profile=profile,
+                                genre_lookup=genre_lookup,
+                            )
+                            if quality_seed_penalty_reasons:
+                                rejection_counts["quality_seed_penalized"] += 1
+                        score_debug = candidate_score_debug(
                             result,
                             bucket,
                             page=page,
                             index_on_page=index_on_page,
+                            source_stage=source_stage,
+                            quality_seed_penalty=quality_seed_penalty,
                         )
+                        candidate_score = float(score_debug["final_score"])
                         candidate = build_candidate_record_from_result(
                             result,
                             bucket,
@@ -1262,6 +1523,8 @@ def run_onboarding_autofill(
                             fetch_rank=fetch_rank,
                             fallback=query_stage,
                             source_stage=source_stage,
+                            score_debug=score_debug,
+                            quality_seed_penalty_reasons=quality_seed_penalty_reasons,
                         )
                         accepted_batch.append(candidate)
                         accepted_identities.add((bucket.media_type, int(result["id"])))
@@ -1269,8 +1532,9 @@ def run_onboarding_autofill(
                     total_pages = int((payload or {}).get("total_pages") or page)
                     if page >= total_pages:
                         state.exhausted = True
+                    if quality_limit_reached:
+                        state.exhausted = True
                 except Exception as error:
-                    api_requests += 1
                     status = "error"
                     error_text = str(error)
                     state.exhausted = True
@@ -1280,7 +1544,15 @@ def run_onboarding_autofill(
                             "onboarding_profile_id": profile_id,
                             "bucket_id": bucket.bucket_id,
                             "endpoint": endpoint,
-                            "params": {**params, "_fallback": query_stage, "_source_stage": source_stage},
+                            "params": {
+                                **params,
+                                "_fallback": query_stage,
+                                "_source_stage": source_stage,
+                                "_cache_hit": cache_hit,
+                                "_request_cache_key": request_key,
+                                "_relaxation_stage": _relaxation_stage_for_query(query_stage, bucket),
+                                "_target_deficit": target_deficit(state),
+                            },
                             "page": page,
                             "status": status,
                             "accepted_count": len(accepted_batch),
@@ -1296,6 +1568,7 @@ def run_onboarding_autofill(
                 if accepted_batch:
                     _emit(progress_callback, stage=4, message="Убираем повторы", profile_id=profile_id)
                     created_candidates.extend(accepted_batch)
+                    source_stage_counts[source_stage] += len(accepted_batch)
                     _emit(progress_callback, stage=5, message="Создаём первый пул", profile_id=profile_id)
                     _save_pool_incremental(pool, accepted_batch, path=path)
                     existing_index = build_existing_candidate_index(pool)
@@ -1309,6 +1582,14 @@ def run_onboarding_autofill(
     complete_onboarding_profile(profile_id, path=path)
     actual_counts = actual_counts_for_candidates(created_candidates)
     source_stats = dict(actual_counts.get("source_stage", {}))
+    request_stats_summary = {
+        "requests_total": int(request_stats.get("requests_total", 0)),
+        "requests_unique": int(request_stats.get("requests_unique", 0)),
+        "requests_duplicate_skipped": int(request_stats.get("requests_duplicate_skipped", 0)),
+        "zero_result_requests": int(request_stats.get("zero_result_requests", 0)),
+        "cache_hits": int(request_stats.get("cache_hits", 0)),
+        "quality_seed_limit_applied": int(request_stats.get("quality_seed_limit_applied", 0)),
+    }
     warnings = _build_warnings(
         profile=profile,
         planned_counts=planned_counts,
@@ -1343,5 +1624,6 @@ def run_onboarding_autofill(
         actual_counts=actual_counts,
         source_stats=source_stats,
         rejection_counts=dict(rejection_counts),
+        request_stats=request_stats_summary,
         rejected_future_count=rejected_future_count,
     )
