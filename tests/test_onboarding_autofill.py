@@ -489,6 +489,70 @@ class PagedYieldTmdbClient(FakeTmdbClient):
         return {"results": results, "total_pages": self.total_pages}
 
 
+class LocalizedScenarioTmdbClient(PagedYieldTmdbClient):
+    LANGUAGE_BY_COUNTRY = {
+        "GB": "en",
+        "JP": "ja",
+        "KR": "ko",
+        "RU": "ru",
+        "US": "en",
+    }
+
+    def __init__(self, *, accepted_per_page: int = 20, total_pages: int = 10, country: str = "US") -> None:
+        super().__init__(accepted_per_page=accepted_per_page, total_pages=total_pages, country=country)
+        self.country_by_tmdb_id: dict[int, str] = {}
+
+    def discover(self, endpoint: str, params: dict) -> dict:
+        payload = super().discover(endpoint, params)
+        country = str(params.get("with_origin_country") or self.country)
+        original_language = self.LANGUAGE_BY_COUNTRY.get(country, "en")
+        for item in payload.get("results") or []:
+            self.country_by_tmdb_id[int(item["id"])] = country
+            item["overview"] = ""
+            item["original_language"] = original_language
+        return payload
+
+    def _details(self, tmdb_id: int, media_type: str, language: str, append_to_response=None) -> dict:
+        appends = tuple(append_to_response or ())
+        self.details_calls.append((media_type, int(tmdb_id), language, appends))
+        country = self.country_by_tmdb_id.get(int(tmdb_id), self.country)
+        original_language = self.LANGUAGE_BY_COUNTRY.get(country, "en")
+        original_locale = autofill._original_language_to_tmdb_locale(original_language)
+        overview = f"{country} localized overview" if language == original_locale else ""
+        common = {
+            "id": int(tmdb_id),
+            "overview": overview,
+            "genres": [{"id": 18, "name": "Drama"}],
+            "vote_average": 7.4,
+            "vote_count": 120,
+            "popularity": 40,
+            "poster_path": f"/localized-{tmdb_id}.jpg",
+            "original_language": original_language,
+            "external_ids": {"imdb_id": f"tt{int(tmdb_id):07d}"},
+        }
+        if media_type == MEDIA_MOVIE:
+            common.update({
+                "title": f"Localized Movie {tmdb_id}",
+                "original_title": f"Localized Movie {tmdb_id}",
+                "release_date": "2024-01-01",
+                "production_countries": [{"iso_3166_1": country, "name": country}],
+            })
+        else:
+            common.update({
+                "name": f"Localized Series {tmdb_id}",
+                "original_name": f"Localized Series {tmdb_id}",
+                "first_air_date": "2024-01-01",
+                "origin_country": [country],
+            })
+        return common
+
+    def movie_details(self, tmdb_id: int, language: str = "en", *, append_to_response=None) -> dict:
+        return self._details(tmdb_id, MEDIA_MOVIE, language, append_to_response)
+
+    def tv_details(self, tmdb_id: int, language: str = "en", *, append_to_response=None) -> dict:
+        return self._details(tmdb_id, MEDIA_TV, language, append_to_response)
+
+
 def _profile(**overrides) -> OnboardingTasteProfile:
     data = {
         "media_preference": "both",
@@ -511,6 +575,49 @@ def _quota_by(buckets, field: str) -> Counter:
 def _genre_filter_ids(params: dict, key: str) -> set[int]:
     text = str(params.get(key) or "")
     return {int(item) for item in text.replace("|", ",").split(",") if item.isdigit()}
+
+
+def _scenario_profile(name: str, **overrides) -> OnboardingTasteProfile:
+    from scripts.reports.run_onboarding_pool_rebuild import SCENARIOS
+
+    data = dict(SCENARIOS[name])
+    data.update(overrides)
+    return OnboardingTasteProfile(**data)
+
+
+def _candidate_country_hit_rate(candidates: list[dict]) -> float:
+    if not candidates:
+        return 0.0
+    hit_count = 0
+    for candidate in candidates:
+        target = candidate.get("target_country")
+        countries = set(candidate.get("country_codes") or candidate.get("countries") or [])
+        if target and (not countries or target in countries):
+            hit_count += 1
+    return round(hit_count / len(candidates), 4)
+
+
+def _candidate_quality_rate(candidates: list[dict], quality_class: str) -> float:
+    if not candidates:
+        return 0.0
+    count = sum(1 for candidate in candidates if candidate.get("quality_class") == quality_class)
+    return round(count / len(candidates), 4)
+
+
+def _dark_vibe_hit_rate(candidates: list[dict]) -> float:
+    dark_names = {"crime", "mystery", "thriller", "horror", "drama", "war", "war & politics"}
+    if not candidates:
+        return 0.0
+    hits = 0
+    for candidate in candidates:
+        genres = {str(value or "").strip().casefold() for value in candidate.get("genres") or []}
+        if genres & dark_names:
+            hits += 1
+    return round(hits / len(candidates), 4)
+
+
+def _country_leakage_count(candidates: list[dict], country: str) -> int:
+    return sum(1 for candidate in candidates if country in set(candidate.get("country_codes") or candidate.get("countries") or []))
 
 
 def _assert_no_initial_discover_vote_filters(profile: OnboardingTasteProfile, *, expected_countries: set[str] | None = None) -> None:
@@ -1157,6 +1264,80 @@ def test_run_autofill_underfills_scarce_tv_without_movie_overfill(tmp_path, monk
     assert result.adaptive_pages_used == 0
     assert result.pagination_stop_reasons["empty_page"] >= 1
     assert "Media quota underfilled: tv planned 120, actual 0." in result.warnings
+
+
+def test_acceptance_scenario_ru_tv_manual_serious_2010_adapts_without_vote_filters_or_foreign_fallback(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = PagedYieldTmdbClient(accepted_per_page=20, total_pages=10, country="RU")
+
+    result = run_onboarding_autofill(
+        _scenario_profile("ru-tv-manual-serious-2010"),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count > 82
+    assert result.created_count == autofill.STARTER_POOL_TARGET
+    assert result.adaptive_pages_used >= 1
+    assert _candidate_country_hit_rate(result.candidates) == 1.0
+    assert _candidate_quality_rate(result.candidates, "garbage") == 0.0
+    assert all(params.get("with_origin_country") == "RU" for _endpoint, params in client.calls)
+    assert all("vote_count.gte" not in params and "vote_average.gte" not in params for _endpoint, params in client.calls)
+
+
+def test_acceptance_scenario_ru_manual_jp_kr_uses_localization_fallback_and_keeps_country_hit(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = LocalizedScenarioTmdbClient()
+
+    result = run_onboarding_autofill(
+        _scenario_profile("ru-manual-jp-kr", details_limit=120),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count == autofill.STARTER_POOL_TARGET
+    assert _candidate_country_hit_rate(result.candidates) == 1.0
+    assert _candidate_quality_rate(result.candidates, "garbage") < 0.3917
+    assert result.localization_fallback_count > 0
+    assert result.missing_overview_after_fallback < 10
+
+
+def test_acceptance_scenario_ru_foreign_new_movies_us_gb_improves_missing_overview_without_broad_origin(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = LocalizedScenarioTmdbClient()
+
+    result = run_onboarding_autofill(
+        _scenario_profile("ru-foreign-new-movies-us-gb", details_limit=120),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count > 0
+    assert _candidate_country_hit_rate(result.candidates) == 1.0
+    assert _candidate_quality_rate(result.candidates, "garbage") < 0.2417
+    assert result.localization_fallback_count > 0
+    assert result.missing_overview_after_fallback == 0
+    assert all("with_origin_country" in params for _endpoint, params in client.calls)
+
+
+def test_acceptance_scenario_dark_new_tv_us_gb_keeps_dark_vibe_and_country_clean(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    client = PagedYieldTmdbClient(accepted_per_page=20, total_pages=10, country="US")
+
+    result = run_onboarding_autofill(
+        _scenario_profile("dark-new-tv-us-gb", details_enrichment={"enabled": False}),
+        client=client,
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.created_count > 0
+    assert _dark_vibe_hit_rate(result.candidates) >= 0.9
+    assert _candidate_quality_rate(result.candidates, "garbage") == 0.0
+    assert _country_leakage_count(result.candidates, "RU") == 0
 
 
 def test_future_or_unreleased_results_are_rejected(tmp_path, monkeypatch) -> None:
