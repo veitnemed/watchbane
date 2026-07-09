@@ -1,8 +1,0 @@
-{
-  "goal": "replace ugly small onboarding with fullscreen animated onboarding and safe dev reset/autofill workflow",
-  "core_prompts": 15,
-  "visual_hardening_cycles": 5,
-  "recommended_model": "gpt-5.5",
-  "recommended_reasoning": "high",
-  "network": "only with -AllowNetwork and never in tests"
-}
