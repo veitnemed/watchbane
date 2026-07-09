@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from diagnostics import runtime_reports
+from scripts.reports import onboarding_compare_report
 from scripts.reports import run_onboarding_discover_quality_report as onboarding_report
 
 
@@ -172,3 +173,50 @@ def test_onboarding_report_summary_schema_includes_details_and_localization_metr
     assert summary["request_retry_count"] == 1
     assert summary["request_outlier_count"] == 1
     assert summary["max_request_ms"] == 125.0
+
+
+def test_onboarding_compare_report_includes_before_after_metric_keys() -> None:
+    current = [
+        {"scenario": "ru-manual-jp-kr", "garbage_rate": 0.1, "details_requests": 10, "missing_overview_after_fallback": 1, "country_hit_rate": 1.0, "ok": True},
+        {"scenario": "ru-foreign-new-movies-us-gb", "garbage_rate": 0.05, "details_requests": 20, "missing_overview_after_fallback": 0, "country_hit_rate": 1.0, "ok": True},
+        {"scenario": "ru-tv-manual-serious-2010", "created_count": 120, "details_requests": 30, "missing_overview_after_fallback": 0, "country_hit_rate": 1.0, "ok": True},
+    ]
+    report = onboarding_compare_report.build_compare_report(
+        current,
+        baseline={
+            "jp_kr_garbage_rate": 0.3917,
+            "us_gb_new_movies_garbage_rate": 0.2417,
+            "ru_tv_manual_serious_2010_created_count": 82,
+            "details_requests": 0,
+            "missing_overview_after_fallback": 10,
+            "country_hit_rate": 1.0,
+        },
+    )
+    rows = {row["metric"]: row for row in report["rows"]}
+
+    assert set(rows) == set(onboarding_compare_report.COMPARE_METRICS)
+    assert rows["jp_kr_garbage_rate"]["current"] == 0.1
+    assert rows["ru_tv_manual_serious_2010_created_count"]["delta"] == 38.0
+    assert rows["details_requests"]["current"] == 60.0
+
+
+def test_onboarding_compare_report_marks_missing_baseline_as_not_captured() -> None:
+    report = onboarding_compare_report.build_compare_report(
+        [{"scenario": "ru-manual-jp-kr", "garbage_rate": 0.1, "ok": True}],
+        baseline={},
+    )
+
+    assert all(row["baseline"] == onboarding_compare_report.NOT_CAPTURED for row in report["rows"])
+    assert "has no captured baseline yet" in report["analysis_markdown"]
+
+
+def test_onboarding_compare_report_mentions_failed_scenarios() -> None:
+    report = onboarding_compare_report.build_compare_report(
+        [
+            {"scenario": "ru-manual-jp-kr", "garbage_rate": 0.1, "ok": True},
+            {"scenario": "dark-new-tv-us-gb", "status": "failed", "ok": False},
+        ],
+        baseline={},
+    )
+
+    assert "Failed scenarios are present: dark-new-tv-us-gb." in report["analysis_markdown"]
