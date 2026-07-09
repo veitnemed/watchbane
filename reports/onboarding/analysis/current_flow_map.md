@@ -282,3 +282,25 @@ Diagnostics:
 - `pagination_stop_reasons` records bucket-level stop causes such as
   `quota_full`, `low_yield`, `normal_max_pages`, `adaptive_max_pages`,
   `empty_page`, `tmdb_total_pages`, and `error`.
+
+## API timeout/outlier handling
+
+Step `104` keeps TMDb HTTP calls bounded and observable.
+
+Network behavior:
+
+- `tmdb_get()` uses an explicit per-request timeout.
+- Transient timeout/`URLError` failures are retried with a small retry budget.
+- HTTP errors remain fail-fast and are not retried.
+
+Diagnostics:
+
+- `request_timeout_count`
+- `request_retry_count`
+- `request_outlier_count`
+- `max_request_ms`
+- `p95_request_ms`
+
+The onboarding quality report wires these diagnostics when live TMDb calls use
+the instrumented client. A latency outlier is recorded for reporting, but does
+not reduce normal Discover page coverage by itself.

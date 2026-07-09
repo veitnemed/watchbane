@@ -78,6 +78,9 @@ SCENARIO_SUMMARY_FIELDS = (
     "fallback_used",
     "request_timeout_count",
     "request_retry_count",
+    "request_outlier_count",
+    "max_request_ms",
+    "p95_request_ms",
 )
 
 CANDIDATE_SAMPLE_FIELDS = (
@@ -136,6 +139,7 @@ class InstrumentedTmdbClient:
     def __init__(self, *, live: bool) -> None:
         self.live = bool(live)
         self.mock = MockTmdbClient()
+        self.diagnostics = tmdb_api.TmdbRequestDiagnostics()
         self.discover_logs: list[dict[str, Any]] = []
         self.genre_logs: list[dict[str, Any]] = []
 
@@ -200,7 +204,11 @@ class InstrumentedTmdbClient:
             "error": None,
         }
         try:
-            payload = tmdb_api.tmdb_get(endpoint, params=clean_params) if self.live else self.mock.discover(endpoint, clean_params)
+            payload = (
+                tmdb_api.tmdb_get(endpoint, params=clean_params, diagnostics=self.diagnostics)
+                if self.live
+                else self.mock.discover(endpoint, clean_params)
+            )
             results = payload.get("results") if isinstance(payload, dict) else []
             results = results if isinstance(results, list) else []
             log_entry.update({
@@ -472,11 +480,13 @@ def _report_schema_summary(
     candidate_metrics: dict[str, Any],
     api_budget_metrics: dict[str, Any],
     request_rows: list[dict[str, Any]],
+    request_diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     selection = profile.get("country_selection") if isinstance(profile.get("country_selection"), dict) else {}
     media_plan = dict((result.planned_counts or {}).get("media_type", {}))
     media_actual = dict((result.actual_counts or {}).get("media_type", {}))
     details_requests = int(getattr(result, "details_requests", 0) or 0)
+    request_diagnostics = dict(request_diagnostics or {})
     summary = {
         "selected_countries": list(selection.get("selected_countries") or []),
         "country_plan": dict((result.planned_counts or {}).get("country", {})),
@@ -505,8 +515,11 @@ def _report_schema_summary(
         "pagination_stop_reasons": dict(getattr(result, "pagination_stop_reasons", {}) or {}),
         "broad_origin_requests": api_budget_metrics.get("broad_origin_requests", 0),
         "fallback_used": api_budget_metrics.get("fallback_used", False),
-        "request_timeout_count": _request_timeout_count(request_rows),
-        "request_retry_count": 0,
+        "request_timeout_count": request_diagnostics.get("request_timeout_count", _request_timeout_count(request_rows)),
+        "request_retry_count": request_diagnostics.get("request_retry_count", 0),
+        "request_outlier_count": request_diagnostics.get("request_outlier_count", 0),
+        "max_request_ms": request_diagnostics.get("max_request_ms", 0.0),
+        "p95_request_ms": request_diagnostics.get("p95_request_ms", 0.0),
     }
     return {field: summary.get(field) for field in SCENARIO_SUMMARY_FIELDS}
 
@@ -534,6 +547,7 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
     speed = _speed_stats(client.discover_logs, elapsed_ms)
     candidate_metrics = _candidate_metrics(candidates)
     api_budget_metrics = _api_budget_metrics(request_rows, result.created_count, details_requests=result.details_requests)
+    request_diagnostics = client.diagnostics.as_dict()
     schema_summary = _report_schema_summary(
         profile=normalized_profile,
         result=result,
@@ -541,6 +555,7 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         candidate_metrics=candidate_metrics,
         api_budget_metrics=api_budget_metrics,
         request_rows=request_rows,
+        request_diagnostics=request_diagnostics,
     )
     return {
         "scenario": name,
@@ -569,6 +584,7 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         "fallback_counts": result.actual_counts.get("fallback", {}),
         "genre_requests": client.genre_logs,
         "discover_requests": request_rows,
+        "request_diagnostics": request_diagnostics,
         "top_candidates": _top_candidates(candidates, limit=sample_limit),
         "schema_version": 1,
         "scenario_summary_fields": list(SCENARIO_SUMMARY_FIELDS),
@@ -674,7 +690,7 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
             f"- Adaptive pages used: {result.get('adaptive_pages_used')}; stop reasons `{_json(result.get('pagination_stop_reasons') or {})}`",
             f"- Localization fallback: {result.get('localization_fallback_count')}; original {result.get('overview_fallback_original_language_count')}; en {result.get('overview_fallback_en_count')}; missing {result.get('missing_overview_after_fallback')}",
             f"- Yield: raw discover {result.get('raw_discover_found')}; duplicates removed {result.get('duplicates_removed')}; accepted/template {result.get('accepted_per_discover_template')}; accepted/discover request {result.get('accepted_per_discover_http_request')}",
-            f"- Timeouts/retries: {result.get('request_timeout_count')} / {result.get('request_retry_count')}",
+            f"- Timeouts/retries/outliers: {result.get('request_timeout_count')} / {result.get('request_retry_count')} / {result.get('request_outlier_count')}; max/p95 {result.get('max_request_ms')} / {result.get('p95_request_ms')} ms",
             f"- Duplicate skipped: {result['duplicate_requests_skipped']}",
             f"- Speed: total {result['elapsed_s']}s; discover avg {result['discover_avg_ms']}ms; p50 {result['discover_p50_ms']}ms; p95 {result['discover_p95_ms']}ms; max {result['discover_max_ms']}ms",
             f"- Planned media: `{_json(result['planned_counts'].get('media_type', {}))}`",

@@ -150,6 +150,13 @@ def test_onboarding_report_summary_schema_includes_details_and_localization_metr
             "fallback_used": False,
         },
         request_rows=[],
+        request_diagnostics={
+            "request_timeout_count": 1,
+            "request_retry_count": 1,
+            "request_outlier_count": 1,
+            "max_request_ms": 125.0,
+            "p95_request_ms": 125.0,
+        },
     )
 
     assert summary["details_requests"] == 4
@@ -161,3 +168,7 @@ def test_onboarding_report_summary_schema_includes_details_and_localization_metr
     assert summary["vote_confidence_avg"] == 0.625
     assert summary["weak_candidates_count"] == 1
     assert summary["adaptive_pages_used"] == 1
+    assert summary["request_timeout_count"] == 1
+    assert summary["request_retry_count"] == 1
+    assert summary["request_outlier_count"] == 1
+    assert summary["max_request_ms"] == 125.0

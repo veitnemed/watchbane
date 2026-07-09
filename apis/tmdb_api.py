@@ -5,7 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import socket
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -49,6 +51,50 @@ TMDB_CACHE_DIR = Path(constant.CACHE_DIR) / "tmdb"
 DISCOVER_CACHE_DIR = TMDB_CACHE_DIR / "discover"
 DETAILS_CACHE_DIR = TMDB_CACHE_DIR / "details"
 GENRE_CACHE_DIR = TMDB_CACHE_DIR / "genre"
+DEFAULT_TMDB_TIMEOUT_SECONDS = 20
+DEFAULT_TMDB_RETRIES = 1
+DEFAULT_TMDB_OUTLIER_MS = 5000.0
+
+
+@dataclass
+class TmdbRequestDiagnostics:
+    outlier_threshold_ms: float = DEFAULT_TMDB_OUTLIER_MS
+    request_timeout_count: int = 0
+    request_retry_count: int = 0
+    _request_durations_ms: list[float] = field(default_factory=list)
+
+    def record_request(self, elapsed_ms: float, *, timed_out: bool = False) -> None:
+        self._request_durations_ms.append(round(float(elapsed_ms), 4))
+        if timed_out:
+            self.request_timeout_count += 1
+
+    def record_retry(self) -> None:
+        self.request_retry_count += 1
+
+    @property
+    def request_outlier_count(self) -> int:
+        return sum(1 for value in self._request_durations_ms if value >= float(self.outlier_threshold_ms))
+
+    @property
+    def max_request_ms(self) -> float:
+        return round(max(self._request_durations_ms), 4) if self._request_durations_ms else 0.0
+
+    @property
+    def p95_request_ms(self) -> float:
+        if not self._request_durations_ms:
+            return 0.0
+        ordered = sorted(self._request_durations_ms)
+        index = min(len(ordered) - 1, max(0, round((len(ordered) - 1) * 0.95)))
+        return round(float(ordered[index]), 4)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "request_timeout_count": int(self.request_timeout_count),
+            "request_retry_count": int(self.request_retry_count),
+            "request_outlier_count": int(self.request_outlier_count),
+            "max_request_ms": self.max_request_ms,
+            "p95_request_ms": self.p95_request_ms,
+        }
 
 
 def find_dotenv(path: str | Path = ".env") -> Path | None:
@@ -141,6 +187,15 @@ def cache_key(path: str, params: dict[str, Any] | None = None) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
+def _is_timeout_error(error: BaseException) -> bool:
+    if isinstance(error, (TimeoutError, socket.timeout)):
+        return True
+    if isinstance(error, URLError):
+        reason = getattr(error, "reason", "")
+        return "timed out" in str(reason).casefold() or isinstance(reason, (TimeoutError, socket.timeout))
+    return False
+
+
 def normalize_append_to_response(append_to_response: str | list[str] | tuple[str, ...] | None) -> str:
     if append_to_response is None:
         values = DEFAULT_TV_DETAIL_APPENDS
@@ -171,6 +226,10 @@ def tmdb_get(
     params: dict[str, Any] | None = None,
     *,
     token: str | None = None,
+    timeout: int | float = DEFAULT_TMDB_TIMEOUT_SECONDS,
+    retries: int = DEFAULT_TMDB_RETRIES,
+    opener=None,
+    diagnostics: TmdbRequestDiagnostics | None = None,
 ) -> dict[str, Any]:
     request_params = dict(params or {})
     headers = {"Accept": "application/json"}
@@ -193,16 +252,33 @@ def tmdb_get(
         url,
         headers=headers,
     )
-    try:
-        with urlopen(request, timeout=20) as response:
-            raw = response.read().decode("utf-8")
-    except HTTPError as error:
-        details = error.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"TMDB вернул HTTP {error.code}: {details}") from error
-    except URLError as error:
-        raise RuntimeError(f"Не удалось подключиться к TMDB: {error.reason}") from error
+    active_opener = opener or urlopen
+    max_retries = max(0, int(retries or 0))
+    for attempt in range(max_retries + 1):
+        started = time.perf_counter()
+        try:
+            with active_opener(request, timeout=timeout) as response:
+                raw = response.read().decode("utf-8")
+            if diagnostics is not None:
+                diagnostics.record_request((time.perf_counter() - started) * 1000)
+            return json.loads(raw)
+        except HTTPError as error:
+            if diagnostics is not None:
+                diagnostics.record_request((time.perf_counter() - started) * 1000)
+            details = error.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"TMDB вернул HTTP {error.code}: {details}") from error
+        except (URLError, TimeoutError, socket.timeout) as error:
+            timed_out = _is_timeout_error(error)
+            if diagnostics is not None:
+                diagnostics.record_request((time.perf_counter() - started) * 1000, timed_out=timed_out)
+            if attempt < max_retries:
+                if diagnostics is not None:
+                    diagnostics.record_retry()
+                continue
+            reason = getattr(error, "reason", error)
+            raise RuntimeError(f"Не удалось подключиться к TMDB: {reason}") from error
 
-    return json.loads(raw)
+    raise RuntimeError("Не удалось подключиться к TMDB.")
 
 
 def cached_tmdb_get(

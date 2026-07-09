@@ -1,4 +1,5 @@
 import inspect
+from urllib.error import URLError
 
 from apis import tmdb_api
 from ui.console import interface_funcs
@@ -59,6 +60,56 @@ def test_tmdb_get_supports_api_key_query_auth(monkeypatch) -> None:
     assert "api_key=test-key" in captured["url"]
     assert "language=ru-RU" in captured["url"]
     assert captured["authorization"] is None
+
+
+def test_tmdb_get_retries_timeout_and_records_diagnostics(monkeypatch) -> None:
+    calls = {"count": 0}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return b'{"ok": true}'
+
+    def fake_opener(request, timeout):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise URLError(TimeoutError("timed out"))
+        return FakeResponse()
+
+    diagnostics = tmdb_api.TmdbRequestDiagnostics()
+    monkeypatch.setattr(tmdb_api, "load_tmdb_credentials", lambda: ("bearer", "test-token"))
+
+    result = tmdb_api.tmdb_get(
+        "/configuration",
+        opener=fake_opener,
+        timeout=3,
+        retries=1,
+        diagnostics=diagnostics,
+    )
+
+    assert result == {"ok": True}
+    assert calls["count"] == 2
+    assert diagnostics.request_timeout_count == 1
+    assert diagnostics.request_retry_count == 1
+
+
+def test_tmdb_request_diagnostics_reports_outliers() -> None:
+    diagnostics = tmdb_api.TmdbRequestDiagnostics(outlier_threshold_ms=100)
+
+    diagnostics.record_request(25)
+    diagnostics.record_request(125)
+    diagnostics.record_retry()
+
+    summary = diagnostics.as_dict()
+    assert summary["request_outlier_count"] == 1
+    assert summary["request_retry_count"] == 1
+    assert summary["max_request_ms"] == 125
+    assert summary["p95_request_ms"] == 125
 
 
 def test_ping_external_apis_prints_status(monkeypatch, capsys) -> None:
