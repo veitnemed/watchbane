@@ -17,6 +17,7 @@ candidates/
   repositories/           # SQLite-backed load/save pool и criteria
   pool/                   # dedupe, queries, stats, diagnostics, search_helpers, completeness
   scoring/                # sort keys
+  search/                 # FTS document, index, rerank, query log
   views/                  # formatters
   sources/
     tmdb/                 # discovery, details, normalizer, scoring, builder, output, importer
@@ -95,6 +96,14 @@ Stats: `pool/stats.get_pool_stats()` — `unique_total`, `raw_total`, duplicate 
 TMDb Discover параметр: `sources/tmdb/discover_query.py` → `builder` → `service` → console UI.
 
 Search filter: `pool/search_helpers.py` → `service` → `app/core/filters.py`.
+
+Локальный текстовый поиск (Steps 2–4):
+- `search/document.py` — детерминированный `search_document` для FTS.
+- `search/fts_index.py` — SQLite FTS5 (`candidate_fts`, migration v3), BM25.
+- `service.search_candidate_pool_text()` — FTS retrieval + structural filters (флаг `WATCHBANE_FTS_SEARCH=1`).
+- `search/rerank.py` — combined score (`relevance` sort mode).
+- `search/query_log.py` — opt-in JSONL (`WATCHBANE_LOG_SEARCH_QUERIES=1`).
+- Offline: `scripts/reports/rebuild_candidate_fts_index.py`, `export_search_top_results.py`, `evaluate_search_relevance.py`.
 
 Dedupe/keys: `models/keys.py` → `pool/dedupe.py` → migration tests.
 

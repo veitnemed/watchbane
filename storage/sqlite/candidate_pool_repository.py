@@ -7,6 +7,7 @@ import sqlite3
 
 from candidates.pool.normalization import normalize_storage_pool
 from candidates.pool.watched_cleanup import purge_watched_from_pool
+from candidates.search.fts_index import rebuild_fts_index
 from storage.sqlite.candidate_write import insert_candidate_record
 from storage.sqlite.json_codec import loads_json
 from storage.sqlite.session import connection, transaction, utc_now
@@ -56,6 +57,7 @@ def save_candidate_pool_dict(
                     candidate=candidate,
                     timestamp=timestamp,
                 )
+            rebuild_fts_index(active)
     finally:
         if owned:
             active.close()
@@ -70,6 +72,7 @@ def clear_candidate_pool(
     try:
         with transaction(active, owned):
             active.execute("DELETE FROM candidate_records")
+            rebuild_fts_index(active)
     finally:
         if owned:
             active.close()

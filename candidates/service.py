@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from app.core import candidates as search_core
 from app.core import ranking as search_ranking
 from app.core import storage as search_storage
-from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
+from candidates.models.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key
 from candidates.onboarding.autofill import (
     CountrySelection,
     OnboardingTasteProfile,
@@ -68,6 +69,20 @@ from candidates.views.formatters import (
 from dataset import filter_popularity
 from candidates.views import filter_popularity as pool_filter_popularity
 from storage import data as storage_data
+
+
+FTS_SEARCH_ENV = "WATCHBANE_FTS_SEARCH"
+
+
+def is_fts_search_enabled() -> bool:
+    return os.environ.get(FTS_SEARCH_ENV) == "1"
+
+
+def _candidate_pool_key(candidate: dict) -> str:
+    stored = candidate.get("pool_entry_key")
+    if stored not in (None, ""):
+        return str(stored)
+    return pool_entry_key(candidate)
 
 
 def get_pool_view(criteria_name: str | None = None) -> list:
@@ -834,6 +849,8 @@ SEARCH_SORT_MODES = (
     "tmdb_votes",
     "tmdb_popularity",
     "year",
+    "text_relevance",
+    "relevance",
 )
 
 SEARCH_SORT_MODE_LABELS = {
@@ -843,6 +860,8 @@ SEARCH_SORT_MODE_LABELS = {
     "tmdb_votes": "Голоса TMDb",
     "tmdb_popularity": "Популярность TMDb",
     "year": "Год",
+    "text_relevance": "Текст",
+    "relevance": "Релевантность",
 }
 DEFAULT_SEARCH_SORT_MODE = "final_score"
 
@@ -854,7 +873,21 @@ def _sort_field_value(candidate: dict, field_name: str) -> float | None:
 
 
 def _sort_candidates_by_mode(candidates: list, sort_mode: str) -> list:
+    if sort_mode == "relevance":
+        from candidates.search.rerank import sort_by_relevance
+
+        return sort_by_relevance(list(candidates))
+
     field_name = sort_mode if sort_mode in SEARCH_SORT_MODES else DEFAULT_SEARCH_SORT_MODE
+    if sort_mode == "text_relevance":
+        def text_sort_key(candidate: dict) -> tuple:
+            value = candidate.get("text_relevance_score")
+            title = str(candidate.get("title") or candidate.get("name") or "").casefold()
+            if value is None:
+                return (1, 0.0, title)
+            return (0, float(value), title)
+
+        return sorted(list(candidates), key=text_sort_key)
 
     def sort_key(candidate: dict) -> tuple:
         value = _sort_field_value(candidate, field_name)
@@ -883,6 +916,51 @@ def sort_search_candidates(candidates: list, sort_mode: str) -> dict:
 def search_candidate_pool(candidates: list, filters: dict) -> dict:
     """Filters and ranks saved candidates for local search."""
     return search_core.search_candidates(candidates, filters)
+
+
+def search_candidate_pool_text(
+    candidates: list,
+    filters: dict,
+    *,
+    text_query: str | None = None,
+) -> dict:
+    """Structural filters plus optional FTS retrieval when enabled."""
+    normalized_query = str(text_query or "").strip()
+    if normalized_query == "" or not is_fts_search_enabled():
+        return search_candidate_pool(candidates, filters)
+
+    from candidates.search.fts_index import search_fts
+    from candidates.search.match_fields import find_matched_fields
+    from candidates.search.rerank import attach_text_relevance
+    from storage.sqlite.connection import connect
+
+    conn = connect()
+    try:
+        fts_hits = search_fts(conn, normalized_query)
+    finally:
+        conn.close()
+
+    fts_keys = {pool_key for pool_key, _ in fts_hits}
+    bm25_by_key = {pool_key: score for pool_key, score in fts_hits}
+    search_view = search_candidate_pool(candidates, filters)
+    filtered_candidates = [
+        candidate
+        for candidate in search_view.get("candidates") or []
+        if _candidate_pool_key(candidate) in fts_keys
+    ]
+    enriched_candidates = attach_text_relevance(filtered_candidates, bm25_by_key)
+    for candidate in enriched_candidates:
+        candidate["matched_fields"] = find_matched_fields(candidate, normalized_query)
+
+    return {
+        **search_view,
+        "candidates": enriched_candidates,
+        "filtered_candidates": enriched_candidates,
+        "filtered_count": len(enriched_candidates),
+        "text_query": normalized_query,
+        "text_relevance_by_key": bm25_by_key,
+        "fts_enabled": True,
+    }
 
 
 def add_candidate_to_watchlist(candidate: dict) -> dict:

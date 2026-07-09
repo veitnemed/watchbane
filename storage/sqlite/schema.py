@@ -173,3 +173,16 @@ def apply_v2(conn: sqlite3.Connection) -> None:
         """
     )
 
+
+def apply_v3(conn: sqlite3.Connection) -> None:
+    """Add FTS5 search index over deterministic candidate documents."""
+    conn.executescript(
+        """
+        CREATE VIRTUAL TABLE IF NOT EXISTS candidate_fts USING fts5(
+          pool_key UNINDEXED,
+          document,
+          tokenize='unicode61 remove_diacritics 2'
+        );
+        """
+    )
+

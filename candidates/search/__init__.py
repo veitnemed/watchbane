@@ -1,1 +1,1 @@
-"""Local search tuning helpers (query logging, offline export support)."""
+"""Local search tuning helpers (query logging, FTS indexing, offline export support)."""

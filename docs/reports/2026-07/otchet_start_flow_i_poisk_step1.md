@@ -185,7 +185,7 @@ py start_console.py
 - новые TMDb Discover-фильтры;
 - ML.
 
-**Следующий логичный шаг (Step 2):** построить `search_document` и локальный FTS-индекс поверх candidate pool, используя накопленный JSONL-лог и экспорт top-результатов для ручной калибровки.
+**Следующий шаг:** см. [otchet_poisk_steps_2-4.md](./otchet_poisk_steps_2-4.md) — FTS5, интеграция в pipeline, rerank и explainability (Steps 2–4, июль 2026).
 
 ---
 

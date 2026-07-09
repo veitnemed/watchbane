@@ -135,7 +135,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._search_input.setClearButtonEnabled(True)
         self._debounced_search = DebouncedLineEditSearch(
             self._search_input,
-            self._apply_visible_candidates,
+            self._on_search_query_changed,
             parent=self._widget,
         )
         list_layout.addWidget(self._search_input)
@@ -240,6 +240,19 @@ class CandidateListView(CandidateListActionsMixin):
         self._detail_entries = {}
         self._model.set_data_language(data_language)
         self._rebuild_list_delegate()
+
+    def _fts_search_enabled(self) -> bool:
+        return bool(getattr(self._service, "is_fts_search_enabled", lambda: False)())
+
+    def _on_search_query_changed(self) -> None:
+        query = self._search_input.text()
+        if self._fts_search_enabled():
+            if not self._session.has_results:
+                return
+            filters = dict(self._session.filters or DEFAULT_BROWSE_FILTERS)
+            self._session.apply_filters_async(filters, text_query=query, parent=self._widget)
+            return
+        self._apply_visible_candidates()
 
     def _apply_visible_candidates(self) -> None:
         query = self._search_input.text()
@@ -377,14 +390,24 @@ class CandidateListView(CandidateListActionsMixin):
             return
 
         self._all_candidates = self._session.sorted_candidates()
-        self._search_index = build_candidate_search_index(self._all_candidates)
+        if self._fts_search_enabled():
+            self._candidates = list(self._all_candidates)
+            self._search_index = build_candidate_search_index(self._all_candidates)
+            self._results_list.blockSignals(True)
+            self._model.set_candidates(self._candidates)
+            self._update_counter_label(self._search_input.text())
+            self._results_list.blockSignals(False)
+            self._log_search_query(self._search_input.text())
+        else:
+            self._search_index = build_candidate_search_index(self._all_candidates)
+            self._debounced_search.flush()
+
         pool_stats = self._session.pool_stats()
         if not pool_stats:
             pool_stats = self._service.get_pool_stats_view()["stats"]
         self._pool_unique_total = int(
             pool_stats.get("unique_total", pool_stats.get("storage_total", 0)) or 0
         )
-        self._debounced_search.flush()
 
     def _on_result_selected(self, current: QModelIndex, _previous: QModelIndex = QModelIndex()) -> None:
         started = perf_counter()

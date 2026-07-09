@@ -78,12 +78,20 @@ def rank_candidates(query: str | None, filters: dict, sort_mode: str) -> tuple[l
     overview = candidate_service.get_search_overview_view()
     if overview.get("is_empty"):
         return [], overview
-    search_view = candidate_service.search_candidate_pool(overview["candidates"], filters)
+    normalized_query = str(query or "").strip()
+    if normalized_query and candidate_service.is_fts_search_enabled():
+        search_view = candidate_service.search_candidate_pool_text(
+            overview["candidates"],
+            filters,
+            text_query=normalized_query,
+        )
+    else:
+        search_view = candidate_service.search_candidate_pool(overview["candidates"], filters)
     filtered = list(search_view.get("candidates") or [])
     sort_view = candidate_service.sort_search_candidates(filtered, sort_mode)
     ranked = list(sort_view.get("candidates") or [])
-    normalized = str(query or "").strip().casefold()
-    if normalized:
+    if normalized_query and not candidate_service.is_fts_search_enabled():
+        normalized = normalized_query.casefold()
         ranked = [
             candidate
             for candidate in ranked
@@ -119,6 +127,9 @@ def build_item(candidate: dict, rank: int) -> dict:
         "genres": genres,
         "final_score": _safe_float(candidate.get("final_score")),
         "quality_score": _safe_float(candidate.get("quality_score")),
+        "text_relevance_score": _safe_float(candidate.get("text_relevance_score")),
+        "combined_relevance_score": _safe_float(candidate.get("combined_relevance_score")),
+        "matched_fields": list(candidate.get("matched_fields") or []),
         "is_complete": is_complete,
         "review": None,
     }
@@ -126,7 +137,7 @@ def build_item(candidate: dict, rank: int) -> dict:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Export top-N local search results for review.")
-    parser.add_argument("--query", default=None, help="Optional substring query (same haystack as UI).")
+    parser.add_argument("--query", default=None, help="Optional text query (FTS when WATCHBANE_FTS_SEARCH=1).")
     parser.add_argument("--top", type=int, default=50, help="Number of top results to export.")
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT), help="Output JSON path.")
     parser.add_argument("--sort-mode", default=candidate_service.DEFAULT_SEARCH_SORT_MODE)

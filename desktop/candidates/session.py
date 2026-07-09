@@ -122,17 +122,29 @@ class CandidateSearchSession:
         filters: dict,
         applied: dict,
         latency_ms: float | None,
+        text_query: str | None = None,
     ) -> None:
         self._current_search_id = search_id
         self._last_search_context = {
             "search_id": search_id,
             "filters": dict(filters or {}),
+            "text_query": str(text_query or ""),
             "sort_mode": self.sort_mode,
             "filtered_count": int(applied.get("filtered_count") or 0),
             "ok": bool(applied.get("ok")),
             "is_empty_pool": bool(applied.get("is_empty_pool")),
             "latency_ms": latency_ms,
         }
+
+    def _search_pool(self, candidates: list, filters: dict, *, text_query: str | None = None) -> dict:
+        normalized_query = str(text_query or "").strip()
+        if normalized_query and hasattr(self.service, "search_candidate_pool_text"):
+            return self.service.search_candidate_pool_text(
+                candidates,
+                filters,
+                text_query=normalized_query,
+            )
+        return self.service.search_candidate_pool(candidates, filters)
 
     def _apply_search_result(self, filters: dict, result: dict) -> dict:
         if result.get("overview") is not None:
@@ -178,7 +190,7 @@ class CandidateSearchSession:
         self._notify_listeners()
         return applied
 
-    def apply_filters(self, filters: dict) -> dict:
+    def apply_filters(self, filters: dict, *, text_query: str | None = None) -> dict:
         """Filter saved pool candidates without sorting."""
         search_id = uuid.uuid4().hex
         started = perf_counter()
@@ -198,10 +210,11 @@ class CandidateSearchSession:
                 filters=filters,
                 applied=applied,
                 latency_ms=round((perf_counter() - started) * 1000, 1),
+                text_query=text_query,
             )
             return applied
 
-        search_view = self.service.search_candidate_pool(overview["candidates"], filters)
+        search_view = self._search_pool(overview["candidates"], filters, text_query=text_query)
         filtered_candidates = list(search_view.get("candidates") or [])
         sort_view = self.service.sort_search_candidates(filtered_candidates, self.sort_mode)
         applied = self._apply_search_result(filters, {
@@ -219,10 +232,17 @@ class CandidateSearchSession:
             filters=filters,
             applied=applied,
             latency_ms=round((perf_counter() - started) * 1000, 1),
+            text_query=text_query,
         )
         return applied
 
-    def apply_filters_async(self, filters: dict, *, parent=None) -> int:
+    def apply_filters_async(
+        self,
+        filters: dict,
+        *,
+        text_query: str | None = None,
+        parent=None,
+    ) -> int:
         """Filter candidates in a worker and ignore stale results."""
         self._request_id += 1
         request_id = self._request_id
@@ -236,6 +256,7 @@ class CandidateSearchSession:
             has_cached_overview=self._overview_cache is not None,
             cached_overview_empty=bool((self._overview_cache or {}).get("is_empty")),
             sort_mode=self.sort_mode,
+            has_text_query=bool(str(text_query or "").strip()),
         )
         worker = CandidateSearchWorker(
             request_id=request_id,
@@ -243,9 +264,12 @@ class CandidateSearchSession:
             filters=filters,
             sort_mode=self.sort_mode,
             overview=self._overview_cache,
+            text_query=text_query,
             parent=parent,
         )
-        worker.completed.connect(lambda rid, result: self._on_async_result(rid, dict(filters), result))
+        worker.completed.connect(
+            lambda rid, result: self._on_async_result(rid, dict(filters), result, text_query=text_query)
+        )
         worker.finished.connect(lambda worker=worker: self._remove_worker(worker))
         worker.finished.connect(worker.deleteLater)
         self._workers.append(worker)
@@ -255,7 +279,14 @@ class CandidateSearchSession:
     def _remove_worker(self, worker: CandidateSearchWorker) -> None:
         self._workers = [item for item in self._workers if item is not worker]
 
-    def _on_async_result(self, request_id: int, filters: dict, result: dict) -> None:
+    def _on_async_result(
+        self,
+        request_id: int,
+        filters: dict,
+        result: dict,
+        *,
+        text_query: str | None = None,
+    ) -> None:
         search_id = self._request_search_id.pop(request_id, None)
         if request_id != self._request_id:
             self._request_started_at.pop(request_id, None)
@@ -270,6 +301,7 @@ class CandidateSearchSession:
             filters=filters,
             applied=applied,
             latency_ms=worker_latency if worker_latency is not None else elapsed_ms,
+            text_query=text_query,
         )
         log_event(
             "candidates.search.async.end",
@@ -307,7 +339,10 @@ class CandidateSearchSession:
         if force:
             self.invalidate_pool_cache()
         if self.filters is not None:
-            self.apply_filters(self.filters)
+            text_query = None
+            if self._last_search_context is not None:
+                text_query = self._last_search_context.get("text_query")
+            self.apply_filters(self.filters, text_query=text_query)
         else:
             self._notify_listeners()
 

@@ -20,6 +20,7 @@ class CandidateSearchWorker(QThread):
         filters: dict,
         sort_mode: str,
         overview: dict | None = None,
+        text_query: str | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -28,6 +29,16 @@ class CandidateSearchWorker(QThread):
         self._filters = dict(filters or {})
         self._sort_mode = str(sort_mode)
         self._overview = overview
+        self._text_query = str(text_query or "").strip() or None
+
+    def _search_pool(self, candidates: list) -> dict:
+        if self._text_query and hasattr(self._service, "search_candidate_pool_text"):
+            return self._service.search_candidate_pool_text(
+                candidates,
+                self._filters,
+                text_query=self._text_query,
+            )
+        return self._service.search_candidate_pool(candidates, self._filters)
 
     def run(self) -> None:
         started = perf_counter()
@@ -49,10 +60,7 @@ class CandidateSearchWorker(QThread):
                 )
                 return
 
-            search_view = self._service.search_candidate_pool(
-                overview.get("candidates") or [],
-                self._filters,
-            )
+            search_view = self._search_pool(overview.get("candidates") or [])
             filtered_candidates = list(search_view.get("candidates") or [])
             sort_view = self._service.sort_search_candidates(filtered_candidates, self._sort_mode)
             sorted_candidates = list(sort_view.get("candidates") or [])

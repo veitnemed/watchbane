@@ -6,6 +6,7 @@ from app.core import filters
 from app.core.ranking import calculate_quality_score, tmdb_vote_weight
 from candidates.models import country_schema, genre_schema
 from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
+from candidates.search.match_fields import matched_field_labels
 
 
 def _number(value) -> float | None:
@@ -15,7 +16,12 @@ def _number(value) -> float | None:
     return float(coerced)
 
 
-def explain_candidate(candidate: dict, criteria: dict | None = None) -> list[str]:
+def explain_candidate(
+    candidate: dict,
+    criteria: dict | None = None,
+    *,
+    search_context: dict | None = None,
+) -> list[str]:
     """Returns short reasons why a candidate belongs in the result list."""
     criteria = criteria or {}
     candidate = normalize_candidate_record(candidate)
@@ -64,5 +70,21 @@ def explain_candidate(candidate: dict, criteria: dict | None = None) -> list[str
         reasons.append("Не скрыт")
     if criteria.get("only_complete"):
         reasons.append("Complete-кандидат")
+
+    context = search_context or {}
+    matched_fields = context.get("matched_fields") or candidate.get("matched_fields") or []
+    if matched_fields:
+        labels = matched_field_labels(list(matched_fields))
+        reasons.append(f"Совпадение по полям: {', '.join(labels)}")
+    text_relevance = context.get("text_relevance_score")
+    if text_relevance is None:
+        text_relevance = candidate.get("text_relevance_score")
+    if text_relevance is not None:
+        reasons.append(f"Релевантность текста (BM25): {float(text_relevance):.2f}")
+    combined = context.get("combined_relevance_score")
+    if combined is None:
+        combined = candidate.get("combined_relevance_score")
+    if combined is not None:
+        reasons.append(f"Комбинированная релевантность: {float(combined):.2f}")
 
     return reasons

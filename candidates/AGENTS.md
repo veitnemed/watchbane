@@ -24,6 +24,7 @@
 - `sources/tmdb/` — discovery, details normalization, scoring, builder, output, importer.
 - `genres.py` — runtime жанры saved pool.
 - `sources/tmdb/genre_options.py` — TMDb TV genre IDs.
+- `search/fts_index.py` — FTS5-индекс; менять только с migration + тестами.
 - `sources/tmdb/country_options.py` — страны Discover UI.
 - `to_dataset.py` — mapper pool `genre_keys` / raw genres → dataset `has_*` (не смешивать с UI/runtime filters).
 
