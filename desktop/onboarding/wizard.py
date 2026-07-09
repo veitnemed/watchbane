@@ -169,6 +169,38 @@ _PRESET_CARDS: tuple[_PresetCard, ...] = (
 
 _PRESET_CARDS_BY_KEY = {card.key: card for card in _PRESET_CARDS}
 
+_MOJIBAKE_MARKERS = (
+    "\u0420\u00a0",
+    "\u0420\u0459",
+    "\u0420\u045f",
+    "\u0420\u040e",
+    "\u0420\u045c",
+    "\u0420\u2019",
+    "\u0420\u045e",
+    "\u0420\u201c",
+    "\u0420\u00b0",
+    "\u0420\u00b5",
+    "\u0420\u0451",
+    "\u0420\u00bb",
+    "\u0421\u0403",
+    "\u0421\u201a",
+    "\u0421\u040a",
+    "\u0421\u040f",
+    "\u0421\u2018",
+    "\u0421\u2020",
+    "\u0432\u0402",
+)
+
+
+def _repair_mojibake(text: str) -> str:
+    if not any(marker in text for marker in _MOJIBAKE_MARKERS):
+        return text
+    try:
+        repaired = text.encode("cp1251").decode("utf-8")
+    except UnicodeError:
+        return text
+    return repaired or text
+
 
 @dataclass(frozen=True)
 class _Question:
@@ -584,7 +616,7 @@ class OnboardingAutofillDialog(QDialog):
         return list(_QUESTIONS)
 
     def _text(self, ru: str, en: str) -> str:
-        return en if self._ui_language == "en" else ru
+        return en if self._ui_language == "en" else _repair_mojibake(ru)
 
     def _country_name(self, code: str) -> str:
         labels = (

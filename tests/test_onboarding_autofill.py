@@ -947,6 +947,33 @@ def test_onboarding_wizard_preset_card_labels_are_localized(qapp) -> None:
         ru_dialog.close()
 
 
+def test_onboarding_wizard_russian_animation_question_is_not_mojibake(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+    from desktop.onboarding import wizard as wizard_module
+
+    dialog = OnboardingAutofillDialog(ui_language="ru")
+    try:
+        question = next(item for item in dialog._active_questions() if item.key == "animation_mode")
+        texts = [
+            dialog._text(question.title_ru, question.title_en),
+            *[dialog._text(option_ru, option_en) for _answer, option_ru, option_en in question.options],
+        ]
+
+        assert texts == [
+            "Как относимся к анимации?",
+            "Не важно",
+            "Только анимация",
+            "Без анимации",
+        ]
+        assert not any(
+            marker in text
+            for text in texts
+            for marker in wizard_module._MOJIBAKE_MARKERS
+        )
+    finally:
+        dialog.close()
+
+
 def test_onboarding_wizard_anime_preset_sets_profile_defaults(qapp) -> None:
     from desktop.onboarding import OnboardingAutofillDialog
 
