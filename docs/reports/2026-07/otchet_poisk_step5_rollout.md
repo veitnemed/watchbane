@@ -56,11 +56,14 @@
 | Без explain в detail | До 3 строк причин под заголовком |
 | Sort вручную | Auto `relevance` при вводе query |
 
-**Не в этом коммите:** default `fts_search_enabled=True`, удаление substring fallback, калибровка `W_BM25` / aliases.
+**Не в этом коммите:** ~~default `fts_search_enabled=True`~~ выполнено в калибровке; substring fallback только при явном отключении FTS.
 
 ---
 
-## 5.1 Калибровочный цикл (подготовка)
+## 5.1 Калибровка (выполнено)
+
+См. [`otchet_poisk_step5_calibration.md`](otchet_poisk_step5_calibration.md): precision@10 **0.617** при W_BM25/W_FINAL **0.5/0.5**, default FTS **on**.
+
 
 - `scripts/reports/summarize_search_eval.py` — агрегация precision@10 по reviewed JSON в `reports/search/curation/`.
 
@@ -112,7 +115,7 @@ py -m pytest tests/test_search_document.py tests/test_candidate_fts_index.py tes
 
 ## Следующие шаги
 
-1. 20–30 размеченных запросов с `WATCHBANE_LOG_SEARCH_QUERIES=1`.
-2. `summarize_search_eval.py` → precision@10.
-3. При ≥ 0.6 — weights/aliases + default `fts_search_enabled=True`.
-4. Убрать substring fallback после default-on релиза.
+1. ~~20–30 размеченных запросов~~ — bootstrap 26 запросов в `reports/search/curation/`.
+2. ~~precision@10 ≥ 0.6~~ — **0.617** после калибровки.
+3. ~~weights/aliases + default on~~ — см. calibration report.
+4. Substring fallback — только при `fts_search_enabled=False`; полное удаление — после стабилизации в проде.

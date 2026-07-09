@@ -3,6 +3,13 @@
   "метод": ["method"],
   "шерлок": ["sherlock"],
   "игра престолов": ["game of thrones", "got"],
-  "криминал": ["crime", "криминальный"],
-  "детектив": ["mystery", "детективный"]
+  "игра": ["game of thrones"],
+  "престолов": ["thrones"],
+  "криминал": ["crime", "криминальный", "criminal"],
+  "детектив": ["mystery", "детективный", "detective"],
+  "комедия": ["comedy", "комедий"],
+  "фантастика": ["sci-fi", "science fiction", "sci fi", "фантаст"],
+  "драма": ["drama", "драм"],
+  "анимация": ["animation", "animated", "анимац"],
+  "one piece": ["one piece", "wan pisu"]
 }

@@ -395,6 +395,23 @@ def test_session_ignores_stale_async_result(qtbot) -> None:
     assert session.sorted_total_count() == 0
 
 
+def test_fts_disabled_falls_back_to_substring_filter(qtbot) -> None:
+    service = FakeCandidateService()
+    service.set_fts_enabled(False)
+    _service, session, _filters_view, list_view = _build_views(qtbot, service=service)
+    session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": False})
+    list_widget = _candidate_list(list_view)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 2)
+
+    search_input = list_view.widget.findChild(QLineEdit, "candidateListSearch")
+    assert search_input is not None
+    search_input.setText("Searchable")
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 1)
+
+    assert service.applied_text_queries == []
+    assert _listed_titles(list_widget) == ["Searchable Only"]
+
+
 def test_fts_search_uses_async_worker_not_substring_filter(qtbot) -> None:
     service = FakeCandidateService()
     service.set_fts_enabled(True)

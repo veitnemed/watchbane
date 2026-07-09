@@ -398,7 +398,6 @@ class CandidateListView(CandidateListActionsMixin):
         if self._fts_search_enabled():
             self._detail_entries = {}
             self._candidates = list(self._all_candidates)
-            self._search_index = build_candidate_search_index(self._all_candidates)
             self._results_list.blockSignals(True)
             self._model.set_candidates(self._candidates)
             self._update_counter_label(self._search_input.text())

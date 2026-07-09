@@ -5,8 +5,9 @@ from __future__ import annotations
 from candidates.models.keys import pool_entry_key
 from candidates.models.schema import coerce_candidate_number
 
-W_BM25 = 0.4
-W_FINAL = 0.6
+# Calibrated on 26-query bootstrap set (2026-07): grid 0.3–0.7, best precision@10 at 0.5/0.5.
+W_BM25 = 0.5
+W_FINAL = 0.5
 
 
 def _candidate_key(candidate: dict) -> str:

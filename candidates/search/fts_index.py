@@ -92,20 +92,19 @@ def _escape_fts_token(token: str) -> str:
 
 
 def build_fts_match_query(query: str, *, typo_fallback: bool = False) -> str:
-    """Build FTS5 MATCH expression (AND across tokens, OR within alias group)."""
+    """Build FTS5 MATCH expression (AND across tokens, OR within single-token alias group)."""
     from candidates.search.query_expand import expand_query_token_groups, expand_query_typo_groups
 
     groups = expand_query_typo_groups(query) if typo_fallback else expand_query_token_groups(query)
     if not groups:
         return ""
-    parts: list[str] = []
-    for group in groups:
-        escaped = [_escape_fts_token(token) for token in group]
+    if len(groups) == 1:
+        escaped = [_escape_fts_token(token) for token in groups[0]]
         if len(escaped) == 1:
-            parts.append(escaped[0])
-        else:
-            parts.append("(" + " OR ".join(escaped) + ")")
-    return " ".join(parts)
+            return escaped[0]
+        return " OR ".join(escaped)
+    # Multi-token: AND primary token per group. Parenthesized OR + AND breaks on SQLite FTS5.
+    return " ".join(_escape_fts_token(group[0]) for group in groups if group)
 
 
 def _search_fts_match(conn: sqlite3.Connection, match_query: str, *, limit: int) -> list[tuple[str, float]]:
@@ -134,7 +133,10 @@ def search_fts(
         match_query = build_fts_match_query(query, typo_fallback=typo_fallback)
         if match_query == "":
             return []
-        hits = _search_fts_match(conn, match_query, limit=limit)
+        try:
+            hits = _search_fts_match(conn, match_query, limit=limit)
+        except sqlite3.OperationalError:
+            continue
         if hits:
             return hits
     return []

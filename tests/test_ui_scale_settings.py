@@ -174,7 +174,7 @@ def test_save_then_load_languages(monkeypatch, tmp_path) -> None:
         "interface_language": "en",
         "data_language": "ru",
         "auto_pool_refill": True,
-        "fts_search_enabled": False,
+        "fts_search_enabled": True,
     }
     assert settings.interface_language == "en"
     assert settings.data_language == "ru"
@@ -196,6 +196,15 @@ def test_save_then_load_fts_search_setting(monkeypatch, tmp_path) -> None:
 
     assert payload["fts_search_enabled"] is True
     assert settings.fts_search_enabled is True
+
+
+def test_fresh_settings_default_fts_search_enabled(monkeypatch, tmp_path) -> None:
+    from candidates import service as candidate_service
+
+    _use_settings_path(monkeypatch, tmp_path)
+    monkeypatch.delenv(candidate_service.FTS_SEARCH_ENV, raising=False)
+    assert load_app_settings().fts_search_enabled is True
+    assert candidate_service.is_fts_search_enabled() is True
 
 
 def test_save_app_settings_preserves_non_ui_settings(monkeypatch, tmp_path) -> None:

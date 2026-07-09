@@ -55,7 +55,7 @@ def test_empty_query_uses_legacy_filter_path(fts_pool, monkeypatch) -> None:
 
 
 def test_fts_disabled_keeps_legacy_behavior(fts_pool, monkeypatch) -> None:
-    monkeypatch.delenv(candidate_service.FTS_SEARCH_ENV, raising=False)
+    monkeypatch.setenv(candidate_service.FTS_SEARCH_ENV, "0")
     result = candidate_service.search_candidate_pool_text(
         fts_pool,
         {},
@@ -105,3 +105,29 @@ def test_relevance_sort_mode_orders_by_combined_score(fts_pool, monkeypatch) -> 
     )
     titles = [item["title"] for item in sort_view["candidates"]]
     assert titles == ["Бригада"]
+
+
+def test_calibrated_rerank_weights() -> None:
+    from candidates.search import rerank
+
+    assert rerank.W_BM25 == 0.5
+    assert rerank.W_FINAL == 0.5
+
+
+def test_phrase_alias_expands_game_of_thrones() -> None:
+    import candidates.search.query_expand as query_expand
+
+    query_expand._ALIASES_CACHE = None
+    groups = query_expand.expand_query_token_groups("игра престолов")
+    assert groups
+    flat = {token for group in groups for token in group}
+    assert "game of thrones" in flat
+
+
+def test_calibrated_brigada_query_regression(fts_pool, monkeypatch) -> None:
+    monkeypatch.setenv(candidate_service.FTS_SEARCH_ENV, "1")
+    result = candidate_service.search_candidate_pool_text(fts_pool, {}, text_query="бригада")
+    titles = [item["title"] for item in result["candidates"]]
+    assert titles == ["Бригада"]
+    sort_view = candidate_service.sort_search_candidates(result["candidates"], "relevance")
+    assert sort_view["candidates"][0]["title"] == "Бригада"

@@ -112,6 +112,36 @@ def test_save_candidate_pool_rebuilds_fts_index(tmp_path, monkeypatch) -> None:
         conn.close()
 
 
+def test_multi_token_fts_match_query(tmp_path, monkeypatch) -> None:
+    from candidates.search.fts_index import build_fts_match_query
+
+    assert build_fts_match_query("one piece") == '"one piece"* OR "wan pisu"*'
+    assert build_fts_match_query("сериал про") == '"сериал"* "про"*'
+
+    db_path = _save_pool(
+        tmp_path,
+        monkeypatch,
+        {
+            "one piece|1999": {
+                "title": "One Piece",
+                "year": 1999,
+                "localized": {"en": {"overview": "Pirate adventure anime."}},
+                "final_score": 8.0,
+            },
+        },
+    )
+    conn = connect(db_path)
+    try:
+        import candidates.search.query_expand as query_expand
+
+        query_expand._ALIASES_CACHE = None
+        rebuild_fts_index(conn)
+        hits = search_fts(conn, "one piece")
+        assert hits and hits[0][0] == "one piece|1999"
+    finally:
+        conn.close()
+
+
 def test_rebuild_script_smoke(tmp_path, monkeypatch, capsys) -> None:
     data_dir = tmp_path / "data"
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(data_dir))
