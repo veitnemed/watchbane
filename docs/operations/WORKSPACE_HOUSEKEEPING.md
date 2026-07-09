@@ -14,6 +14,17 @@ database dumps or one-off screenshots.
 When checking desktop UI changes, keep screenshots grouped by task under
 `screens/tmp_ui/tmp_ui_*` instead of creating root-level `tmp_ui_*` folders.
 
+## Reports
+
+Generated reports belong in ignored output folders, not in the active `docs/`
+root. Default raw report locations are documented in
+[REPORT_OUTPUT_POLICY.md](REPORT_OUTPUT_POLICY.md).
+
+Use `docs/reports/<topic>/` only for short curated summaries that should remain
+part of project documentation. Do not commit raw generated markdown, JSON dumps,
+network logs, visual smoke screenshots, cache snapshots or one-off audit
+transcripts.
+
 ## Large Local Artifacts
 
 These paths are intentionally ignored and should not be committed:
@@ -25,6 +36,7 @@ These paths are intentionally ignored and should not be committed:
 - `data/watchbane.sqlite3*` - local SQLite runtime data.
 - `data/candidates/*.json*` and `data/watched/*.json*` - legacy import/export or old local data.
 - `reports/` and `data/diagnostics/` - generated diagnostics.
+- `logs/` - generated local logs.
 
 The public desktop and candidate flows are TMDb-only. A local IMDb sqlite
 database and KP API artifacts are not required for normal app use. If an
@@ -36,6 +48,7 @@ restore it locally; do not commit it.
 Safe cleanup targets when the workspace gets large:
 
 - old `screens/tmp_ui/tmp_ui_*` screenshot batches;
+- raw generated reports under `reports/`;
 - generated release zip files under `data/exports/`;
 - old `pool.before_*.json` snapshots after confirming the active pool is valid;
 - rebuildable TMDb cache files under `data/cache/tmdb/`;
