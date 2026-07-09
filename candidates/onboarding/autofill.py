@@ -32,10 +32,14 @@ STARTER_POOL_TARGET = 120
 STARTER_POOL_MIN_ACCEPTABLE = 80
 MAX_TMDB_REQUESTS = 180
 RESULTS_PER_TMDB_PAGE = 20
+DEFAULT_DISCOVER_PAGES = 3
+MAX_DISCOVER_PAGES = 5
+DEFAULT_DETAILS_LIMIT_PER_TEMPLATE = 50
 
 ERA_TOP_ALL_TIME = "top_all_time"
 ERA_CLASSIC_SWEEP = "classic_sweep"
 ERA_NEW_SWEEP = "new_sweep"
+ERA_MIXED = "mixed"
 
 CLASSIC_START_YEAR = 2005
 CLASSIC_END_YEAR = 2021
@@ -48,6 +52,10 @@ ORIGIN_DOMESTIC = "domestic"
 ORIGIN_FOREIGN = "foreign"
 VIBE_LIGHT = "light"
 VIBE_DARK = "dark"
+VIBE_MIXED = "mixed"
+INCLUDE_GENRE_MODE_OR = "or"
+INCLUDE_GENRE_MODE_AND = "and"
+TV_JUNK_GENRE_IDS = (10766, 10764, 10767, 10763, 10762, 99)
 
 COUNTRY_SELECTION_MODE_COUNTRY_PAIR = "country_pair"
 COUNTRY_SELECTION_MODE_SINGLE = "single_country"
@@ -90,12 +98,6 @@ FALLBACK_POPULAR = "popular"
 
 FALLBACK_ORDER = (
     FALLBACK_BASE,
-    FALLBACK_RELAX_ORIGIN,
-    FALLBACK_RELAX_GENRES,
-    FALLBACK_RELAX_VOTES_MID,
-    FALLBACK_RELAX_VOTES_LOW,
-    FALLBACK_RELAX_ERA,
-    FALLBACK_POPULAR,
 )
 
 ProgressCallback = Callable[[dict[str, Any]], None]
@@ -137,21 +139,11 @@ def _normalize_country_code(value: Any) -> str:
 
 
 def _normalize_country_weights(countries: list[str], weights: dict[str, Any] | None) -> dict[str, float]:
+    del weights
     if len(countries) == 0:
         return {}
-    raw_weights = weights if isinstance(weights, dict) else {}
-    normalized: dict[str, float] = {}
-    for country in countries:
-        try:
-            value = float(raw_weights.get(country, 0.0))
-        except (TypeError, ValueError):
-            value = 0.0
-        normalized[country] = max(0.0, value)
-    total = sum(normalized.values())
-    if total <= 0:
-        equal = 1.0 / len(countries)
-        return {country: equal for country in countries}
-    return {country: value / total for country, value in normalized.items()}
+    equal = 1.0 / len(countries)
+    return {country: equal for country in countries}
 
 
 @dataclass(frozen=True)
@@ -349,12 +341,20 @@ class OnboardingTasteProfile:
     origin_preference: str | None
     ui_language: str
     country_selection: CountrySelection | dict[str, Any] | None = None
+    include_genres: tuple[int, ...] | list[int] | None = None
+    include_genre_mode: str = INCLUDE_GENRE_MODE_OR
+    exclude_genres: tuple[int, ...] | list[int] | None = None
+    min_year: int | None = None
+    max_year: int | None = None
+    discover_pages: int = DEFAULT_DISCOVER_PAGES
+    details_limit: int = DEFAULT_DETAILS_LIMIT_PER_TEMPLATE
 
     def normalized(self) -> "OnboardingTasteProfile":
         ui_language = str(self.ui_language or "ru").strip().casefold() or "ru"
         media_preference = _choice(self.media_preference, {"movie", "tv", "both"}, "both")
         release_preference = _choice(self.release_preference, {"classic", "new", "mixed"}, "mixed")
         vibe_preference = _choice(self.vibe_preference, {"light", "dark", "mixed"}, "mixed")
+        include_genre_mode = _choice(self.include_genre_mode, {INCLUDE_GENRE_MODE_OR, INCLUDE_GENRE_MODE_AND}, INCLUDE_GENRE_MODE_OR)
         origin_preference = self.origin_preference
         if ui_language != "ru":
             origin_preference = None
@@ -372,6 +372,13 @@ class OnboardingTasteProfile:
             origin_preference=origin_preference,
             ui_language=ui_language,
             country_selection=country_selection,
+            include_genres=_normalize_int_tuple(self.include_genres),
+            include_genre_mode=include_genre_mode,
+            exclude_genres=_normalize_int_tuple(self.exclude_genres),
+            min_year=_normalize_year(self.min_year),
+            max_year=_normalize_year(self.max_year),
+            discover_pages=max(1, min(MAX_DISCOVER_PAGES, int(self.discover_pages or DEFAULT_DISCOVER_PAGES))),
+            details_limit=max(1, int(self.details_limit or DEFAULT_DETAILS_LIMIT_PER_TEMPLATE)),
         )
 
     def as_repository_dict(self) -> dict[str, Any]:
@@ -435,28 +442,60 @@ def _choice(value: Any, allowed: set[str], default: str) -> str:
     return text if text in allowed else default
 
 
+def _normalize_int_tuple(value: Any) -> tuple[int, ...]:
+    if value in (None, ""):
+        return ()
+    raw_values = value
+    if isinstance(value, str):
+        raw_values = [part.strip() for part in value.replace("|", ",").split(",")]
+    result: list[int] = []
+    seen: set[int] = set()
+    for item in raw_values or ():
+        try:
+            number = int(item)
+        except (TypeError, ValueError):
+            continue
+        if number in seen:
+            continue
+        seen.add(number)
+        result.append(number)
+    return tuple(result)
+
+
+def _normalize_year(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        year = int(value)
+    except (TypeError, ValueError):
+        return None
+    if year < 1900 or year > 2100:
+        return None
+    return year
+
+
 def media_weights(media_preference: str) -> dict[str, float]:
-    if media_preference == "movie":
-        return {MEDIA_MOVIE: 0.70, MEDIA_TV: 0.30}
     if media_preference == "tv":
-        return {MEDIA_MOVIE: 0.30, MEDIA_TV: 0.70}
+        return {MEDIA_TV: 1.0}
+    if media_preference == "movie":
+        return {MEDIA_MOVIE: 1.0}
     return {MEDIA_MOVIE: 0.50, MEDIA_TV: 0.50}
 
 
 def release_weights(release_preference: str) -> dict[str, float]:
-    if release_preference == "classic":
-        return {ERA_TOP_ALL_TIME: 0.40, ERA_CLASSIC_SWEEP: 0.60}
     if release_preference == "new":
-        return {ERA_TOP_ALL_TIME: 0.30, ERA_NEW_SWEEP: 0.70}
-    return {ERA_TOP_ALL_TIME: 0.40, ERA_CLASSIC_SWEEP: 0.30, ERA_NEW_SWEEP: 0.30}
+        return {ERA_NEW_SWEEP: 1.0}
+    if release_preference == "classic":
+        return {ERA_CLASSIC_SWEEP: 1.0}
+    return {ERA_MIXED: 1.0}
 
 
 def vibe_weights(vibe_preference: str) -> dict[str, float]:
-    if vibe_preference == "light":
-        return {VIBE_LIGHT: 0.70, VIBE_DARK: 0.30}
     if vibe_preference == "dark":
-        return {VIBE_LIGHT: 0.30, VIBE_DARK: 0.70}
-    return {VIBE_LIGHT: 0.50, VIBE_DARK: 0.50}
+        return {VIBE_DARK: 1.0}
+    if vibe_preference == "light":
+        return {VIBE_LIGHT: 1.0}
+    return {VIBE_MIXED: 1.0}
 
 
 def origin_weights(origin_preference: str | None, *, ui_language: str) -> dict[str, float]:
@@ -699,6 +738,33 @@ def _date_lte_field(media_type: str) -> str:
     return "primary_release_date.lte" if media_type == MEDIA_MOVIE else "first_air_date.lte"
 
 
+def _date_gte_field(media_type: str) -> str:
+    return "primary_release_date.gte" if media_type == MEDIA_MOVIE else "first_air_date.gte"
+
+
+def _default_year_range(profile: OnboardingTasteProfile) -> tuple[int | None, int | None]:
+    min_year = profile.min_year
+    max_year = profile.max_year
+    if min_year is None and max_year is None:
+        if profile.release_preference == "new":
+            min_year = NEW_START_YEAR
+        elif profile.release_preference == "classic":
+            min_year = CLASSIC_START_YEAR
+            max_year = CLASSIC_END_YEAR
+    if min_year is not None and max_year is not None and min_year > max_year:
+        min_year, max_year = max_year, min_year
+    return min_year, max_year
+
+
+def _bounded_lte_date(max_year: int | None, current_date: date) -> str:
+    if max_year is None:
+        return current_date.isoformat()
+    max_date = date(int(max_year), 12, 31)
+    if max_date > current_date:
+        max_date = current_date
+    return max_date.isoformat()
+
+
 def _genre_name_map(items: list[dict[str, Any]]) -> dict[str, int]:
     result: dict[str, int] = {}
     for item in items:
@@ -734,16 +800,23 @@ def resolve_tmdb_genre_ids(client: TmdbClientProtocol) -> dict[str, dict[str, tu
     }
 
 
+def _era_for_release_preference(release_preference: str) -> str:
+    if release_preference == "new":
+        return ERA_NEW_SWEEP
+    if release_preference == "classic":
+        return ERA_CLASSIC_SWEEP
+    return ERA_MIXED
+
+
 def build_fetch_buckets(
     profile: OnboardingTasteProfile,
     *,
     genre_ids: dict[str, dict[str, tuple[int, ...]]] | None = None,
     target: int = STARTER_POOL_TARGET,
 ) -> list[CandidateFetchBucket]:
+    del genre_ids
     profile = profile.normalized()
     media = media_weights(profile.media_preference)
-    era = release_weights(profile.release_preference)
-    vibe = vibe_weights(profile.vibe_preference)
     country_selection = profile.country_selection
     if not isinstance(country_selection, CountrySelection):
         country_selection = _coerce_country_selection(
@@ -753,40 +826,29 @@ def build_fetch_buckets(
         )
     country_selection = country_selection.normalized()
     country_plan = build_country_plan(country_selection, target)
-    genre_ids = genre_ids or {}
 
-    raw_quotas: dict[tuple[str, str, str, str], float] = {}
-    quota_weights: dict[tuple[str, str, str, str], float] = {}
+    raw_quotas: dict[tuple[str, str], float] = {}
+    quota_weights: dict[tuple[str, str], float] = {}
     for target_country, country_quota in country_plan.items():
         for media_type, media_weight in media.items():
-            for era_name, era_weight in era.items():
-                for vibe_name, vibe_weight in vibe.items():
-                    key = (target_country, media_type, era_name, vibe_name)
-                    country_weight = float(country_selection.country_weights.get(target_country, 0.0))
-                    quota_weight = country_weight * media_weight * era_weight * vibe_weight
-                    quota_weights[key] = quota_weight
-                    raw_quotas[key] = country_quota * media_weight * era_weight * vibe_weight
+            key = (target_country, media_type)
+            country_weight = float(country_selection.country_weights.get(target_country, 0.0))
+            quota_weights[key] = country_weight * media_weight
+            raw_quotas[key] = country_quota * media_weight
 
-    quotas = _allocate_country_bucket_quotas(
-        raw_quotas,
-        country_plan=country_plan,
-        media_targets=_allocate_weighted(media, target),
-        era_targets=_allocate_weighted(era, target),
-        vibe_targets=_allocate_weighted(vibe, target),
-        target=target,
-    )
+    quotas = allocate_integer_quotas(raw_quotas, int(target))
     buckets: list[CandidateFetchBucket] = []
     for key, quota in quotas.items():
         if quota <= 0:
             continue
-        target_country, media_type, era_name, vibe_name = key
+        target_country, media_type = key
         country_weight = float(country_selection.country_weights.get(target_country, 0.0))
         origin_name = ORIGIN_DOMESTIC if target_country == country_selection.home_country else ORIGIN_FOREIGN
         buckets.append(
             CandidateFetchBucket(
                 media_type=media_type,
-                era=era_name,
-                vibe=vibe_name,
+                era=_era_for_release_preference(profile.release_preference),
+                vibe=profile.vibe_preference if profile.vibe_preference in {VIBE_LIGHT, VIBE_DARK} else VIBE_MIXED,
                 origin=origin_name,
                 original_language=None,
                 quota=quota,
@@ -795,7 +857,7 @@ def build_fetch_buckets(
                 target_country_weight=country_weight,
                 home_country=country_selection.home_country,
                 exclude_home_country=country_selection.exclude_home_country,
-                genre_ids=tuple(genre_ids.get(media_type, {}).get(vibe_name, ())),
+                genre_ids=tuple(profile.include_genres or ()),
             )
         )
     buckets.sort(key=lambda bucket: stable_bucket_key(bucket))
@@ -810,8 +872,10 @@ def _media_order(profile: OnboardingTasteProfile) -> dict[str, int]:
 
 def _vibe_order(profile: OnboardingTasteProfile) -> dict[str, int]:
     if profile.vibe_preference == "dark":
-        return {VIBE_DARK: 0, VIBE_LIGHT: 1}
-    return {VIBE_LIGHT: 0, VIBE_DARK: 1}
+        return {VIBE_DARK: 0, VIBE_LIGHT: 1, VIBE_MIXED: 2}
+    if profile.vibe_preference == "light":
+        return {VIBE_LIGHT: 0, VIBE_DARK: 1, VIBE_MIXED: 2}
+    return {VIBE_MIXED: 0, VIBE_LIGHT: 1, VIBE_DARK: 2}
 
 
 def _origin_order(profile: OnboardingTasteProfile) -> dict[str, int]:
@@ -823,7 +887,7 @@ def _origin_order(profile: OnboardingTasteProfile) -> dict[str, int]:
 
 
 def bucket_priority_key(bucket: CandidateFetchBucket, profile: OnboardingTasteProfile) -> tuple[Any, ...]:
-    era_order = {ERA_TOP_ALL_TIME: 0, ERA_CLASSIC_SWEEP: 1, ERA_NEW_SWEEP: 2}
+    era_order = {ERA_MIXED: 0, ERA_TOP_ALL_TIME: 1, ERA_CLASSIC_SWEEP: 2, ERA_NEW_SWEEP: 3}
     language_order = {language: index for index, (language, _) in enumerate(FOREIGN_LANGUAGE_BUCKETS)}
     return (
         -bucket.quota,
@@ -919,52 +983,30 @@ def build_discover_request(
 ) -> tuple[str, dict[str, Any]]:
     current_year = current_year or _current_year()
     current_date = current_date or _current_date()
+    profile = profile.normalized()
+    min_year, max_year = _default_year_range(profile)
     params: dict[str, Any] = {
         "include_adult": False,
         "language": _ui_language_to_tmdb_locale(profile.ui_language),
-        _date_lte_field(bucket.media_type): current_date.isoformat(),
+        "sort_by": "popularity.desc",
+        "page": request_index + 1,
+        _date_lte_field(bucket.media_type): _bounded_lte_date(max_year, current_date),
     }
 
-    effective_popular = fallback == FALLBACK_POPULAR
-    effective_relax_era = fallback in {FALLBACK_RELAX_ERA, FALLBACK_POPULAR}
-    effective_no_genres = fallback in {
-        FALLBACK_RELAX_GENRES,
-        FALLBACK_RELAX_VOTES_MID,
-        FALLBACK_RELAX_VOTES_LOW,
-        FALLBACK_RELAX_ERA,
-        FALLBACK_POPULAR,
-    }
-    effective_any_origin = fallback == FALLBACK_RELAX_ORIGIN and not _is_hard_origin_bucket(profile, bucket)
-
-    years = [] if effective_relax_era else _years_for_bucket(bucket, current_year)
-    if years:
-        year = years[request_index % len(years)]
-        params[_year_field(bucket.media_type)] = year
-        params["page"] = 1 + request_index // len(years)
-        params["sort_by"] = "popularity.desc"
-    else:
-        params["page"] = request_index + 1
-        if effective_popular or effective_relax_era:
-            params["sort_by"] = "popularity.desc"
-        elif bucket.era == ERA_TOP_ALL_TIME:
-            params["sort_by"] = "vote_average.desc"
-        else:
-            params["sort_by"] = "popularity.desc"
-
-    if effective_no_genres is False and bucket.genre_ids:
-        params["with_genres"] = "|".join(str(genre_id) for genre_id in bucket.genre_ids)
-
+    if min_year is not None:
+        params[_date_gte_field(bucket.media_type)] = f"{int(min_year):04d}-01-01"
     if bucket.target_country:
         params["with_origin_country"] = bucket.target_country
-    elif effective_any_origin is False:
-        if bucket.origin == ORIGIN_DOMESTIC:
-            params.update(_domestic_filter_for_fallback(fallback))
-        elif bucket.origin == ORIGIN_FOREIGN and bucket.original_language:
-            params["with_original_language"] = bucket.original_language
 
-    vote_count = _vote_count_for_fallback(bucket, fallback)
-    if vote_count is not None:
-        params["vote_count.gte"] = vote_count
+    if bucket.genre_ids:
+        separator = "," if profile.include_genre_mode == INCLUDE_GENRE_MODE_AND else "|"
+        params["with_genres"] = separator.join(str(genre_id) for genre_id in bucket.genre_ids)
+
+    excluded_genres = tuple(profile.exclude_genres or ())
+    if bucket.media_type == MEDIA_TV and not excluded_genres:
+        excluded_genres = TV_JUNK_GENRE_IDS
+    if excluded_genres:
+        params["without_genres"] = ",".join(str(genre_id) for genre_id in excluded_genres)
     return _endpoint(bucket.media_type), params
 
 
@@ -1051,14 +1093,6 @@ def candidate_rejection_reason(
         return "future"
     if result_year is not None and result_year > current_date.year:
         return "future"
-    vote_average = _result_number(result, "vote_average")
-    vote_count = _result_number(result, "vote_count")
-    if vote_average is None or vote_count is None:
-        return "missing_votes"
-    if vote_average < 5.8:
-        return "low_score"
-    if bucket.era == ERA_TOP_ALL_TIME and vote_count < _base_vote_count(bucket):
-        return "low_votes"
     country_codes = _result_country_codes(result)
     if bucket.target_country and country_codes and bucket.target_country not in country_codes:
         return "wrong_country"
@@ -1407,6 +1441,10 @@ def run_onboarding_autofill(
                     continue
                 if fallback not in _fallback_order_for_bucket(profile, state.bucket):
                     continue
+                page_limit = max(int(profile.discover_pages or DEFAULT_DISCOVER_PAGES), MAX_DISCOVER_PAGES)
+                if state.request_index >= page_limit:
+                    state.exhausted = True
+                    continue
                 if is_cancelled():
                     cancelled = True
                     break
@@ -1471,7 +1509,7 @@ def run_onboarding_autofill(
                     for index_on_page, result in enumerate(results):
                         if len(created_candidates) + len(accepted_batch) >= STARTER_POOL_TARGET:
                             break
-                        if state.filled + len(accepted_batch) >= state.bucket.quota:
+                        if state.filled >= state.bucket.quota:
                             break
                         rejection_reason = candidate_rejection_reason(
                             result,

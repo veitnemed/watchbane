@@ -110,7 +110,7 @@ class FakeTmdbClient:
                         "original_language": params.get("with_original_language") or "en",
                     }
                 )
-        return {"results": results, "total_pages": 1}
+        return {"results": results, "total_pages": 5}
 
 
 class EmptyTmdbClient(FakeTmdbClient):
@@ -175,42 +175,45 @@ def _quota_by(buckets, field: str) -> Counter:
     return result
 
 
-def test_media_preference_quota_weights_are_fixed_70_30_and_50_50() -> None:
-    assert media_weights("movie") == {MEDIA_MOVIE: 0.70, MEDIA_TV: 0.30}
-    assert media_weights("tv") == {MEDIA_MOVIE: 0.30, MEDIA_TV: 0.70}
+def test_media_preference_quota_weights_are_country_first_and_explicit() -> None:
+    assert media_weights("movie") == {MEDIA_MOVIE: 1.0}
+    assert media_weights("tv") == {MEDIA_TV: 1.0}
     assert media_weights("both") == {MEDIA_MOVIE: 0.50, MEDIA_TV: 0.50}
-    assert _quota_by(build_fetch_buckets(_profile(media_preference="movie")), "media_type") == {MEDIA_MOVIE: 84, MEDIA_TV: 36}
-    assert _quota_by(build_fetch_buckets(_profile(media_preference="tv")), "media_type") == {MEDIA_MOVIE: 36, MEDIA_TV: 84}
+    assert _quota_by(build_fetch_buckets(_profile(media_preference="movie")), "media_type") == {MEDIA_MOVIE: 120}
+    assert _quota_by(build_fetch_buckets(_profile(media_preference="tv")), "media_type") == {MEDIA_TV: 120}
     assert _quota_by(build_fetch_buckets(_profile(media_preference="both")), "media_type") == {MEDIA_MOVIE: 60, MEDIA_TV: 60}
 
 
-def test_release_preferences_create_required_era_buckets_and_year_order() -> None:
-    assert release_weights("classic") == {"top_all_time": 0.40, "classic_sweep": 0.60}
-    assert release_weights("new") == {"top_all_time": 0.30, "new_sweep": 0.70}
+def test_release_preferences_create_broad_date_ranges_not_exact_year_templates() -> None:
+    assert release_weights("classic") == {"classic_sweep": 1.0}
+    assert release_weights("new") == {"new_sweep": 1.0}
     classic_buckets = build_fetch_buckets(_profile(release_preference="classic"))
-    assert {bucket.era for bucket in classic_buckets} == {"top_all_time", "classic_sweep"}
+    assert {bucket.era for bucket in classic_buckets} == {"classic_sweep"}
     classic = next(bucket for bucket in classic_buckets if bucket.era == "classic_sweep")
     endpoint, params = build_discover_request(classic, profile=_profile(release_preference="classic"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert endpoint in {"/discover/movie", "/discover/tv"}
-    assert (params.get("primary_release_year") or params.get("first_air_date_year")) == 2005
+    assert "primary_release_year" not in params
+    assert "first_air_date_year" not in params
+    assert (params.get("primary_release_date.gte") or params.get("first_air_date.gte")) == "2005-01-01"
+    assert (params.get("primary_release_date.lte") or params.get("first_air_date.lte")) == "2021-12-31"
     new = next(bucket for bucket in build_fetch_buckets(_profile(release_preference="new")) if bucket.era == "new_sweep")
     _endpoint, params = build_discover_request(new, profile=_profile(release_preference="new"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
-    assert (params.get("primary_release_year") or params.get("first_air_date_year")) == 2026
+    assert (params.get("primary_release_date.gte") or params.get("first_air_date.gte")) == "2022-01-01"
 
 
-def test_vibe_preference_quotas_are_70_30_and_50_50() -> None:
-    assert vibe_weights("light") == {"light": 0.70, "dark": 0.30}
-    assert vibe_weights("dark") == {"light": 0.30, "dark": 0.70}
-    assert vibe_weights("mixed") == {"light": 0.50, "dark": 0.50}
-    assert _quota_by(build_fetch_buckets(_profile(vibe_preference="light")), "vibe") == {"light": 84, "dark": 36}
-    assert _quota_by(build_fetch_buckets(_profile(vibe_preference="dark")), "vibe") == {"light": 36, "dark": 84}
+def test_vibe_preference_is_scoring_target_not_discover_split() -> None:
+    assert vibe_weights("light") == {"light": 1.0}
+    assert vibe_weights("dark") == {"dark": 1.0}
+    assert vibe_weights("mixed") == {"mixed": 1.0}
+    assert _quota_by(build_fetch_buckets(_profile(vibe_preference="light")), "vibe") == {"light": 120}
+    assert _quota_by(build_fetch_buckets(_profile(vibe_preference="dark")), "vibe") == {"dark": 120}
 
 
 def test_country_selection_presets_create_contract_quotas() -> None:
-    assert build_country_plan(country_selection_for_foreign_ru(), 120) == {"US": 108, "GB": 12}
-    assert build_country_plan(country_selection_for_mixed_ru(), 120) == {"RU": 18, "US": 102}
-    assert build_country_plan(country_selection_for_manual("RU", ["US", "KR"]), 120) == {"US": 84, "KR": 36}
-    assert build_country_plan(country_selection_for_manual("RU", ["US", "KR"], ratio_preset="90/10"), 120) == {"US": 108, "KR": 12}
+    assert build_country_plan(country_selection_for_foreign_ru(), 120) == {"US": 60, "GB": 60}
+    assert build_country_plan(country_selection_for_mixed_ru(), 120) == {"RU": 60, "US": 60}
+    assert build_country_plan(country_selection_for_manual("RU", ["US", "KR"]), 120) == {"US": 60, "KR": 60}
+    assert build_country_plan(country_selection_for_manual("RU", ["US", "KR"], ratio_preset="90/10"), 120) == {"US": 60, "KR": 60}
     assert build_country_plan(country_selection_for_manual("RU", ["US", "RU", "GB"]), 120) == {"US": 40, "RU": 40, "GB": 40}
     assert build_country_plan(country_selection_for_manual("RU", ["US", "RU", "GB", "KR", "JP"]), 120) == {
         "US": 24,
@@ -227,9 +230,9 @@ def test_country_first_profile_replaces_broad_origin_defaults() -> None:
     foreign_countries = _quota_by(build_fetch_buckets(_profile(ui_language="ru", origin_preference="foreign")), "target_country")
     mixed_countries = _quota_by(build_fetch_buckets(_profile(ui_language="ru", origin_preference="mixed")), "target_country")
     en_countries = _quota_by(build_fetch_buckets(_profile(ui_language="en")), "target_country")
-    assert foreign_countries == {"US": 108, "GB": 12}
-    assert mixed_countries == {"RU": 18, "US": 102}
-    assert en_countries == {"US": 108, "GB": 12}
+    assert foreign_countries == {"US": 60, "GB": 60}
+    assert mixed_countries == {"RU": 60, "US": 60}
+    assert en_countries == {"US": 60, "GB": 60}
 
 
 def test_bucket_quotas_sum_exactly_to_target() -> None:
@@ -238,15 +241,20 @@ def test_bucket_quotas_sum_exactly_to_target() -> None:
     assert sum(bucket.quota for bucket in buckets) == autofill.STARTER_POOL_TARGET
 
 
-def test_tmdb_genre_ids_are_resolved_from_genre_lists_and_joined_with_pipe() -> None:
+def test_multiple_include_genres_are_or_by_default_and_strict_when_explicit() -> None:
     client = FakeTmdbClient()
     genre_ids = resolve_tmdb_genre_ids(client)
     assert genre_ids[MEDIA_MOVIE]["light"] == (35, 10749, 14, 10751, 12)
     assert genre_ids[MEDIA_TV]["dark"] == (18, 80, 9648, 10759, 10768)
-    bucket = next(bucket for bucket in build_fetch_buckets(_profile(vibe_preference="light"), genre_ids=genre_ids) if bucket.vibe == "light")
-    _endpoint, params = build_discover_request(bucket, profile=_profile(vibe_preference="light"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
-    assert "," not in params["with_genres"]
-    assert "|" in params["with_genres"]
+    profile = _profile(include_genres=[18, 9648, 80])
+    bucket = build_fetch_buckets(profile)[0]
+    _endpoint, params = build_discover_request(bucket, profile=profile, fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    assert params["with_genres"] == "18|9648|80"
+
+    strict = _profile(include_genres=[18, 9648, 80], include_genre_mode="and")
+    bucket = build_fetch_buckets(strict)[0]
+    _endpoint, params = build_discover_request(bucket, profile=strict, fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+    assert params["with_genres"] == "18,9648,80"
 
 
 def test_discover_params_use_media_specific_contract() -> None:
@@ -254,34 +262,32 @@ def test_discover_params_use_media_specific_contract() -> None:
     endpoint, params = build_discover_request(movie, profile=_profile(media_preference="movie", release_preference="new"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert endpoint == "/discover/movie"
     assert params["with_origin_country"] == movie.target_country
-    assert params["primary_release_year"] == 2026
+    assert params["primary_release_date.gte"] == "2022-01-01"
     assert params["primary_release_date.lte"] == "2026-07-08"
     assert params["include_adult"] is False
+    assert params["sort_by"] == "popularity.desc"
+    assert "vote_count.gte" not in params
+    assert "vote_average.gte" not in params
     tv = next(bucket for bucket in build_fetch_buckets(_profile(media_preference="tv", release_preference="new")) if bucket.media_type == MEDIA_TV and bucket.era == "new_sweep")
     endpoint, params = build_discover_request(tv, profile=_profile(media_preference="tv", release_preference="new"), fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert endpoint == "/discover/tv"
     assert params["with_origin_country"] == tv.target_country
-    assert params["first_air_date_year"] == 2026
+    assert params["first_air_date.gte"] == "2022-01-01"
     assert params["first_air_date.lte"] == "2026-07-08"
+    assert params["without_genres"] == "10766,10764,10767,10763,10762,99"
 
 
-def test_country_first_fallback_keeps_origin_country_before_genres_and_votes() -> None:
-    assert autofill.FALLBACK_ORDER.index("relax_origin") < autofill.FALLBACK_ORDER.index("relax_genres")
-    assert autofill.FALLBACK_ORDER.index("relax_genres") < autofill.FALLBACK_ORDER.index("relax_votes_mid")
-    profile = _profile(ui_language="ru", origin_preference="domestic", vibe_preference="light")
-    genre_ids = resolve_tmdb_genre_ids(FakeTmdbClient())
-    bucket = next(bucket for bucket in build_fetch_buckets(profile, genre_ids=genre_ids) if bucket.target_country == "RU" and bucket.genre_ids)
+def test_country_first_sweep_blocks_broad_origin_and_vote_filters() -> None:
+    assert autofill.FALLBACK_ORDER == ("base",)
+    profile = _profile(ui_language="ru", origin_preference="domestic", include_genres=[18, 9648, 80])
+    bucket = next(bucket for bucket in build_fetch_buckets(profile) if bucket.target_country == "RU" and bucket.genre_ids)
     _endpoint, base = build_discover_request(bucket, profile=profile, fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     _endpoint, relaxed_origin = build_discover_request(bucket, profile=profile, fallback="relax_origin", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
-    _endpoint, relaxed_genres = build_discover_request(bucket, profile=profile, fallback="relax_genres", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
-    _endpoint, relaxed_era = build_discover_request(bucket, profile=profile, fallback="relax_era", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
     assert base["with_origin_country"] == "RU"
     assert relaxed_origin["with_origin_country"] == "RU"
-    assert "with_genres" in relaxed_origin
-    assert relaxed_genres["with_origin_country"] == "RU"
-    assert "with_genres" not in relaxed_genres
-    assert relaxed_era["with_origin_country"] == "RU"
-    assert "with_original_language" not in relaxed_era
+    assert "with_original_language" not in relaxed_origin
+    assert "vote_count.gte" not in base
+    assert "vote_average.gte" not in base
 
 
 def test_onboarding_wizard_starts_with_country_question_for_all_languages(qapp) -> None:
@@ -466,6 +472,7 @@ def test_run_autofill_uses_mocked_tmdb_and_persists_profile_audit_and_candidates
         assert row["fetch_rank"] > 0
         assert len(client.calls) == result.api_requests
         assert len({autofill.canonical_discover_request_key(endpoint, params) for endpoint, params in client.calls}) == result.api_requests
+        assert result.api_requests <= 20
     finally:
         conn.close()
 
@@ -481,8 +488,8 @@ def test_run_autofill_keeps_tv_quota_when_tv_is_preferred(tmp_path, monkeypatch)
     )
 
     assert result.created_count == autofill.STARTER_POOL_TARGET
-    assert result.planned_counts["media_type"] == {MEDIA_MOVIE: 36, MEDIA_TV: 84}
-    assert result.actual_counts["media_type"] == {MEDIA_MOVIE: 36, MEDIA_TV: 84}
+    assert result.planned_counts["media_type"] == {MEDIA_TV: 120}
+    assert result.actual_counts["media_type"] == {MEDIA_TV: 120}
     assert result.warning is None
 
 
@@ -496,11 +503,11 @@ def test_run_autofill_underfills_scarce_tv_without_movie_overfill(tmp_path, monk
         current_year=2026,
     )
 
-    assert result.planned_counts["media_type"] == {MEDIA_MOVIE: 36, MEDIA_TV: 84}
-    assert result.actual_counts["media_type"].get(MEDIA_MOVIE) == 36
+    assert result.planned_counts["media_type"] == {MEDIA_TV: 120}
+    assert result.actual_counts.get("media_type", {}).get(MEDIA_MOVIE, 0) == 0
     assert result.actual_counts["media_type"].get(MEDIA_TV, 0) == 0
-    assert result.created_count == 36
-    assert "Media quota underfilled: tv planned 84, actual 0." in result.warnings
+    assert result.created_count == 0
+    assert "Media quota underfilled: tv planned 120, actual 0." in result.warnings
 
 
 def test_future_or_unreleased_results_are_rejected(tmp_path, monkeypatch) -> None:
@@ -530,10 +537,10 @@ def test_onboarding_plan_view_has_target_quotas_without_api_calls() -> None:
     })
 
     assert plan["target"] == autofill.STARTER_POOL_TARGET
-    assert plan["quotas"]["media_type"][MEDIA_MOVIE] == 84
-    assert plan["quotas"]["media_type"][MEDIA_TV] == 36
-    assert plan["quotas"]["country"] == {"US": 108, "GB": 12}
-    assert plan["country_plan"] == {"US": 108, "GB": 12}
+    assert plan["quotas"]["media_type"][MEDIA_MOVIE] == 120
+    assert MEDIA_TV not in plan["quotas"]["media_type"]
+    assert plan["quotas"]["country"] == {"US": 60, "GB": 60}
+    assert plan["country_plan"] == {"US": 60, "GB": 60}
     assert plan["country_selection"]["exclude_home_country"] is True
     assert plan["quotas"]["origin"] == {"foreign": 120}
 
@@ -586,6 +593,64 @@ def test_watched_existing_and_hidden_candidates_are_skipped(tmp_path, monkeypatc
         watched_signatures=set(),
         dataset_title_keys=set(),
     ) is False
+
+
+def test_low_vote_candidate_is_not_filtered_before_local_scoring(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    bucket = build_fetch_buckets(_profile(media_preference="tv", country_selection={"selected_countries": ["RU"]}))[0]
+    result = {
+        "id": 777,
+        "name": "Small Strong Show",
+        "first_air_date": "2024-01-01",
+        "origin_country": ["RU"],
+        "poster_path": "/p.jpg",
+        "vote_average": 8.5,
+        "vote_count": 5,
+    }
+
+    assert autofill.accept_candidate(
+        result,
+        bucket,
+        existing_index={"tmdb_identities": set(), "media_title_year_keys": set()},
+        accepted_identities=set(),
+        hidden_or_rejected_identities=set(),
+        watched_signatures=set(),
+        dataset_title_keys=set(),
+        current_date=date(2026, 7, 8),
+    ) is True
+
+
+def test_acceptance_ru_tv_manual_sweep_contract() -> None:
+    profile = _profile(
+        media_preference="tv",
+        country_selection={"selected_countries": ["RU"], "home_country": "RU"},
+        min_year=2010,
+        include_genres=[18, 9648, 80],
+        include_genre_mode="or",
+        exclude_genres=[10766, 10764, 10767, 10763, 10762, 99],
+        discover_pages=5,
+    )
+    buckets = build_fetch_buckets(profile)
+
+    assert len(buckets) == 1
+    bucket = buckets[0]
+    endpoint, params = build_discover_request(
+        bucket,
+        profile=profile,
+        fallback="base",
+        request_index=0,
+        current_year=2026,
+        current_date=date(2026, 7, 8),
+    )
+
+    assert endpoint == "/discover/tv"
+    assert params["with_origin_country"] == "RU"
+    assert params["first_air_date.gte"] == "2010-01-01"
+    assert params["first_air_date.lte"] == "2026-07-08"
+    assert params["with_genres"] == "18|9648|80"
+    assert params["without_genres"] == "10766,10764,10767,10763,10762,99"
+    assert "vote_count.gte" not in params
+    assert "vote_average.gte" not in params
 
 
 def test_autofill_can_be_cancelled_before_api_requests(tmp_path, monkeypatch) -> None:

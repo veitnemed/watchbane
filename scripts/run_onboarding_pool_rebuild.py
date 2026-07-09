@@ -196,6 +196,20 @@ SCENARIOS: dict[str, dict[str, Any]] = {
             country_weights={"RU": 1.0},
         ),
     },
+    "ru-tv-manual-serious-2010": {
+        "ui_language": "ru",
+        "media_preference": "tv",
+        "release_preference": "mixed",
+        "vibe_preference": "dark",
+        "origin_preference": "domestic",
+        "country_selection": _equal_country_selection(["RU"]),
+        "min_year": 2010,
+        "include_genres": [18, 9648, 80],
+        "include_genre_mode": "or",
+        "exclude_genres": [10766, 10764, 10767, 10763, 10762, 99],
+        "discover_pages": 5,
+        "details_limit": 50,
+    },
     "en-country-pair-us-gb": {
         "ui_language": "en",
         "media_preference": "both",
@@ -300,7 +314,7 @@ class MockTmdbClient:
                         "original_language": params.get("with_original_language") or "en",
                     }
                 )
-        return {"results": results, "total_pages": 1}
+        return {"results": results, "total_pages": 5}
 
 
 def _credentials_available() -> bool:

@@ -235,6 +235,13 @@ def build_onboarding_candidate_pool(
             origin_preference=profile.get("origin_preference"),
             ui_language=profile.get("ui_language"),
             country_selection=profile.get("country_selection"),
+            include_genres=profile.get("include_genres"),
+            include_genre_mode=profile.get("include_genre_mode", "or"),
+            exclude_genres=profile.get("exclude_genres"),
+            min_year=profile.get("min_year"),
+            max_year=profile.get("max_year"),
+            discover_pages=profile.get("discover_pages", 3),
+            details_limit=profile.get("details_limit", 50),
         )
     result = run_onboarding_autofill(
         taste_profile,
@@ -268,6 +275,13 @@ def _normalize_onboarding_profile(profile: OnboardingTasteProfile | dict) -> Onb
         origin_preference=profile.get("origin_preference"),
         ui_language=profile.get("ui_language"),
         country_selection=profile.get("country_selection"),
+        include_genres=profile.get("include_genres"),
+        include_genre_mode=profile.get("include_genre_mode", "or"),
+        exclude_genres=profile.get("exclude_genres"),
+        min_year=profile.get("min_year"),
+        max_year=profile.get("max_year"),
+        discover_pages=profile.get("discover_pages", 3),
+        details_limit=profile.get("details_limit", 50),
     ).normalized()
 
 

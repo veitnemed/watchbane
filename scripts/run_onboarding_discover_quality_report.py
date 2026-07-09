@@ -33,6 +33,7 @@ from storage.sqlite.onboarding_repository import load_autofill_request_audits
 
 
 SCENARIO_ORDER = (
+    "ru-tv-manual-serious-2010",
     "ru-countries-us-only",
     "ru-countries-ru-only",
     "ru-countries-all-five",
@@ -215,6 +216,23 @@ def _avg(values: list[float]) -> float:
 def _candidate_metrics(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     media_counter = Counter(str(item.get("media_type") or "") for item in candidates)
     tv_candidates = [item for item in candidates if item.get("media_type") == "tv"]
+    junk_names = {"soap", "reality", "talk", "news", "kids", "documentary"}
+    light_names = {"comedy", "family", "animation", "adventure", "romance", "fantasy", "sci-fi & fantasy"}
+    dark_names = {"crime", "mystery", "thriller", "horror", "drama", "war", "war & politics"}
+    junk_count = 0
+    light_hits = 0
+    dark_hits = 0
+    for candidate in candidates:
+        genres = {str(value or "").strip().casefold() for value in candidate.get("genres") or []}
+        if genres & junk_names:
+            junk_count += 1
+        if genres & light_names:
+            light_hits += 1
+        if genres & dark_names:
+            dark_hits += 1
+    total = len(candidates)
+    poster_missing = sum(1 for item in candidates if item.get("poster_path") in (None, ""))
+    overview_missing = sum(1 for item in candidates if item.get("overview") in (None, ""))
     return {
         "media_counts": dict(media_counter),
         "avg_tmdb_score": _avg(_number_values(candidates, "tmdb_score")),
@@ -222,11 +240,17 @@ def _candidate_metrics(candidates: list[dict[str, Any]]) -> dict[str, Any]:
         "avg_popularity": _avg(_number_values(candidates, "tmdb_popularity")),
         "avg_candidate_score": _avg(_number_values(candidates, "candidate_score")),
         "avg_final_score": _avg(_number_values(candidates, "final_score")),
-        "poster_missing_count": sum(1 for item in candidates if item.get("poster_path") in (None, "")),
-        "overview_missing_count": sum(1 for item in candidates if item.get("overview") in (None, "")),
+        "poster_missing_count": poster_missing,
+        "overview_missing_count": overview_missing,
         "tv_count": len(tv_candidates),
         "tv_with_seasons": sum(1 for item in tv_candidates if item.get("number_of_seasons") not in (None, "", 0, "0")),
         "tv_with_episodes": sum(1 for item in tv_candidates if item.get("number_of_episodes") not in (None, "", 0, "0")),
+        "junk_count": junk_count,
+        "junk_rate": round(junk_count / total, 4) if total else 0.0,
+        "light_vibe_hit_rate": round(light_hits / total, 4) if total else 0.0,
+        "dark_vibe_hit_rate": round(dark_hits / total, 4) if total else 0.0,
+        "garbage_count": junk_count + poster_missing + overview_missing,
+        "garbage_rate": round((junk_count + poster_missing + overview_missing) / total, 4) if total else 0.0,
     }
 
 
@@ -293,6 +317,49 @@ def _combine_requests(audits: list[dict[str, Any]], logs: list[dict[str, Any]]) 
     return combined
 
 
+def _template_key(request: dict[str, Any]) -> str:
+    params = dict(request.get("params") or {})
+    params.pop("page", None)
+    return json.dumps(
+        {
+            "endpoint": request.get("endpoint"),
+            "params": params,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _api_budget_metrics(requests: list[dict[str, Any]], final_candidates: int) -> dict[str, Any]:
+    executed = [request for request in requests if request.get("status") != "skipped_duplicate"]
+    templates = {_template_key(request) for request in executed}
+    raw_found = sum(int(request.get("returned_count") or 0) for request in executed)
+    broad_origin_requests = sum(
+        1
+        for request in executed
+        if "with_origin_country" not in (request.get("params") or {})
+    )
+    details_requests = 0
+    template_count = len(templates)
+    http_count = len(executed)
+    return {
+        "discover_templates_count": template_count,
+        "discover_http_requests": http_count,
+        "details_requests": details_requests,
+        "external_ids_requests": 0,
+        "raw_discover_found": raw_found,
+        "duplicates_removed": max(0, raw_found - final_candidates),
+        "details_requested": details_requests,
+        "complete_candidates": final_candidates,
+        "final_candidates": final_candidates,
+        "accepted_per_discover_template": round(final_candidates / template_count, 4) if template_count else 0.0,
+        "accepted_per_discover_http_request": round(final_candidates / http_count, 4) if http_count else 0.0,
+        "accepted_per_details_request": 0.0,
+        "broad_origin_requests": broad_origin_requests,
+        "fallback_used": any(request.get("fallback") not in (None, "", "base") for request in executed),
+    }
+
+
 def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_root: Path, current_year: int, sample_limit: int) -> dict[str, Any]:
     db_path = tmp_root / f"{name}.sqlite3"
     profile = OnboardingTasteProfile(**profile_data)
@@ -315,6 +382,7 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
     country_metrics = _country_metrics(candidates, normalized_profile)
     speed = _speed_stats(client.discover_logs, elapsed_ms)
     candidate_metrics = _candidate_metrics(candidates)
+    api_budget_metrics = _api_budget_metrics(request_rows, result.created_count)
     return {
         "scenario": name,
         "mode": "live" if live else "mock",
@@ -340,6 +408,7 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         **request_metrics,
         **country_metrics,
         **candidate_metrics,
+        **api_budget_metrics,
     }
 
 
@@ -392,6 +461,7 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
         f"- Полный пул 120/120 собран в {full_pool_count} из {len(results)} проходов.",
         f"- Всего создано кандидатов: {total_candidates}.",
         f"- Всего выполнено discover-запросов: {total_requests}.",
+        f"- Discover templates: {sum(int(result.get('discover_templates_count') or 0) for result in results)}.",
         f"- Среднее время discover-запроса: {round(sum(all_elapsed) / len(all_elapsed), 1) if all_elapsed else 0.0} ms.",
         f"- P95 discover-запроса: {_percentile(all_elapsed, 0.95)} ms.",
         f"- Минимальный country hit rate: {min_country_hit}.",
@@ -429,6 +499,8 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
             f"- Profile: `{_json(result['profile'])}`",
             f"- Created/pool: {result['created_count']} / {result['pool_size']}",
             f"- API requests: {result['api_requests']}; unique/total: {result['requests_unique']} / {result['requests_total']}",
+            f"- API budget: templates {result.get('discover_templates_count')}; discover HTTP {result.get('discover_http_requests')}; details {result.get('details_requests')}; broad origin {result.get('broad_origin_requests')}; fallback used {result.get('fallback_used')}",
+            f"- Yield: raw discover {result.get('raw_discover_found')}; duplicates removed {result.get('duplicates_removed')}; accepted/template {result.get('accepted_per_discover_template')}; accepted/discover request {result.get('accepted_per_discover_http_request')}",
             f"- Duplicate skipped: {result['duplicate_requests_skipped']}",
             f"- Speed: total {result['elapsed_s']}s; discover avg {result['discover_avg_ms']}ms; p50 {result['discover_p50_ms']}ms; p95 {result['discover_p95_ms']}ms; max {result['discover_max_ms']}ms",
             f"- Planned media: `{_json(result['planned_counts'].get('media_type', {}))}`",
@@ -438,6 +510,8 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
             f"- Country hit/leak/wrong: {result.get('country_hit_rate')} / {result.get('country_leakage_rate')} / {result.get('wrong_country_count')}",
             f"- Fallbacks: `{_json(result.get('fallback_counts', {}))}`; fallback share {result.get('fallback_share')}",
             f"- Avg TMDb score/votes/popularity: {result.get('avg_tmdb_score')} / {result.get('avg_tmdb_votes')} / {result.get('avg_popularity')}",
+            f"- Vibe hit light/dark: {result.get('light_vibe_hit_rate')} / {result.get('dark_vibe_hit_rate')}",
+            f"- Junk/garbage: {result.get('junk_count')} ({result.get('junk_rate')}) / {result.get('garbage_count')} ({result.get('garbage_rate')})",
             f"- Missing poster/overview: {result.get('poster_missing_count')} / {result.get('overview_missing_count')}",
             f"- TV seasons/episodes present initially: {result.get('tv_with_seasons')}/{result.get('tv_count')} and {result.get('tv_with_episodes')}/{result.get('tv_count')}",
             f"- Warnings: `{_json(result.get('warnings') or [])}`",
