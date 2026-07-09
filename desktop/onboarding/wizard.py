@@ -7,7 +7,14 @@ import os
 import re
 from typing import Any
 
-from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, Qt, pyqtSignal
+from PyQt6.QtCore import (
+    QEasingCurve,
+    QParallelAnimationGroup,
+    QPoint,
+    QPropertyAnimation,
+    Qt,
+    pyqtSignal,
+)
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -52,6 +59,7 @@ from desktop.theme.ui_modules import ensure_scaled_ui_modules
 from desktop.theme.tokens import (
     COLOR_ACCENT,
     COLOR_ACCENT_HOVER,
+    COLOR_ACCENT_SOFT,
     COLOR_BG,
     COLOR_BORDER,
     COLOR_BORDER_HOVER,
@@ -169,6 +177,22 @@ _PRESET_CARDS: tuple[_PresetCard, ...] = (
 
 _PRESET_CARDS_BY_KEY = {card.key: card for card in _PRESET_CARDS}
 
+_GENRE_GROUP_LABELS: dict[str, tuple[str, str]] = {
+    "action_adventure": ("Боевик и приключения", "Action & adventure"),
+    "adventure": ("Приключения", "Adventure"),
+    "anime": ("Аниме", "Anime"),
+    "drama": ("Драма", "Drama"),
+    "romance": ("Мелодрама", "Romance"),
+    "comedy": ("Комедия", "Comedy"),
+    "crime": ("Криминал", "Crime"),
+    "detective": ("Детектив", "Detective"),
+    "family": ("Семейный", "Family"),
+    "fantasy": ("Фантастика и фэнтези", "Sci-fi & fantasy"),
+    "horror": ("Ужасы", "Horror"),
+    "mystery": ("Мистика", "Mystery"),
+    "thriller": ("Триллер", "Thriller"),
+}
+
 _MOJIBAKE_MARKERS = (
     "\u0420\u00a0",
     "\u0420\u0459",
@@ -212,12 +236,6 @@ class _Question:
 
 _QUESTIONS: tuple[_Question, ...] = (
     _Question(
-        key="country_selection",
-        title_ru="Какие страны ищем?",
-        title_en="Which countries should Watchbane search?",
-        options=(),
-    ),
-    _Question(
         key="media_preference",
         title_ru="Что вы чаще смотрите?",
         title_en="What do you watch more often?",
@@ -228,13 +246,19 @@ _QUESTIONS: tuple[_Question, ...] = (
         ),
     ),
     _Question(
+        key="country_selection",
+        title_ru="Какие страны ищем?",
+        title_en="Which countries should Watchbane search?",
+        options=(),
+    ),
+    _Question(
         key="animation_mode",
-        title_ru="РљР°Рє РѕС‚РЅРѕСЃРёРјСЃСЏ Рє Р°РЅРёРјР°С†РёРё?",
+        title_ru="Как относимся к анимации?",
         title_en="How should animation be handled?",
         options=(
-            (ANIMATION_MODE_ANY, "РќРµ РІР°Р¶РЅРѕ", "No preference"),
-            (ANIMATION_MODE_ANIMATION_ONLY, "РўРѕР»СЊРєРѕ Р°РЅРёРјР°С†РёСЏ", "Animation only"),
-            (ANIMATION_MODE_LIVE_ACTION_ONLY, "Р‘РµР· Р°РЅРёРјР°С†РёРё", "Live action only"),
+            (ANIMATION_MODE_ANY, "Не важно", "No preference"),
+            (ANIMATION_MODE_ANIMATION_ONLY, "Только анимация", "Animation only"),
+            (ANIMATION_MODE_LIVE_ACTION_ONLY, "Без анимации", "Live action only"),
         ),
     ),
     _Question(
@@ -305,6 +329,10 @@ QLabel#onboardingDot {{
 }}
 QLabel#onboardingDot[active="true"] {{
     color: {COLOR_ACCENT};
+    font-size: {font_px(FONT_DIALOG_TITLE)}px;
+}}
+QLabel#onboardingDot[state="done"] {{
+    color: {COLOR_ACCENT_HOVER};
 }}
 QPushButton#onboardingOption {{
     background-color: {COLOR_SURFACE};
@@ -324,7 +352,7 @@ QPushButton#onboardingOption:focus {{
     border-color: {COLOR_BORDER};
 }}
 QPushButton#onboardingOption:checked {{
-    background-color: {COLOR_CARD_ALT};
+    background-color: {COLOR_ACCENT_SOFT};
     border-color: {COLOR_ACCENT};
     color: {COLOR_TEXT};
 }}
@@ -351,7 +379,7 @@ QPushButton#onboardingPresetCard:hover {{
     border-color: {COLOR_BORDER_HOVER};
 }}
 QPushButton#onboardingPresetCard:checked {{
-    background-color: {COLOR_CARD_ALT};
+    background-color: {COLOR_ACCENT_SOFT};
     border-color: {COLOR_ACCENT};
     color: {COLOR_TEXT};
 }}
@@ -374,7 +402,7 @@ QPushButton#onboardingCountryChip:hover {{
     border-color: {COLOR_BORDER_HOVER};
 }}
 QPushButton#onboardingCountryChip:checked {{
-    background-color: {COLOR_CARD_ALT};
+    background-color: {COLOR_ACCENT_SOFT};
     border-color: {COLOR_ACCENT};
     color: {COLOR_TEXT};
 }}
@@ -499,7 +527,8 @@ class OnboardingAutofillDialog(QDialog):
         self._question_pages: list[tuple[_Question, QWidget, QButtonGroup]] = []
         self._preset_group: QButtonGroup | None = None
         self._worker: OnboardingAutofillWorker | None = None
-        self._fade_animation: QPropertyAnimation | None = None
+        self._page_animation: QParallelAnimationGroup | None = None
+        self._progress_animation: QPropertyAnimation | None = None
         self._last_result: dict[str, Any] = {}
 
         root_layout = QVBoxLayout(self)
@@ -796,17 +825,17 @@ class OnboardingAutofillDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(scale_px(SPACING_LARGE))
 
-        eyebrow = QLabel(self._text("РЎС‚Р°СЂС‚РѕРІС‹Р№ РїСЂРµСЃРµС‚", "Starter preset"))
+        eyebrow = QLabel(self._text("Стартовый пресет", "Starter preset"))
         eyebrow.setObjectName("onboardingEyebrow")
         layout.addWidget(eyebrow)
 
-        title = QLabel(self._text("Р’С‹Р±РµСЂРёС‚Рµ РЅР°РїСЂР°РІР»РµРЅРёРµ РїСѓР»Р°", "Choose the starter pool direction"))
+        title = QLabel(self._text("Выберите направление пула", "Choose the starter pool direction"))
         title.setObjectName("onboardingTitle")
         title.setWordWrap(True)
         layout.addWidget(title)
 
         subtitle = QLabel(self._text(
-            "РџСЂРµСЃРµС‚ Р·Р°РґР°С‘С‚ СЃС‚СЂР°РЅС‹, С‚РёРї РјРµРґРёР°, Р°РЅРёРјР°С†РёСЋ Рё РІР°Р№Р±. РќР° СЃР»РµРґСѓСЋС‰РёС… С€Р°РіР°С… РІСЃС‘ РјРѕР¶РЅРѕ РёР·РјРµРЅРёС‚СЊ.",
+            "Пресет задаёт страны, тип медиа, анимацию и вайб. На следующих шагах всё можно изменить.",
             "A preset fills countries, media type, animation mode and vibe. You can edit everything next.",
         ))
         subtitle.setObjectName("onboardingSubtitle")
@@ -1138,6 +1167,16 @@ class OnboardingAutofillDialog(QDialog):
                     return self._text(label_ru, label_en)
         return normalized or "-"
 
+    def _genre_groups_line(self, genre_groups: Any) -> str:
+        labels = [
+            self._text(*_GENRE_GROUP_LABELS[str(group)])
+            for group in (genre_groups or ())
+            if str(group) in _GENRE_GROUP_LABELS
+        ]
+        if labels:
+            return ", ".join(labels)
+        return self._text("все", "all")
+
     def _format_plan_summary(self) -> str:
         profile = self._profile()
         plan = candidate_service.get_onboarding_autofill_plan_view(profile)
@@ -1172,6 +1211,10 @@ class OnboardingAutofillDialog(QDialog):
             self._text(
                 f"Вайб: {self._answer_label('vibe_preference', profile.get('vibe_preference'))}",
                 f"Vibe: {self._answer_label('vibe_preference', profile.get('vibe_preference'))}",
+            ),
+            self._text(
+                f"Жанры: {self._genre_groups_line(profile.get('genre_groups'))}",
+                f"Genres: {self._genre_groups_line(profile.get('genre_groups'))}",
             ),
             self._text(f"Цель: {plan.get('target')} кандидатов", f"Target: {plan.get('target')} candidates"),
             self._text(f"Страны: {country_line or '-'}", f"Countries: {country_line or '-'}"),
@@ -1275,42 +1318,58 @@ class OnboardingAutofillDialog(QDialog):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
+        current_index = self._stack.currentIndex()
         for index in range(self._stack.count()):
             dot = QLabel("●")
             dot.setObjectName("onboardingDot")
-            dot.setProperty("active", "true" if index == self._stack.currentIndex() else "false")
+            dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            dot.setProperty("active", "true" if index == current_index else "false")
+            dot.setProperty("state", "done" if index < current_index else ("active" if index == current_index else "pending"))
             dot.style().unpolish(dot)
             dot.style().polish(dot)
             self._dots_layout.addWidget(dot)
         self._dots_layout.addStretch(1)
 
     def _set_page(self, index: int) -> None:
+        previous_index = self._stack.currentIndex()
         self._stack.setCurrentIndex(index)
         if index == self._plan_index():
             self._update_plan_summary()
-        self._animate_current_page()
+        self._animate_current_page(forward=index >= previous_index)
         self._rebuild_dots()
         self._sync_controls()
 
-    def _animate_current_page(self) -> None:
+    def _animate_current_page(self, *, forward: bool = True) -> None:
         widget = self._stack.currentWidget()
         if widget is None:
             return
         if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("QT_QPA_PLATFORM") == "offscreen":
             widget.setGraphicsEffect(None)
             return
-        if self._fade_animation is not None:
-            self._fade_animation.stop()
+        if self._page_animation is not None:
+            self._page_animation.stop()
         effect = QGraphicsOpacityEffect(widget)
         widget.setGraphicsEffect(effect)
-        animation = QPropertyAnimation(effect, b"opacity", self)
-        animation.setDuration(180)
-        animation.setStartValue(0.0)
-        animation.setEndValue(1.0)
-        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        animation.finished.connect(lambda: widget.setGraphicsEffect(None))
-        self._fade_animation = animation
-        animation.start()
+        fade = QPropertyAnimation(effect, b"opacity", self)
+        fade.setDuration(200)
+        fade.setStartValue(0.0)
+        fade.setEndValue(1.0)
+        fade.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        end_pos = widget.pos()
+        offset = scale_px(28) if forward else -scale_px(28)
+        slide = QPropertyAnimation(widget, b"pos", self)
+        slide.setDuration(200)
+        slide.setStartValue(QPoint(end_pos.x() + offset, end_pos.y()))
+        slide.setEndValue(end_pos)
+        slide.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        group = QParallelAnimationGroup(self)
+        group.addAnimation(fade)
+        group.addAnimation(slide)
+        group.finished.connect(lambda: widget.setGraphicsEffect(None))
+        self._page_animation = group
+        group.start()
 
     def _selected_answer(self, question: _Question, group: QButtonGroup) -> Any:
         if question.key == "country_selection":
@@ -1426,6 +1485,8 @@ class OnboardingAutofillDialog(QDialog):
                 origin_preference = "foreign"
         else:
             origin_preference = None
+        preset = get_taste_preset(self._current_preset_key())
+        genre_groups = list(preset.genre_groups) if preset is not None else []
         return {
             "taste_preset": self._current_preset_key(),
             "ui_language": self._ui_language,
@@ -1435,6 +1496,7 @@ class OnboardingAutofillDialog(QDialog):
             "vibe_preference": self._answers.get("vibe_preference") or "mixed",
             "origin_preference": origin_preference,
             "country_selection": self._country_selection_payload(),
+            "genre_groups": genre_groups,
         }
 
     def _start_autofill(self) -> None:
@@ -1462,7 +1524,24 @@ class OnboardingAutofillDialog(QDialog):
             value = min(95, max(5, int((completed / total) * 90)))
         else:
             value = min(95, max(5, stage * 15))
-        self._progress.setValue(value)
+        self._set_progress_smooth(value)
+
+    def _set_progress_smooth(self, value: int) -> None:
+        if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("QT_QPA_PLATFORM") == "offscreen":
+            self._progress.setValue(value)
+            return
+        if value <= self._progress.value():
+            self._progress.setValue(value)
+            return
+        if self._progress_animation is not None:
+            self._progress_animation.stop()
+        animation = QPropertyAnimation(self._progress, b"value", self)
+        animation.setDuration(260)
+        animation.setStartValue(self._progress.value())
+        animation.setEndValue(value)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._progress_animation = animation
+        animation.start()
 
     def _on_finished(self, result: object) -> None:
         data = result if isinstance(result, dict) else {}

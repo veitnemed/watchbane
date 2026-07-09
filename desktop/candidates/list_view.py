@@ -89,6 +89,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._localized_poster_inflight: set[str] = set()
         self._model = CandidateListModel(parent=None, data_language=self._data_language)
         self._delegate = None
+        self._last_logged_search_signature: tuple | None = None
 
         self._widget = QWidget()
         self._widget.setObjectName("candidateListRoot")
@@ -244,6 +245,7 @@ class CandidateListView(CandidateListActionsMixin):
         query = self._search_input.text()
         previous_identity = self._selected_identity
         self._candidates = self._search_index.filter_by_query(query)
+        self._log_search_query(query)
 
         self._results_list.blockSignals(True)
         if len(self._candidates) == 0:
@@ -275,6 +277,34 @@ class CandidateListView(CandidateListActionsMixin):
         elif selected_identity != self._selected_identity:
             self._on_result_selected(self._model.index(row, 0), QModelIndex())
 
+    def _log_search_query(self, query: str) -> None:
+        """Best-effort: append one JSONL row per finalized visible result."""
+        try:
+            from candidates.search import query_log
+
+            if not query_log.is_search_query_log_enabled():
+                return
+            context = self._session.last_search_context() or {}
+            result_count = len(self._candidates)
+            search_id = context.get("search_id")
+            normalized_query = query_log.normalize_query(query)
+            signature = (search_id, normalized_query, result_count)
+            if signature == self._last_logged_search_signature:
+                return
+            entry = query_log.build_search_query_entry(
+                search_id=search_id,
+                query=query,
+                filters=context.get("filters"),
+                sort_mode=context.get("sort_mode") or self._session.sort_mode,
+                result_count=result_count,
+                top_candidates=self._candidates,
+                latency_ms=context.get("latency_ms"),
+            )
+            query_log.append_search_query_log(entry)
+            self._last_logged_search_signature = signature
+        except Exception:
+            logger.debug("search query logging skipped", exc_info=True)
+
     def _update_counter_label(self, query: str) -> None:
         dup_note = ""
         if self._session.hidden_duplicates > 0:
@@ -304,6 +334,31 @@ class CandidateListView(CandidateListActionsMixin):
                     dup_note=dup_note,
                 )
             )
+
+    def _log_search_query(self, query: str) -> None:
+        """Best-effort: log one finalized search result (deduped, never raises)."""
+        try:
+            from candidates.search import query_log
+
+            if not query_log.is_search_query_log_enabled():
+                return
+            context = self._session.last_search_context() or {}
+            entry = query_log.build_search_query_entry(
+                search_id=context.get("search_id"),
+                query=query,
+                filters=context.get("filters"),
+                sort_mode=context.get("sort_mode") or self._session.sort_mode,
+                result_count=len(self._candidates),
+                top_candidates=self._candidates,
+                latency_ms=context.get("latency_ms"),
+            )
+            signature = query_log.build_search_signature(entry)
+            if signature == self._last_logged_search_signature:
+                return
+            self._last_logged_search_signature = signature
+            query_log.append_search_query_log(entry)
+        except Exception:
+            logger.debug("search query logging skipped", exc_info=True)
 
     def refresh(self) -> None:
         self._refresh_data_language()
@@ -347,6 +402,7 @@ class CandidateListView(CandidateListActionsMixin):
         candidate = self._candidates[row]
         self._selected_candidate = candidate
         self._selected_identity = candidate_detail_identity(candidate)
+        self._log_search_action("open", candidate, rank=row + 1)
         lookup_done = perf_counter()
 
         identity = candidate_detail_identity(candidate)

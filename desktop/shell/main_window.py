@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QTabWidget
 
 from candidates import service as candidate_service
 from diagnostics.gui_event_log import log_event
+from desktop.i18n import tr
 from desktop.onboarding import OnboardingAutofillDialog
-from desktop.settings.app_settings import get_persisted_interface_language
+from desktop.onboarding.worker import PoolReplenishWorker
+from desktop.settings.app_settings import get_persisted_interface_language, load_app_settings
 from desktop.shell.app_icon import build_app_icon
 from desktop.shell.tabs import build_main_tabs
 from desktop.theme import build_app_style
@@ -17,6 +19,7 @@ from desktop.theme.scaling import scale_px
 MAIN_WINDOW_BASE_WIDTH = 1180
 MAIN_WINDOW_BASE_HEIGHT = 720
 MAIN_WINDOW_SCREEN_MARGIN = 80
+POOL_AUTO_REFILL_CHECK_INTERVAL_MS = 15 * 60 * 1000
 
 
 def scaled_main_window_size() -> tuple[int, int]:
@@ -60,13 +63,66 @@ class WatchedMoviesWindow(QMainWindow):
             on_status_message=self._show_status_message,
         )
         self._onboarding_view: OnboardingAutofillDialog | None = None
+        self._pool_refill_worker: PoolReplenishWorker | None = None
+        self._pool_refill_timer = QTimer(self)
+        self._pool_refill_timer.setInterval(POOL_AUTO_REFILL_CHECK_INTERVAL_MS)
+        self._pool_refill_timer.timeout.connect(self.maybe_start_pool_auto_refill)
+        self._pool_refill_timer.start()
 
     def _show_status_message(self, message: str, timeout_ms: int) -> None:
         self.statusBar().showMessage(message, timeout_ms)
 
+    def _refresh_candidate_pool_views(self) -> None:
+        session = self._tabs_context.candidate_session
+        reload_from_pool = getattr(session, "reload_from_pool", None)
+        if callable(reload_from_pool):
+            reload_from_pool(force=True)
+        else:
+            session.invalidate_pool_cache()
+        refresh_filters = getattr(self._tabs_context, "refresh_candidate_filters", None)
+        if callable(refresh_filters):
+            refresh_filters()
+
+    def maybe_start_pool_auto_refill(self) -> None:
+        """Start a quiet background pool top-up when the pool runs low."""
+        if self._pool_refill_worker is not None or self._onboarding_view is not None:
+            return
+        if load_app_settings().auto_pool_refill is False:
+            return
+        try:
+            view = candidate_service.get_pool_replenish_view()
+        except Exception:
+            return
+        if view.get("needs_replenish") is not True:
+            return
+
+        worker = PoolReplenishWorker(self)
+
+        def on_refill_finished(result: object) -> None:
+            data = result if isinstance(result, dict) else {}
+            created = int(data.get("created_count") or 0)
+            if created > 0:
+                self._refresh_candidate_pool_views()
+                self._show_status_message(tr("pool.auto_refill.done").format(count=created), 8000)
+            log_event("pool.auto_refill.finished", created_count=created)
+            self._pool_refill_worker = None
+
+        def on_refill_failed(message: str) -> None:
+            self._show_status_message(tr("pool.auto_refill.failed"), 8000)
+            log_event("pool.auto_refill.failed", error=message)
+            self._pool_refill_worker = None
+
+        worker.finished_with_result.connect(on_refill_finished)
+        worker.failed.connect(on_refill_failed)
+        self._pool_refill_worker = worker
+        self._show_status_message(tr("pool.auto_refill.started"), 6000)
+        log_event("pool.auto_refill.started", pool_size=view.get("pool_size"), missing=view.get("missing"))
+        worker.start()
+
     def maybe_show_onboarding_autofill(self) -> None:
         """Show first-run deterministic candidate-pool autofill wizard when needed."""
         if candidate_service.should_show_onboarding_autofill() is False:
+            self.maybe_start_pool_auto_refill()
             return
         onboarding = OnboardingAutofillDialog(
             ui_language=get_persisted_interface_language(),
@@ -76,15 +132,7 @@ class WatchedMoviesWindow(QMainWindow):
         onboarding.setWindowFlag(Qt.WindowType.Widget, True)
 
         def refresh_candidate_pool_views() -> None:
-            session = self._tabs_context.candidate_session
-            reload_from_pool = getattr(session, "reload_from_pool", None)
-            if callable(reload_from_pool):
-                reload_from_pool(force=True)
-            else:
-                session.invalidate_pool_cache()
-            refresh_filters = getattr(self._tabs_context, "refresh_candidate_filters", None)
-            if callable(refresh_filters):
-                refresh_filters()
+            self._refresh_candidate_pool_views()
 
         def mark_candidate_pool_changed(_result: object) -> None:
             refresh_candidate_pool_views()

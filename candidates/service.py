@@ -12,6 +12,7 @@ from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
 from candidates.onboarding.autofill import (
     CountrySelection,
     OnboardingTasteProfile,
+    STARTER_POOL_TARGET,
     build_country_plan,
     build_fetch_buckets,
     media_weights,
@@ -218,6 +219,10 @@ def should_show_onboarding_autofill() -> bool:
     return should_start_onboarding_autofill()
 
 
+ONBOARDING_LAST_PROFILE_SETTING_KEY = "onboarding_last_profile"
+POOL_REPLENISH_THRESHOLD = 40
+
+
 def build_onboarding_candidate_pool(
     profile: OnboardingTasteProfile | dict,
     *,
@@ -225,34 +230,18 @@ def build_onboarding_candidate_pool(
     cancel_checker=None,
 ) -> dict:
     """Run deterministic onboarding autofill through the service boundary."""
-    if isinstance(profile, OnboardingTasteProfile):
-        taste_profile = profile
-    else:
-        taste_profile = OnboardingTasteProfile(
-            media_preference=profile.get("media_preference"),
-            release_preference=profile.get("release_preference"),
-            vibe_preference=profile.get("vibe_preference"),
-            origin_preference=profile.get("origin_preference"),
-            ui_language=profile.get("ui_language"),
-            taste_preset=profile.get("taste_preset"),
-            country_selection=profile.get("country_selection"),
-            animation_mode=profile.get("animation_mode", "any"),
-            animation_disliked=profile.get("animation_disliked", False),
-            include_genres=profile.get("include_genres"),
-            include_genre_mode=profile.get("include_genre_mode", "or"),
-            exclude_genres=profile.get("exclude_genres"),
-            min_year=profile.get("min_year"),
-            max_year=profile.get("max_year"),
-            discover_pages=profile.get("discover_pages", 3),
-            details_limit=profile.get("details_limit", 50),
-            details_enrichment=profile.get("details_enrichment"),
-            pagination=profile.get("pagination"),
-        )
+    taste_profile = _normalize_onboarding_profile(profile)
     result = run_onboarding_autofill(
         taste_profile,
         progress_callback=progress_callback,
         cancel_checker=cancel_checker,
     )
+    if result.ok and result.cancelled is False and result.created_count > 0:
+        _save_last_onboarding_profile(taste_profile)
+    return _autofill_result_to_dict(result)
+
+
+def _autofill_result_to_dict(result) -> dict:
     return {
         "ok": result.ok,
         "profile_id": result.profile_id,
@@ -297,6 +286,7 @@ def _normalize_onboarding_profile(profile: OnboardingTasteProfile | dict) -> Onb
         country_selection=profile.get("country_selection"),
         animation_mode=profile.get("animation_mode", "any"),
         animation_disliked=profile.get("animation_disliked", False),
+        genre_groups=profile.get("genre_groups"),
         include_genres=profile.get("include_genres"),
         include_genre_mode=profile.get("include_genre_mode", "or"),
         exclude_genres=profile.get("exclude_genres"),
@@ -307,6 +297,59 @@ def _normalize_onboarding_profile(profile: OnboardingTasteProfile | dict) -> Onb
         details_enrichment=profile.get("details_enrichment"),
         pagination=profile.get("pagination"),
     ).normalized()
+
+
+def _save_last_onboarding_profile(profile: OnboardingTasteProfile) -> None:
+    from storage.sqlite.settings_repository import set_setting
+
+    try:
+        set_setting(ONBOARDING_LAST_PROFILE_SETTING_KEY, profile.as_repository_dict())
+    except Exception:
+        pass
+
+
+def load_last_onboarding_profile() -> dict | None:
+    """Return the taste profile of the last successful autofill, or None."""
+    from storage.sqlite.settings_repository import get_setting
+
+    payload = get_setting(ONBOARDING_LAST_PROFILE_SETTING_KEY)
+    return payload if isinstance(payload, dict) else None
+
+
+def get_pool_replenish_view() -> dict:
+    """Read-only view: whether the candidate pool needs an automatic top-up."""
+    pool_size = len(load_candidate_pool())
+    profile = load_last_onboarding_profile()
+    return {
+        "pool_size": pool_size,
+        "threshold": POOL_REPLENISH_THRESHOLD,
+        "target": STARTER_POOL_TARGET,
+        "missing": max(0, STARTER_POOL_TARGET - pool_size),
+        "has_profile": profile is not None,
+        "needs_replenish": profile is not None and pool_size < POOL_REPLENISH_THRESHOLD,
+    }
+
+
+def replenish_candidate_pool(
+    *,
+    progress_callback=None,
+    cancel_checker=None,
+) -> dict:
+    """Top the pool back up to the starter target using the last taste profile."""
+    view = get_pool_replenish_view()
+    if view["has_profile"] is False or view["missing"] <= 0:
+        return {"ok": False, "skipped": True, "created_count": 0, **view}
+    taste_profile = _normalize_onboarding_profile(load_last_onboarding_profile())
+    result = run_onboarding_autofill(
+        taste_profile,
+        progress_callback=progress_callback,
+        cancel_checker=cancel_checker,
+        target=view["missing"],
+    )
+    payload = _autofill_result_to_dict(result)
+    payload["skipped"] = False
+    payload["replenish_target"] = view["missing"]
+    return payload
 
 
 def get_onboarding_autofill_plan_view(profile: OnboardingTasteProfile | dict) -> dict:

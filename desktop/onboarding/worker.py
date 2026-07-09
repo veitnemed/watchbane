@@ -46,3 +46,36 @@ class OnboardingAutofillWorker(QThread):
             warning=result.get("warning"),
         )
         self.finished_with_result.emit(result)
+
+
+class PoolReplenishWorker(QThread):
+    """Top the candidate pool back up off the UI thread using the saved profile."""
+
+    finished_with_result = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+
+    def run(self) -> None:
+        log_event("pool.auto_refill.worker.begin")
+        try:
+            result = candidate_service.replenish_candidate_pool(
+                cancel_checker=lambda: self._cancelled,
+            )
+        except Exception as error:  # noqa: BLE001 - surface to shell status bar
+            log_exception("pool.auto_refill.worker.error", error)
+            self.failed.emit(str(error))
+            return
+        log_event(
+            "pool.auto_refill.worker.end",
+            created_count=result.get("created_count"),
+            api_requests=result.get("api_requests"),
+            skipped=result.get("skipped"),
+            warning=result.get("warning"),
+        )
+        self.finished_with_result.emit(result)

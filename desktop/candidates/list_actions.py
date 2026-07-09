@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from desktop.candidates.presenters import candidate_detail_identity
 from desktop.candidates.workers.poster_worker import CandidatePosterDownloadWorker
+
+logger = logging.getLogger(__name__)
 
 
 class CandidateListActionsMixin:
@@ -13,6 +17,45 @@ class CandidateListActionsMixin:
     # _show_status, _list_widget/_results_list, _selected_candidate, _selected_identity,
     # _on_watched_added callbacks, _session/_service state, _detail_entries,
     # _detail_card, _model, _widget, _poster_request_seq, _poster_worker.
+
+    def _candidate_rank(self, candidate: dict) -> int | None:
+        candidates = getattr(self, "_candidates", None) or []
+        try:
+            target = candidate_detail_identity(candidate)
+        except Exception:
+            return None
+        for index, item in enumerate(candidates, start=1):
+            if candidate_detail_identity(item) == target:
+                return index
+        return None
+
+    def _log_search_action(self, action: str, candidate: dict, rank: int | None = None) -> None:
+        """Best-effort action breadcrumb (open/hide/watched) tied to a search_id."""
+        try:
+            from candidates.search import query_log
+
+            if not query_log.is_search_query_log_enabled():
+                return
+            context = self._session.last_search_context() or {}
+            if rank is None:
+                rank = self._candidate_rank(candidate)
+            tmdb_id = candidate.get("tmdb_id")
+            if tmdb_id in (None, ""):
+                source_query = candidate.get("source_query")
+                if isinstance(source_query, dict):
+                    tmdb_id = source_query.get("tmdb_id")
+            entry = query_log.build_search_action_entry(
+                search_id=context.get("search_id"),
+                action=action,
+                tmdb_id=tmdb_id,
+                rank=rank,
+                query=getattr(self, "_search_input", None).text()
+                if getattr(self, "_search_input", None) is not None
+                else "",
+            )
+            query_log.append_search_query_log(entry)
+        except Exception:
+            logger.debug("search action logging skipped", exc_info=True)
 
     def _transfer_selected_to_watched(self) -> None:
         candidate = self._selected_candidate
@@ -26,6 +69,7 @@ class CandidateListActionsMixin:
         if result is None or getattr(result, "ok", False) is False:
             return
 
+        self._log_search_action("watched", candidate)
         self._selected_candidate = None
         if self._session.filters is not None:
             self._session.reload_from_pool(force=True)
@@ -41,6 +85,7 @@ class CandidateListActionsMixin:
         if isinstance(result, dict) and result.get("ok") is False:
             return
 
+        self._log_search_action("hide", candidate)
         identity = candidate_detail_identity(candidate)
         self._detail_entries.pop(identity, None)
         self._selected_candidate = None

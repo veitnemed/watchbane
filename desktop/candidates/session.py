@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from time import perf_counter
 from typing import Callable
 
@@ -47,6 +48,9 @@ class CandidateSearchSession:
         self._request_id = 0
         self._workers: list[CandidateSearchWorker] = []
         self._request_started_at: dict[int, float] = {}
+        self._request_search_id: dict[int, str] = {}
+        self._current_search_id: str | None = None
+        self._last_search_context: dict | None = None
 
     def add_listener(self, callback: Callable[[], None]) -> None:
         if callback not in self._listeners:
@@ -107,6 +111,29 @@ class CandidateSearchSession:
     def has_results(self) -> bool:
         return self.filters is not None
 
+    def last_search_context(self) -> dict | None:
+        """Metadata of the last finalized filter apply (for query logging)."""
+        return dict(self._last_search_context) if self._last_search_context is not None else None
+
+    def _record_search_context(
+        self,
+        *,
+        search_id: str | None,
+        filters: dict,
+        applied: dict,
+        latency_ms: float | None,
+    ) -> None:
+        self._current_search_id = search_id
+        self._last_search_context = {
+            "search_id": search_id,
+            "filters": dict(filters or {}),
+            "sort_mode": self.sort_mode,
+            "filtered_count": int(applied.get("filtered_count") or 0),
+            "ok": bool(applied.get("ok")),
+            "is_empty_pool": bool(applied.get("is_empty_pool")),
+            "latency_ms": latency_ms,
+        }
+
     def _apply_search_result(self, filters: dict, result: dict) -> dict:
         if result.get("overview") is not None:
             self._overview_cache = result.get("overview")
@@ -153,9 +180,11 @@ class CandidateSearchSession:
 
     def apply_filters(self, filters: dict) -> dict:
         """Filter saved pool candidates without sorting."""
+        search_id = uuid.uuid4().hex
+        started = perf_counter()
         overview = self._get_overview()
         if overview.get("is_empty"):
-            return self._apply_search_result(filters, {
+            applied = self._apply_search_result(filters, {
                 "ok": False,
                 "is_empty_pool": True,
                 "filtered_count": 0,
@@ -164,11 +193,18 @@ class CandidateSearchSession:
                 "candidates": [],
                 "hidden_duplicates": 0,
             })
+            self._record_search_context(
+                search_id=search_id,
+                filters=filters,
+                applied=applied,
+                latency_ms=round((perf_counter() - started) * 1000, 1),
+            )
+            return applied
 
         search_view = self.service.search_candidate_pool(overview["candidates"], filters)
         filtered_candidates = list(search_view.get("candidates") or [])
         sort_view = self.service.sort_search_candidates(filtered_candidates, self.sort_mode)
-        return self._apply_search_result(filters, {
+        applied = self._apply_search_result(filters, {
             "ok": True,
             "is_empty_pool": False,
             "filtered_count": int(search_view.get("filtered_count") or len(filtered_candidates)),
@@ -178,6 +214,13 @@ class CandidateSearchSession:
             "candidates": list(sort_view.get("candidates") or []),
             "hidden_duplicates": int(sort_view.get("hidden_duplicates") or 0),
         })
+        self._record_search_context(
+            search_id=search_id,
+            filters=filters,
+            applied=applied,
+            latency_ms=round((perf_counter() - started) * 1000, 1),
+        )
+        return applied
 
     def apply_filters_async(self, filters: dict, *, parent=None) -> int:
         """Filter candidates in a worker and ignore stale results."""
@@ -186,6 +229,7 @@ class CandidateSearchSession:
         self.last_error = None
         self._set_loading(True)
         self._request_started_at[request_id] = perf_counter()
+        self._request_search_id[request_id] = uuid.uuid4().hex
         log_event(
             "candidates.search.async.begin",
             request_id=request_id,
@@ -212,12 +256,21 @@ class CandidateSearchSession:
         self._workers = [item for item in self._workers if item is not worker]
 
     def _on_async_result(self, request_id: int, filters: dict, result: dict) -> None:
+        search_id = self._request_search_id.pop(request_id, None)
         if request_id != self._request_id:
+            self._request_started_at.pop(request_id, None)
             return
         started = self._request_started_at.pop(request_id, None)
         self._set_loading(False)
         applied = self._apply_search_result(filters, result)
         elapsed_ms = None if started is None else round((perf_counter() - started) * 1000, 1)
+        worker_latency = result.get("latency_ms")
+        self._record_search_context(
+            search_id=search_id,
+            filters=filters,
+            applied=applied,
+            latency_ms=worker_latency if worker_latency is not None else elapsed_ms,
+        )
         log_event(
             "candidates.search.async.end",
             request_id=request_id,
@@ -232,6 +285,14 @@ class CandidateSearchSession:
         if sort_mode in self.service.SEARCH_SORT_MODES:
             self.sort_mode = sort_mode
             self._rebuild_sorted_cache()
+            if self._last_search_context is not None:
+                self._current_search_id = uuid.uuid4().hex
+                self._last_search_context = {
+                    **self._last_search_context,
+                    "search_id": self._current_search_id,
+                    "sort_mode": sort_mode,
+                    "latency_ms": None,
+                }
             self._notify_listeners()
 
     def sorted_candidates(self) -> list[dict]:

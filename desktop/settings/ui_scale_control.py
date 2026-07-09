@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QSlider, QVBoxLayout, QWidget
 
 from desktop.settings.app_settings import (
     APP_LANGUAGE_SUPPORTED,
@@ -12,6 +12,7 @@ from desktop.settings.app_settings import (
     APP_UI_SCALE_MIN,
     AppSettings,
     load_app_settings,
+    normalize_auto_pool_refill,
     normalize_language,
     normalize_ui_scale,
     save_app_settings,
@@ -132,6 +133,19 @@ class UiScaleControlPanel(QWidget):
         data_language_hint.setWordWrap(True)
         section_layout.addWidget(data_language_hint)
 
+        pool_title = QLabel(tr("settings.pool.title"))
+        pool_title.setObjectName("settingsPoolTitle")
+        section_layout.addWidget(pool_title)
+
+        self._auto_refill_checkbox = QCheckBox(tr("settings.pool.auto_refill"))
+        self._auto_refill_checkbox.setObjectName("autoPoolRefillCheckbox")
+        section_layout.addWidget(self._auto_refill_checkbox)
+
+        auto_refill_hint = QLabel(tr("settings.pool.auto_refill_hint"))
+        auto_refill_hint.setObjectName("autoPoolRefillHint")
+        auto_refill_hint.setWordWrap(True)
+        section_layout.addWidget(auto_refill_hint)
+
         self._message_label = QLabel("")
         self._message_label.setObjectName("settingsRestartMessage")
         self._message_label.setWordWrap(True)
@@ -170,11 +184,15 @@ class UiScaleControlPanel(QWidget):
     def selected_data_language(self) -> str:
         return normalize_language(self._data_language_combo.currentData())
 
+    def selected_auto_pool_refill(self) -> bool:
+        return normalize_auto_pool_refill(self._auto_refill_checkbox.isChecked())
+
     def load_from_settings(self) -> None:
         settings = load_app_settings()
         self.set_ui_scale(settings.ui_scale)
         self._set_language_combo(self._interface_language_combo, settings.interface_language)
         self._set_language_combo(self._data_language_combo, settings.data_language)
+        self._auto_refill_checkbox.setChecked(normalize_auto_pool_refill(settings.auto_pool_refill))
 
     def set_ui_scale(self, scale: float) -> None:
         self._scale_slider.blockSignals(True)
@@ -194,6 +212,7 @@ class UiScaleControlPanel(QWidget):
             ui_scale=self.selected_ui_scale(),
             interface_language=self.selected_interface_language(),
             data_language=self.selected_data_language(),
+            auto_pool_refill=self.selected_auto_pool_refill(),
         )
         message = self._settings_saved_message(previous_settings, next_settings)
         save_app_settings(

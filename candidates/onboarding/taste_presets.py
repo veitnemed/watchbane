@@ -167,6 +167,7 @@ class TastePreset:
             "origin_preference": None,
             "ui_language": ui_language,
             "country_selection": country_selection,
+            "genre_groups": normalized.genre_groups,
             "include_genres": (),
             "include_genre_mode": INCLUDE_GENRE_MODE_OR,
         }

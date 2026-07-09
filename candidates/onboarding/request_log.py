@@ -2,31 +2,48 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 from typing import Any
+
+from diagnostics.log_sanitize import (
+    MAX_TEXT_LENGTH,
+    _POSIX_ABSOLUTE_PATH_RE,
+    _SENSITIVE_KEY_RE,
+    _SENSITIVE_TEXT_RE,
+    _WINDOWS_ABSOLUTE_PATH_RE,
+    _sanitize_text,
+    _sanitize_value,
+    sanitize_log_entry,
+)
+
+__all__ = [
+    "MAX_TEXT_LENGTH",
+    "_POSIX_ABSOLUTE_PATH_RE",
+    "_SENSITIVE_KEY_RE",
+    "_SENSITIVE_TEXT_RE",
+    "_WINDOWS_ABSOLUTE_PATH_RE",
+    "_sanitize_text",
+    "_sanitize_value",
+    "sanitize_log_entry",
+    "OnboardingRequestLogEntry",
+    "utc_timestamp",
+    "current_git_commit",
+    "is_onboarding_request_log_enabled",
+    "append_onboarding_request_log",
+    "PROJECT_ROOT",
+    "DEFAULT_LOG_PATH",
+    "ENV_FLAG",
+]
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LOG_PATH = PROJECT_ROOT / "reports" / "onboarding" / "user_requests" / "onboarding_request_log.jsonl"
 ENV_FLAG = "WATCHBANE_LOG_ONBOARDING_REQUESTS"
-MAX_TEXT_LENGTH = 500
-
-_SENSITIVE_KEY_RE = re.compile(
-    r"(api[_-]?key|authorization|bearer|credential|password|secret|token)",
-    re.IGNORECASE,
-)
-_SENSITIVE_TEXT_RE = re.compile(
-    r"\b(api[_-]?key|authorization|bearer|credential|password|secret|token)\s*[:=]\s*[^\s,;]+",
-    re.IGNORECASE,
-)
-_WINDOWS_ABSOLUTE_PATH_RE = re.compile(r"(?<![\w:])[A-Za-z]:\\[^\r\n\t\"'<>|]+")
-_POSIX_ABSOLUTE_PATH_RE = re.compile(r"(?<![\w:])/(?:[^\s\"'<>/]+/)+[^\s\"'<>]+")
 
 
 @dataclass(frozen=True)
@@ -86,39 +103,6 @@ def current_git_commit() -> str | None:
 
 def is_onboarding_request_log_enabled() -> bool:
     return os.environ.get(ENV_FLAG) == "1"
-
-
-def _sanitize_text(value: str) -> str:
-    text = "".join(char for char in str(value) if (ord(char) >= 32 and ord(char) != 127))
-    text = _SENSITIVE_TEXT_RE.sub(lambda match: f"{match.group(1)}=<redacted>", text)
-    text = _WINDOWS_ABSOLUTE_PATH_RE.sub("<redacted_path>", text)
-    text = _POSIX_ABSOLUTE_PATH_RE.sub("<redacted_path>", text)
-    if len(text) > MAX_TEXT_LENGTH:
-        return text[:MAX_TEXT_LENGTH].rstrip() + "..."
-    return text
-
-
-def _sanitize_value(value: Any) -> Any:
-    if isinstance(value, dict):
-        sanitized: dict[str, Any] = {}
-        for key, item in value.items():
-            key_text = _sanitize_text(str(key))
-            if _SENSITIVE_KEY_RE.search(key_text):
-                continue
-            sanitized[key_text] = _sanitize_value(item)
-        return sanitized
-    if isinstance(value, (list, tuple, set)):
-        return [_sanitize_value(item) for item in value]
-    if isinstance(value, str):
-        return _sanitize_text(value)
-    if isinstance(value, Path):
-        return "<redacted_path>" if value.is_absolute() else _sanitize_text(value.as_posix())
-    return value
-
-
-def sanitize_log_entry(entry: OnboardingRequestLogEntry | dict[str, Any]) -> dict[str, Any]:
-    data = asdict(entry) if isinstance(entry, OnboardingRequestLogEntry) else dict(entry)
-    return _sanitize_value(data)
 
 
 def append_onboarding_request_log(

@@ -1,0 +1,220 @@
+ЭТО НЕ ЯВЛЯЕТСЯ КОНТРАКТОМ ПРОСТО ПРИМЕРНОЕ ОПРЕДЕЛЕНИЕ ЦВЕТОВОЙ ГАММЫ, ФАЙЛ МОЖНО МЕНЯТЬ ИЛИ ПЕРЕВЕСТИ В MD
+
+
+Основные токены:
+
+COLORS = {
+    # Base
+    "app_bg": "#06101C",
+    "window_bg": "#0A1828",
+    "window_bg_2": "#0D1D30",
+
+    # Surfaces
+    "card_bg": "#101B2B",
+    "card_bg_hover": "#132337",
+    "card_bg_selected": "#12304A",
+
+    # Borders
+    "window_border": "#1D334C",
+    "card_border": "#223650",
+    "card_border_soft": "#1A2A40",
+
+    # Text
+    "text_main": "#F3F7FF",
+    "text_secondary": "#AEBBD0",
+    "text_muted": "#6F7F94",
+
+    # Primary UI
+    "primary": "#15AEEA",
+    "primary_hover": "#25C6FF",
+    "primary_pressed": "#0B87C8",
+
+    # Disabled / inactive
+    "inactive_dot": "#5F7188",
+    "inactive_button_bg": "#101B2B",
+    "inactive_button_border": "#2A3D57",
+}
+
+Акценты пресетов:
+
+PRESET_ACCENTS = {
+    "manual": {
+        "name": "Вручную",
+        "accent": "#18CDEB",
+        "accent_dark": "#0B6F8D",
+        "icon": "sliders",
+    },
+    "hollywood": {
+        "name": "Голливуд",
+        "accent": "#E0B24A",
+        "accent_dark": "#6F5520",
+        "icon": "star",
+    },
+    "russian": {
+        "name": "Российское",
+        "accent": "#3A9DFF",
+        "accent_dark": "#1B4E84",
+        "icon": "cathedral",
+    },
+    "anime": {
+        "name": "Аниме",
+        "accent": "#9A5CFF",
+        "accent_dark": "#42206E",
+        "icon": "torii",
+    },
+    "k_drama": {
+        "name": "K-драмы",
+        "accent": "#F06AB6",
+        "accent_dark": "#6B294F",
+        "icon": "heart",
+    },
+    "turkish": {
+        "name": "Турецкие драмы",
+        "accent": "#F39A38",
+        "accent_dark": "#6B3D16",
+        "icon": "mosque",
+    },
+    "euro_detective": {
+        "name": "Европейский детектив",
+        "accent": "#61D17D",
+        "accent_dark": "#244F35",
+        "icon": "detective",
+    },
+    "family_animation": {
+        "name": "Семейная анимация",
+        "accent": "#32D6D2",
+        "accent_dark": "#155C5B",
+        "icon": "family",
+    },
+    "dark_crime": {
+        "name": "Мрачный криминал",
+        "accent": "#F0475C",
+        "accent_dark": "#661A26",
+        "icon": "fedora",
+    },
+}
+
+Правило карточки:
+
+CARD_RULES = {
+    "background": COLORS["card_bg"],
+    "border": COLORS["card_border"],
+    "border_radius": 10,
+
+    # У каждой карточки только 3 цветных места:
+    "accent_strip_width": 3,
+    "icon_circle_alpha": 0.16,
+    "icon_border_alpha": 0.35,
+
+    # Цветной фон карточки должен быть очень слабым
+    "accent_bg_alpha_normal": 0.04,
+    "accent_bg_alpha_hover": 0.08,
+    "accent_bg_alpha_selected": 0.13,
+
+    # Выбранная карточка
+    "selected_border": "accent",
+    "selected_check_bg": COLORS["primary"],
+}
+
+Главное правило: не красить всю карточку в цвет пресета. Цвет должен быть дозированно: полоса слева, круг иконки, слабый glow/overlay, возможно border при hover/selected.
+
+Для PyQt6 удобно сделать helper:
+
+def rgba(hex_color: str, alpha: float) -> str:
+    hex_color = hex_color.lstrip("#")
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    a = int(alpha * 255)
+    return f"rgba({r}, {g}, {b}, {a})"
+
+Пример QSS для карточки:
+
+def preset_card_qss(accent: str, selected: bool = False, hover: bool = False) -> str:
+    bg_alpha = 0.13 if selected else 0.08 if hover else 0.04
+    border = accent if selected else COLORS["card_border"]
+
+    return f"""
+    QFrame#PresetCard {{
+        background-color: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 {rgba(accent, bg_alpha)},
+            stop:0.18 {COLORS["card_bg"]},
+            stop:1 #0B1625
+        );
+        border: 1px solid {border};
+        border-radius: 10px;
+    }}
+
+    QFrame#PresetCard:hover {{
+        border: 1px solid {accent};
+        background-color: {rgba(accent, 0.08)};
+    }}
+
+    QLabel#PresetTitle {{
+        color: {COLORS["text_main"]};
+        font-weight: 700;
+        font-size: 15px;
+    }}
+
+    QLabel#PresetDescription {{
+        color: {COLORS["text_secondary"]};
+        font-size: 13px;
+    }}
+
+    QFrame#PresetIcon {{
+        background-color: {rgba(accent, 0.16)};
+        border: 1px solid {rgba(accent, 0.35)};
+        border-radius: 20px;
+    }}
+
+    QFrame#PresetAccentStrip {{
+        background-color: {accent};
+        border-radius: 2px;
+    }}
+    """
+
+Для выбранной карточки:
+
+SELECTED_RULE = {
+    "border": "accent 100%",
+    "left_strip": "accent 100%",
+    "icon_bg": "accent 18%",
+    "card_bg_tint": "accent 13%",
+    "check_bg": "#15AEEA",
+    "check_text": "#FFFFFF",
+}
+
+Для обычной карточки:
+
+NORMAL_RULE = {
+    "border": "#223650",
+    "left_strip": "accent 100%",
+    "icon_bg": "accent 16%",
+    "card_bg_tint": "accent 4%",
+    "title": "#F3F7FF",
+    "description": "#AEBBD0",
+}
+
+Для hover:
+
+HOVER_RULE = {
+    "border": "accent 70%",
+    "card_bg_tint": "accent 8%",
+    "icon_bg": "accent 22%",
+}
+
+Формула строгого внешнего вида:
+
+80–85% интерфейса = тёмно-синие нейтральные цвета
+10–15% = серо-синие бордеры и вторичный текст
+3–5% = яркие акценты пресетов
+
+Что лучше не делать:
+
+Не делать разные цвета текста у карточек.
+Не делать разноцветные большие фоны.
+Не делать emoji крупными и плоскими.
+Не использовать чистый чёрный #000000.
+Не использовать чистый белый для вторичного текста.
+Не делать glow сильнее самого border.

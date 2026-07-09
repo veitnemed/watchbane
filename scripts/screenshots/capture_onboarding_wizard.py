@@ -23,6 +23,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--language", choices=("ru", "en"), default="ru")
     parser.add_argument("--page", type=int, default=0, help="Zero-based question page index.")
     parser.add_argument("--loading", action="store_true", help="Capture the loading/progress page.")
+    parser.add_argument("--plan", action="store_true", help="Capture the autofill plan summary page.")
     parser.add_argument(
         "--output",
         type=Path,
@@ -57,7 +58,12 @@ def main(argv: list[str] | None = None) -> int:
     families = set(QFontDatabase.families())
     dialog = OnboardingAutofillDialog(ui_language=args.language)
     page_count = len(dialog._question_pages)
-    page = page_count if args.loading else max(0, min(int(args.page), max(0, page_count - 1)))
+    if args.plan:
+        page = dialog._plan_index()
+    elif args.loading:
+        page = dialog._loading_index()
+    else:
+        page = max(0, min(int(args.page), max(0, page_count - 1)))
     dialog._set_page(page)
     dialog.show()
     dialog.raise_()

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from time import perf_counter
+
 from PyQt6.QtCore import QThread, pyqtSignal
 
 
@@ -28,6 +30,7 @@ class CandidateSearchWorker(QThread):
         self._overview = overview
 
     def run(self) -> None:
+        started = perf_counter()
         try:
             overview = self._overview or self._service.get_search_overview_view()
             if overview.get("is_empty"):
@@ -41,6 +44,7 @@ class CandidateSearchWorker(QThread):
                         "overview": overview,
                         "candidates": [],
                         "hidden_duplicates": 0,
+                        "latency_ms": round((perf_counter() - started) * 1000, 1),
                     },
                 )
                 return
@@ -64,6 +68,7 @@ class CandidateSearchWorker(QThread):
                     "candidates": sorted_candidates,
                     "filtered_candidates": filtered_candidates,
                     "hidden_duplicates": int(sort_view.get("hidden_duplicates") or 0),
+                    "latency_ms": round((perf_counter() - started) * 1000, 1),
                 },
             )
         except Exception as error:
@@ -77,5 +82,6 @@ class CandidateSearchWorker(QThread):
                     "error": str(error),
                     "candidates": [],
                     "hidden_duplicates": 0,
+                    "latency_ms": round((perf_counter() - started) * 1000, 1),
                 },
             )

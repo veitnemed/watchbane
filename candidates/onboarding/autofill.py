@@ -74,6 +74,47 @@ INCLUDE_GENRE_MODE_AND = "and"
 TMDB_ANIMATION_GENRE_ID = 16
 TV_JUNK_GENRE_IDS = (10766, 10764, 10767, 10763, 10762, 99)
 
+# Static TMDb Discover genre ids per taste-preset genre group.
+# Movie and TV use different id spaces (e.g. Action 28 vs Action & Adventure 10759);
+# TV has no Romance/Thriller/Horror genres, so the closest Discover proxies are used.
+GENRE_GROUP_TMDB_GENRE_IDS: dict[str, dict[str, tuple[int, ...]]] = {
+    "action_adventure": {"movie": (28, 12), "tv": (10759,)},
+    "adventure": {"movie": (12,), "tv": (10759,)},
+    "anime": {"movie": (16,), "tv": (16,)},
+    "drama": {"movie": (18,), "tv": (18,)},
+    "romance": {"movie": (10749,), "tv": (18,)},
+    "comedy": {"movie": (35,), "tv": (35,)},
+    "crime": {"movie": (80,), "tv": (80,)},
+    "detective": {"movie": (9648, 80), "tv": (9648, 80)},
+    "family": {"movie": (10751,), "tv": (10751,)},
+    "fantasy": {"movie": (14, 878), "tv": (10765,)},
+    "horror": {"movie": (27,), "tv": (9648, 10765)},
+    "mystery": {"movie": (9648,), "tv": (9648,)},
+    "thriller": {"movie": (53,), "tv": (9648, 80)},
+}
+
+
+def genre_ids_for_groups(genre_groups: tuple[str, ...] | list[str] | None, media_type: str) -> tuple[int, ...]:
+    """Union of TMDb Discover genre ids for the given genre groups and media type."""
+    ids: list[int] = []
+    for group in genre_groups or ():
+        mapping = GENRE_GROUP_TMDB_GENRE_IDS.get(str(group or "").strip())
+        if mapping is None:
+            continue
+        for genre_id in mapping.get(media_type, ()):
+            if genre_id not in ids:
+                ids.append(genre_id)
+    return tuple(ids)
+
+
+def _normalize_genre_groups(values: tuple[str, ...] | list[str] | None) -> tuple[str, ...]:
+    result: list[str] = []
+    for value in values or ():
+        group = str(value or "").strip()
+        if group in GENRE_GROUP_TMDB_GENRE_IDS and group not in result:
+            result.append(group)
+    return tuple(result)
+
 COUNTRY_SELECTION_MODE_COUNTRY_PAIR = "country_pair"
 COUNTRY_SELECTION_MODE_SINGLE = "single_country"
 COUNTRY_SELECTION_MODE_PRESET_FOREIGN = "preset_foreign"
@@ -115,6 +156,8 @@ FALLBACK_POPULAR = "popular"
 
 FALLBACK_ORDER = (
     FALLBACK_BASE,
+    FALLBACK_RELAX_GENRES,
+    FALLBACK_RELAX_ERA,
 )
 
 OVERVIEW_SOURCE_UI_LANGUAGE = "ui_language"
@@ -527,6 +570,7 @@ class OnboardingTasteProfile:
     country_selection: CountrySelection | dict[str, Any] | None = None
     animation_mode: str = ANIMATION_MODE_ANY
     animation_disliked: bool = False
+    genre_groups: tuple[str, ...] | list[str] | None = None
     include_genres: tuple[int, ...] | list[int] | None = None
     include_genre_mode: str = INCLUDE_GENRE_MODE_OR
     exclude_genres: tuple[int, ...] | list[int] | None = None
@@ -587,6 +631,7 @@ class OnboardingTasteProfile:
             country_selection=country_selection,
             animation_mode=animation_mode,
             animation_disliked=_coerce_bool(self.animation_disliked, False),
+            genre_groups=_normalize_genre_groups(self.genre_groups),
             include_genres=_normalize_int_tuple(self.include_genres),
             include_genre_mode=include_genre_mode,
             exclude_genres=_normalize_int_tuple(self.exclude_genres),
@@ -1078,6 +1123,13 @@ def build_fetch_buckets(
             raw_quotas[key] = country_quota * media_weight
 
     quotas = allocate_integer_quotas(raw_quotas, int(target))
+    genre_ids_by_media = {
+        media_type: (
+            tuple(profile.include_genres or ())
+            or genre_ids_for_groups(profile.genre_groups, media_type)
+        )
+        for media_type in (MEDIA_MOVIE, MEDIA_TV)
+    }
     buckets: list[CandidateFetchBucket] = []
     for key, quota in quotas.items():
         if quota <= 0:
@@ -1098,7 +1150,7 @@ def build_fetch_buckets(
                 target_country_weight=country_weight,
                 home_country=country_selection.home_country,
                 exclude_home_country=country_selection.exclude_home_country,
-                genre_ids=tuple(profile.include_genres or ()),
+                genre_ids=genre_ids_by_media.get(media_type, ()),
             )
         )
     buckets.sort(key=lambda bucket: stable_bucket_key(bucket))
@@ -1246,9 +1298,16 @@ def _is_hard_origin_bucket(profile: OnboardingTasteProfile, bucket: CandidateFet
 
 
 def _fallback_order_for_bucket(profile: OnboardingTasteProfile, bucket: CandidateFetchBucket) -> tuple[str, ...]:
+    order = FALLBACK_ORDER
     if _is_hard_origin_bucket(profile, bucket):
-        return tuple(fallback for fallback in FALLBACK_ORDER if fallback != FALLBACK_RELAX_ORIGIN)
-    return FALLBACK_ORDER
+        order = tuple(fallback for fallback in order if fallback != FALLBACK_RELAX_ORIGIN)
+    if not bucket.genre_ids:
+        # Without an include-genre filter the relaxed request would duplicate base.
+        order = tuple(fallback for fallback in order if fallback != FALLBACK_RELAX_GENRES)
+    min_year, max_year = _default_year_range(profile)
+    if min_year is None and max_year is None:
+        order = tuple(fallback for fallback in order if fallback != FALLBACK_RELAX_ERA)
+    return order
 
 
 def _domestic_filter_for_fallback(fallback: str) -> dict[str, str]:
@@ -1277,7 +1336,13 @@ def build_discover_request(
     current_year = current_year or _current_year()
     current_date = current_date or _current_date()
     profile = profile.normalized()
-    min_year, max_year = _default_year_range(profile)
+    if fallback in {FALLBACK_RELAX_GENRES, FALLBACK_RELAX_ERA}:
+        bucket = replace(bucket, genre_ids=())
+    if fallback == FALLBACK_RELAX_ERA:
+        # Keep explicit user year bounds, drop only release-preference-derived era limits.
+        min_year, max_year = profile.min_year, profile.max_year
+    else:
+        min_year, max_year = _default_year_range(profile)
     params: dict[str, Any] = {
         "include_adult": False,
         "language": _ui_language_to_tmdb_locale(profile.ui_language),
@@ -2232,11 +2297,13 @@ def _build_warnings(
     actual_counts: dict[str, dict[str, int]],
     created_count: int,
     rejected_future_count: int,
+    target: int = STARTER_POOL_TARGET,
 ) -> list[str]:
     warnings: list[str] = []
-    if created_count < STARTER_POOL_TARGET:
-        warnings.append(f"Starter pool underfilled: created {created_count} of {STARTER_POOL_TARGET}.")
-    if created_count < STARTER_POOL_MIN_ACCEPTABLE:
+    min_acceptable = min(STARTER_POOL_MIN_ACCEPTABLE, target)
+    if created_count < target:
+        warnings.append(f"Starter pool underfilled: created {created_count} of {target}.")
+    if created_count < min_acceptable:
         warnings.append(f"Only {created_count} candidates collected; the pool can be topped up later.")
     for media_type, planned in sorted(planned_counts.get("media_type", {}).items()):
         actual = int(actual_counts.get("media_type", {}).get(media_type, 0))
@@ -2279,7 +2346,9 @@ def _run_onboarding_autofill_impl(
     progress_callback: ProgressCallback | None = None,
     cancel_checker: CancelChecker | None = None,
     current_year: int | None = None,
+    target: int = STARTER_POOL_TARGET,
 ) -> AutofillResult:
+    target = max(1, min(STARTER_POOL_TARGET, int(target)))
     profile = profile.normalized()
     preference_diagnostics = dict(profile.preference_compatibility or {})
     client = client or TmdbAutofillClient()
@@ -2304,8 +2373,8 @@ def _run_onboarding_autofill_impl(
     genre_ids = resolve_tmdb_genre_ids(client)
     genre_lookup = _genre_lookup_by_id(client)
     _emit(progress_callback, stage=2, message="Собираем жанровые направления", profile_id=profile_id)
-    buckets = build_fetch_buckets(profile, genre_ids=genre_ids)
-    planned_counts = planned_counts_for_profile(profile, genre_ids=genre_ids)
+    buckets = build_fetch_buckets(profile, genre_ids=genre_ids, target=target)
+    planned_counts = planned_counts_for_profile(profile, genre_ids=genre_ids, target=target)
     states = [_BucketState(bucket=bucket) for bucket in sorted(buckets, key=lambda item: bucket_priority_key(item, profile))]
     pagination_config = _pagination_config(profile)
     pagination_stop_reasons: Counter[str] = Counter()
@@ -2330,10 +2399,10 @@ def _run_onboarding_autofill_impl(
             state.exhausted = False
             state.last_accepted_count = 0
             state.stop_reason = None
-        while len(created_candidates) < STARTER_POOL_TARGET and api_requests < MAX_TMDB_REQUESTS:
+        while len(created_candidates) < target and api_requests < MAX_TMDB_REQUESTS:
             progressed = False
             for state in states:
-                if len(created_candidates) >= STARTER_POOL_TARGET or api_requests >= MAX_TMDB_REQUESTS:
+                if len(created_candidates) >= target or api_requests >= MAX_TMDB_REQUESTS:
                     break
                 if state.exhausted:
                     continue
@@ -2409,7 +2478,7 @@ def _run_onboarding_autofill_impl(
                     if not results:
                         _mark_bucket_exhausted(state, "empty_page", pagination_stop_reasons)
                     for index_on_page, result in enumerate(results):
-                        if len(created_candidates) + len(preliminary_entries) >= STARTER_POOL_TARGET:
+                        if len(created_candidates) + len(preliminary_entries) >= target:
                             break
                         if state.filled >= state.bucket.quota:
                             break
@@ -2536,7 +2605,7 @@ def _run_onboarding_autofill_impl(
                 break
             if progressed is False:
                 break
-        if cancelled or len(created_candidates) >= STARTER_POOL_TARGET or api_requests >= MAX_TMDB_REQUESTS:
+        if cancelled or len(created_candidates) >= target or api_requests >= MAX_TMDB_REQUESTS:
             break
 
     complete_onboarding_profile(profile_id, path=path)
@@ -2547,6 +2616,7 @@ def _run_onboarding_autofill_impl(
         actual_counts=actual_counts,
         created_count=len(created_candidates),
         rejected_future_count=rejected_future_count,
+        target=target,
     )
     warning = "\n".join(warnings) if warnings else None
     _emit(
@@ -2742,6 +2812,7 @@ def run_onboarding_autofill(
     progress_callback: ProgressCallback | None = None,
     cancel_checker: CancelChecker | None = None,
     current_year: int | None = None,
+    target: int = STARTER_POOL_TARGET,
 ) -> AutofillResult:
     normalized_profile = profile.normalized()
     started_at = perf_counter()
@@ -2753,6 +2824,7 @@ def run_onboarding_autofill(
             progress_callback=progress_callback,
             cancel_checker=cancel_checker,
             current_year=current_year,
+            target=target,
         )
     except Exception as error:
         duration_ms = int(round((perf_counter() - started_at) * 1000))
