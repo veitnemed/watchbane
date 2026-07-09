@@ -941,31 +941,29 @@ def search_candidate_pool(candidates: list, filters: dict) -> dict:
     return search_core.search_candidates(candidates, filters)
 
 
-def search_candidate_pool_text(
-    candidates: list,
-    filters: dict,
-    *,
-    text_query: str | None = None,
-) -> dict:
-    """Structural filters plus optional FTS retrieval when enabled."""
-    normalized_query = str(text_query or "").strip()
-    if normalized_query == "" or not is_fts_search_enabled():
-        return search_candidate_pool(candidates, filters)
+def _prepare_text_search_criteria(filters: dict) -> dict:
+    criteria = dict(filters or {})
+    criteria.setdefault("only_unwatched", True)
+    criteria.setdefault("hide_hidden", True)
+    criteria.setdefault("watched_identities", search_storage.load_watched_identities())
+    criteria.setdefault("watched_title_keys", search_storage.load_watched_title_keys())
+    criteria.setdefault("hidden_identities", search_storage.load_hidden_identities())
+    return criteria
 
-    from candidates.search.fts_index import search_fts
+
+def _search_candidate_pool_text_legacy(
+    candidates: list,
+    criteria: dict,
+    *,
+    normalized_query: str,
+    fts_hits: list[tuple[str, float]],
+) -> dict:
     from candidates.search.match_fields import find_matched_fields
     from candidates.search.rerank import attach_text_relevance
-    from storage.sqlite.connection import connect
-
-    conn = connect()
-    try:
-        fts_hits = search_fts(conn, normalized_query)
-    finally:
-        conn.close()
 
     fts_keys = {pool_key for pool_key, _ in fts_hits}
     bm25_by_key = {pool_key: score for pool_key, score in fts_hits}
-    search_view = search_candidate_pool(candidates, filters)
+    search_view = search_candidate_pool(candidates, criteria)
     filtered_candidates = [
         candidate
         for candidate in search_view.get("candidates") or []
@@ -984,6 +982,81 @@ def search_candidate_pool_text(
         "text_relevance_by_key": bm25_by_key,
         "fts_enabled": True,
     }
+
+
+def search_candidate_pool_text(
+    candidates: list,
+    filters: dict,
+    *,
+    text_query: str | None = None,
+) -> dict:
+    """Structural filters plus optional FTS retrieval when enabled."""
+    normalized_query = str(text_query or "").strip()
+    if normalized_query == "" or not is_fts_search_enabled():
+        return search_candidate_pool(candidates, filters)
+
+    import sqlite3
+
+    from app.core.explain import explain_candidate
+    from app.core.filters import filter_candidates
+    from app.core.ranking import rank_candidates
+    from candidates.search.fts_index import search_fts, search_fts_prefiltered
+    from candidates.search.match_fields import find_matched_fields
+    from candidates.search.rerank import attach_text_relevance
+    from candidates.search.structural_sql import build_structural_sql_filters
+    from storage.sqlite.candidate_query_repository import load_candidate_records_by_pool_keys
+    from storage.sqlite.connection import connect
+
+    criteria = _prepare_text_search_criteria(filters)
+    structural_clauses, structural_params = build_structural_sql_filters(criteria)
+
+    conn = connect()
+    try:
+        fts_hits = search_fts_prefiltered(
+            conn,
+            normalized_query,
+            structural_clauses=structural_clauses or None,
+            structural_params=structural_params or None,
+        )
+        if fts_hits:
+            try:
+                hit_keys = [pool_key for pool_key, _ in fts_hits]
+                hit_candidates = load_candidate_records_by_pool_keys(hit_keys, conn=conn)
+                filtered = filter_candidates(hit_candidates, criteria)
+                ranked = rank_candidates(filtered)
+                for candidate in ranked:
+                    candidate["explanation"] = explain_candidate(candidate, criteria)
+                bm25_by_key = {pool_key: score for pool_key, score in fts_hits}
+                enriched_candidates = attach_text_relevance(ranked, bm25_by_key)
+                for candidate in enriched_candidates:
+                    candidate["matched_fields"] = find_matched_fields(candidate, normalized_query)
+                return {
+                    "criteria": criteria,
+                    "filtered_candidates": enriched_candidates,
+                    "candidates": enriched_candidates,
+                    "filtered_count": len(enriched_candidates),
+                    "text_query": normalized_query,
+                    "text_relevance_by_key": bm25_by_key,
+                    "fts_enabled": True,
+                }
+            except sqlite3.OperationalError:
+                return _search_candidate_pool_text_legacy(
+                    candidates,
+                    criteria,
+                    normalized_query=normalized_query,
+                    fts_hits=fts_hits,
+                )
+
+        fts_hits = search_fts(conn, normalized_query)
+    finally:
+        conn.close()
+
+    return _search_candidate_pool_text_legacy(
+        candidates,
+        criteria,
+        normalized_query=normalized_query,
+        fts_hits=fts_hits,
+    )
 
 
 def add_candidate_to_watchlist(candidate: dict) -> dict:

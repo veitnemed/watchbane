@@ -131,3 +131,36 @@ def test_calibrated_brigada_query_regression(fts_pool, monkeypatch) -> None:
     assert titles == ["Бригада"]
     sort_view = candidate_service.sort_search_candidates(result["candidates"], "relevance")
     assert sort_view["candidates"][0]["title"] == "Бригада"
+
+
+def test_sql_path_parity_with_legacy_intersect(fts_pool, monkeypatch, tmp_path) -> None:
+    from candidates.search.fts_index import search_fts
+    from storage.sqlite.connection import connect
+
+    monkeypatch.setenv(candidate_service.FTS_SEARCH_ENV, "1")
+    filters = {"media_type": "tv", "year_min": 2000, "year_max": 2015}
+    sql_result = candidate_service.search_candidate_pool_text(
+        fts_pool,
+        filters,
+        text_query="криминал",
+    )
+
+    db_path = tmp_path / "data" / "watchbane.sqlite3"
+    conn = connect(db_path)
+    try:
+        fts_hits = search_fts(conn, "криминал")
+    finally:
+        conn.close()
+    legacy_result = candidate_service._search_candidate_pool_text_legacy(
+        fts_pool,
+        candidate_service._prepare_text_search_criteria(filters),
+        normalized_query="криминал",
+        fts_hits=fts_hits,
+    )
+    sql_keys = [
+        candidate_service._candidate_pool_key(item) for item in sql_result["candidates"]
+    ]
+    legacy_keys = [
+        candidate_service._candidate_pool_key(item) for item in legacy_result["candidates"]
+    ]
+    assert sql_keys == legacy_keys

@@ -107,18 +107,37 @@ def build_fts_match_query(query: str, *, typo_fallback: bool = False) -> str:
     return " ".join(_escape_fts_token(group[0]) for group in groups if group)
 
 
-def _search_fts_match(conn: sqlite3.Connection, match_query: str, *, limit: int) -> list[tuple[str, float]]:
+def _search_fts_match(
+    conn: sqlite3.Connection,
+    match_query: str,
+    *,
+    limit: int,
+    structural_clauses: list[str] | None = None,
+    structural_params: list[object] | None = None,
+) -> list[tuple[str, float]]:
     safe_limit = max(1, int(limit))
-    rows = conn.execute(
+    clauses = list(structural_clauses or [])
+    if clauses:
+        where_parts = ["candidate_fts MATCH ?", *clauses]
+        params: list[object] = [match_query, *list(structural_params or []), safe_limit]
+        sql = f"""
+        SELECT fts.pool_key, bm25(candidate_fts) AS score
+        FROM candidate_fts AS fts
+        INNER JOIN candidate_records AS cr ON cr.pool_key = fts.pool_key
+        WHERE {" AND ".join(where_parts)}
+        ORDER BY score ASC
+        LIMIT ?
         """
+    else:
+        params = [match_query, safe_limit]
+        sql = """
         SELECT pool_key, bm25(candidate_fts) AS score
         FROM candidate_fts
         WHERE candidate_fts MATCH ?
         ORDER BY score ASC
         LIMIT ?
-        """,
-        (match_query, safe_limit),
-    ).fetchall()
+        """
+    rows = conn.execute(sql, params).fetchall()
     return [(str(row["pool_key"]), float(row["score"])) for row in rows]
 
 
@@ -129,12 +148,30 @@ def search_fts(
     limit: int = 200,
 ) -> list[tuple[str, float]]:
     """Return (pool_key, bm25_score) pairs; lower bm25 is better in SQLite FTS5."""
+    return search_fts_prefiltered(conn, query, limit=limit)
+
+
+def search_fts_prefiltered(
+    conn: sqlite3.Connection,
+    query: str,
+    *,
+    structural_clauses: list[str] | None = None,
+    structural_params: list[object] | None = None,
+    limit: int = 200,
+) -> list[tuple[str, float]]:
+    """FTS retrieval with optional indexed structural pre-filter via JOIN."""
     for typo_fallback in (False, True):
         match_query = build_fts_match_query(query, typo_fallback=typo_fallback)
         if match_query == "":
             return []
         try:
-            hits = _search_fts_match(conn, match_query, limit=limit)
+            hits = _search_fts_match(
+                conn,
+                match_query,
+                limit=limit,
+                structural_clauses=structural_clauses,
+                structural_params=structural_params,
+            )
         except sqlite3.OperationalError:
             continue
         if hits:

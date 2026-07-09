@@ -156,3 +156,67 @@ def test_rebuild_script_smoke(tmp_path, monkeypatch, capsys) -> None:
     assert rebuild_candidate_fts_index.main([]) == 0
     output = capsys.readouterr().out
     assert '"count": 1' in output
+
+
+def test_search_fts_prefiltered_media_type_subset(tmp_path, monkeypatch) -> None:
+    from candidates.search.fts_index import search_fts_prefiltered
+    from candidates.search.structural_sql import build_structural_sql_filters
+
+    db_path = _save_pool(
+        tmp_path,
+        monkeypatch,
+        {
+            "tv|2020": {
+                "title": "TV Show",
+                "year": 2020,
+                "media_type": "tv",
+                "localized": {"en": {"overview": "A detective mystery."}},
+                "final_score": 7.0,
+            },
+            "movie|2020": {
+                "title": "Movie Show",
+                "year": 2020,
+                "media_type": "movie",
+                "localized": {"en": {"overview": "A detective mystery film."}},
+                "final_score": 7.0,
+            },
+        },
+    )
+    conn = connect(db_path)
+    try:
+        rebuild_fts_index(conn)
+        plain_hits = search_fts(conn, "detective")
+        assert len(plain_hits) == 2
+        clauses, params = build_structural_sql_filters({"media_type": "tv"})
+        filtered_hits = search_fts_prefiltered(
+            conn,
+            "detective",
+            structural_clauses=clauses,
+            structural_params=params,
+        )
+        assert len(filtered_hits) == 1
+        loaded = candidate_repository.load_candidate_pool_dict(path=db_path)
+        tv_key = next(key for key, value in loaded.items() if value.get("title") == "TV Show")
+        assert filtered_hits[0][0] == tv_key
+    finally:
+        conn.close()
+
+
+def test_load_candidate_records_by_pool_keys_preserves_order(tmp_path, monkeypatch) -> None:
+    from storage.sqlite.candidate_query_repository import load_candidate_records_by_pool_keys
+
+    db_path = _save_pool(
+        tmp_path,
+        monkeypatch,
+        {
+            "a|2001": {"title": "A", "year": 2001, "final_score": 1.0},
+            "b|2002": {"title": "B", "year": 2002, "final_score": 2.0},
+            "c|2003": {"title": "C", "year": 2003, "final_score": 3.0},
+        },
+    )
+    conn = connect(db_path)
+    try:
+        loaded = load_candidate_records_by_pool_keys(["c|2003", "a|2001"], conn=conn)
+        assert [item["title"] for item in loaded] == ["C", "A"]
+    finally:
+        conn.close()

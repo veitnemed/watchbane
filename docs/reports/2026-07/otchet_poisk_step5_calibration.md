@@ -58,4 +58,4 @@ py scripts/reports/summarize_search_eval.py reports/search/curation
 
 - Ручная правка `review` в JSON для спорных запросов.
 - Повтор `summarize_search_eval.py` после правок.
-- При росте пула до 500+ — SQL pre-filter + FTS join (отложено).
+- ~~При росте пула до 500+ — SQL pre-filter + FTS join~~ — выполнено в [Step 6](otchet_poisk_step6_performance.md).

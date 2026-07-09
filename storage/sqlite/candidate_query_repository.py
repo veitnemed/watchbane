@@ -64,6 +64,39 @@ def query_candidate_records(
             active.close()
 
 
+def load_candidate_records_by_pool_keys(
+    keys: list[str],
+    *,
+    conn: sqlite3.Connection | None = None,
+    path: str | Path | None = None,
+) -> list[dict]:
+    """Load candidate payloads for explicit pool keys (preserves key order)."""
+    normalized_keys = [str(key) for key in keys if str(key or "").strip()]
+    if not normalized_keys:
+        return []
+
+    active, owned = connection(conn, path)
+    try:
+        placeholders = ",".join("?" for _ in normalized_keys)
+        rows = active.execute(
+            f"""
+            SELECT pool_key, payload_json
+            FROM candidate_records
+            WHERE pool_key IN ({placeholders})
+            """,
+            normalized_keys,
+        ).fetchall()
+        by_key = {
+            str(row["pool_key"]): payload
+            for row in rows
+            if isinstance((payload := loads_json(row["payload_json"], {})), dict)
+        }
+        return [by_key[key] for key in normalized_keys if key in by_key]
+    finally:
+        if owned:
+            active.close()
+
+
 def get_worst_candidate_records(
     *,
     conn: sqlite3.Connection | None = None,
