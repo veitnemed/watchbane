@@ -46,7 +46,7 @@ MOVIE_DETAIL_FIELDS = (
     "release_date",
     "status",
     "runtime",
-    "imdb_runtime_minutes",
+    "runtime_minutes",
     "content_rating",
     "watch_providers",
     "production_companies",

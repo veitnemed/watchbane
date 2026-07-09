@@ -265,6 +265,7 @@ def test_tmdb_only_builder_does_not_return_kp_or_imdb_rating_fields(monkeypatch)
         "imdb_score",
         "imdb_votes",
         "imdb_rating",
+        "imdb_runtime_minutes",
         "imdb_genres",
     ):
         assert field_name not in candidate

@@ -194,7 +194,7 @@ The public recommendation flow is TMDb-only:
 4. Local scoring computes `quality_score`, `hidden_gem_score` and `final_score`.
 5. The result can be saved into the SQLite candidate pool and searched from GUI/console.
 
-The candidate contract does not require KP/IMDb ratings. `imdb_id` may exist only as an external id.
+The candidate contract does not require KP/IMDb ratings. `imdb_id` may exist only as an external id. Movie runtime is stored as `runtime_minutes`; legacy `imdb_runtime_minutes` is stripped from active candidate records.
 
 See [TMDb-only candidate flow](docs/contracts/TMDB_ONLY_CANDIDATE_FLOW.md) for the full contract, migration scripts, refresh scripts, scoring notes and limitations.
 
@@ -210,7 +210,7 @@ Adding a watched title is also TMDb-only:
 6. enter your `user_score`;
 7. save into the watched dataset through the domain service path.
 
-KP API is not needed. A local IMDb dataset is not needed. IMDb rating/votes are not used. `imdb_id` may be stored only as an external id returned by TMDb.
+KP API is not needed. A local IMDb dataset is not needed. IMDb rating/votes are not used. `imdb_id` may be stored only as an external id returned by TMDb. Runtime metadata uses `runtime_minutes`, not IMDb-prefixed fields.
 
 ## Analytics Helpers
 

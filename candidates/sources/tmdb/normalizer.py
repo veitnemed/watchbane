@@ -193,7 +193,7 @@ def prepare_tmdb_movie_candidate(
         "release_date": raw_details.get("release_date"),
         "status": raw_details.get("status"),
         "runtime": raw_details.get("runtime"),
-        "imdb_runtime_minutes": raw_details.get("runtime"),
+        "runtime_minutes": raw_details.get("runtime"),
         "description": overview,
         "overview": overview,
         "genres": genres,

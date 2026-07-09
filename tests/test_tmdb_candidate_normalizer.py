@@ -219,6 +219,8 @@ def test_movie_candidate_maps_release_runtime_and_media_type() -> None:
     assert candidate["year"] == 2009
     assert candidate["release_date"] == "2009-03-06"
     assert candidate["runtime"] == 162
+    assert candidate["runtime_minutes"] == 162
+    assert "imdb_runtime_minutes" not in candidate
     assert candidate["tmdb_score"] == 7.3
     assert candidate["country_codes"] == ["US"]
     assert candidate["content_rating"] == "US: R"

@@ -175,7 +175,11 @@ def test_normalize_tmdb_movie_maps_movie_fields() -> None:
     assert movie["title"] == "Movie"
     assert movie["year"] == 2009
     assert movie["runtime"] == 162
-    assert movie["imdb_runtime_minutes"] == 162
+    assert movie["runtime_minutes"] == 162
+    assert "imdb_runtime_minutes" not in movie
+    assert "imdb_rating" not in movie
+    assert "imdb_votes" not in movie
+    assert "imdb_genres" not in movie
     assert movie["genres_tmdb"] == ["Drama"]
     assert movie["tmdb_country_codes"] == ["US"]
     assert movie["content_rating"] == "18+"

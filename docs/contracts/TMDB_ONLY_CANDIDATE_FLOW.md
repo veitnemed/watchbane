@@ -11,7 +11,7 @@
 - TMDb TV Details;
 - локальную нормализацию, scoring и import.
 
-KP/IMDb rating enrichment не входит в public candidate flow. `imdb_id` может сохраняться только как external id из TMDb `external_ids`.
+KP/IMDb rating enrichment не входит в public candidate flow. `imdb_id` может сохраняться только как external id из TMDb `external_ids`. Movie runtime uses `runtime_minutes`; legacy `imdb_runtime_minutes` is stripped.
 
 ## Новый Flow
 
@@ -78,6 +78,7 @@ Optional metadata:
 - `watch_providers`;
 - `networks`;
 - `production_companies`;
+- `runtime_minutes`;
 - `imdb_id`.
 
 ## Removed Fields
@@ -95,6 +96,7 @@ Candidate pool write-path strips old external rating fields:
 - `imdb_votes`;
 - `imdb_start_year`;
 - `imdb_end_year`;
+- `imdb_runtime_minutes`;
 - `imdb_genres`;
 - `imdb_title_type`;
 - `imdb_is_adult`;
@@ -106,7 +108,8 @@ Not removed:
 - `tmdb_id`;
 - `tmdb_score`;
 - `tmdb_votes`;
-- `tmdb_popularity`.
+- `tmdb_popularity`;
+- `runtime_minutes`.
 
 ## Migration Scripts
 

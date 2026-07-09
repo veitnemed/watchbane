@@ -37,6 +37,7 @@ EXTERNAL_RATING_FIELDS = frozenset({
     "imdb_votes",
     "imdb_start_year",
     "imdb_end_year",
+    "imdb_runtime_minutes",
     "imdb_genres",
     "imdb_title_type",
     "imdb_is_adult",

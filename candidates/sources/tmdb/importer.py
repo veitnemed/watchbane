@@ -44,7 +44,7 @@ def normalize_tmdb_candidate_for_common_import(candidate: dict[str, Any], criter
         "release_date": candidate.get("release_date"),
         "media_type": candidate.get("media_type"),
         "runtime": candidate.get("runtime"),
-        "imdb_runtime_minutes": candidate.get("imdb_runtime_minutes"),
+        "runtime_minutes": candidate.get("runtime_minutes") or candidate.get("runtime"),
         "type": candidate.get("type") or ("movie" if candidate.get("media_type") == "movie" else "series"),
         "description": candidate.get("description") or candidate.get("overview") or "",
         "overview": candidate.get("overview") or candidate.get("description") or "",

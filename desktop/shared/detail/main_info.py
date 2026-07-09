@@ -262,7 +262,7 @@ def _is_movie_card(card: dict) -> bool:
 
 
 def _movie_runtime_value(card: dict):
-    for field_name in ("runtime", "runtime_minutes", "imdb_runtime_minutes"):
+    for field_name in ("runtime", "runtime_minutes"):
         value = card.get(field_name)
         if value not in (None, ""):
             return value

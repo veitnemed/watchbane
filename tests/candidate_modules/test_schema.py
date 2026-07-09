@@ -128,6 +128,7 @@ def test_ensure_candidate_defaults_does_not_create_kp_imdb_rating_fields() -> No
         "imdb_score",
         "imdb_votes",
         "imdb_rating",
+        "imdb_runtime_minutes",
     ):
         assert field_name not in normalized
     assert normalized["source"] == "tmdb"
@@ -161,6 +162,7 @@ def test_strip_external_rating_fields_preserves_imdb_id_and_tmdb_fields() -> Non
         "imdb_votes": 200,
         "imdb_start_year": 2020,
         "imdb_end_year": 2024,
+        "imdb_runtime_minutes": 48,
         "imdb_genres": ["Drama"],
         "imdb_title_type": "tvSeries",
         "imdb_is_adult": 0,
@@ -183,6 +185,7 @@ def test_strip_external_rating_fields_preserves_imdb_id_and_tmdb_fields() -> Non
         "imdb_votes",
         "imdb_start_year",
         "imdb_end_year",
+        "imdb_runtime_minutes",
         "imdb_genres",
         "imdb_title_type",
         "imdb_is_adult",

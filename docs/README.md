@@ -14,7 +14,7 @@
 - показывать read-only карточку тайтла, постер, метаданные, оценки и аналитику;
 - собирать TMDb-only candidate pool;
 - импортировать TMDb result в общий candidate pool;
-- строить top prediction из общего пула по runtime-фильтрам;
+- искать и ранжировать кандидатов из общего пула по runtime-фильтрам;
 - переносить кандидатов из пула в watched/dataset через форму ручного подтверждения;
 - экспортировать watched/add-title карточки через read-only слой `web/`.
 
@@ -202,8 +202,8 @@ active backend.
 
 ## Важно
 
-- SQLite candidate pool не должен меняться от runtime-фильтра перед top prediction.
-- Обычный top prediction работает только по ready/complete-кандидатам.
+- SQLite candidate pool не должен меняться от runtime-фильтров поиска.
+- Обычный поиск/ранжирование работает только по ready/complete-кандидатам.
 - TMDb import и перенос кандидата в dataset - разные шаги.
 - Финальное сообщение об успешном добавлении печатает UI-слой, а не storage.
 - Legacy model лежит в `archive/legacy/model/` и не импортируется активным runtime.
