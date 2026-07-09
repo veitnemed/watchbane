@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from itertools import combinations
 from datetime import date
 
 from candidates.onboarding import autofill
@@ -210,6 +211,14 @@ def test_country_selection_presets_create_contract_quotas() -> None:
     assert build_country_plan(country_selection_for_mixed_ru(), 120) == {"RU": 18, "US": 102}
     assert build_country_plan(country_selection_for_manual("RU", ["US", "KR"]), 120) == {"US": 84, "KR": 36}
     assert build_country_plan(country_selection_for_manual("RU", ["US", "KR"], ratio_preset="90/10"), 120) == {"US": 108, "KR": 12}
+    assert build_country_plan(country_selection_for_manual("RU", ["US", "RU", "GB"]), 120) == {"US": 40, "RU": 40, "GB": 40}
+    assert build_country_plan(country_selection_for_manual("RU", ["US", "RU", "GB", "KR", "JP"]), 120) == {
+        "US": 24,
+        "RU": 24,
+        "GB": 24,
+        "KR": 24,
+        "JP": 24,
+    }
 
 
 def test_country_first_profile_replaces_broad_origin_defaults() -> None:
@@ -283,8 +292,8 @@ def test_onboarding_wizard_starts_with_country_question_for_all_languages(qapp) 
     try:
         assert len(ru_dialog._active_questions()) == 4
         assert len(en_dialog._active_questions()) == 4
-        assert ru_dialog._active_questions()[0].key == "country_preference"
-        assert en_dialog._active_questions()[0].key == "country_preference"
+        assert ru_dialog._active_questions()[0].key == "country_selection"
+        assert en_dialog._active_questions()[0].key == "country_selection"
     finally:
         ru_dialog.close()
         en_dialog.close()
@@ -295,12 +304,13 @@ def test_onboarding_wizard_profile_contains_explicit_country_selection(qapp) -> 
 
     dialog = OnboardingAutofillDialog(ui_language="ru")
     try:
-        dialog._answers["country_preference"] = "foreign"
+        dialog._answers["country_selection"] = ["US", "GB"]
         profile = dialog._profile()
         assert profile["origin_preference"] == "foreign"
         assert profile["country_selection"]["selected_countries"] == ["US", "GB"]
-        assert profile["country_selection"]["country_weights"] == {"US": 0.90, "GB": 0.10}
-        assert profile["country_selection"]["exclude_home_country"] is True
+        assert profile["country_selection"]["country_weights"] == {"US": 0.50, "GB": 0.50}
+        assert profile["country_selection"]["exclude_home_country"] is False
+        assert profile["country_selection"]["max_countries"] == 5
     finally:
         dialog.close()
 
@@ -314,16 +324,14 @@ def test_onboarding_wizard_country_buttons_use_localized_names(qapp) -> None:
         ru_labels = [button.text() for button in ru_dialog._question_pages[0][2].buttons()]
         en_labels = [button.text() for button in en_dialog._question_pages[0][2].buttons()]
 
-        assert ru_labels == [
-            "Зарубежное: США + Великобритания",
-            "Смешанное: Россия + США",
-            "Без предпочтений: США",
-        ]
-        assert all(code not in " ".join(ru_labels) for code in ("RU", "US", "GB", "KR"))
+        assert ru_labels == ["США", "Россия", "Великобритания", "Южная Корея", "Япония"]
+        assert all(code not in " ".join(ru_labels) for code in ("RU", "US", "GB", "KR", "JP"))
         assert en_labels == [
-            "Foreign: United States + United Kingdom",
-            "Mixed: United States + South Korea",
-            "No preference: United States",
+            "United States",
+            "Russia",
+            "United Kingdom",
+            "South Korea",
+            "Japan",
         ]
         assert "US + GB" not in " ".join(en_labels)
         assert "RU" not in " ".join(en_labels)
@@ -332,19 +340,62 @@ def test_onboarding_wizard_country_buttons_use_localized_names(qapp) -> None:
         en_dialog.close()
 
 
-def test_onboarding_wizard_no_preference_uses_us_only_without_ru(qapp) -> None:
+def test_onboarding_wizard_country_buttons_are_multi_select(qapp) -> None:
     from desktop.onboarding import OnboardingAutofillDialog
 
     dialog = OnboardingAutofillDialog(ui_language="ru")
     try:
-        dialog._answers["country_preference"] = "any"
+        dialog._set_page(1)
+        group = dialog._question_pages[0][2]
+        buttons = {button.property("answer"): button for button in group.buttons()}
+
+        assert group.exclusive() is False
+        assert buttons["US"].isChecked() is True
+        buttons["RU"].click()
+        buttons["GB"].click()
+
+        assert dialog._answers["country_selection"] == ["US", "RU", "GB"]
+        assert dialog._selected_answer(dialog._question_pages[0][0], group) == ["US", "RU", "GB"]
+    finally:
+        dialog.close()
+
+
+def test_onboarding_wizard_defaults_to_us_only_without_ru(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="ru")
+    try:
         profile = dialog._profile()
 
         assert profile["origin_preference"] == "foreign"
         assert profile["country_selection"]["selected_countries"] == ["US"]
         assert profile["country_selection"]["country_weights"] == {"US": 1.0}
-        assert profile["country_selection"]["exclude_home_country"] is True
+        assert profile["country_selection"]["exclude_home_country"] is False
         assert profile["country_selection"]["primary_country"] == "US"
+    finally:
+        dialog.close()
+
+
+def test_onboarding_wizard_supports_all_country_chip_combinations(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    codes = ("US", "RU", "GB", "KR", "JP")
+    dialog = OnboardingAutofillDialog(ui_language="ru")
+    try:
+        for size in range(1, len(codes) + 1):
+            for combo in combinations(codes, size):
+                dialog._answers["country_selection"] = list(combo)
+                selection = dialog._country_selection_payload()
+                plan = build_country_plan(autofill._coerce_country_selection(
+                    selection,
+                    ui_language="ru",
+                    origin_preference=dialog._profile()["origin_preference"],
+                ), 120)
+
+                assert selection["selected_countries"] == list(combo)
+                assert set(selection["country_weights"]) == set(combo)
+                assert sum(plan.values()) == 120
+                assert set(plan) == set(combo)
     finally:
         dialog.close()
 
@@ -373,10 +424,10 @@ def test_onboarding_wizard_plan_summary_localizes_country_counts(qapp) -> None:
 
     dialog = OnboardingAutofillDialog(ui_language="ru")
     try:
-        dialog._answers["country_preference"] = "foreign"
+        dialog._answers["country_selection"] = ["US", "GB"]
         summary = dialog._format_plan_summary()
 
-        assert "Страны: США: 108, Великобритания: 12" in summary
+        assert "Страны: США: 60, Великобритания: 60" in summary
         assert "US:" not in summary
         assert "GB:" not in summary
     finally:

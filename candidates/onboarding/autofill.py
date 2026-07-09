@@ -53,10 +53,12 @@ COUNTRY_SELECTION_MODE_COUNTRY_PAIR = "country_pair"
 COUNTRY_SELECTION_MODE_SINGLE = "single_country"
 COUNTRY_SELECTION_MODE_PRESET_FOREIGN = "preset_foreign"
 COUNTRY_SELECTION_MODE_PRESET_MIXED = "preset_mixed"
+COUNTRY_SELECTION_MODE_MULTI = "multi_country"
 COUNTRY_SELECTION_MODE_CUSTOM = "custom"
 DEFAULT_HOME_COUNTRY = "RU"
 DEFAULT_FOREIGN_COUNTRIES = ("US", "GB")
 DEFAULT_EN_COUNTRIES = ("US", "GB")
+MAX_MANUAL_COUNTRIES = 5
 
 MOVIE_LIGHT_GENRES = ("Comedy", "Romance", "Fantasy", "Family", "Adventure")
 MOVIE_DARK_GENRES = ("Drama", "Thriller", "Action", "Crime", "Mystery")
@@ -159,12 +161,12 @@ class CountrySelection:
     selected_countries: tuple[str, ...]
     country_weights: dict[str, float]
     exclude_home_country: bool
-    max_countries: int = 2
+    max_countries: int = MAX_MANUAL_COUNTRIES
     primary_country: str | None = None
     secondary_country: str | None = None
 
     def normalized(self) -> "CountrySelection":
-        max_countries = max(1, int(self.max_countries or 2))
+        max_countries = max(1, int(self.max_countries or MAX_MANUAL_COUNTRIES))
         home_country = _normalize_country_code(self.home_country) or DEFAULT_HOME_COUNTRY
         countries: list[str] = []
         for value in self.selected_countries or ():
@@ -259,7 +261,7 @@ def country_selection_for_manual(
         code = _normalize_country_code(value)
         if code and code not in normalized_countries:
             normalized_countries.append(code)
-        if len(normalized_countries) >= 2:
+        if len(normalized_countries) >= MAX_MANUAL_COUNTRIES:
             break
     if len(normalized_countries) == 0:
         return country_selection_for_single(home_country, home_country=home_country)
@@ -267,18 +269,22 @@ def country_selection_for_manual(
         return country_selection_for_single(normalized_countries[0], home_country=home_country)
 
     preset = str(ratio_preset or "70/30").strip()
-    if preset == "90/10":
+    if len(normalized_countries) > 2:
+        equal = 1.0 / len(normalized_countries)
+        weights = {country: equal for country in normalized_countries}
+    elif preset == "90/10":
         weights = {normalized_countries[0]: 0.90, normalized_countries[1]: 0.10}
     elif preset == "50/50":
         weights = {normalized_countries[0]: 0.50, normalized_countries[1]: 0.50}
     else:
         weights = {normalized_countries[0]: 0.70, normalized_countries[1]: 0.30}
     return CountrySelection(
-        mode=COUNTRY_SELECTION_MODE_COUNTRY_PAIR,
+        mode=COUNTRY_SELECTION_MODE_MULTI,
         home_country=home_country,
         selected_countries=tuple(normalized_countries),
         country_weights=weights,
         exclude_home_country=False,
+        max_countries=MAX_MANUAL_COUNTRIES,
         primary_country=normalized_countries[0],
         secondary_country=normalized_countries[1],
     ).normalized()
@@ -312,7 +318,7 @@ def _coerce_country_selection(value: Any, *, ui_language: str, origin_preference
             selected_countries=tuple(selected),
             country_weights=value.get("country_weights") or {},
             exclude_home_country=bool(value.get("exclude_home_country")),
-            max_countries=int(value.get("max_countries") or 2),
+            max_countries=int(value.get("max_countries") or MAX_MANUAL_COUNTRIES),
             primary_country=value.get("primary_country"),
             secondary_country=value.get("secondary_country"),
         ).normalized()

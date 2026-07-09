@@ -28,6 +28,7 @@ from candidates import service as candidate_service
 from candidates.models import country_reference
 from desktop.settings.app_settings import AppSettings, get_persisted_data_language, normalize_ui_scale, save_app_settings
 from desktop.onboarding.worker import OnboardingAutofillWorker
+from desktop.shared.widgets.genre_chip_selector import FlowLayout
 from desktop.theme.scaling import font_px, get_ui_scale, scale_px
 from desktop.theme.scaling import set_ui_scale
 from desktop.theme.ui_modules import ensure_scaled_ui_modules
@@ -68,6 +69,8 @@ ONBOARDING_SCALE_PRESETS: tuple[tuple[float, str], ...] = (
     (1.15, "115%"),
     (1.30, "130%"),
 )
+ONBOARDING_COUNTRY_CODES: tuple[str, ...] = ("US", "RU", "GB", "KR", "JP")
+ONBOARDING_COUNTRY_DEFAULT: tuple[str, ...] = ("US",)
 
 
 @dataclass(frozen=True)
@@ -80,14 +83,10 @@ class _Question:
 
 _QUESTIONS: tuple[_Question, ...] = (
     _Question(
-        key="country_preference",
+        key="country_selection",
         title_ru="Какие страны ищем?",
         title_en="Which countries should Watchbane search?",
-        options=(
-            ("foreign", "Зарубежное", "Foreign"),
-            ("mixed", "Смешанное", "Mixed"),
-            ("any", "Без предпочтений", "No preference"),
-        ),
+        options=(),
     ),
     _Question(
         key="media_preference",
@@ -192,6 +191,29 @@ QPushButton#onboardingOption:checked {{
 }}
 QPushButton#onboardingOption:checked:focus {{
     border-color: {COLOR_ACCENT};
+}}
+QWidget#onboardingCountryChipHost {{
+    background-color: transparent;
+    border: 0;
+}}
+QPushButton#onboardingCountryChip {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_BUTTON)}px;
+    color: {COLOR_TEXT_SOFT};
+    font-size: {font_px(FONT_DIALOG_TITLE)}px;
+    font-weight: 650;
+    padding: {px(12)}px {px(16)}px;
+    min-height: {px(48)}px;
+}}
+QPushButton#onboardingCountryChip:hover {{
+    background-color: {COLOR_CARD_ALT};
+    border-color: {COLOR_BORDER_HOVER};
+}}
+QPushButton#onboardingCountryChip:checked {{
+    background-color: {COLOR_CARD_ALT};
+    border-color: {COLOR_ACCENT};
+    color: {COLOR_TEXT};
 }}
 QPushButton#onboardingNext, QPushButton#onboardingOpen {{
     background-color: {COLOR_ACCENT};
@@ -309,7 +331,7 @@ class OnboardingAutofillDialog(QDialog):
         self.setStyleSheet(_wizard_style())
         self._ui_language = "en" if str(ui_language or "").casefold().startswith("en") else "ru"
         self._ui_scale = normalize_ui_scale(get_ui_scale())
-        self._answers: dict[str, str] = {}
+        self._answers: dict[str, Any] = {}
         self._question_pages: list[tuple[_Question, QWidget, QButtonGroup]] = []
         self._worker: OnboardingAutofillWorker | None = None
         self._fade_animation: QPropertyAnimation | None = None
@@ -409,27 +431,26 @@ class OnboardingAutofillDialog(QDialog):
     def _country_names(self, *codes: str) -> str:
         return " + ".join(self._country_name(code) for code in codes)
 
-    def _country_option_label(self, value: str, label_ru: str, label_en: str) -> str:
-        if value == "foreign":
-            return self._text(
-                f"{label_ru}: {self._country_names('US', 'GB')}",
-                f"{label_en}: {self._country_names('US', 'GB')}",
-            )
-        if value == "mixed":
-            if self._ui_language == "ru":
-                return f"{label_ru}: {self._country_names('RU', 'US')}"
-            return f"{label_en}: {self._country_names('US', 'KR')}"
-        if value == "any":
-            return self._text(
-                f"{label_ru}: {self._country_name('US')}",
-                f"{label_en}: {self._country_name('US')}",
-            )
-        return self._text(label_ru, label_en)
+    def _normalized_country_answers(self, value: Any = None) -> list[str]:
+        raw = self._answers.get("country_selection") if value is None else value
+        if raw in (None, ""):
+            raw = ONBOARDING_COUNTRY_DEFAULT
+        if isinstance(raw, str):
+            items = [part.strip() for part in raw.replace(",", " ").split()]
+        elif isinstance(raw, (list, tuple, set)):
+            items = list(raw)
+        else:
+            items = []
+        selected: list[str] = []
+        allowed = set(ONBOARDING_COUNTRY_CODES)
+        for item in items:
+            code = str(item or "").strip().upper()
+            if code in allowed and code not in selected:
+                selected.append(code)
+        return selected or list(ONBOARDING_COUNTRY_DEFAULT)
 
-    def _question_option_label(self, question: _Question, value: str, label_ru: str, label_en: str) -> str:
-        if question.key == "country_preference":
-            return self._country_option_label(value, label_ru, label_en)
-        return self._text(label_ru, label_en)
+    def _selected_country_codes(self) -> list[str]:
+        return self._normalized_country_answers()
 
     def _question_start_index(self) -> int:
         return 1
@@ -643,27 +664,57 @@ class OnboardingAutofillDialog(QDialog):
         title.setWordWrap(True)
         layout.addWidget(title)
 
-        subtitle = QLabel(self._text("Выберите один вариант, чтобы собрать первый пул.", "Choose one option to build the first pool."))
+        subtitle = QLabel(self._text(
+            "Выберите одну или несколько стран, чтобы собрать первый пул."
+            if question.key == "country_selection"
+            else "Выберите один вариант, чтобы собрать первый пул.",
+            "Choose one or more countries to build the first pool."
+            if question.key == "country_selection"
+            else "Choose one option to build the first pool.",
+        ))
         subtitle.setObjectName("onboardingSubtitle")
         subtitle.setWordWrap(True)
         layout.addWidget(subtitle)
 
         group = QButtonGroup(self)
-        group.setExclusive(True)
+        group.setExclusive(question.key != "country_selection")
         group.buttonClicked.connect(lambda _button, key=question.key: self._on_option_selected(key))
 
         options_layout = QVBoxLayout()
         options_layout.setContentsMargins(0, scale_px(SPACING_SMALL), 0, 0)
         options_layout.setSpacing(scale_px(SPACING_MEDIUM))
-        for value, label_ru, label_en in question.options:
-            button = QPushButton(self._question_option_label(question, value, label_ru, label_en))
-            button.setObjectName("onboardingOption")
-            button.setCheckable(True)
-            button.setProperty("answer", value)
-            button.setMinimumHeight(scale_px(58))
-            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-            group.addButton(button)
-            options_layout.addWidget(button)
+        if question.key == "country_selection":
+            selected_countries = set(self._selected_country_codes())
+            chips_host = QWidget()
+            chips_host.setObjectName("onboardingCountryChipHost")
+            flow = FlowLayout(
+                chips_host,
+                margin=0,
+                h_spacing=scale_px(SPACING_SMALL),
+                v_spacing=scale_px(SPACING_SMALL),
+            )
+            chips_host.setLayout(flow)
+            for code in ONBOARDING_COUNTRY_CODES:
+                button = QPushButton(self._country_name(code))
+                button.setObjectName("onboardingCountryChip")
+                button.setCheckable(True)
+                button.setProperty("answer", code)
+                button.setMinimumHeight(scale_px(48))
+                button.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
+                button.setChecked(code in selected_countries)
+                group.addButton(button)
+                flow.addWidget(button)
+            options_layout.addWidget(chips_host)
+        else:
+            for value, label_ru, label_en in question.options:
+                button = QPushButton(self._text(label_ru, label_en))
+                button.setObjectName("onboardingOption")
+                button.setCheckable(True)
+                button.setProperty("answer", value)
+                button.setMinimumHeight(scale_px(58))
+                button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+                group.addButton(button)
+                options_layout.addWidget(button)
         layout.addLayout(options_layout)
         layout.addStretch(1)
 
@@ -940,7 +991,14 @@ class OnboardingAutofillDialog(QDialog):
         self._fade_animation = animation
         animation.start()
 
-    def _selected_answer(self, group: QButtonGroup) -> str | None:
+    def _selected_answer(self, question: _Question, group: QButtonGroup) -> Any:
+        if question.key == "country_selection":
+            selected = [
+                str(button.property("answer") or "").strip().upper()
+                for button in group.buttons()
+                if button.isChecked()
+            ]
+            return self._normalized_country_answers(selected) if selected else None
         button = group.checkedButton()
         if button is None:
             return None
@@ -960,9 +1018,11 @@ class OnboardingAutofillDialog(QDialog):
         question, group = current
         if question.key != key:
             return
-        selected = self._selected_answer(group)
+        selected = self._selected_answer(question, group)
         if selected is not None:
             self._answers[key] = selected
+        else:
+            self._answers.pop(key, None)
         self._sync_controls()
 
     def _sync_controls(self) -> None:
@@ -978,7 +1038,7 @@ class OnboardingAutofillDialog(QDialog):
         self._next_button.setEnabled(
             on_setup
             or on_plan
-            or (current is not None and self._selected_answer(current[1]) is not None)
+            or (current is not None and self._selected_answer(current[0], current[1]) is not None)
         )
         if on_plan:
             self._next_button.setText(self._text("Собрать пул", "Build pool"))
@@ -1002,7 +1062,7 @@ class OnboardingAutofillDialog(QDialog):
         if current is None:
             return
         question, group = current
-        selected = self._selected_answer(group)
+        selected = self._selected_answer(question, group)
         if selected is None:
             return
         self._answers[question.key] = selected
@@ -1010,81 +1070,30 @@ class OnboardingAutofillDialog(QDialog):
         self._set_page(next_index)
 
     def _country_selection_payload(self) -> dict[str, Any]:
-        preference = self._answers.get("country_preference") or "foreign"
-        if self._ui_language == "ru":
-            if preference in {"any", "domestic"}:
-                return {
-                    "mode": "single_country",
-                    "home_country": "RU",
-                    "selected_countries": ["US"],
-                    "country_weights": {"US": 1.0},
-                    "exclude_home_country": True,
-                    "max_countries": 1,
-                    "primary_country": "US",
-                    "secondary_country": None,
-                }
-            if preference == "mixed":
-                return {
-                    "mode": "preset_mixed",
-                    "home_country": "RU",
-                    "selected_countries": ["RU", "US"],
-                    "country_weights": {"RU": 0.15, "US": 0.85},
-                    "exclude_home_country": False,
-                    "max_countries": 2,
-                    "primary_country": "RU",
-                    "secondary_country": "US",
-                }
-            return {
-                "mode": "preset_foreign",
-                "home_country": "RU",
-                "selected_countries": ["US", "GB"],
-                "country_weights": {"US": 0.90, "GB": 0.10},
-                "exclude_home_country": True,
-                "max_countries": 2,
-                "primary_country": "US",
-                "secondary_country": "GB",
-            }
-
-        if preference in {"any", "domestic"}:
-            return {
-                "mode": "single_country",
-                "home_country": "US",
-                "selected_countries": ["US"],
-                "country_weights": {"US": 1.0},
-                "exclude_home_country": False,
-                "max_countries": 1,
-                "primary_country": "US",
-                "secondary_country": None,
-            }
-        if preference == "mixed":
-            return {
-                "mode": "country_pair",
-                "home_country": "US",
-                "selected_countries": ["US", "KR"],
-                "country_weights": {"US": 0.70, "KR": 0.30},
-                "exclude_home_country": False,
-                "max_countries": 2,
-                "primary_country": "US",
-                "secondary_country": "KR",
-            }
+        countries = self._selected_country_codes()
+        weight = 1.0 / len(countries)
         return {
-            "mode": "country_pair",
-            "home_country": "US",
-            "selected_countries": ["US", "GB"],
-            "country_weights": {"US": 0.90, "GB": 0.10},
+            "mode": "single_country" if len(countries) == 1 else "multi_country",
+            "home_country": "RU" if self._ui_language == "ru" else "US",
+            "selected_countries": countries,
+            "country_weights": {country: weight for country in countries},
             "exclude_home_country": False,
-            "max_countries": 2,
-            "primary_country": "US",
-            "secondary_country": "GB",
+            "max_countries": len(ONBOARDING_COUNTRY_CODES),
+            "primary_country": countries[0],
+            "secondary_country": countries[1] if len(countries) > 1 else None,
         }
 
     def _profile(self) -> dict[str, Any]:
-        country_preference = self._answers.get("country_preference") or "foreign"
-        origin_preference = (
-            country_preference
-            if self._ui_language == "ru" and country_preference in {"foreign", "mixed"}
-            else ("foreign" if self._ui_language == "ru" else None)
-        )
+        countries = set(self._selected_country_codes())
+        if self._ui_language == "ru":
+            if countries == {"RU"}:
+                origin_preference = "domestic"
+            elif "RU" in countries:
+                origin_preference = "mixed"
+            else:
+                origin_preference = "foreign"
+        else:
+            origin_preference = None
         return {
             "ui_language": self._ui_language,
             "media_preference": self._answers.get("media_preference") or "both",

@@ -72,6 +72,20 @@ def _country_selection(
     }
 
 
+def _equal_country_selection(
+    selected_countries: list[str],
+    *,
+    home_country: str = "RU",
+) -> dict[str, Any]:
+    weight = 1.0 / len(selected_countries)
+    return _country_selection(
+        mode="single_country" if len(selected_countries) == 1 else "multi_country",
+        home_country=home_country,
+        selected_countries=selected_countries,
+        country_weights={country: weight for country in selected_countries},
+    )
+
+
 FOREIGN_RU_SELECTION = _country_selection(
     mode="preset_foreign",
     home_country="RU",
@@ -82,6 +96,38 @@ FOREIGN_RU_SELECTION = _country_selection(
 
 
 SCENARIOS: dict[str, dict[str, Any]] = {
+    "ru-countries-us-only": {
+        "ui_language": "ru",
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "foreign",
+        "country_selection": _equal_country_selection(["US"]),
+    },
+    "ru-countries-ru-only": {
+        "ui_language": "ru",
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "domestic",
+        "country_selection": _equal_country_selection(["RU"]),
+    },
+    "ru-countries-us-ru-gb": {
+        "ui_language": "ru",
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "mixed",
+        "country_selection": _equal_country_selection(["US", "RU", "GB"]),
+    },
+    "ru-countries-all-five": {
+        "ui_language": "ru",
+        "media_preference": "both",
+        "release_preference": "mixed",
+        "vibe_preference": "mixed",
+        "origin_preference": "mixed",
+        "country_selection": _equal_country_selection(["US", "RU", "GB", "KR", "JP"]),
+    },
     "ru-foreign-new-movies-us-gb": {
         "ui_language": "ru",
         "media_preference": "movie",
