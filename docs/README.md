@@ -135,15 +135,19 @@ py -m pytest
 ## Документация
 
 - [PROJECT_MAP.md](PROJECT_MAP.md) - карта активных модулей.
-- [STRUCTURE_PLAN.md](STRUCTURE_PLAN.md) - план структурной чистки.
 - [ARCHITECTURE_TARGET.md](ARCHITECTURE_TARGET.md) - целевая архитектура и правила зависимостей.
-- [REFACTORING_CHECKLIST.md](REFACTORING_CHECKLIST.md) - чеклист безопасного завершения структурных правок.
-- [DATA_STORAGE_PLAN.md](DATA_STORAGE_PLAN.md) - структура локального хранения данных.
-- [add_functions.md](add_functions.md) - правила добавления нового функционала.
-- [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления/изменения записей.
+- [STRUCTURE_PLAN.md](STRUCTURE_PLAN.md) - план структурной чистки.
+- [WORKSPACE_HOUSEKEEPING.md](WORKSPACE_HOUSEKEEPING.md) - правила локальной чистки workspace.
 - [DESKTOP_STYLE_CONTRACT.md](DESKTOP_STYLE_CONTRACT.md) - визуальный контракт desktop GUI.
-- [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) - roadmap desktop GUI.
+- [UI_SCALE_CONTRACT.md](UI_SCALE_CONTRACT.md) - контракт application-level UI scale.
 - [TMDB_ONLY_CANDIDATE_FLOW.md](TMDB_ONLY_CANDIDATE_FLOW.md) - public TMDb-only candidate flow, contract, migration, refresh and scoring.
+- [ADD_RECORD_RULES.md](ADD_RECORD_RULES.md) - контракт добавления/изменения записей.
+- [onboarding_country_first_10_scenario_quality_report.md](onboarding_country_first_10_scenario_quality_report.md) - последний актуальный onboarding quality report.
+
+## Historical reports removed/archived
+
+- Старые generated onboarding reports удалены из активного `docs/`; оставлен только `onboarding_country_first_10_scenario_quality_report.md`.
+- Закрытый movie-cycle перенесён из `docs/codex_movie_cycle/` в [`archive/docs/codex_movie_cycle/`](../archive/docs/codex_movie_cycle/README.md).
 
 ## Legacy JSON import/export
 

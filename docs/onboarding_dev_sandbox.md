@@ -29,8 +29,8 @@ If either flag is enabled:
 For isolated pool rebuild checks without touching the active profile:
 
 ```powershell
-py scripts\run_onboarding_pool_rebuild.py --mock --all --output docs\onboarding_pool_mock_report.md
-py scripts\run_onboarding_pool_rebuild.py --live --all --require-live --output docs\onboarding_pool_live_report_after_quota_fixes.md
+py scripts\run_onboarding_pool_rebuild.py --mock --all --output screens\tmp_ui\onboarding\pool_mock_report.md
+py scripts\run_onboarding_pool_rebuild.py --live --all --require-live --output screens\tmp_ui\onboarding\pool_live_report.md
 ```
 
 The scenario runner writes each scenario into a temporary SQLite database and does not print TMDb credentials.
@@ -58,4 +58,4 @@ Tokens are never printed. `TMDB_API_KEY` is sent as query `api_key`; access toke
 
 ## Release Note
 
-The dev flags and `.codex-onboarding-fullscreen/local_scripts` helpers are development-only. They must not be enabled in user startup environments.
+The dev flags are development-only. The old `.codex-onboarding-fullscreen` helper prompt-pack has been removed; use the commands above for local checks. These flags must not be enabled in user startup environments.
