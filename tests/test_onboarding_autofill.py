@@ -93,7 +93,7 @@ class FakeTmdbClient:
                         "name": f"Series {tmdb_id}",
                         "original_name": f"Series {tmdb_id}",
                         "first_air_date": f"{year}-01-01",
-                        "origin_country": ["RU"] if params.get("with_origin_country") == "RU" else ["US"],
+                        "origin_country": [params.get("with_origin_country") or "US"],
                         "poster_path": f"/t{tmdb_id}.jpg",
                         "overview": "Overview",
                         "genre_ids": genre_ids,
@@ -143,7 +143,7 @@ class FutureTmdbClient(FakeTmdbClient):
                     "vote_count": 1200,
                     "popularity": 50,
                     "original_language": params.get("with_original_language") or "en",
-                    "origin_country": ["RU"] if params.get("with_origin_country") == "RU" else ["US"],
+                    "origin_country": [params.get("with_origin_country") or "US"],
                 }
             )
         return {"results": results, "total_pages": 1}
@@ -307,17 +307,53 @@ def test_vibe_preference_quotas_are_70_30_and_50_50() -> None:
 
 
 def test_ru_origin_preferences_create_domestic_foreign_quotas_and_non_ru_uses_any() -> None:
-    assert origin_weights("domestic", ui_language="ru") == {"domestic": 0.70, "foreign": 0.30}
-    assert origin_weights("foreign", ui_language="ru") == {"domestic": 0.30, "foreign": 0.70}
-    assert origin_weights("mixed", ui_language="ru") == {"domestic": 0.50, "foreign": 0.50}
+    assert origin_weights("domestic", ui_language="ru") == {"domestic": 1.0, "foreign": 0.0}
+    assert origin_weights("foreign", ui_language="ru") == {"domestic": 0.0, "foreign": 1.0}
+    assert origin_weights("mixed", ui_language="ru") == {"domestic": 0.15, "foreign": 0.85}
     assert origin_weights(None, ui_language="en") == {"any": 1.0}
     domestic = _quota_by(build_fetch_buckets(_profile(ui_language="ru", origin_preference="domestic")), "origin")
     foreign = _quota_by(build_fetch_buckets(_profile(ui_language="ru", origin_preference="foreign")), "origin")
-    assert domestic["domestic"] == 84
-    assert domestic["foreign"] == 36
-    assert foreign["domestic"] == 36
-    assert foreign["foreign"] == 84
+    mixed = _quota_by(build_fetch_buckets(_profile(ui_language="ru", origin_preference="mixed")), "origin")
+    assert domestic["domestic"] == 120
+    assert domestic["foreign"] == 0
+    assert foreign["domestic"] == 0
+    assert foreign["foreign"] == 120
+    assert mixed["domestic"] == 18
+    assert mixed["foreign"] == 102
     assert set(_quota_by(build_fetch_buckets(_profile(ui_language="en")), "origin")) == {"any"}
+
+
+def test_foreign_country_buckets_are_computed_from_foreign_quota() -> None:
+    mixed_profile = _profile(ui_language="ru", origin_preference="mixed")
+    foreign_profile = _profile(ui_language="ru", origin_preference="foreign")
+
+    mixed_policy = autofill.origin_quota_policy_for_profile(mixed_profile)
+    foreign_policy = autofill.origin_quota_policy_for_profile(foreign_profile)
+
+    assert mixed_policy["domestic_target"] == 18
+    assert mixed_policy["foreign_target"] == 102
+    assert mixed_policy["foreign_country_plan"]["US"] == 46
+    assert sum(mixed_policy["foreign_country_plan"].values()) == 102
+    assert foreign_policy["domestic_target"] == 0
+    assert foreign_policy["foreign_target"] == 120
+    assert foreign_policy["foreign_country_plan"]["US"] == 54
+    assert sum(foreign_policy["foreign_country_plan"].values()) == 120
+
+
+def test_foreign_ru_profile_generates_country_targeted_queries() -> None:
+    profile = _profile(ui_language="ru", origin_preference="foreign", release_preference="new")
+    genre_ids = resolve_tmdb_genre_ids(FakeTmdbClient())
+    bucket = next(
+        bucket
+        for bucket in build_fetch_buckets(profile, genre_ids=genre_ids)
+        if bucket.origin == "foreign" and bucket.origin_country == "US"
+    )
+
+    endpoint, params = build_discover_request(bucket, profile=profile, fallback="base", request_index=0, current_year=2026, current_date=date(2026, 7, 8))
+
+    assert endpoint in {"/discover/movie", "/discover/tv"}
+    assert params["with_origin_country"] == "US"
+    assert "with_original_language" not in params
 
 
 def test_bucket_quotas_sum_exactly_to_target() -> None:
@@ -624,6 +660,24 @@ def test_broad_quality_seed_is_capped_to_twenty_percent(tmp_path, monkeypatch) -
     assert result.request_stats["quality_seed_limit_applied"] == 1
 
 
+def test_result_reports_origin_quota_policy_and_country_actuals(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    result = run_onboarding_autofill(
+        _profile(ui_language="ru", origin_preference="mixed"),
+        client=FakeTmdbClient(),
+        path=tmp_path / "watchbane.sqlite3",
+        current_year=2026,
+    )
+
+    assert result.origin_quota_policy["origin_quota_policy"] == "mixed"
+    assert result.origin_quota_policy["domestic_ratio"] == 0.15
+    assert result.origin_quota_policy["foreign_ratio"] == 0.85
+    assert result.origin_quota_policy["domestic_target"] == 18
+    assert result.origin_quota_policy["foreign_target"] == 102
+    assert result.origin_quota_policy["foreign_country_plan"]["US"] == 46
+    assert result.origin_quota_policy["foreign_country_actual"]
+
+
 def test_run_autofill_keeps_tv_quota_when_tv_is_preferred(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
     db_path = tmp_path / "watchbane.sqlite3"
@@ -701,10 +755,10 @@ def test_broad_quality_seed_cannot_fill_ru_domestic_without_verified_origin(tmp_
         current_year=2026,
     )
 
-    assert result.planned_counts["origin"]["domestic"] == 84
+    assert result.planned_counts["origin"]["domestic"] == 120
     assert result.actual_counts["origin"].get("domestic", 0) == 0
-    assert result.created_count == result.actual_counts["origin"].get("foreign", 0)
-    assert "Origin quota underfilled: domestic planned 84, actual 0." in result.warnings
+    assert result.created_count == 0
+    assert "Origin quota underfilled: domestic planned 120, actual 0." in result.warnings
 
 
 def test_broad_movie_shaped_candidates_cannot_fill_tv_underfill(tmp_path, monkeypatch) -> None:
@@ -776,8 +830,9 @@ def test_onboarding_plan_view_has_target_quotas_without_api_calls() -> None:
     assert plan["target"] == autofill.STARTER_POOL_TARGET
     assert plan["quotas"]["media_type"][MEDIA_MOVIE] == 84
     assert plan["quotas"]["media_type"][MEDIA_TV] == 36
-    assert plan["quotas"]["origin"]["foreign"] == 84
-    assert plan["quotas"]["origin"]["domestic"] == 36
+    assert plan["quotas"]["origin"]["foreign"] == 120
+    assert plan["quotas"]["origin"].get("domestic", 0) == 0
+    assert plan["origin_quota_policy"]["foreign_country_plan"]["US"] == 54
 
 
 def test_candidate_identity_is_media_type_plus_tmdb_id() -> None:

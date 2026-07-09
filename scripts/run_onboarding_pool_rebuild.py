@@ -72,6 +72,13 @@ SCENARIOS: dict[str, dict[str, Any]] = {
         "vibe_preference": "dark",
         "origin_preference": None,
     },
+    "ru-foreign-new": {
+        "ui_language": "ru",
+        "media_preference": "both",
+        "release_preference": "new",
+        "vibe_preference": "mixed",
+        "origin_preference": "foreign",
+    },
 }
 
 
@@ -122,7 +129,7 @@ class MockTmdbClient:
                         "name": f"Mock Series {tmdb_id}",
                         "original_name": f"Mock Series {tmdb_id}",
                         "first_air_date": f"{year}-01-01",
-                        "origin_country": ["RU"] if params.get("with_origin_country") == "RU" else ["US"],
+                        "origin_country": [params.get("with_origin_country") or "US"],
                         "poster_path": f"/series{tmdb_id}.jpg",
                         "overview": "Mock overview",
                         "genre_ids": genre_ids,
@@ -217,6 +224,9 @@ def run_scenario(
         "actual_media": result.actual_counts.get("media_type", {}),
         "planned_origin": result.planned_counts.get("origin", {}),
         "actual_origin": result.actual_counts.get("origin", {}),
+        "foreign_country_plan": result.origin_quota_policy.get("foreign_country_plan", {}),
+        "foreign_country_actual": result.origin_quota_policy.get("foreign_country_actual", {}),
+        "origin_quota_policy": result.origin_quota_policy,
         "source_contributions": result.source_stats,
         "fallbacks": result.actual_counts.get("fallback", {}),
         "future_rejected": result.rejected_future_count,
@@ -259,6 +269,9 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
                 f"- Actual media: `{result['actual_media']}`",
                 f"- Planned origin: `{result['planned_origin']}`",
                 f"- Actual origin: `{result['actual_origin']}`",
+                f"- Origin quota policy: `{result['origin_quota_policy']}`",
+                f"- Foreign country plan: `{result['foreign_country_plan']}`",
+                f"- Foreign country actual: `{result['foreign_country_actual']}`",
                 f"- Source contributions: `{result['source_contributions']}`",
                 f"- Fallbacks: `{result['fallbacks']}`",
                 f"- Future rejected: {result['future_rejected']}",

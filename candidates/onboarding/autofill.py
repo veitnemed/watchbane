@@ -63,6 +63,21 @@ FOREIGN_LANGUAGE_BUCKETS: tuple[tuple[str, float], ...] = (
     ("de", 0.05),
     ("it", 0.05),
 )
+FOREIGN_COUNTRY_BUCKETS: tuple[tuple[str, float], ...] = (
+    ("US", 0.45),
+    ("GB", 0.10),
+    ("CA", 0.05),
+    ("AU", 0.05),
+    ("KR", 0.10),
+    ("JP", 0.10),
+    ("FR", 0.05),
+    ("DE", 0.03),
+    ("ES", 0.03),
+    ("IT", 0.02),
+    ("OTHER", 0.02),
+)
+OTHER_FOREIGN_COUNTRIES = ("MX", "BR", "IN", "TR", "SE", "DK", "NO")
+HOME_COUNTRY_BY_UI_LANGUAGE = {"ru": "RU"}
 
 DOMESTIC_FILTER = {
     "with_origin_country": "RU",
@@ -185,6 +200,7 @@ class CandidateFetchBucket:
     vibe: str
     origin: str
     original_language: str | None
+    origin_country: str | None
     quota: int
     quota_weight: float
     genre_ids: tuple[int, ...] = ()
@@ -192,7 +208,8 @@ class CandidateFetchBucket:
     @property
     def bucket_id(self) -> str:
         language = self.original_language or "any"
-        return f"{self.media_type}:{self.era}:{self.vibe}:{self.origin}:{language}"
+        country = self.origin_country or "any"
+        return f"{self.media_type}:{self.era}:{self.vibe}:{self.origin}:{language}:{country}"
 
 
 @dataclass
@@ -220,6 +237,7 @@ class AutofillResult:
     source_stats: dict[str, int]
     rejection_counts: dict[str, int]
     request_stats: dict[str, int]
+    origin_quota_policy: dict[str, Any]
     rejected_future_count: int = 0
 
 
@@ -256,10 +274,30 @@ def origin_weights(origin_preference: str | None, *, ui_language: str) -> dict[s
     if str(ui_language or "").strip().casefold() != "ru":
         return {ORIGIN_ANY: 1.0}
     if origin_preference == "domestic":
-        return {ORIGIN_DOMESTIC: 0.70, ORIGIN_FOREIGN: 0.30}
+        return {ORIGIN_DOMESTIC: 1.0, ORIGIN_FOREIGN: 0.0}
     if origin_preference == "foreign":
-        return {ORIGIN_DOMESTIC: 0.30, ORIGIN_FOREIGN: 0.70}
-    return {ORIGIN_DOMESTIC: 0.50, ORIGIN_FOREIGN: 0.50}
+        return {ORIGIN_DOMESTIC: 0.0, ORIGIN_FOREIGN: 1.0}
+    return {ORIGIN_DOMESTIC: 0.15, ORIGIN_FOREIGN: 0.85}
+
+
+def origin_quota_policy_for_profile(
+    profile: OnboardingTasteProfile,
+    *,
+    target: int = STARTER_POOL_TARGET,
+) -> dict[str, Any]:
+    profile = profile.normalized()
+    weights = origin_weights(profile.origin_preference, ui_language=profile.ui_language)
+    targets = _allocate_weighted(weights, target)
+    foreign_target = int(targets.get(ORIGIN_FOREIGN, 0))
+    return {
+        "home_country": HOME_COUNTRY_BY_UI_LANGUAGE.get(profile.ui_language),
+        "origin_quota_policy": profile.origin_preference or ORIGIN_ANY,
+        "domestic_ratio": float(weights.get(ORIGIN_DOMESTIC, 0)),
+        "foreign_ratio": float(weights.get(ORIGIN_FOREIGN, 0)),
+        "domestic_target": int(targets.get(ORIGIN_DOMESTIC, 0)),
+        "foreign_target": foreign_target,
+        "foreign_country_plan": _allocate_weighted(dict(FOREIGN_COUNTRY_BUCKETS), foreign_target) if foreign_target else {},
+    }
 
 
 def stable_bucket_key(bucket: CandidateFetchBucket | tuple[Any, ...]) -> str:
@@ -305,15 +343,16 @@ def _dimension_targets(
         "vibe": _allocate_weighted(vibe, target),
         "origin": _allocate_weighted(origin, target),
         "original_language": {},
+        "foreign_country": {},
     }
     foreign_quota = targets["origin"].get(ORIGIN_FOREIGN, 0)
     if foreign_quota:
-        targets["original_language"] = _allocate_weighted(dict(FOREIGN_LANGUAGE_BUCKETS), foreign_quota)
+        targets["foreign_country"] = _allocate_weighted(dict(FOREIGN_COUNTRY_BUCKETS), foreign_quota)
     return targets
 
 
-def _bucket_key_value(key: tuple[str, str, str, str, str | None], dimension: str) -> Any:
-    media_type, era_name, vibe_name, origin_name, language = key
+def _bucket_key_value(key: tuple[str, str, str, str, str | None, str | None], dimension: str) -> Any:
+    media_type, era_name, vibe_name, origin_name, language, country = key
     if dimension == "media_type":
         return media_type
     if dimension == "era":
@@ -324,11 +363,13 @@ def _bucket_key_value(key: tuple[str, str, str, str, str | None], dimension: str
         return origin_name
     if dimension == "original_language":
         return language
+    if dimension == "foreign_country":
+        return country
     raise KeyError(dimension)
 
 
 def _allocate_bucket_quotas(
-    raw_quotas: dict[tuple[str, str, str, str, str | None], float],
+    raw_quotas: dict[tuple[str, str, str, str, str | None, str | None], float],
     *,
     profile: OnboardingTasteProfile,
     target: int,
@@ -341,11 +382,12 @@ def _allocate_bucket_quotas(
         "vibe": Counter(),
         "origin": Counter(),
         "original_language": Counter(),
+        "foreign_country": Counter(),
     }
     for key, quota in quotas.items():
         if quota <= 0:
             continue
-        for dimension in ("media_type", "era", "vibe", "origin", "original_language"):
+        for dimension in ("media_type", "era", "vibe", "origin", "original_language", "foreign_country"):
             value = _bucket_key_value(key, dimension)
             if value is not None:
                 current[dimension][value] += quota
@@ -356,7 +398,7 @@ def _allocate_bucket_quotas(
         reverse=True,
     )
 
-    def can_add(key: tuple[str, str, str, str, str | None], *, enforce_language: bool) -> bool:
+    def can_add(key: tuple[str, str, str, str, str | None, str | None], *, enforce_language: bool) -> bool:
         for dimension in ("media_type", "era", "vibe", "origin"):
             value = _bucket_key_value(key, dimension)
             if current[dimension][value] >= targets[dimension].get(value, 0):
@@ -364,6 +406,10 @@ def _allocate_bucket_quotas(
         language = _bucket_key_value(key, "original_language")
         if enforce_language and language is not None:
             if current["original_language"][language] >= targets["original_language"].get(language, 0):
+                return False
+        country = _bucket_key_value(key, "foreign_country")
+        if enforce_language and country is not None:
+            if current["foreign_country"][country] >= targets["foreign_country"].get(country, 0):
                 return False
         return True
 
@@ -383,7 +429,7 @@ def _allocate_bucket_quotas(
             selected = ranked_keys[0]
 
         quotas[selected] += 1
-        for dimension in ("media_type", "era", "vibe", "origin", "original_language"):
+        for dimension in ("media_type", "era", "vibe", "origin", "original_language", "foreign_country"):
             value = _bucket_key_value(selected, dimension)
             if value is not None:
                 current[dimension][value] += 1
@@ -461,20 +507,22 @@ def build_fetch_buckets(
     origin = origin_weights(profile.origin_preference, ui_language=profile.ui_language)
     genre_ids = genre_ids or {}
 
-    raw_quotas: dict[tuple[str, str, str, str, str | None], float] = {}
-    quota_weights: dict[tuple[str, str, str, str, str | None], float] = {}
+    raw_quotas: dict[tuple[str, str, str, str, str | None, str | None], float] = {}
+    quota_weights: dict[tuple[str, str, str, str, str | None, str | None], float] = {}
     for media_type, media_weight in media.items():
         for era_name, era_weight in era.items():
             for vibe_name, vibe_weight in vibe.items():
                 for origin_name, origin_weight in origin.items():
+                    if origin_weight <= 0:
+                        continue
                     if origin_name == ORIGIN_FOREIGN:
-                        for language, language_weight in FOREIGN_LANGUAGE_BUCKETS:
-                            key = (media_type, era_name, vibe_name, origin_name, language)
-                            quota_weight = media_weight * era_weight * vibe_weight * origin_weight * language_weight
+                        for country, country_weight in FOREIGN_COUNTRY_BUCKETS:
+                            key = (media_type, era_name, vibe_name, origin_name, None, country)
+                            quota_weight = media_weight * era_weight * vibe_weight * origin_weight * country_weight
                             quota_weights[key] = quota_weight
                             raw_quotas[key] = target * quota_weight
                     else:
-                        key = (media_type, era_name, vibe_name, origin_name, None)
+                        key = (media_type, era_name, vibe_name, origin_name, None, None)
                         quota_weight = media_weight * era_weight * vibe_weight * origin_weight
                         quota_weights[key] = quota_weight
                         raw_quotas[key] = target * quota_weight
@@ -484,7 +532,7 @@ def build_fetch_buckets(
     for key, quota in quotas.items():
         if quota <= 0:
             continue
-        media_type, era_name, vibe_name, origin_name, language = key
+        media_type, era_name, vibe_name, origin_name, language, country = key
         buckets.append(
             CandidateFetchBucket(
                 media_type=media_type,
@@ -492,6 +540,7 @@ def build_fetch_buckets(
                 vibe=vibe_name,
                 origin=origin_name,
                 original_language=language,
+                origin_country=country,
                 quota=quota,
                 quota_weight=quota_weights[key],
                 genre_ids=tuple(genre_ids.get(media_type, {}).get(vibe_name, ())),
@@ -524,12 +573,14 @@ def _origin_order(profile: OnboardingTasteProfile) -> dict[str, int]:
 def bucket_priority_key(bucket: CandidateFetchBucket, profile: OnboardingTasteProfile) -> tuple[Any, ...]:
     era_order = {ERA_TOP_ALL_TIME: 0, ERA_CLASSIC_SWEEP: 1, ERA_NEW_SWEEP: 2}
     language_order = {language: index for index, (language, _) in enumerate(FOREIGN_LANGUAGE_BUCKETS)}
+    country_order = {country: index for index, (country, _) in enumerate(FOREIGN_COUNTRY_BUCKETS)}
     return (
         -bucket.quota,
         _media_order(profile).get(bucket.media_type, 99),
         era_order.get(bucket.era, 99),
         _vibe_order(profile).get(bucket.vibe, 99),
         _origin_order(profile).get(bucket.origin, 99),
+        country_order.get(bucket.origin_country or "", 99),
         language_order.get(bucket.original_language or "", 99),
         bucket.bucket_id,
     )
@@ -612,6 +663,31 @@ def _title_field(media_type: str) -> tuple[str, str]:
     if media_type == MEDIA_MOVIE:
         return "title", "original_title"
     return "name", "original_name"
+
+
+def _request_origin_country_for_bucket(bucket: CandidateFetchBucket, request_index: int) -> str | None:
+    if bucket.origin != ORIGIN_FOREIGN:
+        return bucket.origin_country
+    country = bucket.origin_country
+    if country == "OTHER":
+        return OTHER_FOREIGN_COUNTRIES[request_index % len(OTHER_FOREIGN_COUNTRIES)]
+    return country
+
+
+def _foreign_country_bucket_name(country: str | None) -> str | None:
+    if country in {None, ""}:
+        return None
+    if country == "US":
+        return "major_us"
+    if country in {"GB", "CA", "AU"}:
+        return "english_market"
+    if country in {"KR", "JP"}:
+        return "east_asia"
+    if country in {"FR", "DE", "ES", "IT"}:
+        return "europe"
+    if country in {"MX", "BR"}:
+        return "latin"
+    return "other"
 
 
 def _base_vote_count(bucket: CandidateFetchBucket) -> int:
@@ -789,8 +865,12 @@ def build_discover_request(
     if effective_any_origin is False:
         if bucket.origin == ORIGIN_DOMESTIC:
             params.update(_domestic_filter_for_fallback(fallback))
-        elif bucket.origin == ORIGIN_FOREIGN and bucket.original_language:
-            params["with_original_language"] = bucket.original_language
+        elif bucket.origin == ORIGIN_FOREIGN:
+            origin_country = _request_origin_country_for_bucket(bucket, request_index)
+            if origin_country:
+                params["with_origin_country"] = origin_country
+            elif bucket.original_language:
+                params["with_original_language"] = bucket.original_language
 
     vote_count = _vote_count_for_fallback(bucket, fallback)
     if vote_count is not None:
@@ -817,6 +897,10 @@ def build_quality_seed_request(
     }
     if seed_stage == SEED_ORIGIN_TOP:
         params["with_origin_country"] = "RU"
+    elif bucket.origin == ORIGIN_FOREIGN:
+        origin_country = _request_origin_country_for_bucket(bucket, request_index)
+        if origin_country:
+            params["with_origin_country"] = origin_country
     return _endpoint(bucket.media_type), params
 
 
@@ -825,6 +909,25 @@ def _origin_countries(result: dict[str, Any]) -> set[str]:
     if isinstance(values, str):
         values = [values]
     return {str(value).strip().upper() for value in values if str(value).strip()}
+
+
+def _foreign_candidate_matches_bucket(result: dict[str, Any], bucket: CandidateFetchBucket) -> bool:
+    if bucket.origin != ORIGIN_FOREIGN:
+        return True
+    countries = _origin_countries(result)
+    target_country = bucket.origin_country
+    if target_country == "OTHER":
+        allowed = set(OTHER_FOREIGN_COUNTRIES)
+        if countries:
+            return bool(countries & allowed) and countries != {"RU"}
+        return str(result.get("original_language") or "").strip().casefold() != "ru"
+    if target_country:
+        if countries:
+            return target_country in countries and countries != {"RU"}
+        return str(result.get("original_language") or "").strip().casefold() != "ru"
+    if countries:
+        return countries != {"RU"}
+    return str(result.get("original_language") or "").strip().casefold() != "ru"
 
 
 def _seed_candidate_matches_hard_bucket(
@@ -842,8 +945,8 @@ def _seed_candidate_matches_hard_bucket(
         return True
     if bucket.origin == ORIGIN_DOMESTIC:
         return "RU" in _origin_countries(result)
-    if bucket.origin == ORIGIN_FOREIGN and bucket.original_language:
-        return str(result.get("original_language") or "").strip().casefold() == bucket.original_language
+    if bucket.origin == ORIGIN_FOREIGN:
+        return _foreign_candidate_matches_bucket(result, bucket)
     return True
 
 
@@ -918,6 +1021,8 @@ def candidate_rejection_reason(
         return "low_score"
     if bucket.era == ERA_TOP_ALL_TIME and vote_count < _base_vote_count(bucket):
         return "low_votes"
+    if bucket.origin == ORIGIN_FOREIGN and not _foreign_candidate_matches_bucket(result, bucket):
+        return "foreign_country_mismatch"
     if (bucket.media_type, normalized_tmdb_id) in accepted_identities:
         return "duplicate_batch"
     if discover_item_existing_reason(result, existing_index, media_type=bucket.media_type) is not None:
@@ -1123,6 +1228,9 @@ def build_candidate_record_from_result(
     country_codes = list(result.get("origin_country") or [])
     if bucket.origin == ORIGIN_DOMESTIC and "RU" not in country_codes:
         country_codes.append("RU")
+    if bucket.origin == ORIGIN_FOREIGN and bucket.origin_country and bucket.origin_country != "OTHER":
+        if bucket.origin_country not in country_codes:
+            country_codes.append(bucket.origin_country)
 
     candidate = {
         "media_type": bucket.media_type,
@@ -1165,6 +1273,11 @@ def build_candidate_record_from_result(
             "fallback": fallback,
             "source_stage": source_stage,
             "relaxation_stage": _relaxation_stage_for_query(fallback, bucket),
+            "target_origin": bucket.origin,
+            "target_country": bucket.origin_country,
+            "target_country_bucket": _foreign_country_bucket_name(bucket.origin_country),
+            "country_weight": dict(FOREIGN_COUNTRY_BUCKETS).get(bucket.origin_country),
+            "country_quota_target": bucket.quota if bucket.origin == ORIGIN_FOREIGN else None,
         },
         "signals": ["onboarding_autofill"],
     }
@@ -1219,6 +1332,7 @@ def planned_counts_for_profile(
         "vibe": totals("vibe"),
         "origin": totals("origin"),
         "original_language": totals("original_language"),
+        "foreign_country": totals("origin_country"),
     }
 
 
@@ -1229,6 +1343,7 @@ def actual_counts_for_candidates(candidates: list[dict[str, Any]]) -> dict[str, 
         "vibe": Counter(),
         "origin": Counter(),
         "original_language": Counter(),
+        "foreign_country": Counter(),
         "fallback": Counter(),
         "source_stage": Counter(),
     }
@@ -1249,6 +1364,9 @@ def actual_counts_for_candidates(candidates: list[dict[str, Any]]) -> dict[str, 
         language = source_query.get("original_language") or candidate.get("original_language")
         if language:
             counters["original_language"][str(language)] += 1
+        foreign_country = source_query.get("target_country")
+        if foreign_country and source_query.get("origin") == ORIGIN_FOREIGN:
+            counters["foreign_country"][str(foreign_country)] += 1
         fallback = source_query.get("fallback")
         if fallback:
             counters["fallback"][str(fallback)] += 1
@@ -1341,6 +1459,7 @@ def run_onboarding_autofill(
     _emit(progress_callback, stage=2, message="Собираем жанровые направления", profile_id=profile_id)
     buckets = build_fetch_buckets(profile, genre_ids=genre_ids)
     planned_counts = planned_counts_for_profile(profile, genre_ids=genre_ids)
+    origin_quota_policy = origin_quota_policy_for_profile(profile)
     states = [_BucketState(bucket=bucket) for bucket in sorted(buckets, key=lambda item: bucket_priority_key(item, profile))]
     api_requests = 0
     fetch_rank = 0
@@ -1526,6 +1645,10 @@ def run_onboarding_autofill(
                             score_debug=score_debug,
                             quality_seed_penalty_reasons=quality_seed_penalty_reasons,
                         )
+                        if bucket.origin == ORIGIN_FOREIGN and isinstance(candidate.get("source_query"), dict):
+                            accepted_country_count = state.filled + len(accepted_batch) + 1
+                            candidate["source_query"]["country_quota_actual"] = accepted_country_count
+                            candidate["source_query"]["country_deficit"] = max(0, int(bucket.quota) - accepted_country_count)
                         accepted_batch.append(candidate)
                         accepted_identities.add((bucket.media_type, int(result["id"])))
                         state.filled += 1
@@ -1552,6 +1675,9 @@ def run_onboarding_autofill(
                                 "_request_cache_key": request_key,
                                 "_relaxation_stage": _relaxation_stage_for_query(query_stage, bucket),
                                 "_target_deficit": target_deficit(state),
+                                "_target_country": bucket.origin_country,
+                                "_target_country_bucket": _foreign_country_bucket_name(bucket.origin_country),
+                                "_why_selected": "largest_combined_deficit",
                             },
                             "page": page,
                             "status": status,
@@ -1582,6 +1708,14 @@ def run_onboarding_autofill(
     complete_onboarding_profile(profile_id, path=path)
     actual_counts = actual_counts_for_candidates(created_candidates)
     source_stats = dict(actual_counts.get("source_stage", {}))
+    origin_quota_policy = {
+        **origin_quota_policy,
+        "foreign_country_actual": dict(actual_counts.get("foreign_country", {})),
+        "foreign_country_deficits": {
+            country: max(0, int(planned) - int(actual_counts.get("foreign_country", {}).get(country, 0)))
+            for country, planned in origin_quota_policy.get("foreign_country_plan", {}).items()
+        },
+    }
     request_stats_summary = {
         "requests_total": int(request_stats.get("requests_total", 0)),
         "requests_unique": int(request_stats.get("requests_unique", 0)),
@@ -1625,5 +1759,6 @@ def run_onboarding_autofill(
         source_stats=source_stats,
         rejection_counts=dict(rejection_counts),
         request_stats=request_stats_summary,
+        origin_quota_policy=origin_quota_policy,
         rejected_future_count=rejected_future_count,
     )

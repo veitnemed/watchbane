@@ -13,6 +13,7 @@ from candidates.onboarding.autofill import (
     OnboardingTasteProfile,
     build_fetch_buckets,
     media_weights,
+    origin_quota_policy_for_profile,
     origin_weights,
     release_weights,
     run_onboarding_autofill,
@@ -255,6 +256,7 @@ def build_onboarding_candidate_pool(
         "source_stats": result.source_stats,
         "rejection_counts": result.rejection_counts,
         "request_stats": result.request_stats,
+        "origin_quota_policy": result.origin_quota_policy,
         "rejected_future_count": result.rejected_future_count,
         "candidates": result.candidates,
     }
@@ -303,6 +305,7 @@ def get_onboarding_autofill_plan_view(profile: OnboardingTasteProfile | dict) ->
             "vibe": vibe_weights(taste_profile.vibe_preference),
             "origin": origin_weights(taste_profile.origin_preference, ui_language=taste_profile.ui_language),
         },
+        "origin_quota_policy": origin_quota_policy_for_profile(taste_profile),
     }
 
 

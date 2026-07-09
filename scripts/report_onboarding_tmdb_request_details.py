@@ -240,6 +240,9 @@ def _final_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "score_debug": candidate.get("score_debug"),
                 "source_stage": candidate.get("source_stage"),
                 "origin_bucket": candidate.get("origin_bucket"),
+                "target_country": (candidate.get("source_query") or {}).get("target_country")
+                if isinstance(candidate.get("source_query"), dict)
+                else None,
                 "source_bucket_id": candidate.get("source_bucket_id"),
             }
         )
@@ -269,6 +272,9 @@ def _markdown(payload: dict[str, Any]) -> str:
                 f"- Actual media: `{scenario['actual_counts'].get('media_type', {})}`",
                 f"- Planned origin: `{scenario['planned_counts'].get('origin', {})}`",
                 f"- Actual origin: `{scenario['actual_counts'].get('origin', {})}`",
+                f"- Origin quota policy: `{scenario['origin_quota_policy']}`",
+                f"- Foreign country plan: `{scenario['origin_quota_policy'].get('foreign_country_plan', {})}`",
+                f"- Foreign country actual: `{scenario['origin_quota_policy'].get('foreign_country_actual', {})}`",
                 f"- Source stats: `{scenario['source_stats']}`",
                 f"- Warnings: `{scenario['warnings']}`",
                 "",
@@ -375,6 +381,7 @@ def main() -> int:
                 "request_stats": result.request_stats,
                 "planned_counts": result.planned_counts,
                 "actual_counts": result.actual_counts,
+                "origin_quota_policy": result.origin_quota_policy,
                 "source_stats": result.source_stats,
                 "rejection_counts": result.rejection_counts,
                 "warnings": result.warnings,
