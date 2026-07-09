@@ -133,6 +133,18 @@ def test_onboarding_report_summary_schema_includes_details_and_localization_metr
         missing_overview_after_fallback=0,
         adaptive_pages_used=1,
         pagination_stop_reasons={"quota_full": 1},
+        preference_diagnostics={
+            "preference_conflict_count": 1,
+            "preference_warning_count": 1,
+            "preference_conflict_codes": ["anime_requires_animation_only"],
+            "auto_fix_applied": True,
+            "selected_preset_before": "anime",
+            "selected_preset_after": "anime",
+            "countries_before": ["RU"],
+            "countries_after": ["JP", "RU"],
+            "animation_mode_before": "live_action_only",
+            "animation_mode_after": "animation_only",
+        },
     )
     summary = onboarding_report._report_schema_summary(
         profile={
@@ -175,6 +187,16 @@ def test_onboarding_report_summary_schema_includes_details_and_localization_metr
     assert summary["request_retry_count"] == 1
     assert summary["request_outlier_count"] == 1
     assert summary["max_request_ms"] == 125.0
+    assert summary["preference_conflict_count"] == 1
+    assert summary["preference_warning_count"] == 1
+    assert summary["preference_conflict_codes"] == ["anime_requires_animation_only"]
+    assert summary["auto_fix_applied"] is True
+    assert summary["selected_preset_before"] == "anime"
+    assert summary["selected_preset_after"] == "anime"
+    assert summary["countries_before"] == ["RU"]
+    assert summary["countries_after"] == ["JP", "RU"]
+    assert summary["animation_mode_before"] == "live_action_only"
+    assert summary["animation_mode_after"] == "animation_only"
 
 
 def test_onboarding_compare_report_includes_before_after_metric_keys() -> None:

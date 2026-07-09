@@ -84,6 +84,16 @@ SCENARIO_SUMMARY_FIELDS = (
     "request_outlier_count",
     "max_request_ms",
     "p95_request_ms",
+    "preference_conflict_count",
+    "preference_warning_count",
+    "preference_conflict_codes",
+    "auto_fix_applied",
+    "selected_preset_before",
+    "selected_preset_after",
+    "countries_before",
+    "countries_after",
+    "animation_mode_before",
+    "animation_mode_after",
 )
 
 CANDIDATE_SAMPLE_FIELDS = (
@@ -490,6 +500,7 @@ def _report_schema_summary(
     media_actual = dict((result.actual_counts or {}).get("media_type", {}))
     details_requests = int(getattr(result, "details_requests", 0) or 0)
     request_diagnostics = dict(request_diagnostics or {})
+    preference_diagnostics = dict(getattr(result, "preference_diagnostics", {}) or {})
     summary = {
         "selected_countries": list(selection.get("selected_countries") or []),
         "country_plan": dict((result.planned_counts or {}).get("country", {})),
@@ -523,6 +534,16 @@ def _report_schema_summary(
         "request_outlier_count": request_diagnostics.get("request_outlier_count", 0),
         "max_request_ms": request_diagnostics.get("max_request_ms", 0.0),
         "p95_request_ms": request_diagnostics.get("p95_request_ms", 0.0),
+        "preference_conflict_count": preference_diagnostics.get("preference_conflict_count", 0),
+        "preference_warning_count": preference_diagnostics.get("preference_warning_count", 0),
+        "preference_conflict_codes": preference_diagnostics.get("preference_conflict_codes", []),
+        "auto_fix_applied": preference_diagnostics.get("auto_fix_applied", False),
+        "selected_preset_before": preference_diagnostics.get("selected_preset_before"),
+        "selected_preset_after": preference_diagnostics.get("selected_preset_after"),
+        "countries_before": preference_diagnostics.get("countries_before", []),
+        "countries_after": preference_diagnostics.get("countries_after", []),
+        "animation_mode_before": preference_diagnostics.get("animation_mode_before"),
+        "animation_mode_after": preference_diagnostics.get("animation_mode_after"),
     }
     return {field: summary.get(field) for field in SCENARIO_SUMMARY_FIELDS}
 
@@ -583,6 +604,11 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         "warnings": result.warnings,
         "rejected_future_count": result.rejected_future_count,
         "duplicate_requests_skipped": result.duplicate_requests_skipped,
+        "preference_diagnostics": result.preference_diagnostics or {},
+        "preference_conflict_count": result.preference_conflict_count,
+        "preference_warning_count": result.preference_warning_count,
+        "preference_conflict_codes": list(result.preference_conflict_codes),
+        "auto_fix_applied": result.preference_auto_fix_applied,
         "fallback_share": _fallback_share(result.actual_counts, result.created_count),
         "fallback_counts": result.actual_counts.get("fallback", {}),
         "genre_requests": client.genre_logs,
@@ -692,6 +718,7 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
             f"- Details enrichment enabled: {result.get('details_enrichment_enabled')}",
             f"- Adaptive pages used: {result.get('adaptive_pages_used')}; stop reasons `{_json(result.get('pagination_stop_reasons') or {})}`",
             f"- Localization fallback: {result.get('localization_fallback_count')}; original {result.get('overview_fallback_original_language_count')}; en {result.get('overview_fallback_en_count')}; missing {result.get('missing_overview_after_fallback')}",
+            f"- Preference compatibility: conflicts {result.get('preference_conflict_count')}; warnings {result.get('preference_warning_count')}; codes `{_json(result.get('preference_conflict_codes') or [])}`; auto fix {result.get('auto_fix_applied')}",
             f"- Yield: raw discover {result.get('raw_discover_found')}; duplicates removed {result.get('duplicates_removed')}; accepted/template {result.get('accepted_per_discover_template')}; accepted/discover request {result.get('accepted_per_discover_http_request')}",
             f"- Timeouts/retries/outliers: {result.get('request_timeout_count')} / {result.get('request_retry_count')} / {result.get('request_outlier_count')}; max/p95 {result.get('max_request_ms')} / {result.get('p95_request_ms')} ms",
             f"- Duplicate skipped: {result['duplicate_requests_skipped']}",

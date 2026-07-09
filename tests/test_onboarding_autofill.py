@@ -991,6 +991,36 @@ def test_onboarding_wizard_anime_preset_sets_profile_defaults(qapp) -> None:
         dialog.close()
 
 
+def test_onboarding_wizard_presets_hide_locked_country_and_animation_questions(qapp) -> None:
+    from desktop.onboarding import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="ru")
+    try:
+        buttons = {button.property("answer"): button for button in dialog._preset_group.buttons()}
+
+        assert [question.key for question in dialog._active_questions()] == [
+            "country_selection",
+            "media_preference",
+            "animation_mode",
+            "release_preference",
+            "vibe_preference",
+        ]
+
+        for preset_key in (PRESET_ANIME, PRESET_FAMILY_ANIMATION, PRESET_K_DRAMA, PRESET_TURKISH_DRAMAS):
+            buttons[preset_key].click()
+            active_keys = [question.key for question in dialog._active_questions()]
+
+            assert "country_selection" not in active_keys
+            assert "animation_mode" not in active_keys
+            assert active_keys == ["media_preference", "release_preference", "vibe_preference"]
+
+        buttons[PRESET_MANUAL].click()
+        assert "country_selection" in [question.key for question in dialog._active_questions()]
+        assert "animation_mode" in [question.key for question in dialog._active_questions()]
+    finally:
+        dialog.close()
+
+
 def test_onboarding_wizard_k_drama_preset_sets_profile_defaults(qapp) -> None:
     from desktop.onboarding import OnboardingAutofillDialog
 

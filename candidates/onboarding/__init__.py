@@ -19,6 +19,11 @@ from candidates.onboarding.autofill import (
     should_start_onboarding_autofill,
     vibe_weights,
 )
+from candidates.onboarding.compatibility import (
+    PreferenceCompatibilityDiagnostics,
+    PreferenceCompatibilityIssue,
+    resolve_preference_compatibility,
+)
 from candidates.onboarding.taste_presets import (
     ANIMATION_MODE_ANIMATION_ONLY,
     ANIMATION_MODE_ANY,
@@ -56,6 +61,9 @@ __all__ = [
     "run_onboarding_autofill",
     "should_start_onboarding_autofill",
     "vibe_weights",
+    "PreferenceCompatibilityDiagnostics",
+    "PreferenceCompatibilityIssue",
+    "resolve_preference_compatibility",
     "ANIMATION_MODE_ANIMATION_ONLY",
     "ANIMATION_MODE_ANY",
     "ANIMATION_MODE_LIVE_ACTION_ONLY",

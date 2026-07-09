@@ -455,6 +455,11 @@ def run_scenario(name: str, profile_data: dict[str, Any], *, live: bool, tmp_roo
         **request_metrics,
         "warnings": result.warnings,
         "rejected_future_count": result.rejected_future_count,
+        "preference_diagnostics": result.preference_diagnostics or {},
+        "preference_conflict_count": result.preference_conflict_count,
+        "preference_warning_count": result.preference_warning_count,
+        "preference_conflict_codes": list(result.preference_conflict_codes),
+        "auto_fix_applied": result.preference_auto_fix_applied,
         "top_fallback_counts": result.actual_counts.get("fallback", {}),
         "fallback_share": _fallback_share(result.actual_counts, result.created_count),
         "candidate_media_counts": _counter(candidates, "media_type"),
@@ -487,6 +492,10 @@ def _markdown(results: list[dict[str, Any]], *, live: bool, credentials_present:
                 f"(original {result['overview_fallback_original_language_count']}, "
                 f"en {result['overview_fallback_en_count']}, "
                 f"missing {result['missing_overview_after_fallback']})",
+                f"- Preference compatibility: conflicts {result.get('preference_conflict_count')}; "
+                f"warnings {result.get('preference_warning_count')}; "
+                f"codes `{result.get('preference_conflict_codes') or []}`; "
+                f"auto fix {result.get('auto_fix_applied')}",
                 f"- Elapsed ms: {result['elapsed_ms']}",
                 f"- Country plan: `{result['country_plan']}`",
                 f"- Country actual: `{result['country_actual']}`",

@@ -612,8 +612,14 @@ class OnboardingAutofillDialog(QDialog):
             "vibe_preference": preset.vibe,
         })
 
+    def _locked_question_keys(self) -> set[str]:
+        if self._current_preset_key() == PRESET_MANUAL:
+            return set()
+        return {"country_selection", "animation_mode"}
+
     def _active_questions(self) -> list[_Question]:
-        return list(_QUESTIONS)
+        locked = self._locked_question_keys()
+        return [question for question in _QUESTIONS if question.key not in locked]
 
     def _text(self, ru: str, en: str) -> str:
         return en if self._ui_language == "en" else _repair_mojibake(ru)

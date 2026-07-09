@@ -159,6 +159,7 @@ class TastePreset:
         ).as_repository_dict()
         country_selection["mode"] = COUNTRY_SELECTION_MODE_CUSTOM
         return {
+            "taste_preset": normalized.preset_id,
             "media_preference": normalized.media_type,
             "animation_mode": normalized.animation_mode,
             "release_preference": normalized.release_preference,

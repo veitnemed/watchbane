@@ -1,5 +1,6 @@
 from candidates import service
 from candidates.onboarding.autofill import OnboardingTasteProfile, build_country_plan
+from candidates.onboarding.compatibility import resolve_preference_compatibility
 from candidates.onboarding.taste_presets import (
     ANIMATION_MODE_ANIMATION_ONLY,
     ANIMATION_MODE_ANY,
@@ -30,6 +31,41 @@ def test_anime_preset_contract_expresses_jp_animation() -> None:
     assert profile.media_preference == "both"
     assert profile.country_selection.selected_countries == ("JP",)
     assert build_country_plan(profile.country_selection, 120) == {"JP": 120}
+    assert profile.taste_preset == PRESET_ANIME
+
+
+def test_preference_compatibility_repairs_anime_live_action_without_broad_origin() -> None:
+    profile = OnboardingTasteProfile(
+        taste_preset=PRESET_ANIME,
+        ui_language="ru",
+        media_preference="both",
+        animation_mode=ANIMATION_MODE_LIVE_ACTION_ONLY,
+        release_preference="mixed",
+        vibe_preference="mixed",
+        origin_preference="foreign",
+        country_selection={"selected_countries": ["RU"], "home_country": "RU"},
+    ).normalized()
+
+    assert profile.animation_mode == ANIMATION_MODE_ANIMATION_ONLY
+    assert "JP" in profile.country_selection.selected_countries
+    assert profile.preference_compatibility["auto_fix_applied"] is True
+    assert "anime_requires_animation_only" in profile.preference_compatibility["preference_conflict_codes"]
+
+
+def test_preference_compatibility_warns_for_manual_but_does_not_autofix() -> None:
+    diagnostics = resolve_preference_compatibility(
+        selected_preset="manual",
+        countries=["RU"],
+        media_type="both",
+        animation_mode=ANIMATION_MODE_ANIMATION_ONLY,
+        animation_disliked=True,
+    )
+
+    assert diagnostics.preference_conflict_count == 0
+    assert diagnostics.preference_warning_count == 1
+    assert diagnostics.auto_fix_applied is False
+    assert diagnostics.countries_after == ("RU",)
+    assert diagnostics.animation_mode_after == ANIMATION_MODE_ANIMATION_ONLY
 
 
 def test_k_drama_preset_contract_expresses_kr_live_action_tv() -> None:

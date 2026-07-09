@@ -15,6 +15,7 @@ from candidates.models import country_schema
 from candidates.models.genre_schema import build_genre_keys
 from candidates.models.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key, title_identity_key
 from candidates.models.schema import compute_completeness, normalize_candidate_record
+from candidates.onboarding.compatibility import resolve_preference_compatibility
 from candidates.onboarding.details_enrichment import DEFAULT_DETAILS_LIMIT_PER_TEMPLATE, DetailsEnrichmentConfig
 from candidates.onboarding.pagination import (
     ADAPTIVE_MAX_DISCOVER_PAGES,
@@ -490,6 +491,23 @@ def _coerce_pagination_config(
     return PaginationConfig(default_pages=discover_pages).normalized(discover_pages=discover_pages)
 
 
+def _country_selection_with_countries(selection: CountrySelection, countries: tuple[str, ...]) -> CountrySelection:
+    selected = tuple(dict.fromkeys(str(code).strip().upper() for code in countries if str(code).strip()))
+    if not selected:
+        selected = tuple(selection.selected_countries)
+    weight = 1.0 / len(selected)
+    return CountrySelection(
+        mode=COUNTRY_SELECTION_MODE_SINGLE if len(selected) == 1 else COUNTRY_SELECTION_MODE_MULTI,
+        home_country=selection.home_country,
+        selected_countries=selected,
+        country_weights={country: weight for country in selected},
+        exclude_home_country=selection.exclude_home_country,
+        primary_country=selected[0],
+        secondary_country=selected[1] if len(selected) > 1 else None,
+        max_countries=selection.max_countries,
+    ).normalized()
+
+
 @dataclass(frozen=True)
 class OnboardingTasteProfile:
     media_preference: str
@@ -497,8 +515,10 @@ class OnboardingTasteProfile:
     vibe_preference: str
     origin_preference: str | None
     ui_language: str
+    taste_preset: str | None = None
     country_selection: CountrySelection | dict[str, Any] | None = None
     animation_mode: str = ANIMATION_MODE_ANY
+    animation_disliked: bool = False
     include_genres: tuple[int, ...] | list[int] | None = None
     include_genre_mode: str = INCLUDE_GENRE_MODE_OR
     exclude_genres: tuple[int, ...] | list[int] | None = None
@@ -508,9 +528,11 @@ class OnboardingTasteProfile:
     details_limit: int = DEFAULT_DETAILS_LIMIT_PER_TEMPLATE
     details_enrichment: DetailsEnrichmentConfig | dict[str, Any] | None = None
     pagination: PaginationConfig | dict[str, Any] | None = None
+    preference_compatibility: dict[str, Any] | None = None
 
     def normalized(self) -> "OnboardingTasteProfile":
         ui_language = str(self.ui_language or "ru").strip().casefold() or "ru"
+        taste_preset = str(self.taste_preset or "manual").strip() or "manual"
         media_preference = _choice(self.media_preference, {"movie", "tv", "both"}, "both")
         release_preference = _choice(self.release_preference, {"classic", "new", "mixed"}, "mixed")
         vibe_preference = _choice(self.vibe_preference, {"light", "dark", "mixed"}, "mixed")
@@ -530,6 +552,19 @@ class OnboardingTasteProfile:
             ui_language=ui_language,
             origin_preference=origin_preference,
         )
+        compatibility = resolve_preference_compatibility(
+            selected_preset=taste_preset,
+            countries=country_selection.selected_countries,
+            media_type=media_preference,
+            animation_mode=animation_mode,
+            animation_disliked=_coerce_bool(self.animation_disliked, False),
+            auto_fix=True,
+        )
+        taste_preset = compatibility.selected_preset_after
+        media_preference = compatibility.media_type_after
+        animation_mode = compatibility.animation_mode_after
+        if compatibility.countries_after != tuple(country_selection.selected_countries):
+            country_selection = _country_selection_with_countries(country_selection, compatibility.countries_after)
         discover_pages = max(1, min(ADAPTIVE_MAX_DISCOVER_PAGES, int(self.discover_pages or DEFAULT_DISCOVER_PAGES)))
         details_limit = max(1, int(self.details_limit or DEFAULT_DETAILS_LIMIT_PER_TEMPLATE))
         details_enrichment = _coerce_details_enrichment_config(self.details_enrichment, details_limit=details_limit)
@@ -540,8 +575,10 @@ class OnboardingTasteProfile:
             vibe_preference=vibe_preference,
             origin_preference=origin_preference,
             ui_language=ui_language,
+            taste_preset=taste_preset,
             country_selection=country_selection,
             animation_mode=animation_mode,
+            animation_disliked=_coerce_bool(self.animation_disliked, False),
             include_genres=_normalize_int_tuple(self.include_genres),
             include_genre_mode=include_genre_mode,
             exclude_genres=_normalize_int_tuple(self.exclude_genres),
@@ -551,6 +588,7 @@ class OnboardingTasteProfile:
             details_limit=details_limit,
             details_enrichment=details_enrichment,
             pagination=pagination,
+            preference_compatibility=compatibility.as_dict(),
         )
 
     def as_repository_dict(self) -> dict[str, Any]:
@@ -623,6 +661,11 @@ class AutofillResult:
     actual_counts: dict[str, dict[str, int]]
     rejected_future_count: int = 0
     duplicate_requests_skipped: int = 0
+    preference_conflict_count: int = 0
+    preference_warning_count: int = 0
+    preference_conflict_codes: tuple[str, ...] = ()
+    preference_auto_fix_applied: bool = False
+    preference_diagnostics: dict[str, Any] | None = None
 
 
 def _choice(value: Any, allowed: set[str], default: str) -> str:
@@ -2148,6 +2191,7 @@ def run_onboarding_autofill(
     current_year: int | None = None,
 ) -> AutofillResult:
     profile = profile.normalized()
+    preference_diagnostics = dict(profile.preference_compatibility or {})
     client = client or TmdbAutofillClient()
     current_year = current_year or _current_year()
     current_date = date(current_year, 12, 31) if current_year != _current_year() else _current_date()
@@ -2445,4 +2489,9 @@ def run_onboarding_autofill(
         actual_counts=actual_counts,
         rejected_future_count=rejected_future_count,
         duplicate_requests_skipped=duplicate_requests_skipped,
+        preference_conflict_count=int(preference_diagnostics.get("preference_conflict_count") or 0),
+        preference_warning_count=int(preference_diagnostics.get("preference_warning_count") or 0),
+        preference_conflict_codes=tuple(preference_diagnostics.get("preference_conflict_codes") or ()),
+        preference_auto_fix_applied=bool(preference_diagnostics.get("auto_fix_applied")),
+        preference_diagnostics=preference_diagnostics,
     )
