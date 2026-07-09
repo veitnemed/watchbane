@@ -183,6 +183,7 @@ py -m pytest
 
 - Старые generated onboarding reports удалены из активного `docs/`; оставлен только curated report в `docs/reports/onboarding/`.
 - Закрытый movie-cycle перенесён из `docs/codex_movie_cycle/` в [`archive/docs/codex_movie_cycle/`](../archive/docs/codex_movie_cycle/README.md).
+- Закрытые планы и аудиты перенесены в `archive/docs/closed-plans/` и `archive/docs/audits/`.
 
 ## Legacy JSON import/export
 

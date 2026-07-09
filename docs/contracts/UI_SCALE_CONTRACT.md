@@ -95,7 +95,8 @@ Not a hard contract:
 ## Architecture
 
 - All scaling goes through `desktop/theme/scaling.py`.
-- Local channel tuning lives in `desktop/theme/ui_tuning.py`; see [ui-scaling.md](ui-scaling.md).
+- Local channel tuning lives in `desktop/theme/ui_tuning.py`.
+- For local-only experiments, copy `desktop/theme/local_ui_tuning.py.example` to ignored `desktop/theme/local_ui_tuning.py`.
 - Layout sizes, margins, spacing, fixed/min/max dimensions and scaled layout constants live in `desktop/theme/layout.py`.
 - `desktop/theme/shell_layout.py` is a compatibility facade for shell-sized constants; do not add new sizes there.
 - `desktop/theme/tokens.py` is for colors, fonts, radii and semantic visual names. Existing layout aliases may remain only for compatibility.
