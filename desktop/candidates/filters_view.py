@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolic
 
 from candidates import service as candidate_service
 from candidates.models import country_schema, genre_schema
+from candidates.replenish.filter_intent import FilterReplenishIntent
 from config import constant
 from dataset.language import choose_genre_labels
 from desktop.candidates.filters_controls import (
@@ -26,6 +27,7 @@ from desktop.candidates.filters_controls import (
 from desktop.candidates.filters_form import CANDIDATE_YEAR_MIN, FiltersFormWidgets, build_filters_form
 from desktop.candidates.filters_intro import build_intro_copy
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.candidates.workers.filter_replenish_worker import FilterReplenishWorker
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language
 from desktop.theme.scaling import control_px, layout_px
@@ -75,6 +77,9 @@ class CandidateFiltersView:
         self._data_language = get_persisted_data_language()
         self._genre_options: list[str] = []
         self._year_max = constant.NOW_YEAR
+        self._is_replenishing = False
+        self._replenish_worker: FilterReplenishWorker | None = None
+        self._last_replenish_result: dict | None = None
 
         view = self
 
@@ -235,6 +240,34 @@ class CandidateFiltersView:
     def _hide_hidden_check(self):
         return self._form.hide_hidden_check
 
+    @property
+    def _replenish_enabled_check(self):
+        return self._form.replenish_enabled_check
+
+    @property
+    def _replenish_preset_combo(self):
+        return self._form.replenish_preset_combo
+
+    @property
+    def _replenish_animation_mode_combo(self):
+        return self._form.replenish_animation_mode_combo
+
+    @property
+    def _replenish_vibe_combo(self):
+        return self._form.replenish_vibe_combo
+
+    @property
+    def _replenish_release_preference_combo(self):
+        return self._form.replenish_release_preference_combo
+
+    @property
+    def _replenish_origin_preference_combo(self):
+        return self._form.replenish_origin_preference_combo
+
+    @property
+    def _replenish_advanced_override_check(self):
+        return self._form.replenish_advanced_override_check
+
     def _update_intro(self, *, result_count: int | None = None, result_ok: bool | None = None) -> None:
         overview = self._session.overview()
         lead, stats, apply_enabled = build_intro_copy(
@@ -245,8 +278,9 @@ class CandidateFiltersView:
         )
         self._intro_lead.setText(lead)
         self._intro_stats.setText(stats)
-        self._apply_button.setEnabled(apply_enabled and self._session.is_loading is False)
-        self._reset_button.setEnabled(apply_enabled and self._session.is_loading is False)
+        enabled = apply_enabled and self._session.is_loading is False and self._is_replenishing is False
+        self._apply_button.setEnabled(enabled)
+        self._reset_button.setEnabled(enabled)
 
     def _on_loading_changed(self) -> None:
         if self._session.is_loading:
@@ -254,6 +288,8 @@ class CandidateFiltersView:
             self._reset_button.setEnabled(False)
             self._intro_lead.setText(tr("candidates.filters.loading.lead"))
             self._intro_stats.setText(tr("candidates.filters.loading.stats"))
+            return
+        self._update_intro()
 
     def _on_session_updated(self) -> None:
         if self._session.is_loading:
@@ -261,8 +297,8 @@ class CandidateFiltersView:
         if self._session.last_error:
             self._intro_lead.setText(tr("candidates.filters.error.lead"))
             self._intro_stats.setText(self._session.last_error)
-            self._apply_button.setEnabled(True)
-            self._reset_button.setEnabled(True)
+            self._apply_button.setEnabled(self._is_replenishing is False)
+            self._reset_button.setEnabled(self._is_replenishing is False)
             return
         if self._session.has_results:
             self._update_intro(
@@ -411,6 +447,19 @@ class CandidateFiltersView:
             "hide_hidden": self._hide_hidden_check.isChecked(),
         }
 
+    def _collect_replenish_intent(self, filters: dict) -> dict:
+        return FilterReplenishIntent.from_filters(
+            filters,
+            preset_id=self._replenish_preset_combo.currentData(),
+            animation_mode=self._replenish_animation_mode_combo.currentData(),
+            vibe=self._replenish_vibe_combo.currentData(),
+            release_preference=self._replenish_release_preference_combo.currentData(),
+            origin_preference=self._replenish_origin_preference_combo.currentData(),
+            target_add_count=30,
+            data_language=self._data_language,
+            allow_advanced_override=self._replenish_advanced_override_check.isChecked(),
+        ).to_dict()
+
     def _clear_filter_controls(self) -> None:
         self._country_selector.clear_selection()
         self._media_type_combo.setCurrentIndex(0)
@@ -437,6 +486,69 @@ class CandidateFiltersView:
     def _apply_filters(self) -> None:
         filters = self.on_before_apply(self._collect_filters())
         self._session.apply_filters_async(filters, parent=self._widget)
+        if self._replenish_enabled_check.isChecked():
+            self._start_filter_replenish(self._collect_replenish_intent(filters))
 
         if self._on_applied is not None:
             self._on_applied()
+
+    def _set_replenish_running(self, value: bool) -> None:
+        self._is_replenishing = bool(value)
+        self._apply_button.setEnabled(not self._is_replenishing and not self._session.is_loading)
+        self._reset_button.setEnabled(not self._is_replenishing and not self._session.is_loading)
+
+    def _start_filter_replenish(self, intent: dict) -> None:
+        if self._replenish_worker is not None:
+            return
+        self._set_replenish_running(True)
+        self._intro_lead.setText("Replenish started")
+        self._intro_stats.setText("Fetching matching TMDb candidates in the background.")
+        worker = FilterReplenishWorker(intent, service=self._service, parent=self._widget)
+        worker.progress.connect(self._on_replenish_progress)
+        worker.finished_with_result.connect(self._on_replenish_finished)
+        worker.failed.connect(self._on_replenish_failed)
+        worker.finished.connect(lambda worker=worker: self._remove_replenish_worker(worker))
+        worker.finished.connect(worker.deleteLater)
+        self._replenish_worker = worker
+        worker.start()
+
+    def _on_replenish_progress(self, progress: object) -> None:
+        if isinstance(progress, dict) is False:
+            return
+        bucket_id = progress.get("bucket_id") or "bucket"
+        page = progress.get("page") or 1
+        accepted = progress.get("accepted_count") or 0
+        self._intro_stats.setText(f"Replenish {bucket_id}, page {page}, accepted {accepted}.")
+
+    def _on_replenish_finished(self, result: object) -> None:
+        payload = dict(result or {}) if isinstance(result, dict) else {"ok": False, "error": "Invalid result"}
+        self._last_replenish_result = payload
+        self._set_replenish_running(False)
+        if payload.get("blocked"):
+            self._intro_lead.setText("Replenish not started")
+            self._intro_stats.setText("Selected replenish options have a compatibility conflict.")
+            return
+        if payload.get("ok") is not True:
+            self._intro_lead.setText("Replenish failed")
+            self._intro_stats.setText(str(payload.get("error") or payload.get("message") or "Unknown error"))
+            return
+        added = int(payload.get("saved_count") or payload.get("created_count") or 0)
+        requested = int(payload.get("requested_count") or 30)
+        self.reload_filter_options()
+        self._session.reload_from_pool(force=True)
+        self._intro_lead.setText("Replenish complete")
+        self._intro_stats.setText(
+            f"Added {added} of {requested} candidates."
+            if added < requested
+            else f"Added {added} candidates."
+        )
+
+    def _on_replenish_failed(self, message: str) -> None:
+        self._last_replenish_result = {"ok": False, "error": str(message)}
+        self._set_replenish_running(False)
+        self._intro_lead.setText("Replenish failed")
+        self._intro_stats.setText(str(message or "Unknown error"))
+
+    def _remove_replenish_worker(self, worker: FilterReplenishWorker) -> None:
+        if self._replenish_worker is worker:
+            self._replenish_worker = None
