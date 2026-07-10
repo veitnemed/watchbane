@@ -80,6 +80,8 @@ class CandidateFiltersView:
         self._is_replenishing = False
         self._replenish_worker: FilterReplenishWorker | None = None
         self._last_replenish_result: dict | None = None
+        self._pending_replenish_intent: dict | None = None
+        self._replenish_local_count_before: int | None = None
 
         view = self
 
@@ -295,6 +297,8 @@ class CandidateFiltersView:
         if self._session.is_loading:
             return
         if self._session.last_error:
+            self._pending_replenish_intent = None
+            self._replenish_local_count_before = None
             self._intro_lead.setText(tr("candidates.filters.error.lead"))
             self._intro_stats.setText(self._session.last_error)
             self._apply_button.setEnabled(self._is_replenishing is False)
@@ -304,6 +308,14 @@ class CandidateFiltersView:
             self._update_intro(
                 result_count=self._session.filtered_count,
                 result_ok=self._session.filtered_count > 0,
+            )
+        if self._pending_replenish_intent is not None and self._replenish_worker is None:
+            intent = self._pending_replenish_intent
+            self._pending_replenish_intent = None
+            self._replenish_local_count_before = int(self._session.filtered_count or 0)
+            self._start_filter_replenish(
+                intent,
+                local_count_before=self._replenish_local_count_before,
             )
 
     def _update_apply_button_width(self) -> None:
@@ -485,9 +497,13 @@ class CandidateFiltersView:
 
     def _apply_filters(self) -> None:
         filters = self.on_before_apply(self._collect_filters())
+        self._pending_replenish_intent = (
+            self._collect_replenish_intent(filters)
+            if self._replenish_enabled_check.isChecked()
+            else None
+        )
+        self._replenish_local_count_before = None
         self._session.apply_filters_async(filters, parent=self._widget)
-        if self._replenish_enabled_check.isChecked():
-            self._start_filter_replenish(self._collect_replenish_intent(filters))
 
         if self._on_applied is not None:
             self._on_applied()
@@ -497,9 +513,10 @@ class CandidateFiltersView:
         self._apply_button.setEnabled(not self._is_replenishing and not self._session.is_loading)
         self._reset_button.setEnabled(not self._is_replenishing and not self._session.is_loading)
 
-    def _start_filter_replenish(self, intent: dict) -> None:
+    def _start_filter_replenish(self, intent: dict, *, local_count_before: int | None = None) -> None:
         if self._replenish_worker is not None:
             return
+        self._replenish_local_count_before = 0 if local_count_before is None else int(local_count_before)
         self._set_replenish_running(True)
         self._intro_lead.setText("Replenish started")
         self._intro_stats.setText("Fetching matching TMDb candidates in the background.")
@@ -534,13 +551,15 @@ class CandidateFiltersView:
             return
         added = int(payload.get("saved_count") or payload.get("created_count") or 0)
         requested = int(payload.get("requested_count") or 30)
+        local_before = 0 if self._replenish_local_count_before is None else int(self._replenish_local_count_before)
         self.reload_filter_options()
-        self._session.reload_from_pool(force=True)
+        reapplied = self._session.reload_from_pool(force=True)
+        visible_after = int(reapplied.get("visible_count") or reapplied.get("filtered_count") or 0)
         self._intro_lead.setText("Replenish complete")
         self._intro_stats.setText(
-            f"Added {added} of {requested} candidates."
+            f"Before: {local_before}. Added {added} of {requested}. Visible now: {visible_after}."
             if added < requested
-            else f"Added {added} candidates."
+            else f"Before: {local_before}. Added {added}. Visible now: {visible_after}."
         )
 
     def _on_replenish_failed(self, message: str) -> None:

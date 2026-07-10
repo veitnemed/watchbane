@@ -351,17 +351,31 @@ class CandidateSearchSession:
     def sorted_total_count(self) -> int:
         return len(self._sorted_candidates)
 
-    def reload_from_pool(self, *, force: bool = False) -> None:
+    def reload_from_pool(self, *, force: bool = False) -> dict:
         """Re-apply the last filter after pool mutation, or notify dependent views."""
+        local_count_before = int(self.filtered_count or 0)
         if force:
             self.invalidate_pool_cache()
         if self.filters is not None:
             text_query = None
             if self._last_search_context is not None:
                 text_query = self._last_search_context.get("text_query")
-            self.apply_filters(self.filters, text_query=text_query)
+            applied = self.apply_filters(dict(self.filters), text_query=text_query)
+            return {
+                **applied,
+                "reapplied": True,
+                "local_count_before": local_count_before,
+                "visible_count": int(self.filtered_count or 0),
+            }
         else:
             self._notify_listeners()
+            return {
+                "ok": True,
+                "reapplied": False,
+                "filtered_count": int(self.filtered_count or 0),
+                "local_count_before": local_count_before,
+                "visible_count": int(self.filtered_count or 0),
+            }
 
     def remove_candidate(self, candidate: dict) -> None:
         """Remove one candidate from current in-memory search results and notify views."""
