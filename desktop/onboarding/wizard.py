@@ -338,14 +338,14 @@ class _PresetCardButton(QAbstractButton):
         self._description = description
         self._visual = visual
         self._icon = QPixmap(str(_PRESET_ICON_DIR / visual.icon_filename))
-        self.setMinimumHeight(scale_px(104))
+        self.setMinimumHeight(scale_px(96))
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt override
-        return QSize(scale_px(704), scale_px(104))
+        return QSize(scale_px(704), scale_px(96))
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt override
-        return QSize(scale_px(280), scale_px(104))
+        return QSize(scale_px(280), scale_px(96))
 
     def enterEvent(self, event) -> None:  # noqa: N802 - Qt override
         self.update()
@@ -393,9 +393,9 @@ class _PresetCardButton(QAbstractButton):
         strip_path.addRoundedRect(strip_rect, scale_px(2), scale_px(2))
         painter.fillPath(strip_path, _color(self._visual.accent, 0.58))
 
-        icon_size = scale_px(58)
+        icon_size = scale_px(52)
         icon_rect = QRectF(
-            rect.left() + scale_px(24),
+            rect.left() + scale_px(22),
             rect.center().y() - icon_size / 2,
             icon_size,
             icon_size,
@@ -406,19 +406,19 @@ class _PresetCardButton(QAbstractButton):
             painter.drawPixmap(icon_rect.toRect(), self._icon)
             painter.restore()
 
-        text_left = rect.left() + scale_px(104)
-        text_right_pad = scale_px(66 if checked else 26)
+        text_left = rect.left() + scale_px(94)
+        text_right_pad = scale_px(62 if checked else 24)
         text_width = max(scale_px(80), int(rect.right() - text_left - text_right_pad))
 
         title_font = QFont(FONT_FAMILY)
-        title_font.setPixelSize(font_px(20))
+        title_font.setPixelSize(font_px(19))
         title_font.setWeight(QFont.Weight.Bold)
         description_font = QFont(FONT_FAMILY)
-        description_font.setPixelSize(font_px(17))
+        description_font.setPixelSize(font_px(16))
         description_font.setWeight(QFont.Weight.Medium)
 
-        title_rect = QRectF(text_left, rect.top() + scale_px(23), text_width, scale_px(32))
-        desc_rect = QRectF(text_left, rect.top() + scale_px(58), text_width, scale_px(28))
+        title_rect = QRectF(text_left, rect.top() + scale_px(20), text_width, scale_px(30))
+        desc_rect = QRectF(text_left, rect.top() + scale_px(52), text_width, scale_px(26))
         self._draw_text(painter, title_rect, self._title, title_font, QColor("#F3F7FF"))
         self._draw_text(painter, desc_rect, self._description, description_font, QColor("#AEBBD0"))
 
@@ -433,8 +433,8 @@ class _PresetCardButton(QAbstractButton):
         painter.drawText(rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided)
 
     def _draw_checkmark(self, painter: QPainter, rect: QRectF) -> None:
-        diameter = scale_px(28)
-        center_x = rect.right() - scale_px(39)
+        diameter = scale_px(26)
+        center_x = rect.right() - scale_px(36)
         center_y = rect.center().y()
         circle = QRectF(center_x - diameter / 2, center_y - diameter / 2, diameter, diameter)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -446,7 +446,7 @@ class _PresetCardButton(QAbstractButton):
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
         painter.drawLine(
-            int(center_x - scale_px(8)),
+            int(center_x - scale_px(7)),
             int(center_y),
             int(center_x - scale_px(2)),
             int(center_y + scale_px(6)),
@@ -454,8 +454,8 @@ class _PresetCardButton(QAbstractButton):
         painter.drawLine(
             int(center_x - scale_px(2)),
             int(center_y + scale_px(6)),
-            int(center_x + scale_px(9)),
-            int(center_y - scale_px(8)),
+            int(center_x + scale_px(8)),
+            int(center_y - scale_px(7)),
         )
 
 
@@ -1011,8 +1011,8 @@ class OnboardingAutofillDialog(QDialog):
         page = QWidget()
         page.setObjectName("onboardingPage")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, scale_px(9), 0, 0)
-        layout.setSpacing(scale_px(SPACING_LARGE))
+        layout.setContentsMargins(0, scale_px(6), 0, 0)
+        layout.setSpacing(scale_px(SPACING_MEDIUM))
 
         eyebrow = QLabel(self._text("Стартовый пресет", "Starter preset"))
         eyebrow.setObjectName("onboardingEyebrow")
@@ -1041,11 +1041,11 @@ class OnboardingAutofillDialog(QDialog):
 
         viewport = QWidget()
         viewport.setObjectName("onboardingPresetViewport")
-        viewport.setMinimumHeight(scale_px(960))
+        viewport.setMinimumHeight(scale_px(760))
         grid = QGridLayout(viewport)
-        grid.setContentsMargins(0, scale_px(7), scale_px(16), 0)
-        grid.setHorizontalSpacing(scale_px(16))
-        grid.setVerticalSpacing(scale_px(14))
+        grid.setContentsMargins(0, scale_px(6), scale_px(12), 0)
+        grid.setHorizontalSpacing(scale_px(14))
+        grid.setVerticalSpacing(scale_px(12))
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         grid.setAlignment(Qt.AlignmentFlag.AlignTop)
