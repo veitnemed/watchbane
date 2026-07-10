@@ -134,10 +134,18 @@ def build_filters_form(
         section_layout.addWidget(divider)
         section_layout.addSpacing(layout_px(2))
 
+    def add_hint(section_layout: QVBoxLayout, text: str) -> QLabel:
+        hint = QLabel(text)
+        hint.setObjectName("candidateSearchHint")
+        hint.setWordWrap(True)
+        section_layout.addWidget(hint)
+        return hint
+
     _basic_section, basic_layout = add_section(tr("candidates.filters.basic"))
     country_selector = CountryChipSelector([])
     basic_layout.addWidget(field_label(tr("candidates.filters.country")))
     basic_layout.addWidget(country_selector)
+    add_hint(basic_layout, "Countries are TMDb origin countries, not language filters.")
     add_divider(basic_layout)
 
     media_type_combo = QComboBox()
@@ -196,9 +204,11 @@ def build_filters_form(
 
     replenish_layout.addWidget(field_label("Preset"))
     replenish_layout.addWidget(replenish_preset_combo)
+    add_hint(replenish_layout, "Anime expects JP origin with Animation only.")
     add_divider(replenish_layout)
     replenish_layout.addWidget(field_label("Animation mode"))
     replenish_layout.addWidget(replenish_animation_mode_combo)
+    add_hint(replenish_layout, "Live action only excludes TMDb Animation titles.")
     add_divider(replenish_layout)
     replenish_layout.addWidget(field_label("Vibe"))
     replenish_layout.addWidget(replenish_vibe_combo)
@@ -211,6 +221,7 @@ def build_filters_form(
     add_divider(replenish_layout)
     replenish_layout.addWidget(replenish_enabled_check)
     replenish_layout.addWidget(replenish_advanced_override_check)
+    add_hint(replenish_layout, "Advanced override is for unusual manual combinations.")
 
     def apply_preset_suggestion() -> None:
         preset_id = replenish_preset_combo.currentData()
