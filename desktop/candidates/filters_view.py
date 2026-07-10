@@ -30,7 +30,7 @@ from desktop.candidates.filters_intro import build_intro_copy
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 from desktop.candidates.workers.filter_replenish_worker import FilterReplenishWorker
 from desktop.i18n import tr
-from desktop.settings.app_settings import get_persisted_data_language
+from desktop.settings.app_settings import get_persisted_data_language, get_persisted_interface_language
 from desktop.theme.scaling import control_px, get_ui_scale, layout_px
 from desktop.theme.shell_layout import (
     CANDIDATE_ROOT_MARGIN_PX,
@@ -86,6 +86,7 @@ class CandidateFiltersView:
         self._service = service or session.service
         self._on_applied = on_applied
         self._on_before_apply = on_before_apply
+        self._interface_language = get_persisted_interface_language()
         self._data_language = get_persisted_data_language()
         self._genre_options: list[str] = []
         self._year_max = constant.NOW_YEAR
@@ -369,7 +370,7 @@ class CandidateFiltersView:
         if not country_codes:
             return tr("candidates.filters.summary.all")
         labels = [
-            country_schema.build_country_display([code], language=self._data_language) or code.upper()
+            country_schema.build_country_display([code], language=self._interface_language) or code.upper()
             for code in country_codes[:3]
         ]
         countries = ", ".join(labels)
@@ -567,7 +568,7 @@ class CandidateFiltersView:
                 "label": (
                     country_schema.build_country_display(
                         [str(item.get("code") or "").strip().upper()],
-                        language=self._data_language,
+                        language=self._interface_language,
                     )
                     or str(item.get("label") or "").strip()
                 ),

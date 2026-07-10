@@ -248,6 +248,24 @@ QLabel#candidateMoodFilterSectionBadge {{
     font-weight: 700;
     padding: 0;
 }}
+QFrame#candidateMoodFilterSection QComboBox#candidateReplenishPreset,
+QFrame#candidateMoodFilterSection QComboBox#candidateReplenishAnimationMode,
+QFrame#candidateMoodFilterSection QComboBox#candidateReplenishVibe,
+QFrame#candidateMoodFilterSection QComboBox#candidateReplenishReleasePreference,
+QFrame#candidateMoodFilterSection QComboBox#candidateReplenishOriginPreference {{
+    background-color: rgba(35, 24, 38, 0.92);
+    border: 1px solid #49324A;
+}}
+QFrame#candidateMoodFilterSection QComboBox#candidateReplenishPreset:focus,
+QFrame#candidateMoodFilterSection QComboBox#candidateReplenishAnimationMode:focus,
+QFrame#candidateMoodFilterSection QComboBox#candidateReplenishVibe:focus,
+QFrame#candidateMoodFilterSection QComboBox#candidateReplenishReleasePreference:focus,
+QFrame#candidateMoodFilterSection QComboBox#candidateReplenishOriginPreference:focus {{
+    border: 1px solid #B85F8A;
+}}
+QFrame#candidateMoodFilterSection QFrame#candidateFilterDivider {{
+    background-color: #3A293C;
+}}
 QToolButton#candidateAdvancedFiltersToggle {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};

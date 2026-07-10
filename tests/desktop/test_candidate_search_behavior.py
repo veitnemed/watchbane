@@ -206,6 +206,40 @@ def test_filters_view_reload_filter_options_uses_new_pool_genres(qtbot) -> None:
     assert filters_view._country_selector._codes_in_order == ["JP"]
 
 
+def test_country_filter_labels_follow_interface_language(monkeypatch, qtbot) -> None:
+    from candidates.models import country_schema
+    import desktop.candidates.filters_view as filters_module
+
+    monkeypatch.setattr(filters_module, "get_persisted_interface_language", lambda: "ru")
+    monkeypatch.setattr(filters_module, "get_persisted_data_language", lambda: "en")
+
+    service = FakeCandidateService()
+    service.chip_options = {
+        "genres": [],
+        "countries": [
+            {"code": "GB", "label": "United Kingdom"},
+            {"code": "CA", "label": "Canada"},
+            {"code": "RU", "label": "Russia"},
+            {"code": "US", "label": "United States"},
+        ],
+    }
+
+    _service, _session, filters_view, _list_view = _build_views(qtbot, service=service)
+    expected_labels = [
+        country_schema.build_country_display([code], language="ru")
+        for code in ("GB", "CA", "RU", "US")
+    ]
+
+    labels = [chip.text() for chip in filters_view._country_selector._ordered_chips()]
+
+    assert labels == expected_labels
+    assert "United Kingdom" not in labels
+
+    filters_view._country_selector.set_selected_codes(["GB"])
+
+    assert filters_view._summary_countries_text() == country_schema.build_country_display(["GB"], language="ru")
+
+
 def test_searchable_candidate_without_kp_imdb_is_visible_in_searchable_mode(qtbot) -> None:
     _service, session, _filters_view, list_view = _build_views(qtbot)
 

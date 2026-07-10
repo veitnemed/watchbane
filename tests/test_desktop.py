@@ -5628,6 +5628,8 @@ def test_candidate_filter_sections_define_visual_hierarchy() -> None:
     assert "QToolButton#candidateAdvancedFiltersToggle" in style
     assert "QWidget#candidateAdvancedFiltersContent" in style
     assert "QLabel#candidateAdvancedFiltersGroupTitle" in style
+    assert "QFrame#candidateMoodFilterSection QComboBox#candidateReplenishPreset:focus" in style
+    assert "#B85F8A" in style
     assert "QFrame#candidateFilterDivider" in style
     assert f"font-size: {font_px(FONT_SECTION)}px;" in style
     assert "QLabel#candidateSearchFieldLabel" in style
@@ -5636,10 +5638,11 @@ def test_candidate_filter_sections_define_visual_hierarchy() -> None:
     assert "font-weight: 700;" in style
 
 
-def test_candidate_filter_section_heart_icon_is_centered(qapp) -> None:
+@pytest.mark.parametrize("icon_name", ("filter", "heart", "sliders"))
+def test_candidate_filter_section_icons_are_centered(qapp, icon_name: str) -> None:
     from desktop.candidates.filter_icon_assets import filter_section_icon_pixmap
 
-    pixmap = filter_section_icon_pixmap("heart", 24, "#F4A7C5")
+    pixmap = filter_section_icon_pixmap(icon_name, 24, "#F4A7C5")
     image = pixmap.toImage()
     xs: list[int] = []
     ys: list[int] = []

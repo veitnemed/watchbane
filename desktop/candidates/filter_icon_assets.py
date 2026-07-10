@@ -163,23 +163,27 @@ def _draw_section_icon(painter: QPainter, name: str, size: int, color: str) -> N
 
     if name == "filter":
         path = QPainterPath()
-        path.moveTo(size * 0.26, size * 0.28)
-        path.lineTo(size * 0.74, size * 0.28)
-        path.lineTo(size * 0.56, size * 0.51)
-        path.lineTo(size * 0.56, size * 0.73)
-        path.lineTo(size * 0.44, size * 0.67)
-        path.lineTo(size * 0.44, size * 0.51)
+        path.moveTo(size * 0.27, size * 0.29)
+        path.lineTo(size * 0.73, size * 0.29)
+        path.lineTo(size * 0.57, size * 0.50)
+        path.lineTo(size * 0.57, size * 0.70)
+        path.lineTo(size * 0.50, size * 0.75)
+        path.lineTo(size * 0.43, size * 0.70)
+        path.lineTo(size * 0.43, size * 0.50)
         path.closeSubpath()
+        fill = QColor(color)
+        fill.setAlpha(42)
+        painter.setBrush(fill)
         painter.drawPath(path)
         return
 
     if name == "heart":
         path = QPainterPath()
-        path.moveTo(size * 0.50, size * 0.76)
-        path.cubicTo(size * 0.18, size * 0.57, size * 0.22, size * 0.31, size * 0.39, size * 0.31)
-        path.cubicTo(size * 0.46, size * 0.31, size * 0.50, size * 0.36, size * 0.50, size * 0.36)
-        path.cubicTo(size * 0.50, size * 0.36, size * 0.54, size * 0.31, size * 0.61, size * 0.31)
-        path.cubicTo(size * 0.78, size * 0.31, size * 0.82, size * 0.57, size * 0.50, size * 0.76)
+        path.moveTo(size * 0.50, size * 0.75)
+        path.cubicTo(size * 0.21, size * 0.58, size * 0.20, size * 0.33, size * 0.38, size * 0.33)
+        path.cubicTo(size * 0.45, size * 0.33, size * 0.50, size * 0.39, size * 0.50, size * 0.39)
+        path.cubicTo(size * 0.50, size * 0.39, size * 0.55, size * 0.33, size * 0.62, size * 0.33)
+        path.cubicTo(size * 0.80, size * 0.33, size * 0.79, size * 0.58, size * 0.50, size * 0.75)
         fill = QColor(color)
         fill.setAlpha(220)
         painter.setBrush(fill)
@@ -192,7 +196,9 @@ def _draw_section_icon(painter: QPainter, name: str, size: int, color: str) -> N
         x2 = size * 0.70
         for y, knob_x in ((size * 0.35, size * 0.42), (size * 0.50, size * 0.61), (size * 0.65, size * 0.48)):
             painter.drawLine(QPointF(x1, y), QPointF(x2, y))
-            painter.drawEllipse(QPointF(knob_x, y), size * 0.035, size * 0.035)
+            painter.setBrush(QColor(color))
+            painter.drawEllipse(QRectF(knob_x - size * 0.042, y - size * 0.042, size * 0.084, size * 0.084))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
         return
 
     if name == "document":
