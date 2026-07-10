@@ -18,12 +18,8 @@ def isolated_profiles(monkeypatch, tmp_path):
         "LOGS_DIR",
         "BACKUP_DIR",
         "DATA_DIR",
-        "FILE_NAME",
-        "CRITERIA_POOL_JSON",
-        "CANDIDATE_POOL_JSON",
         "API_LOG_FILE",
         "DIR_META",
-        "META_JSON",
         "DIR_TXT",
     )
     original_constants = {name: getattr(constant, name) for name in constant_attrs}
@@ -108,9 +104,13 @@ def test_switch_sandbox_changes_active_profile_and_paths(isolated_profiles) -> N
     profiles.create_sandbox_profile()
     profiles.set_active_profile(profiles.SANDBOX_PROFILE)
 
+    from scripts.migrations.legacy_paths import watched_titles_json
+
     assert profiles.get_active_profile() == profiles.SANDBOX_PROFILE
     assert profiles.get_active_data_dir() == isolated_profiles / "profiles" / "sandbox"
-    assert Path(constant.FILE_NAME) == isolated_profiles / "profiles" / "sandbox" / "watched" / "titles.json"
+    assert watched_titles_json(isolated_profiles / "profiles" / "sandbox") == (
+        isolated_profiles / "profiles" / "sandbox" / "watched" / "titles.json"
+    )
 
 
 def test_console_create_sandbox_does_not_switch_profile(isolated_profiles, capsys) -> None:

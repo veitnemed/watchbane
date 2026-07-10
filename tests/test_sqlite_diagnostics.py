@@ -104,42 +104,43 @@ def test_sqlite_diagnostics_reports_orphaned_actions_and_legacy_json(tmp_path) -
         {"title": "Ghost", "year": 2020},
         path=db_path,
     )
+    data_dir = tmp_path / "data"
     legacy_files = [
-        tmp_path / "data" / "watched" / "titles.json",
-        tmp_path / "data" / "candidates" / "watchlist.json",
-        tmp_path / "data" / "candidates" / "hidden.json",
-        tmp_path / "data" / "cache" / "posters" / "posters.json",
+        data_dir / "watched" / "titles.json",
+        data_dir / "candidates" / "watchlist.json",
+        data_dir / "candidates" / "hidden.json",
+        data_dir / "cache" / "posters" / "posters.json",
     ]
     for legacy_file in legacy_files:
         legacy_file.parent.mkdir(parents=True, exist_ok=True)
         legacy_file.write_text("{}", encoding="utf-8")
 
-    report = diagnostics.build_sqlite_diagnostics(path=db_path, base_dir=tmp_path)
+    report = diagnostics.build_sqlite_diagnostics(path=db_path, base_dir=data_dir)
 
     assert report["orphaned_candidate_actions"] == [
         {"action": action_repository.ACTION_HIDDEN, "identity_key": "ghost|2020"}
     ]
     assert report["legacy_json_files"] == [
         {
-            "path": "data/watched/titles.json",
+            "path": "watched/titles.json",
             "exists": True,
             "canonical": False,
             "size_bytes": 2,
         },
         {
-            "path": "data/candidates/watchlist.json",
+            "path": "candidates/watchlist.json",
             "exists": True,
             "canonical": False,
             "size_bytes": 2,
         },
         {
-            "path": "data/candidates/hidden.json",
+            "path": "candidates/hidden.json",
             "exists": True,
             "canonical": False,
             "size_bytes": 2,
         },
         {
-            "path": "data/cache/posters/posters.json",
+            "path": "cache/posters/posters.json",
             "exists": True,
             "canonical": False,
             "size_bytes": 2,

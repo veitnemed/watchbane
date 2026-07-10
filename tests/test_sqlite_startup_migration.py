@@ -30,10 +30,6 @@ def _patch_runtime(tmp_path, monkeypatch) -> Path:
     monkeypatch.setattr("config.constant.EXPORTS_DIR", str(exports_dir))
     monkeypatch.setattr("config.constant.LOGS_DIR", str(logs_dir))
     monkeypatch.setattr("config.constant.BACKUP_DIR", str(backup_dir))
-    monkeypatch.setattr("config.constant.FILE_NAME", str(watched_dir / "titles.json"))
-    monkeypatch.setattr("config.constant.META_JSON", str(watched_dir / "meta.json"))
-    monkeypatch.setattr("config.constant.CANDIDATE_POOL_JSON", str(candidates_dir / "pool.json"))
-    monkeypatch.setattr("config.constant.CRITERIA_POOL_JSON", str(candidates_dir / "criteria.json"))
     monkeypatch.setattr(runtime, "RUNTIME_DIRECTORIES", (
         str(data_dir),
         str(watched_dir),

@@ -167,33 +167,6 @@ def confirm_or_edit_tmdb_genres(series: dict) -> list:
     )
 
 
-def confirm_or_edit_dataset_genres(series: dict) -> list:
-    """Показывает жанры для dataset без автодобавления новых feature."""
-    genres = extract_tmdb_genres(series)
-    known_genres, unknown_genres = split_known_genres(genres)
-    genres_line = ", ".join(genres) if len(genres) > 0 else "жанры не найдены"
-    known_line = ", ".join(known_genres) if len(known_genres) > 0 else "нет"
-
-    print(f"Краткое описание: {short_text(series.get('description'), 80)}")
-    print(f"Жанры из API: {genres_line}")
-    print(f"В dataset попадут: {known_line}")
-    if len(unknown_genres) > 0:
-        print(f"Игнор как подсказка: {', '.join(unknown_genres)}")
-
-    answer = input("Принять жанры для dataset? yes / edit / off >> ").strip().lower()
-    if answer in ("yes", "y", "да"):
-        return known_genres
-    if answer in ("off", "n", "no", "нет"):
-        return []
-
-    return choose_genre_names_by_numbers(
-        known_genres,
-        prompt_title="Выберите жанры для dataset по номерам.",
-        prompt_hint="Пустой ввод оставит текущий набор, 0 очистит жанры.",
-        input_label="Номера жанров",
-    )
-
-
 def choose_media_type() -> str:
     answer = input("Media type [1=series, 2=movie] >> ").strip().lower()
     if answer in {"2", "movie", "film"}:
@@ -398,36 +371,3 @@ def request_user_score(defaults: dict | None = None) -> dict:
     )
     user_score = valid.parse_float(answer)
     return service.build_movie_record_from_defaults(defaults, user_score)
-
-
-def request_all_scores(defaults: dict = None) -> dict:
-    """Запрашивает все данные фильма."""
-    if defaults is None:
-        defaults = {}
-    funcs = get_request_schema()
-
-    movie = {}
-
-    for section_name, section_fields in funcs.items():
-        section = {}
-
-        print(f'\n--- {get_section_label(section_name)} ---')
-
-        for feature, field_settings in section_fields.items():
-            tags_validators = field_settings["tag"]
-            type_func = field_settings["type"]
-            field_validators = get_validators(tags_validators, field_settings.get("max_value", 1))
-            default_value = defaults.get(section_name, {}).get(feature)
-            answer = loop_input_with_default(
-                text=f'>> {get_label(feature)} [{default_value}]: ',
-                funcs_list=field_validators,
-                default_value=default_value
-            )
-            if type_func is float:
-                section[feature] = valid.parse_float(answer)
-            else:
-                section[feature] = type_func(answer)
-
-        movie[section_name] = section
-
-    return movie

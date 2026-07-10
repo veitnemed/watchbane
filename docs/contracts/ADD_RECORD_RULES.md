@@ -44,7 +44,7 @@ Relevant files:
 Service отвечает за:
 
 - валидацию payload;
-- нормализацию `main_info`, `raw_scores`, `tags_vibe`, `genre`;
+- нормализацию `main_info`, `raw_scores`, TMDb metadata;
 - сохранение dataset через SQLite-backed storage;
 - сохранение/обновление meta через SQLite-backed storage;
 - backup перед опасными операциями;
@@ -98,8 +98,7 @@ add_dataset_record(
 - `main_info.year`;
 - `main_info.media_type` (`tv` или `movie`; legacy/empty нормализуется в `tv`);
 - `raw_scores`;
-- `tags_vibe`;
-- `genre`.
+- optional `genres_tmdb` / `localized` enrichment.
 
 После сохранения service:
 
@@ -122,7 +121,7 @@ Defaults собираются через `dataset.title_resolve`.
 
 UI показывает defaults пользователю, но перед сохранением пользователь может изменить **только** `main_info.user_score`.
 
-Название, год, страна, `media_type`, `raw_scores`, жанры и `tags_vibe` берутся из resolve/candidate bundle без override.
+Название, год, страна, `media_type`, `raw_scores` и TMDb-жанры берутся из resolve/candidate bundle без override.
 
 Для правки остальных полей уже существующей записи используй `update_dataset_record()`.
 
@@ -158,8 +157,7 @@ Watched и UI используют TMDb metadata: `genres_tmdb`, `genre_keys`, `
 Типичные поля:
 
 - `tmdb_id`;
-- `imdb_id`;
-- `kp_id`;
+- `imdb_id` (external reference из TMDb);
 - `description`;
 - `source`;
 - poster hints.
@@ -195,9 +193,7 @@ update_dataset_record(title, patch_payload, source_name="") -> UpdateRecordResul
 
 - `main_info.user_score`;
 - `main_info.year`;
-- `raw_scores`;
-- `tags_vibe`;
-- `genre`.
+- `raw_scores`.
 
 Запрещено через patch:
 
@@ -236,11 +232,7 @@ Console и desktop используют один service path.
 - `data/diagnostics/`;
 - `data/cache/`.
 
-Активные JSON-справочники в репозитории:
-
-- `config/tags.json`;
-- `config/genre_tags.json`;
-- `apis/sql_title_aliases.json`.
+Активные JSON-справочники в репозитории: нет runtime JSON schema files; legacy paths — `scripts/migrations/legacy_paths.py`.
 
 ## Проверки
 

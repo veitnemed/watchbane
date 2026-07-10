@@ -1,4 +1,4 @@
-from dataset.genre_stats import build_dataset_genre_catalog
+from dataset.genres.stats import build_dataset_genre_catalog
 
 
 def test_build_dataset_genre_catalog_uses_tmdb_labels(monkeypatch) -> None:
@@ -23,13 +23,8 @@ def test_build_dataset_genre_catalog_uses_tmdb_labels(monkeypatch) -> None:
     assert "Crime" in labels
 
 
-def test_genre_stats_uses_dataset_named_catalog() -> None:
-    import inspect
+def test_genre_stats_module_exports_catalog() -> None:
+    import dataset.genres.stats as genre_stats
 
-    import dataset.genre_stats as genre_stats
-
-    source = inspect.getsource(genre_stats)
     assert hasattr(genre_stats, "build_dataset_genre_catalog")
     assert hasattr(genre_stats, "show_dataset_genre_catalog")
-    assert "build_model_genre_catalog" not in source
-    assert "show_model_genres" not in source

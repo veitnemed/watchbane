@@ -56,16 +56,6 @@ def open_extra_menu() -> None:
     maintenance_menu.open_maintenance_menu()
 
 
-def open_genres_menu() -> None:
-    """Compatibility wrapper for the old genres menu name."""
-    reference_menu.open_reference_menu()
-
-
-def open_tags_menu() -> None:
-    """Compatibility wrapper for the old tags menu name."""
-    reference_menu.open_reference_menu()
-
-
 def open_candidate_pool_management_menu() -> None:
     """Compatibility wrapper for the old pool management submenu name."""
     pool_menu.open_candidate_pool_import_menu()

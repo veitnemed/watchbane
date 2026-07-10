@@ -20,7 +20,7 @@ from candidates.models.schema import (
     resolve_canonical_year,
     strip_external_rating_fields,
 )
-from candidates.repositories import pool_repository
+from scripts.migrations.legacy_paths import candidate_pool_json
 
 REPORT_PATH = ROOT_DIR / "data" / "diagnostics" / "candidate_pool_tmdb_only_migration_report.json"
 
@@ -30,10 +30,8 @@ def _timestamp() -> str:
 
 
 def candidate_pool_path() -> Path:
-    path = Path(pool_repository.constant.CANDIDATE_POOL_JSON)
-    if path.is_absolute():
-        return path
-    return ROOT_DIR / path
+    path = candidate_pool_json(ROOT_DIR / "data")
+    return path
 
 
 def backup_path_for(pool_path: Path, timestamp: str) -> Path:

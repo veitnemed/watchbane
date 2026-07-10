@@ -1,4 +1,7 @@
-"""Прогоняет локальный SQL-поиск по всем сериалам из dataset.json."""
+"""Прогоняет локальный SQL-поиск по всем сериалам из dataset.json.
+
+DEPRECATED: historical archive script; references removed IMDb SQL datasource.
+"""
 
 from __future__ import annotations
 

@@ -299,12 +299,8 @@ def apply_profile_to_constants(name: str) -> None:
     constant.BACKUP_DIR = _with_sep(data_dir / "backups")
 
     constant.DATA_DIR = constant.WATCHED_DIR
-    constant.FILE_NAME = str(data_dir / "watched" / "titles.json")
-    constant.CRITERIA_POOL_JSON = str(data_dir / "candidates" / "criteria.json")
-    constant.CANDIDATE_POOL_JSON = str(data_dir / "candidates" / "pool.json")
     constant.API_LOG_FILE = str(data_dir / "logs" / "api_requests.log")
     constant.DIR_META = constant.WATCHED_DIR
-    constant.META_JSON = str(data_dir / "watched" / "meta.json")
     constant.DIR_TXT = constant.EXPORTS_DIR
     _apply_module_level_path_caches(data_dir)
 

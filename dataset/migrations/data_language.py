@@ -10,6 +10,7 @@ import shutil
 from typing import Any
 
 from config import constant
+from scripts.migrations import legacy_paths
 from dataset.language import build_localized_block_from_legacy
 
 
@@ -179,9 +180,9 @@ def migrate_data_language_files(
 ) -> dict:
     """Migrate watched dataset/meta and candidate pool JSON files."""
     stamp = timestamp or _timestamp()
-    watched_dataset_path = Path(dataset_path or constant.FILE_NAME)
-    watched_meta_path = Path(meta_path or constant.META_JSON)
-    candidate_pool_path = Path(pool_path or constant.CANDIDATE_POOL_JSON)
+    watched_dataset_path = Path(dataset_path or legacy_paths.watched_titles_json(constant.APP_DATA_DIR))
+    watched_meta_path = Path(meta_path or legacy_paths.watched_meta_json(constant.APP_DATA_DIR))
+    candidate_pool_path = Path(pool_path or legacy_paths.candidate_pool_json(constant.APP_DATA_DIR))
 
     files = {
         "watched_dataset": _migrate_file(

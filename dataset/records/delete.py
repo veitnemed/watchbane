@@ -6,7 +6,6 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-from config import constant
 from dataset.meta.lookup import find_meta_title
 from dataset.models.results import DeleteRecordResult
 from posters.cache import (
@@ -98,22 +97,18 @@ def build_watched_delete_preview(dataset_key: str, data: dict | None = None) -> 
 
 
 def backup_before_watched_delete(timestamp: str | None = None) -> list[str]:
-    """Backup dataset, meta and poster-cache before delete. Returns created backup paths."""
+    """Backup SQLite runtime DB and poster-cache before delete."""
     stamp = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
     suffix = f".backup_before_delete_{stamp}"
     backups: list[str] = []
 
-    dataset_path = Path(constant.FILE_NAME)
-    if dataset_path.is_file():
-        destination = dataset_path.with_name(dataset_path.name + suffix)
-        shutil.copy2(dataset_path, destination)
-        backups.append(str(destination))
+    try:
+        from storage.files import create_backup
 
-    meta_path = Path(constant.META_JSON)
-    if meta_path.is_file():
-        destination = meta_path.with_name(meta_path.name + suffix)
-        shutil.copy2(meta_path, destination)
-        backups.append(str(destination))
+        backup_path = create_backup()
+        backups.append(str(backup_path))
+    except FileNotFoundError:
+        pass
 
     poster_cache_path = DEFAULT_POSTER_CACHE_JSON
     if poster_cache_path.is_file():

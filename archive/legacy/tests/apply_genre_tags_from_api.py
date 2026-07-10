@@ -1,4 +1,7 @@
-"""Собирает жанровые теги из API и размечает датасет без дубликатов."""
+"""Собирает жанровые теги из API и размечает датасет без дубликатов.
+
+DEPRECATED: historical archive script; not compatible with TMDb-only runtime.
+"""
 
 import datetime
 import json

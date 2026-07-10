@@ -7,6 +7,7 @@ import sqlite3
 from typing import Any
 
 from config import constant
+from scripts.migrations.legacy_paths import legacy_json_paths_for_data_root
 from storage.sqlite.connection import get_db_path
 from storage.sqlite.migrations import get_current_schema_version
 from storage.sqlite.session import connection
@@ -19,16 +20,6 @@ TABLES = (
     "candidate_actions",
     "app_settings",
     "poster_cache_entries",
-)
-
-LEGACY_JSON_PATHS = (
-    constant.FILE_NAME,
-    constant.META_JSON,
-    constant.CANDIDATE_POOL_JSON,
-    constant.CRITERIA_POOL_JSON,
-    str(Path(constant.CANDIDATES_DIR) / "watchlist.json"),
-    str(Path(constant.CANDIDATES_DIR) / "hidden.json"),
-    str(Path(constant.CACHE_DIR) / "posters" / "posters.json"),
 )
 
 
@@ -49,14 +40,13 @@ def _duplicate_rows(conn: sqlite3.Connection, sql: str) -> list[dict[str, Any]]:
 
 
 def _legacy_json_presence(base_dir: str | Path | None = None) -> list[dict[str, Any]]:
-    root = Path(base_dir) if base_dir is not None else Path(".")
+    root = Path(base_dir) if base_dir is not None else Path(constant.APP_DATA_DIR)
     result = []
-    for path_text in LEGACY_JSON_PATHS:
-        path = root / path_text
+    for path in legacy_json_paths_for_data_root(root):
         if path.exists():
             result.append(
                 {
-                    "path": Path(path_text).as_posix(),
+                    "path": path.relative_to(root).as_posix(),
                     "exists": True,
                     "canonical": False,
                     "size_bytes": path.stat().st_size,

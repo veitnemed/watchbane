@@ -32,10 +32,6 @@ def test_ensure_runtime_data_layout_initializes_sqlite_without_runtime_json(monk
     monkeypatch.setattr(constant, "BACKUP_DIR", str(backups_dir))
     monkeypatch.setattr(constant, "DATA_DIR", str(watched_dir))
     monkeypatch.setattr(constant, "DIR_META", str(watched_dir))
-    monkeypatch.setattr(constant, "FILE_NAME", str(titles_json))
-    monkeypatch.setattr(constant, "META_JSON", str(meta_json))
-    monkeypatch.setattr(constant, "CANDIDATE_POOL_JSON", str(pool_json))
-    monkeypatch.setattr(constant, "CRITERIA_POOL_JSON", str(criteria_json))
     monkeypatch.setattr(
         runtime,
         "RUNTIME_DIRECTORIES",

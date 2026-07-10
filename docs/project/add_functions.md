@@ -43,12 +43,12 @@ common  <-  config  <-  storage  <-  dataset / apis  <-  candidates  <-  ui
 
 - Новый пункт меню / экран / форма / prompt → `ui/console/` (`global_menu.py`, `interface_funcs.py`, `request.py`, `ui.py`).
 - Новый desktop PyQt экран / карточка / dialog → `desktop/`; visual-polish сверять с [DESKTOP_STYLE_CONTRACT.md](../contracts/DESKTOP_STYLE_CONTRACT.md).
-- Новый сценарий над пользовательским dataset (add/update/stats/excel/tags/genre) → `dataset/`.
+- Новый сценарий над пользовательским dataset (add/update/stats/analytics) → `dataset/`.
 - Новая логика пулов кандидатов (сбор, фильтры, dedupe, ranking) → `candidates/`.
 - Новый внешний или локальный источник данных → `apis/`.
 - Новое низкоуровневое чтение/запись файла, backup, init → `storage/`.
 - Новая чистая утилита (валидация, формат, нормализация текста) → `common/`.
-- Новая константа/путь/схема/каталог тегов или жанров → `config/`.
+- Новая константа/путь/схема → `config/`; canonical genre keys → `candidates/models/genre_schema.py`.
 
 Если функция совмещает ввод-вывод и логику — **раздели**: интерактив (input/print)
 в `ui/console/`, вычисление/сохранение в нижнем слое, UI вызывает сервис и печатает результат.

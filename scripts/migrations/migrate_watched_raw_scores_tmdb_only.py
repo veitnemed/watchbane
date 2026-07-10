@@ -16,6 +16,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from common import format_score
 from config import constant, scheme
+from scripts.migrations.legacy_paths import FILE_NAME, META_JSON
 from storage.normalize import normalize_raw_scores
 
 REPORT_PATH = ROOT_DIR / "data" / "diagnostics" / "watched_raw_scores_tmdb_only_migration_report.json"
@@ -34,11 +35,11 @@ def _json_path(raw_path: str) -> Path:
 
 
 def watched_path() -> Path:
-    return _json_path(constant.FILE_NAME)
+    return _json_path(FILE_NAME)
 
 
 def meta_path() -> Path:
-    return _json_path(constant.META_JSON)
+    return _json_path(META_JSON)
 
 
 def backup_path_for(path: Path, timestamp: str) -> Path:

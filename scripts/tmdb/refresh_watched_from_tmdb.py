@@ -18,6 +18,7 @@ from apis import tmdb_api
 from candidates.models import genre_schema
 from common import format_score
 from config import constant, scheme
+from scripts.migrations.legacy_paths import FILE_NAME, META_JSON
 from posters.fetch_watched_tmdb import match_tmdb_search_result
 from storage import data as storage_data
 from storage.normalize import normalize_raw_scores
@@ -39,11 +40,11 @@ def _json_path(raw_path: str) -> Path:
 
 
 def dataset_path() -> Path:
-    return _json_path(constant.FILE_NAME)
+    return _json_path(FILE_NAME)
 
 
 def meta_path() -> Path:
-    return _json_path(constant.META_JSON)
+    return _json_path(META_JSON)
 
 
 def backup_path_for(path: Path, timestamp: str) -> Path:

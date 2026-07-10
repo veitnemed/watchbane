@@ -37,10 +37,6 @@ def _isolate_runtime_data(monkeypatch, request, tmp_path):
     monkeypatch.setattr(constant, "EXPORTS_DIR", str(exports_dir))
     monkeypatch.setattr(constant, "LOGS_DIR", str(logs_dir))
     monkeypatch.setattr(constant, "BACKUP_DIR", str(backup_dir))
-    monkeypatch.setattr(constant, "FILE_NAME", str(watched_dir / "titles.json"))
-    monkeypatch.setattr(constant, "META_JSON", str(watched_dir / "meta.json"))
-    monkeypatch.setattr(constant, "CANDIDATE_POOL_JSON", str(candidates_dir / "pool.json"))
-    monkeypatch.setattr(constant, "CRITERIA_POOL_JSON", str(candidates_dir / "criteria.json"))
 
     from storage import profiles
 

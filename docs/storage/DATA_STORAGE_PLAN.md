@@ -18,7 +18,6 @@ data/
     tmdb/
   exports/
     candidate_pool/
-    edit_dataset.xlsx
   logs/
     api_requests.log
   backups/
@@ -30,6 +29,7 @@ data/
 - SQLite хранит watched records, watched meta, candidate pool, candidate criteria, watchlist/hidden actions, app settings и poster-cache metadata.
 - JSON-файлы в `data/watched/`, `data/candidates/`, `data/settings.json` и `data/cache/posters/posters.json` являются legacy import/export/backup compatibility, а не source of truth при стандартном backend.
 - Runtime backend selector removed: JSON is no longer a selectable runtime backend.
+- Legacy JSON path constants живут в `scripts/migrations/legacy_paths.py`, не в `config/constant.py`.
 
 ## Runtime Lists
 
@@ -47,7 +47,6 @@ Cache можно удалить без потери watched-базы.
 ## Generated / Exports
 
 - `data/exports/candidate_pool/` - saved TMDb build JSON/CSV.
-- `data/exports/edit_dataset.xlsx` - Excel export/import рабочий файл.
 - `data/diagnostics/` - diagnostic reports.
 - `data/logs/api_requests.log` - API log.
 - `data/backups/` - SQLite backups (`*.sqlite3`) и legacy JSON backups/exports.
@@ -79,17 +78,13 @@ TMDb-only candidate migration/refresh reports:
 
 - поле текстовое;
 - старые записи без `country` нормализуются как пустая строка;
-- add-flow подставляет страну из API/SQL/TMDb/candidate;
+- add-flow подставляет страну из TMDb/candidate;
 - если источник не дал страну, используется страна, выбранная пользователем при поиске;
 - `country` не участвует в computed scores.
 
 ## Git Policy
 
-В git остаются только справочники проекта:
-
-- `config/tags.json`;
-- `config/genre_tags.json`;
-- `apis/sql_title_aliases.json`.
+В git остаются только схемы и справочники проекта (`config/scheme.py`, `config/constant.py`, `candidates/models/genre_schema.py`).
 
 Локальные runtime data в `data/` игнорируются: SQLite DB, WAL/SHM, legacy JSON, exports, backups и caches не коммитятся.
 

@@ -11,6 +11,7 @@ from typing import Any
 
 from apis import tmdb_api
 from config import constant
+from scripts.migrations import legacy_paths
 from dataset.language import normalize_data_language, tmdb_locale_for_data_language
 
 
@@ -184,7 +185,7 @@ def backfill_watched_meta_from_tmdb(
     details_func=None,
 ) -> dict:
     """Backfill watched meta localized strings from TMDb Details."""
-    path = Path(meta_path or constant.META_JSON)
+    path = Path(meta_path or legacy_paths.watched_meta_json(constant.APP_DATA_DIR))
     records = _read_json(path)
     updated, report = backfill_mapping_from_tmdb(
         records,
@@ -221,7 +222,7 @@ def backfill_candidate_pool_from_tmdb(
     details_func=None,
 ) -> dict:
     """Backfill candidate pool localized strings from TMDb Details."""
-    path = Path(pool_path or constant.CANDIDATE_POOL_JSON)
+    path = Path(pool_path or legacy_paths.candidate_pool_json(constant.APP_DATA_DIR))
     records = _read_json(path)
     updated, report = backfill_mapping_from_tmdb(
         records,

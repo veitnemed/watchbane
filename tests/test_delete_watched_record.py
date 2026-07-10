@@ -150,28 +150,24 @@ def test_delete_watched_record_missing_entry_does_not_save(monkeypatch) -> None:
     assert save_called["dataset"] is False
 
 
-def test_backup_before_watched_delete_creates_files(monkeypatch) -> None:
+def test_backup_before_watched_delete_creates_files(monkeypatch, tmp_path) -> None:
     from dataset.records import delete as records_delete
 
-    with tempfile.TemporaryDirectory() as temp_root:
-        root = Path(temp_root)
-        dataset_path = root / "dataset.json"
-        meta_path = root / "meta_data.json"
-        cache_path = root / "posters.json"
-        dataset_path.write_text("{}", encoding="utf-8")
-        meta_path.write_text("{}", encoding="utf-8")
-        cache_path.write_text("{}", encoding="utf-8")
+    cache_path = tmp_path / "posters.json"
+    cache_path.write_text("{}", encoding="utf-8")
+    sqlite_backup = tmp_path / "runtime.sqlite3"
+    sqlite_backup.write_bytes(b"sqlite-backup")
 
-        monkeypatch.setattr(records_delete.constant, "FILE_NAME", str(dataset_path))
-        monkeypatch.setattr(records_delete.constant, "META_JSON", str(meta_path))
-        monkeypatch.setattr(records_delete, "DEFAULT_POSTER_CACHE_JSON", cache_path)
+    monkeypatch.setattr(records_delete, "DEFAULT_POSTER_CACHE_JSON", cache_path)
 
-        backups = records_delete.backup_before_watched_delete(timestamp="123")
+    import storage.files as files_module
 
-        assert len(backups) == 3
-        assert Path(backups[0]).name == "dataset.json.backup_before_delete_123"
-        assert Path(backups[1]).name == "meta_data.json.backup_before_delete_123"
-        assert Path(backups[2]).name == "posters.json.backup_before_delete_123"
+    monkeypatch.setattr(files_module, "create_backup", lambda: sqlite_backup)
+
+    backups = records_delete.backup_before_watched_delete(timestamp="123")
+
+    assert str(sqlite_backup) in backups
+    assert any(Path(path).name == "posters.json.backup_before_delete_123" for path in backups)
 
 
 def test_build_watched_delete_preview(monkeypatch) -> None:
@@ -217,7 +213,6 @@ def test_delete_watched_record_does_not_touch_candidate_pool(monkeypatch) -> Non
         monkeypatch.setattr(records_delete.storage_data, "save_meta", lambda _payload: None)
         monkeypatch.setattr(records_delete, "save_poster_cache", lambda _payload: None)
         monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: [])
-        monkeypatch.setattr(records_delete.constant, "CANDIDATE_POOL_JSON", str(pool_path))
 
         module.delete_watched_record("Alpha", timestamp="test")
 

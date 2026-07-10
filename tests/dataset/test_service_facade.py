@@ -3,13 +3,6 @@
 import importlib
 
 
-def test_genre_stats_wrapper_reexports_catalog() -> None:
-    from dataset.genres.stats import build_dataset_genre_catalog
-    from dataset.genre_stats import build_dataset_genre_catalog as wrapped
-
-    assert build_dataset_genre_catalog is wrapped
-
-
 def test_service_facade_exports_core_operations() -> None:
     import dataset.service as service
 
