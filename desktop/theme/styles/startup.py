@@ -14,7 +14,7 @@ QFrame#startupGateCard {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_CARD)}px;
-    max-width: {px(560)}px;
+    max-width: {px(660)}px;
 }}
 QLabel#startupGateTitle {{
     color: {COLOR_TEXT};
@@ -30,7 +30,7 @@ QLabel#startupGateNetworkStatus {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_INPUT)}px;
-    padding: {px(12)}px {px(14)}px;
+    padding: {px(9)}px {px(14)}px;
 }}
 QLabel#startupGateTokenLabel {{
     color: {COLOR_TEXT};
@@ -40,7 +40,7 @@ QLineEdit#startupTokenInput {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_INPUT)}px;
-    padding: {px(INPUT_PADDING_Y)}px {px(INPUT_PADDING_X)}px;
+    padding: {px(INPUT_PADDING_Y + 1)}px {px(INPUT_PADDING_X)}px;
     color: {COLOR_TEXT};
     font-size: {font_px(FONT_BASE)}px;
     selection-background-color: {COLOR_ACCENT_SOFT};
@@ -53,7 +53,7 @@ QPushButton#startupPrimaryButton {{
     color: {COLOR_TEXT_INVERTED};
     border: none;
     border-radius: {px(RADIUS_BUTTON)}px;
-    padding: {px(10)}px {px(22)}px;
+    padding: {px(9)}px {px(24)}px;
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 600;
 }}

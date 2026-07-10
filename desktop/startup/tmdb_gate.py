@@ -56,15 +56,17 @@ class TmdbStartupGateView(QWidget):
 
         card = QFrame()
         card.setObjectName("startupGateCard")
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+        card.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        card.setMinimumWidth(scale_px(540))
+        card.setMaximumWidth(scale_px(660))
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(
-            scale_px(36),
-            scale_px(32),
-            scale_px(36),
-            scale_px(32),
+            scale_px(40),
+            scale_px(34),
+            scale_px(40),
+            scale_px(34),
         )
-        card_layout.setSpacing(scale_px(SPACING_MEDIUM))
+        card_layout.setSpacing(scale_px(SPACING_SMALL + 2))
 
         title = QLabel(tr("startup.tmdb.title"))
         title.setObjectName("startupGateTitle")
@@ -81,8 +83,11 @@ class TmdbStartupGateView(QWidget):
 
         self._network_label = QLabel(tr("startup.tmdb.network.checking"))
         self._network_label.setObjectName("startupGateNetworkStatus")
+        self._network_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._network_label.setWordWrap(True)
-        self._network_label.setFont(QFont(FONT_FAMILY, font_px(FONT_BASE)))
+        self._network_label.setMinimumHeight(scale_px(68))
+        self._network_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self._network_label.setFont(QFont(FONT_FAMILY, font_px(FONT_SMALL)))
 
         token_caption = QLabel(tr("startup.tmdb.token.label"))
         token_caption.setObjectName("startupGateTokenLabel")
@@ -93,18 +98,24 @@ class TmdbStartupGateView(QWidget):
         self._token_input.setEchoMode(QLineEdit.EchoMode.Password)
         self._token_input.setPlaceholderText(tr("startup.tmdb.token.placeholder"))
         self._token_input.setEnabled(False)
+        self._token_input.setMinimumHeight(scale_px(44))
         self._token_input.returnPressed.connect(self._on_continue_clicked)
         self._token_input.textChanged.connect(self._on_token_changed)
 
         hint = QLabel(tr("startup.tmdb.token.hint"))
         hint.setObjectName("startupGateHint")
         hint.setWordWrap(True)
+        hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        hint.setMinimumHeight(scale_px(52))
+        hint.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         hint.setFont(QFont(FONT_FAMILY, font_px(FONT_SMALL)))
         hint.setStyleSheet(f"color: {COLOR_TEXT_MUTED};")
 
         self._error_label = QLabel("")
         self._error_label.setObjectName("startupGateError")
         self._error_label.setWordWrap(True)
+        self._error_label.setMinimumHeight(scale_px(34))
+        self._error_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._error_label.setFont(QFont(FONT_FAMILY, font_px(FONT_SMALL)))
         self._error_label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
         self._error_label.hide()
@@ -115,20 +126,21 @@ class TmdbStartupGateView(QWidget):
         self._continue_button.setObjectName("startupPrimaryButton")
         self._continue_button.setEnabled(False)
         self._continue_button.setMinimumWidth(scale_px(180))
+        self._continue_button.setMinimumHeight(scale_px(42))
         self._continue_button.clicked.connect(self._on_continue_clicked)
         button_row.addWidget(self._continue_button)
         button_row.addStretch(1)
 
         card_layout.addWidget(title)
         card_layout.addWidget(subtitle)
-        card_layout.addSpacing(scale_px(SPACING_SMALL))
+        card_layout.addSpacing(scale_px(SPACING_SMALL + 2))
         card_layout.addWidget(self._network_label)
-        card_layout.addSpacing(scale_px(SPACING_LARGE))
+        card_layout.addSpacing(scale_px(SPACING_MEDIUM))
         card_layout.addWidget(token_caption)
         card_layout.addWidget(self._token_input)
         card_layout.addWidget(hint)
         card_layout.addWidget(self._error_label)
-        card_layout.addSpacing(scale_px(SPACING_MEDIUM))
+        card_layout.addSpacing(scale_px(SPACING_SMALL))
         card_layout.addLayout(button_row)
 
         outer.addWidget(card, 0, Qt.AlignmentFlag.AlignHCenter)
