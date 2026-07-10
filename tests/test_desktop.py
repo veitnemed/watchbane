@@ -5529,6 +5529,11 @@ def test_format_pool_stats_user_uses_plain_language() -> None:
     assert "ready" not in text
     assert "pool" not in text.lower()
 
+    zero_text = format_pool_stats_user(
+        {"unique_total": 2, "ready_total": 2, "incomplete_total": 0},
+    )
+    assert "нет ожидающих диагностики" in zero_text
+
 
 def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch, qapp) -> None:
     import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
@@ -5616,8 +5621,9 @@ def test_candidate_filter_sections_define_visual_hierarchy() -> None:
 
     assert "QFrame#candidateFilterSection" in style
     assert "QLabel#candidateFilterSectionTitle" in style
+    assert "QLabel#candidateFilterSectionBadge" in style
     assert "QFrame#candidateFilterDivider" in style
-    assert f"font-size: {font_px(FONT_SECTION + 2)}px;" in style
+    assert f"font-size: {font_px(FONT_SECTION)}px;" in style
     assert "QLabel#candidateSearchFieldLabel" in style
     assert "QComboBox#candidateSearchMediaType" in style
     assert f"font-size: {font_px(FONT_SECTION)}px;" in style
@@ -5902,13 +5908,15 @@ def test_candidate_filters_form_uses_grouped_sections() -> None:
     assert 'tr("candidates.filters.visibility")' in source
 
 
-def test_candidate_filters_view_places_apply_button_in_top_bar() -> None:
+def test_candidate_filters_view_places_apply_button_in_summary_card() -> None:
     import inspect
 
     import desktop.candidates.filters_view as module
 
     source = inspect.getsource(module.CandidateFiltersView.__init__)
-    assert "top_bar" in source
+    assert "candidateFiltersIntro" in source
+    assert "candidateFiltersSummaryTitle" in source
+    assert "content_layout.addWidget(self._intro_card" in source
     assert "_update_apply_button_width" in source
     assert "control_px(40)" in inspect.getsource(module)
     assert "form.addWidget(self._apply_button)" not in source

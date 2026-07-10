@@ -26,11 +26,16 @@ def format_pool_stats_user(stats: dict) -> str:
     unique_total = int(stats.get("unique_total", stats.get("storage_total", 0)) or 0)
     ready_total = int(stats.get("ready_total", 0) or 0)
     incomplete_total = int(stats.get("incomplete_total", 0) or 0)
+    incomplete_phrase = (
+        tr("candidates.filters.pool.incomplete.none")
+        if incomplete_total == 0
+        else tr("candidates.filters.pool.incomplete.some", count=incomplete_total)
+    )
     return tr(
         "candidates.filters.pool.stats",
         count_phrase=series_count_phrase(unique_total),
         ready_total=ready_total,
-        incomplete_total=incomplete_total,
+        incomplete_phrase=incomplete_phrase,
     )
 
 

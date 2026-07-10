@@ -30,15 +30,15 @@ from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FI
 from desktop.candidates.workers.filter_replenish_worker import FilterReplenishWorker
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language
-from desktop.theme.scaling import control_px, layout_px
+from desktop.theme.scaling import control_px, get_ui_scale, layout_px
 from desktop.theme.shell_layout import (
     CANDIDATE_ROOT_MARGIN_PX,
     CANDIDATE_ROOT_SPACING_PX,
     LEFT_PANEL_TOP_COMPENSATION_PX,
 )
 
-APPLY_BUTTON_WIDTH_RATIO = 0.25
 APPLY_BUTTON_HEIGHT = control_px(40)
+SUMMARY_CARD_WIDTH = layout_px(292 if get_ui_scale() >= 1.25 else 324)
 FILTER_REPLENISH_DEFAULT_BATCH_SIZE = 30
 FILTER_REPLENISH_MAX_BATCH_SIZE = 30
 
@@ -116,49 +116,47 @@ class CandidateFiltersView:
         self._apply_button = QPushButton(tr("candidates.filters.apply"))
         self._apply_button.setObjectName("candidateSearchApplyTopButton")
         self._apply_button.clicked.connect(self._apply_filters)
-        self._apply_button.setSizePolicy(
-            QSizePolicy.Policy.Fixed,
-            QSizePolicy.Policy.Fixed,
-        )
+        self._apply_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._apply_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
 
         self._reset_button = QPushButton(tr("candidates.filters.reset"))
         self._reset_button.setObjectName("candidateSearchResetTopButton")
         self._reset_button.clicked.connect(self._reset_filters)
-        self._reset_button.setSizePolicy(
-            QSizePolicy.Policy.Fixed,
-            QSizePolicy.Policy.Fixed,
-        )
+        self._reset_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._reset_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
 
-        top_bar = QHBoxLayout()
-        top_bar.setContentsMargins(0, 0, 0, 0)
-        top_bar.setSpacing(CANDIDATE_ROOT_SPACING_PX)
+        header_block = QVBoxLayout()
+        header_block.setContentsMargins(0, 0, 0, 0)
+        header_block.setSpacing(layout_px(4))
 
         header = QLabel(tr("candidates.filters.header"))
         header.setObjectName("candidateSearchHeader")
         header.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-        top_bar.addWidget(header, stretch=1)
-        top_bar.addWidget(
-            self._reset_button,
-            alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
-        )
-        top_bar.addWidget(
-            self._apply_button,
-            alignment=Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignRight,
-        )
-        root_layout.addLayout(top_bar)
+        header_block.addWidget(header)
+
+        subtitle = QLabel(tr("candidates.filters.subtitle"))
+        subtitle.setObjectName("candidateSearchSubtitle")
+        subtitle.setWordWrap(True)
+        header_block.addWidget(subtitle)
+
+        root_layout.addLayout(header_block)
 
         self._intro_card = QFrame()
         self._intro_card.setObjectName("candidateFiltersIntro")
+        self._intro_card.setFixedWidth(SUMMARY_CARD_WIDTH)
+        self._intro_card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.MinimumExpanding)
         intro_layout = QVBoxLayout(self._intro_card)
         intro_layout.setContentsMargins(
+            layout_px(16),
             layout_px(14),
-            layout_px(12),
-            layout_px(14),
-            layout_px(12),
+            layout_px(16),
+            layout_px(16),
         )
-        intro_layout.setSpacing(layout_px(6))
+        intro_layout.setSpacing(layout_px(8))
+
+        summary_title = QLabel(tr("candidates.filters.summary.title"))
+        summary_title.setObjectName("candidateFiltersSummaryTitle")
+        intro_layout.addWidget(summary_title)
 
         self._intro_lead = QLabel(tr("candidates.filters.intro.lead"))
         self._intro_lead.setObjectName("candidateFiltersIntroLead")
@@ -169,14 +167,22 @@ class CandidateFiltersView:
         self._intro_stats.setObjectName("candidateFiltersIntroStats")
         self._intro_stats.setWordWrap(True)
         intro_layout.addWidget(self._intro_stats)
-
-        root_layout.addWidget(self._intro_card)
+        intro_layout.addStretch(1)
+        intro_layout.addWidget(self._apply_button)
+        intro_layout.addWidget(self._reset_button)
 
         self._form = build_filters_form(
             year_max=self._year_max,
             on_year_range_changed=self._on_year_range_changed,
         )
-        root_layout.addWidget(self._form.scroll, stretch=1)
+        self._form.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+        content_layout = QHBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(layout_px(16))
+        content_layout.addWidget(self._form.scroll, stretch=1)
+        content_layout.addWidget(self._intro_card, alignment=Qt.AlignmentFlag.AlignTop)
+        root_layout.addLayout(content_layout, stretch=1)
 
         self._update_apply_button_width()
         self._update_year_range_label()
@@ -340,13 +346,14 @@ class CandidateFiltersView:
         self._local_apply_requested = False
 
     def _update_apply_button_width(self) -> None:
-        width = self._widget.width()
-        if width <= 0:
+        if not hasattr(self, "_intro_card"):
             return
-        max_width = max(120, int(width * APPLY_BUTTON_WIDTH_RATIO))
-        content_width = self._apply_button.sizeHint().width()
-        target = min(max_width, content_width)
+        content_width = self._intro_card.width() - layout_px(32)
+        if content_width <= 0:
+            content_width = SUMMARY_CARD_WIDTH - layout_px(32)
+        target = max(control_px(148), content_width)
         self._apply_button.setFixedWidth(target)
+        self._reset_button.setFixedWidth(target)
         self._apply_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
         self._reset_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
 

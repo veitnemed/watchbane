@@ -2,10 +2,10 @@
 
 from desktop.candidates.filters_view import (
     APPLY_BUTTON_HEIGHT,
-    APPLY_BUTTON_WIDTH_RATIO,
     CANDIDATE_YEAR_MIN,
     SCORE_SLIDER_MAX,
     SCORE_SLIDER_STEP,
+    SUMMARY_CARD_WIDTH,
     VOTES_SLIDER_MAX_INDEX,
     VOTES_SLIDER_STEPS,
     CandidateFiltersView,
@@ -44,7 +44,6 @@ from desktop.candidates.workers.search_worker import CandidateSearchWorker
 
 __all__ = [
     "APPLY_BUTTON_HEIGHT",
-    "APPLY_BUTTON_WIDTH_RATIO",
     "CANDIDATE_DETAIL_STRETCH",
     "CANDIDATE_LIST_MAX_WIDTH",
     "CANDIDATE_LIST_MIN_WIDTH",
@@ -63,6 +62,7 @@ __all__ = [
     "SCORE_SLIDER_MAX",
     "SCORE_SLIDER_STEP",
     "SORT_MODE_METRIC_PREFIX",
+    "SUMMARY_CARD_WIDTH",
     "VOTES_SLIDER_MAX_INDEX",
     "VOTES_SLIDER_STEPS",
     "build_candidate_detail_entry",

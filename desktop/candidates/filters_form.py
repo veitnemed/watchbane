@@ -36,7 +36,6 @@ from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
 from desktop.shared.widgets.range_slider import RangeSlider
 from desktop.theme import TRANSPARENT_STYLE
 from desktop.theme.scaling import get_ui_scale, layout_px
-from desktop.theme.shell_layout import CANDIDATE_ROOT_SPACING_PX
 
 CANDIDATE_YEAR_MIN = 2000
 
@@ -116,25 +115,38 @@ def build_filters_form(
     form_host = QWidget()
     form_host.setObjectName("candidateSearchFiltersHost")
     form = QVBoxLayout(form_host)
-    form.setContentsMargins(0, 0, 0, 0)
-    form.setSpacing(CANDIDATE_ROOT_SPACING_PX)
+    form.setContentsMargins(0, 0, layout_px(10), 0)
+    form.setSpacing(layout_px(12))
     compact_combo_max_width = layout_px(420)
+    section_index = 0
 
     def add_section(title: str) -> tuple[QFrame, QVBoxLayout]:
+        nonlocal section_index
+        section_index += 1
         section = QFrame()
         section.setObjectName("candidateFilterSection")
         section_layout = QVBoxLayout(section)
         section_layout.setContentsMargins(
-            layout_px(18),
-            layout_px(16),
-            layout_px(18),
-            layout_px(18),
+            layout_px(14),
+            layout_px(12),
+            layout_px(14),
+            layout_px(14),
         )
-        section_layout.setSpacing(layout_px(12))
+        section_layout.setSpacing(layout_px(10))
 
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(layout_px(8))
+        badge = QLabel(str(section_index))
+        badge.setObjectName("candidateFilterSectionBadge")
+        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        badge.setFixedSize(layout_px(24), layout_px(24))
         title_label = QLabel(title)
         title_label.setObjectName("candidateFilterSectionTitle")
-        section_layout.addWidget(title_label)
+        title_row.addWidget(badge)
+        title_row.addWidget(title_label)
+        title_row.addStretch(1)
+        section_layout.addLayout(title_row)
         form.addWidget(section)
         return section, section_layout
 
@@ -143,9 +155,9 @@ def build_filters_form(
         divider.setObjectName("candidateFilterDivider")
         divider.setFrameShape(QFrame.Shape.HLine)
         divider.setFrameShadow(QFrame.Shadow.Plain)
-        section_layout.addSpacing(layout_px(2))
+        section_layout.addSpacing(layout_px(1))
         section_layout.addWidget(divider)
-        section_layout.addSpacing(layout_px(2))
+        section_layout.addSpacing(layout_px(1))
 
     def make_hint(text: str) -> QLabel:
         hint = QLabel(text)
@@ -227,8 +239,8 @@ def build_filters_form(
 
     replenish_grid = QGridLayout()
     replenish_grid.setContentsMargins(0, 0, 0, 0)
-    replenish_grid.setHorizontalSpacing(layout_px(22))
-    replenish_grid.setVerticalSpacing(layout_px(16))
+    replenish_grid.setHorizontalSpacing(layout_px(16))
+    replenish_grid.setVerticalSpacing(layout_px(12))
     replenish_column_count = 1 if get_ui_scale() >= 1.25 else 2
     for column in range(replenish_column_count):
         replenish_grid.setColumnStretch(column, 1)
@@ -249,7 +261,7 @@ def build_filters_form(
         cell.setStyleSheet(TRANSPARENT_STYLE)
         cell_layout = QVBoxLayout(cell)
         cell_layout.setContentsMargins(0, 0, 0, 0)
-        cell_layout.setSpacing(layout_px(7))
+        cell_layout.setSpacing(layout_px(6))
         cell_layout.addWidget(field_label(label_text))
         cell_layout.addWidget(combo)
         if hint_text:
@@ -294,7 +306,7 @@ def build_filters_form(
     replenish_action_cell.setStyleSheet(TRANSPARENT_STYLE)
     replenish_action_layout = QVBoxLayout(replenish_action_cell)
     replenish_action_layout.setContentsMargins(0, 0, 0, 0)
-    replenish_action_layout.setSpacing(layout_px(7))
+    replenish_action_layout.setSpacing(layout_px(6))
     replenish_action_layout.addWidget(replenish_enabled_check)
     replenish_action_layout.addWidget(replenish_advanced_override_check)
     replenish_action_layout.addWidget(make_hint(tr("candidates.filters.replenish.hint.advanced_override")))
