@@ -26,6 +26,29 @@ QFrame#settingsInterfaceSection {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_CARD)}px;
 }}
+QFrame#poolOpsSection {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_CARD)}px;
+}}
+QLabel#poolOpsTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SECTION)}px;
+    font-weight: 700;
+}}
+QLabel#poolOpsStatsSummary,
+QLabel#poolOpsStatsLine {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_BASE)}px;
+}}
+QLabel#poolOpsStatsWarning,
+QLabel#poolOpsBuildHint {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+}}
 QLabel#settingsSectionTitle {{
     background: transparent;
     color: {COLOR_TEXT};
@@ -108,7 +131,12 @@ QLabel#settingsRestartMessage {{
     font-size: {font_px(FONT_SMALL)}px;
 }}
 QPushButton#resetUiScaleButton,
-QPushButton#saveSettingsButton {{
+QPushButton#saveSettingsButton,
+QPushButton#poolOpsDedupeButton,
+QPushButton#poolOpsPurgeButton,
+QPushButton#poolOpsClearButton,
+QPushButton#poolOpsImportButton,
+QPushButton#poolOpsBuildButton {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
@@ -119,7 +147,12 @@ QPushButton#saveSettingsButton {{
     min-height: {px(28)}px;
 }}
 QPushButton#resetUiScaleButton:hover,
-QPushButton#saveSettingsButton:hover {{
+QPushButton#saveSettingsButton:hover,
+QPushButton#poolOpsDedupeButton:hover,
+QPushButton#poolOpsPurgeButton:hover,
+QPushButton#poolOpsClearButton:hover,
+QPushButton#poolOpsImportButton:hover,
+QPushButton#poolOpsBuildButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};
     border-color: {COLOR_BORDER_HOVER};
 }}
