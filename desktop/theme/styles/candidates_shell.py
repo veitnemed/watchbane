@@ -99,7 +99,7 @@ QLabel#candidateSearchFieldLabel {{
     color: {COLOR_TEXT};
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 600;
-    padding: {px(3)}px 0 {px(1)}px 0;
+    padding: {px(2)}px 0 0 0;
 }}
 QComboBox#candidateSearchMediaType,
 QComboBox#candidateReplenishPreset,
@@ -112,8 +112,8 @@ QComboBox#candidateReplenishOriginPreference {{
     border-radius: {px(8)}px;
     color: {COLOR_TEXT};
     font-size: {font_px(FONT_BASE)}px;
-    padding: {px(6)}px {px(10)}px;
-    min-height: {px(30)}px;
+    padding: {px(5)}px {px(9)}px;
+    min-height: {px(28)}px;
 }}
 QComboBox#candidateSearchMediaType:focus,
 QComboBox#candidateReplenishPreset:focus,
@@ -130,7 +130,7 @@ QComboBox#candidateReplenishVibe::drop-down,
 QComboBox#candidateReplenishReleasePreference::drop-down,
 QComboBox#candidateReplenishOriginPreference::drop-down {{
     border: none;
-    width: {px(28)}px;
+    width: {px(26)}px;
 }}
 QComboBox#candidateSearchMediaType::down-arrow,
 QComboBox#candidateReplenishPreset::down-arrow,
@@ -228,6 +228,48 @@ QLabel#candidateFilterSectionBadge {{
     border-radius: {px(8)}px;
     color: {COLOR_ACCENT_HOVER};
     font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 700;
+    padding: 0;
+}}
+QFrame#candidateMoodFilterSection {{
+    background-color: rgba(47, 29, 44, 0.72);
+    border: 1px solid #4A3146;
+    border-radius: {px(RADIUS_CARD)}px;
+}}
+QFrame#candidateMoodFilterSection:hover {{
+    border-color: #6B3B66;
+}}
+QLabel#candidateMoodFilterSectionBadge {{
+    background-color: rgba(244, 167, 197, 0.16);
+    border: 1px solid #7E4C68;
+    border-radius: {px(8)}px;
+    color: #F4A7C5;
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 700;
+    padding: 0;
+}}
+QToolButton#candidateAdvancedFiltersToggle {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_BASE)}px;
+    font-weight: 600;
+    padding: {px(6)}px {px(10)}px;
+    min-height: {px(30)}px;
+}}
+QToolButton#candidateAdvancedFiltersToggle:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
+}}
+QWidget#candidateAdvancedFiltersContent,
+QWidget#candidateAdvancedFiltersGroup {{
+    background: transparent;
+}}
+QLabel#candidateAdvancedFiltersGroupTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_BASE)}px;
     font-weight: 700;
     padding: 0;
 }}

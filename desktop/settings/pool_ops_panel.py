@@ -30,6 +30,7 @@ from desktop.settings.pool_ops_worker import (
     PoolMaintenanceWorker,
 )
 from desktop.settings.tmdb_build_dialog import TmdbBuildDialog
+from desktop.theme import TRANSPARENT_STYLE
 from desktop.theme.scaling import layout_px
 
 StatusCallback = Callable[[str, int], None]
@@ -88,6 +89,7 @@ class PoolOpsPanel(QWidget):
 
         self._stats_container = QWidget()
         self._stats_container.setObjectName("poolOpsStatsContainer")
+        self._stats_container.setStyleSheet(TRANSPARENT_STYLE)
         self._stats_layout = QVBoxLayout(self._stats_container)
         self._stats_layout.setContentsMargins(0, 0, 0, 0)
         self._stats_layout.setSpacing(layout_px(4))

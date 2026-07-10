@@ -258,6 +258,33 @@ def test_language_to_tmdb_locale() -> None:
     assert language_to_tmdb_locale("de") == "ru-RU"
 
 
+def test_pool_ops_dynamic_stats_text_surfaces_are_transparent(monkeypatch, qapp) -> None:
+    from PyQt6.QtWidgets import QLabel, QWidget
+
+    from desktop.settings.pool_ops_panel import PoolOpsPanel
+    from desktop.theme import TRANSPARENT_STYLE
+
+    monkeypatch.setattr(
+        "desktop.settings.pool_ops_panel.candidate_service.get_pool_stats_view",
+        lambda: {
+            "summary": "Pool summary",
+            "stats": {},
+            "lines": ["Unique: 10", "Ready: 8"],
+        },
+    )
+
+    panel = PoolOpsPanel()
+    container = panel.findChild(QWidget, "poolOpsStatsContainer")
+    assert container is not None
+    assert container.styleSheet() == TRANSPARENT_STYLE
+
+    summary = panel.findChild(QLabel, "poolOpsStatsSummary")
+    assert summary is not None
+    assert summary.text() == "Pool summary"
+    stats_lines = container.findChildren(QLabel, "poolOpsStatsLine")
+    assert [label.text() for label in stats_lines] == ["Unique: 10", "Ready: 8"]
+
+
 def test_get_scale_tuning_defaults_when_local_file_is_missing(monkeypatch) -> None:
     import desktop.theme.ui_tuning as ui_tuning
 
@@ -970,8 +997,6 @@ def test_hardcoded_px_guard_for_direct_sizing_calls() -> None:
     legacy_whitelist = {
         ("desktop/analytics/sections/fallback_bars.py", "count.setFixedWidth(92)"),
         ("desktop/shared/detail/card.py", "self._genre_section.setFixedHeight(0)"),
-        ("desktop/shared/widgets/country_chip_selector.py", "chip.setMinimumHeight(36)"),
-        ("desktop/shared/widgets/genre_chip_selector.py", "chip.setMinimumHeight(36)"),
     }
     findings = set()
 
@@ -1069,6 +1094,12 @@ def test_app_style_includes_settings_scaled_typography() -> None:
     assert "QCheckBox#ftsSearchCheckbox" in style
     assert "QLabel#autoPoolRefillHint" in style
     assert "QLabel#ftsSearchHint" in style
+    assert "QWidget#poolOpsStatsContainer" in style
+    assert re.search(r"QWidget#poolOpsStatsContainer\s*\{\s*background:\s*transparent;", style)
+    assert re.search(
+        r"QLabel#poolOpsStatsSummary,\s*QLabel#poolOpsStatsLine\s*\{\s*background:\s*transparent;",
+        style,
+    )
     assert "QComboBox#interfaceLanguageCombo" in style
     assert "QComboBox#dataLanguageCombo" in style
     assert "QPushButton#saveSettingsButton" in style

@@ -49,8 +49,10 @@ QWidget#watchedYearRange,
 QWidget#candidateSearchYearRange,
 QWidget#candidateSearchKpScoreRange,
 QWidget#candidateSearchImdbScoreRange,
+QWidget#candidateSearchTmdbScoreRange,
 QWidget#candidateSearchKpVotesRange,
-QWidget#candidateSearchImdbVotesRange {{
+QWidget#candidateSearchImdbVotesRange,
+QWidget#candidateSearchTmdbVotesRange {{
     background: transparent;
 }}
 QLabel#candidateSearchYearRangeLabel,
@@ -83,14 +85,14 @@ QCheckBox#candidateSearchOnlyUnwatched,
 QCheckBox#candidateSearchHideHidden {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {font_px(FONT_BASE + 1)}px;
+    font-size: {font_px(FONT_BASE)}px;
     spacing: {px(8)}px;
-    min-height: {px(32)}px;
+    min-height: {px(29)}px;
 }}
 QCheckBox#candidateSearchOnlyComplete::indicator,
 QCheckBox#candidateSearchOnlyUnwatched::indicator,
 QCheckBox#candidateSearchHideHidden::indicator {{
-    width: {px(20)}px;
-    height: {px(20)}px;
+    width: {px(18)}px;
+    height: {px(18)}px;
 }}
 """

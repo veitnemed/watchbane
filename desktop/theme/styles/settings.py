@@ -31,6 +31,9 @@ QFrame#poolOpsSection {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_CARD)}px;
 }}
+QWidget#poolOpsStatsContainer {{
+    background: transparent;
+}}
 QLabel#poolOpsTitle {{
     background: transparent;
     color: {COLOR_TEXT};

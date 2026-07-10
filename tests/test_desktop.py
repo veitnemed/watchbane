@@ -5620,14 +5620,39 @@ def test_candidate_filter_sections_define_visual_hierarchy() -> None:
     style = build_candidates_shell_style()
 
     assert "QFrame#candidateFilterSection" in style
+    assert "QFrame#candidateMoodFilterSection" in style
     assert "QLabel#candidateFilterSectionTitle" in style
     assert "QLabel#candidateFilterSectionBadge" in style
+    assert "QLabel#candidateMoodFilterSectionBadge" in style
+    assert "#F4A7C5" in style
+    assert "QToolButton#candidateAdvancedFiltersToggle" in style
+    assert "QWidget#candidateAdvancedFiltersContent" in style
+    assert "QLabel#candidateAdvancedFiltersGroupTitle" in style
     assert "QFrame#candidateFilterDivider" in style
     assert f"font-size: {font_px(FONT_SECTION)}px;" in style
     assert "QLabel#candidateSearchFieldLabel" in style
     assert "QComboBox#candidateSearchMediaType" in style
     assert f"font-size: {font_px(FONT_SECTION)}px;" in style
     assert "font-weight: 700;" in style
+
+
+def test_candidate_filter_section_heart_icon_is_centered(qapp) -> None:
+    from desktop.candidates.filter_icon_assets import filter_section_icon_pixmap
+
+    pixmap = filter_section_icon_pixmap("heart", 24, "#F4A7C5")
+    image = pixmap.toImage()
+    xs: list[int] = []
+    ys: list[int] = []
+    for y in range(image.height()):
+        for x in range(image.width()):
+            if image.pixelColor(x, y).alpha() > 0:
+                xs.append(x)
+                ys.append(y)
+
+    assert xs
+    assert ys
+    assert abs(((min(xs) + max(xs)) / 2) - ((image.width() - 1) / 2)) <= 2.5
+    assert abs(((min(ys) + max(ys)) / 2) - ((image.height() - 1) / 2)) <= 3.0
 
 
 def test_candidate_list_search_matches_watched_search_scale() -> None:
@@ -5899,10 +5924,18 @@ def test_candidate_filters_form_uses_grouped_sections() -> None:
     source = inspect.getsource(form_module.build_filters_form)
 
     assert "add_section" in source
+    assert "add_advanced_group" in source
     assert "add_divider" in source
     assert "candidateFilterSection" in source
+    assert "candidateMoodFilterSection" in source
+    assert "candidateAdvancedFiltersToggle" in source
+    assert "candidateAdvancedFiltersContent" in source
     assert "candidateFilterDivider" in source
+    assert "filter_section_icon_label" in source
+    assert "filter_icon_label(" not in source
     assert 'tr("candidates.filters.basic")' in source
+    assert 'tr("candidates.filters.replenish.title")' in source
+    assert 'tr("candidates.filters.additional")' in source
     assert 'tr("candidates.filters.genres")' in source
     assert 'tr("candidates.filters.tmdb")' in source
     assert 'tr("candidates.filters.visibility")' in source

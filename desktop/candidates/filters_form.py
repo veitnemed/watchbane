@@ -15,12 +15,13 @@ from PyQt6.QtWidgets import (
     QLabel,
     QScrollArea,
     QSizePolicy,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
 from candidates.onboarding.taste_presets import get_taste_preset
-from desktop.candidates.filter_icon_assets import filter_icon_label
+from desktop.candidates.filter_icon_assets import filter_section_icon_label
 from desktop.candidates.filters_controls import (
     SCORE_SLIDER_MAX,
     VOTES_SLIDER_MAX_INDEX,
@@ -117,33 +118,39 @@ def build_filters_form(
     form_host.setObjectName("candidateSearchFiltersHost")
     form = QVBoxLayout(form_host)
     form.setContentsMargins(0, 0, layout_px(10), 0)
-    form.setSpacing(layout_px(12))
+    form.setSpacing(layout_px(10))
     compact_combo_max_width = layout_px(420)
     section_index = 0
-    section_icons = ("filter", "heart", "refresh", "target", "document")
 
-    def add_section(title: str) -> tuple[QFrame, QVBoxLayout]:
+    def add_section(
+        title: str,
+        *,
+        object_name: str = "candidateFilterSection",
+        icon_name: str = "document",
+        badge_object_name: str = "candidateFilterSectionBadge",
+        icon_color: str = "#22D3C5",
+    ) -> tuple[QFrame, QVBoxLayout]:
         nonlocal section_index
         section_index += 1
         section = QFrame()
-        section.setObjectName("candidateFilterSection")
+        section.setObjectName(object_name)
         section_layout = QVBoxLayout(section)
         section_layout.setContentsMargins(
-            layout_px(16),
             layout_px(14),
-            layout_px(16),
+            layout_px(12),
             layout_px(14),
+            layout_px(12),
         )
-        section_layout.setSpacing(layout_px(12))
+        section_layout.setSpacing(layout_px(10))
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.setSpacing(layout_px(8))
-        badge = filter_icon_label(
-            section_icons[min(section_index - 1, len(section_icons) - 1)],
-            "candidateFilterSectionBadge",
+        badge = filter_section_icon_label(
+            icon_name,
+            badge_object_name,
             layout_px(24),
-            "#22D3C5",
+            icon_color,
         )
         title_label = QLabel(f"{section_index}. {title}")
         title_label.setObjectName("candidateFilterSectionTitle")
@@ -153,6 +160,19 @@ def build_filters_form(
         section_layout.addLayout(title_row)
         form.addWidget(section)
         return section, section_layout
+
+    def add_advanced_group(parent_layout: QVBoxLayout, title: str) -> QVBoxLayout:
+        group = QWidget()
+        group.setObjectName("candidateAdvancedFiltersGroup")
+        group.setStyleSheet(TRANSPARENT_STYLE)
+        group_layout = QVBoxLayout(group)
+        group_layout.setContentsMargins(0, 0, 0, 0)
+        group_layout.setSpacing(layout_px(8))
+        title_label = QLabel(title)
+        title_label.setObjectName("candidateAdvancedFiltersGroupTitle")
+        group_layout.addWidget(title_label)
+        parent_layout.addWidget(group)
+        return group_layout
 
     def add_divider(section_layout: QVBoxLayout) -> None:
         divider = QFrame()
@@ -178,7 +198,10 @@ def build_filters_form(
         combo.setMaximumWidth(compact_combo_max_width)
         combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
-    _basic_section, basic_layout = add_section(tr("candidates.filters.basic"))
+    _basic_section, basic_layout = add_section(
+        tr("candidates.filters.basic"),
+        icon_name="filter",
+    )
     country_selector = CountryChipSelector([])
     basic_layout.addWidget(field_label(tr("candidates.filters.country")))
     basic_layout.addWidget(country_selector)
@@ -228,7 +251,13 @@ def build_filters_form(
         if index >= 0:
             combo.setCurrentIndex(index)
 
-    _replenish_section, replenish_layout = add_section(tr("candidates.filters.replenish.title"))
+    _replenish_section, replenish_layout = add_section(
+        tr("candidates.filters.replenish.title"),
+        object_name="candidateMoodFilterSection",
+        icon_name="heart",
+        badge_object_name="candidateMoodFilterSectionBadge",
+        icon_color="#F4A7C5",
+    )
     replenish_preset_combo = add_combo(REPLENISH_PRESETS, "candidateReplenishPreset")
     replenish_animation_mode_combo = add_combo(ANIMATION_MODE_OPTIONS, "candidateReplenishAnimationMode")
     replenish_vibe_combo = add_combo(VIBE_OPTIONS, "candidateReplenishVibe")
@@ -391,7 +420,40 @@ def build_filters_form(
     replenish_preset_combo.currentIndexChanged.connect(apply_preset_suggestion)
     country_selector.selection_changed.connect(refresh_replenish_compatibility)
 
-    _genres_section, genres_layout = add_section(tr("candidates.filters.genres"))
+    _advanced_section, advanced_layout = add_section(
+        tr("candidates.filters.additional"),
+        icon_name="sliders",
+    )
+    advanced_toggle = QToolButton()
+    advanced_toggle.setObjectName("candidateAdvancedFiltersToggle")
+    advanced_toggle.setCheckable(True)
+    advanced_toggle.setChecked(False)
+    advanced_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+    advanced_toggle.setArrowType(Qt.ArrowType.RightArrow)
+    advanced_layout.addWidget(advanced_toggle)
+
+    advanced_content = QWidget()
+    advanced_content.setObjectName("candidateAdvancedFiltersContent")
+    advanced_content.setStyleSheet(TRANSPARENT_STYLE)
+    advanced_content.setVisible(False)
+    advanced_content_layout = QVBoxLayout(advanced_content)
+    advanced_content_layout.setContentsMargins(0, 0, 0, 0)
+    advanced_content_layout.setSpacing(layout_px(9))
+    advanced_layout.addWidget(advanced_content)
+
+    def set_advanced_visible(checked: bool) -> None:
+        advanced_content.setVisible(bool(checked))
+        advanced_toggle.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
+        advanced_toggle.setText(
+            tr("candidates.filters.additional.hide")
+            if checked
+            else tr("candidates.filters.additional.show")
+        )
+
+    advanced_toggle.toggled.connect(set_advanced_visible)
+    set_advanced_visible(False)
+
+    genres_layout = add_advanced_group(advanced_content_layout, tr("candidates.filters.genres"))
     include_genre_selector = GenreChipSelector(object_name="candidateSearchIncludeGenres")
     exclude_genre_selector = GenreChipSelector(object_name="candidateSearchExcludeGenres")
     genres_layout.addWidget(field_label(tr("candidates.filters.include")))
@@ -400,7 +462,9 @@ def build_filters_form(
     genres_layout.addWidget(field_label(tr("candidates.filters.exclude")))
     genres_layout.addWidget(exclude_genre_selector)
 
-    _tmdb_section, tmdb_layout = add_section(tr("candidates.filters.tmdb"))
+    add_divider(advanced_content_layout)
+
+    tmdb_layout = add_advanced_group(advanced_content_layout, tr("candidates.filters.tmdb"))
     tmdb_score_range_label = QLabel("")
     tmdb_score_range_label.setObjectName("candidateSearchFilterValue")
     tmdb_score_slider = make_min_threshold_slider(
@@ -422,7 +486,9 @@ def build_filters_form(
     )
     add_threshold_filter_row(tmdb_layout, tr("candidates.filters.votes"), tmdb_votes_range_label, tmdb_votes_slider)
 
-    _visibility_section, visibility_layout = add_section(tr("candidates.filters.visibility"))
+    add_divider(advanced_content_layout)
+
+    visibility_layout = add_advanced_group(advanced_content_layout, tr("candidates.filters.visibility"))
     only_complete_check = QCheckBox(tr("candidates.filters.only_complete"))
     only_complete_check.setObjectName("candidateSearchOnlyComplete")
     only_complete_check.setChecked(DEFAULT_BROWSE_FILTERS["only_complete"])

@@ -90,7 +90,7 @@ class CountryChipSelector(QWidget):
             chip.setCheckable(True)
             chip.setChecked(code in selected and code not in self._disabled_codes)
             chip.setEnabled(code not in self._disabled_codes)
-            chip.setMinimumHeight(36)
+            chip.setMinimumHeight(layout_px(34))
             chip.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
             chip.toggled.connect(self._on_chip_toggled)
             self._chips[code] = chip

@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QCheckBox, QComboBox
+from PyQt6.QtWidgets import QCheckBox, QComboBox, QToolButton, QWidget
 
 from desktop.candidates.filters_form import build_filters_form
 
@@ -57,6 +57,31 @@ def test_replenish_controls_exist_and_default_safe(qtbot) -> None:
     assert form.replenish_origin_preference_combo.currentData() == "any"
     assert form.replenish_enabled_check.isChecked() is False
     assert form.replenish_advanced_override_check.isChecked() is False
+
+
+def test_advanced_filter_controls_live_under_collapsible_settings(qtbot) -> None:
+    form = _build_form(qtbot)
+
+    toggle = form.scroll.findChild(QToolButton, "candidateAdvancedFiltersToggle")
+    content = form.scroll.findChild(QWidget, "candidateAdvancedFiltersContent")
+
+    assert toggle is not None
+    assert content is not None
+    assert toggle.isChecked() is False
+    assert content.isHidden() is True
+
+    assert content.findChild(type(form.include_genre_selector), "candidateSearchIncludeGenres") is form.include_genre_selector
+    assert content.findChild(type(form.exclude_genre_selector), "candidateSearchExcludeGenres") is form.exclude_genre_selector
+    assert content.findChild(type(form.tmdb_score_slider), "candidateSearchTmdbScoreRange") is form.tmdb_score_slider
+    assert content.findChild(type(form.tmdb_votes_slider), "candidateSearchTmdbVotesRange") is form.tmdb_votes_slider
+    assert content.findChild(QCheckBox, "candidateSearchOnlyComplete") is form.only_complete_check
+    assert content.findChild(QCheckBox, "candidateSearchOnlyUnwatched") is form.only_unwatched_check
+    assert content.findChild(QCheckBox, "candidateSearchHideHidden") is form.hide_hidden_check
+
+    toggle.setChecked(True)
+
+    assert toggle.isChecked() is True
+    assert content.isHidden() is False
 
 
 def test_anime_preset_suggests_jp_and_animation_only(qtbot) -> None:

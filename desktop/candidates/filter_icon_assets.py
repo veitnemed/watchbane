@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QColor, QIcon, QImage, QPixmap
+from PyQt6.QtCore import QPointF, QRectF, QSize, Qt
+from PyQt6.QtGui import QColor, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PyQt6.QtWidgets import QLabel
 
 
@@ -33,6 +33,7 @@ _ICON_CELLS = {
     "replenish": (4, 2),
 }
 _pixmap_cache: dict[tuple[str, int, str], QPixmap] = {}
+_section_pixmap_cache: dict[tuple[str, int, str], QPixmap] = {}
 
 
 def _sprite() -> QImage:
@@ -140,4 +141,96 @@ def filter_icon_label(name: str, object_name: str, size: int, color: str) -> QLa
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     label.setFixedSize(size, size)
     label.setPixmap(filter_icon_pixmap(name, max(1, int(size * 0.9)), color))
+    return label
+
+
+def _section_pen(color: str, size: int) -> QPen:
+    return QPen(
+        QColor(color),
+        max(2, int(round(size * 0.075))),
+        Qt.PenStyle.SolidLine,
+        Qt.PenCapStyle.RoundCap,
+        Qt.PenJoinStyle.RoundJoin,
+    )
+
+
+def _draw_section_icon(painter: QPainter, name: str, size: int, color: str) -> None:
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setPen(_section_pen(color, size))
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    inset = size * 0.24
+    rect = QRectF(inset, inset, size - inset * 2, size - inset * 2)
+
+    if name == "filter":
+        path = QPainterPath()
+        path.moveTo(size * 0.26, size * 0.28)
+        path.lineTo(size * 0.74, size * 0.28)
+        path.lineTo(size * 0.56, size * 0.51)
+        path.lineTo(size * 0.56, size * 0.73)
+        path.lineTo(size * 0.44, size * 0.67)
+        path.lineTo(size * 0.44, size * 0.51)
+        path.closeSubpath()
+        painter.drawPath(path)
+        return
+
+    if name == "heart":
+        path = QPainterPath()
+        path.moveTo(size * 0.50, size * 0.76)
+        path.cubicTo(size * 0.18, size * 0.57, size * 0.22, size * 0.31, size * 0.39, size * 0.31)
+        path.cubicTo(size * 0.46, size * 0.31, size * 0.50, size * 0.36, size * 0.50, size * 0.36)
+        path.cubicTo(size * 0.50, size * 0.36, size * 0.54, size * 0.31, size * 0.61, size * 0.31)
+        path.cubicTo(size * 0.78, size * 0.31, size * 0.82, size * 0.57, size * 0.50, size * 0.76)
+        fill = QColor(color)
+        fill.setAlpha(220)
+        painter.setBrush(fill)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawPath(path)
+        return
+
+    if name == "sliders":
+        x1 = size * 0.30
+        x2 = size * 0.70
+        for y, knob_x in ((size * 0.35, size * 0.42), (size * 0.50, size * 0.61), (size * 0.65, size * 0.48)):
+            painter.drawLine(QPointF(x1, y), QPointF(x2, y))
+            painter.drawEllipse(QPointF(knob_x, y), size * 0.035, size * 0.035)
+        return
+
+    if name == "document":
+        path = QPainterPath()
+        path.moveTo(rect.left(), rect.top())
+        path.lineTo(rect.right() - size * 0.13, rect.top())
+        path.lineTo(rect.right(), rect.top() + size * 0.13)
+        path.lineTo(rect.right(), rect.bottom())
+        path.lineTo(rect.left(), rect.bottom())
+        path.closeSubpath()
+        painter.drawPath(path)
+        painter.drawLine(QPointF(size * 0.38, size * 0.47), QPointF(size * 0.62, size * 0.47))
+        painter.drawLine(QPointF(size * 0.38, size * 0.59), QPointF(size * 0.67, size * 0.59))
+        return
+
+    painter.drawEllipse(rect)
+
+
+def filter_section_icon_pixmap(name: str, size: int, color: str) -> QPixmap:
+    """Return a clean drawn icon for section header badges."""
+    key = (name, int(size), color)
+    cached = _section_pixmap_cache.get(key)
+    if cached is not None:
+        return cached
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    _draw_section_icon(painter, name, size, color)
+    painter.end()
+    _section_pixmap_cache[key] = pixmap
+    return pixmap
+
+
+def filter_section_icon_label(name: str, object_name: str, size: int, color: str) -> QLabel:
+    """Return a fixed-size label with a centered clean section icon."""
+    label = QLabel()
+    label.setObjectName(object_name)
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    label.setFixedSize(size, size)
+    label.setPixmap(filter_section_icon_pixmap(name, size, color))
     return label

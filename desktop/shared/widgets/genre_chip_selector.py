@@ -135,7 +135,7 @@ class GenreChipSelector(QWidget):
             chip.setObjectName("genreFilterChip")
             chip.setCheckable(True)
             chip.setChecked(genre.casefold() in selected_normalized)
-            chip.setMinimumHeight(36)
+            chip.setMinimumHeight(layout_px(34))
             chip.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
             chip.toggled.connect(self._on_chip_toggled)
             self._chips[genre] = chip

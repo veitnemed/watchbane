@@ -15,8 +15,8 @@ QPushButton#genreFilterChip {{
     color: {COLOR_TEXT_CHIP};
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 500;
-    padding: {px(8)}px {px(14)}px;
-    min-height: {px(36)}px;
+    padding: {px(7)}px {px(12)}px;
+    min-height: {px(34)}px;
 }}
 QPushButton#genreFilterChip:hover {{
     background-color: {COLOR_HOVER};
@@ -59,8 +59,8 @@ QPushButton#countryFilterChip {{
     color: {COLOR_TEXT_CHIP};
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 500;
-    padding: {px(8)}px {px(14)}px;
-    min-height: {px(36)}px;
+    padding: {px(7)}px {px(12)}px;
+    min-height: {px(34)}px;
 }}
 QPushButton#countryFilterChip:hover {{
     background-color: {COLOR_HOVER};
