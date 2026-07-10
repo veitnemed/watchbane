@@ -39,6 +39,15 @@ QLabel#candidateFiltersSummaryTitle {{
     font-size: {font_px(FONT_SECTION)}px;
     font-weight: 700;
 }}
+QLabel#candidateFiltersSummaryTitleIcon {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER_HOVER};
+    border-radius: {px(13)}px;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 700;
+    padding: 0;
+}}
 QLabel#candidateFiltersIntroLead {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};
@@ -50,6 +59,32 @@ QLabel#candidateFiltersIntroStats {{
     color: {COLOR_TEXT};
     font-size: {font_px(FONT_BASE + 1)}px;
     font-weight: 600;
+}}
+QFrame#candidateFiltersSummaryRow {{
+    background: transparent;
+    min-height: {px(26)}px;
+}}
+QLabel#candidateFiltersSummaryRowIcon {{
+    background: transparent;
+    color: {COLOR_TEXT_MUTED};
+    font-size: {font_px(FONT_BASE)}px;
+    font-weight: 600;
+}}
+QLabel#candidateFiltersSummaryRowLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+}}
+QLabel#candidateFiltersSummaryRowValue {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+}}
+QFrame#candidateFiltersSummaryDivider {{
+    background-color: {COLOR_DIVIDER};
+    border: none;
+    min-height: {px(1)}px;
+    max-height: {px(1)}px;
 }}
 QLabel#candidateSearchHint,
 QLabel#candidateSearchResultsSummary,
@@ -191,8 +226,8 @@ QLabel#candidateFilterSectionBadge {{
     background-color: {COLOR_ACCENT_SOFT};
     border: 1px solid {COLOR_BORDER_ACTIVE};
     border-radius: {px(8)}px;
-    color: {COLOR_TEXT};
-    font-size: {font_px(FONT_BASE)}px;
+    color: {COLOR_ACCENT_HOVER};
+    font-size: {font_px(FONT_SMALL)}px;
     font-weight: 700;
     padding: 0;
 }}

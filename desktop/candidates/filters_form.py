@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from candidates.onboarding.taste_presets import get_taste_preset
+from desktop.candidates.filter_icon_assets import filter_icon_label
 from desktop.candidates.filters_controls import (
     SCORE_SLIDER_MAX,
     VOTES_SLIDER_MAX_INDEX,
@@ -119,6 +120,7 @@ def build_filters_form(
     form.setSpacing(layout_px(12))
     compact_combo_max_width = layout_px(420)
     section_index = 0
+    section_icons = ("filter", "heart", "refresh", "target", "document")
 
     def add_section(title: str) -> tuple[QFrame, QVBoxLayout]:
         nonlocal section_index
@@ -137,11 +139,13 @@ def build_filters_form(
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
         title_row.setSpacing(layout_px(8))
-        badge = QLabel(str(section_index))
-        badge.setObjectName("candidateFilterSectionBadge")
-        badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        badge.setFixedSize(layout_px(24), layout_px(24))
-        title_label = QLabel(title)
+        badge = filter_icon_label(
+            section_icons[min(section_index - 1, len(section_icons) - 1)],
+            "candidateFilterSectionBadge",
+            layout_px(24),
+            "#22D3C5",
+        )
+        title_label = QLabel(f"{section_index}. {title}")
         title_label.setObjectName("candidateFilterSectionTitle")
         title_row.addWidget(badge)
         title_row.addWidget(title_label)

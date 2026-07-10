@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from candidates import service as candidate_service
@@ -12,6 +12,7 @@ from candidates.models import country_schema, genre_schema
 from candidates.replenish.filter_intent import FilterReplenishIntent
 from config import constant
 from dataset.language import choose_genre_labels
+from desktop.candidates.filter_icon_assets import filter_icon, filter_icon_label
 from desktop.candidates.filters_controls import (
     SCORE_SLIDER_MAX,
     SCORE_SLIDER_STEP,
@@ -113,14 +114,18 @@ class CandidateFiltersView:
         )
         root_layout.setSpacing(CANDIDATE_ROOT_SPACING_PX)
 
-        self._apply_button = QPushButton(tr("candidates.filters.apply"))
+        self._apply_button = QPushButton(tr("candidates.filters.summary.apply"))
         self._apply_button.setObjectName("candidateSearchApplyTopButton")
+        self._apply_button.setIcon(filter_icon("search", control_px(18), "#F5F7FB"))
+        self._apply_button.setIconSize(QSize(control_px(18), control_px(18)))
         self._apply_button.clicked.connect(self._apply_filters)
         self._apply_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._apply_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
 
-        self._reset_button = QPushButton(tr("candidates.filters.reset"))
+        self._reset_button = QPushButton(tr("candidates.filters.summary.reset"))
         self._reset_button.setObjectName("candidateSearchResetTopButton")
+        self._reset_button.setIcon(filter_icon("refresh", control_px(17), "#F5F7FB"))
+        self._reset_button.setIconSize(QSize(control_px(17), control_px(17)))
         self._reset_button.clicked.connect(self._reset_filters)
         self._reset_button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._reset_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
@@ -147,16 +152,28 @@ class CandidateFiltersView:
         self._intro_card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.MinimumExpanding)
         intro_layout = QVBoxLayout(self._intro_card)
         intro_layout.setContentsMargins(
+            layout_px(18),
             layout_px(16),
-            layout_px(14),
-            layout_px(16),
+            layout_px(18),
             layout_px(16),
         )
         intro_layout.setSpacing(layout_px(8))
 
+        summary_title_row = QHBoxLayout()
+        summary_title_row.setContentsMargins(0, 0, 0, 0)
+        summary_title_row.setSpacing(layout_px(8))
+        summary_icon = filter_icon_label(
+            "document",
+            "candidateFiltersSummaryTitleIcon",
+            layout_px(26),
+            "#8FA2B7",
+        )
+        summary_title_row.addWidget(summary_icon)
         summary_title = QLabel(tr("candidates.filters.summary.title"))
         summary_title.setObjectName("candidateFiltersSummaryTitle")
-        intro_layout.addWidget(summary_title)
+        summary_title_row.addWidget(summary_title)
+        summary_title_row.addStretch(1)
+        intro_layout.addLayout(summary_title_row)
 
         self._intro_lead = QLabel(tr("candidates.filters.intro.lead"))
         self._intro_lead.setObjectName("candidateFiltersIntroLead")
@@ -166,8 +183,54 @@ class CandidateFiltersView:
         self._intro_stats = QLabel("")
         self._intro_stats.setObjectName("candidateFiltersIntroStats")
         self._intro_stats.setWordWrap(True)
+        self._intro_stats.setVisible(False)
         intro_layout.addWidget(self._intro_stats)
-        intro_layout.addStretch(1)
+
+        self._summary_value_labels: dict[str, QLabel] = {}
+
+        def add_summary_row(key: str, icon_name: str, label_key: str) -> None:
+            row = QFrame()
+            row.setObjectName("candidateFiltersSummaryRow")
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(layout_px(7))
+
+            icon_label = filter_icon_label(
+                icon_name,
+                "candidateFiltersSummaryRowIcon",
+                layout_px(18),
+                "#8FA2B7",
+            )
+            row_layout.addWidget(icon_label)
+
+            label = QLabel(tr(label_key))
+            label.setObjectName("candidateFiltersSummaryRowLabel")
+            row_layout.addWidget(label, stretch=1)
+
+            value = QLabel("")
+            value.setObjectName("candidateFiltersSummaryRowValue")
+            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            value.setWordWrap(True)
+            row_layout.addWidget(value, stretch=1)
+            self._summary_value_labels[key] = value
+
+            intro_layout.addWidget(row)
+            divider = QFrame()
+            divider.setObjectName("candidateFiltersSummaryDivider")
+            divider.setFrameShape(QFrame.Shape.HLine)
+            divider.setFrameShadow(QFrame.Shadow.Plain)
+            intro_layout.addWidget(divider)
+
+        add_summary_row("countries", "globe", "candidates.filters.summary.countries")
+        add_summary_row("media_type", "media", "candidates.filters.summary.media_type")
+        add_summary_row("year", "calendar", "candidates.filters.summary.year")
+        add_summary_row("preset", "heart", "candidates.filters.summary.preset")
+        add_summary_row("vibe", "vibe", "candidates.filters.summary.vibe")
+        add_summary_row("release", "clock", "candidates.filters.summary.release")
+        add_summary_row("origin", "target", "candidates.filters.summary.origin")
+        add_summary_row("replenish", "refresh", "candidates.filters.summary.replenish")
+
+        intro_layout.addSpacing(layout_px(4))
         intro_layout.addWidget(self._apply_button)
         intro_layout.addWidget(self._reset_button)
 
@@ -188,6 +251,7 @@ class CandidateFiltersView:
         self._update_year_range_label()
         self._refresh_threshold_labels()
         self._apply_filter_defaults()
+        self._connect_summary_updates()
         session.add_listener(self._on_session_updated)
         session.add_loading_listener(self._on_loading_changed)
         self._update_intro()
@@ -288,6 +352,65 @@ class CandidateFiltersView:
     def _replenish_advanced_override_check(self):
         return self._form.replenish_advanced_override_check
 
+    def _connect_summary_updates(self) -> None:
+        self._summary_update_callback = lambda *_args: self._update_summary_rows()
+        update = self._summary_update_callback
+        self._country_selector.selection_changed.connect(update)
+        self._media_type_combo.currentIndexChanged.connect(update)
+        self._year_slider.rangeChanged.connect(update)
+        self._replenish_preset_combo.currentIndexChanged.connect(update)
+        self._replenish_vibe_combo.currentIndexChanged.connect(update)
+        self._replenish_release_preference_combo.currentIndexChanged.connect(update)
+        self._replenish_origin_preference_combo.currentIndexChanged.connect(update)
+        self._replenish_enabled_check.toggled.connect(update)
+
+    def _summary_countries_text(self) -> str:
+        country_codes = self._country_selector.selected_country_codes()
+        if not country_codes:
+            return tr("candidates.filters.summary.all")
+        labels = [
+            country_schema.build_country_display([code], language=self._data_language) or code.upper()
+            for code in country_codes[:3]
+        ]
+        countries = ", ".join(labels)
+        if len(country_codes) <= 3:
+            return countries
+        return tr(
+            "candidates.filters.summary.more",
+            value=countries,
+            count=len(country_codes) - 3,
+        )
+
+    def _summary_year_text(self) -> str:
+        year_from, year_to = self._year_slider.values()
+        return f"{year_from} \u2014 {year_to}"
+
+    def _summary_replenish_text(self) -> str:
+        if self._replenish_enabled_check.isChecked():
+            return tr(
+                "candidates.filters.summary.replenish_on",
+                count=FILTER_REPLENISH_DEFAULT_BATCH_SIZE,
+            )
+        return tr("candidates.filters.summary.replenish_off")
+
+    def _update_summary_rows(self) -> None:
+        if not hasattr(self, "_summary_value_labels"):
+            return
+        values = {
+            "countries": self._summary_countries_text(),
+            "media_type": self._media_type_combo.currentText(),
+            "year": self._summary_year_text(),
+            "preset": self._replenish_preset_combo.currentText(),
+            "vibe": self._replenish_vibe_combo.currentText(),
+            "release": self._replenish_release_preference_combo.currentText(),
+            "origin": self._replenish_origin_preference_combo.currentText(),
+            "replenish": self._summary_replenish_text(),
+        }
+        for key, value in values.items():
+            label = self._summary_value_labels.get(key)
+            if label is not None:
+                label.setText(str(value or tr("candidates.filters.summary.not_set")))
+
     def _update_intro(self, *, result_count: int | None = None, result_ok: bool | None = None) -> None:
         overview = self._session.overview()
         lead, stats, apply_enabled = build_intro_copy(
@@ -298,6 +421,8 @@ class CandidateFiltersView:
         )
         self._intro_lead.setText(lead)
         self._intro_stats.setText(stats)
+        self._intro_stats.setVisible(False)
+        self._update_summary_rows()
         enabled = apply_enabled and self._session.is_loading is False and self._is_replenishing is False
         self._apply_button.setEnabled(enabled)
         self._reset_button.setEnabled(enabled)
@@ -308,6 +433,7 @@ class CandidateFiltersView:
             self._reset_button.setEnabled(False)
             self._intro_lead.setText(tr("candidates.filters.loading.lead"))
             self._intro_stats.setText(tr("candidates.filters.loading.stats"))
+            self._intro_stats.setVisible(True)
             return
         self._update_intro()
 
@@ -321,6 +447,7 @@ class CandidateFiltersView:
             self._local_apply_requested = False
             self._intro_lead.setText(tr("candidates.filters.error.lead"))
             self._intro_stats.setText(self._session.last_error)
+            self._intro_stats.setVisible(True)
             self._apply_button.setEnabled(self._is_replenishing is False)
             self._reset_button.setEnabled(self._is_replenishing is False)
             return
@@ -348,9 +475,9 @@ class CandidateFiltersView:
     def _update_apply_button_width(self) -> None:
         if not hasattr(self, "_intro_card"):
             return
-        content_width = self._intro_card.width() - layout_px(32)
+        content_width = self._intro_card.width() - layout_px(36)
         if content_width <= 0:
-            content_width = SUMMARY_CARD_WIDTH - layout_px(32)
+            content_width = SUMMARY_CARD_WIDTH - layout_px(36)
         target = max(control_px(148), content_width)
         self._apply_button.setFixedWidth(target)
         self._reset_button.setFixedWidth(target)
@@ -359,6 +486,7 @@ class CandidateFiltersView:
 
     def _on_year_range_changed(self, _lower: int, _upper: int) -> None:
         self._update_year_range_label()
+        self._update_summary_rows()
 
     def _update_year_range_label(self) -> None:
         year_from, year_to = self._year_slider.values()
@@ -549,6 +677,7 @@ class CandidateFiltersView:
         self._set_replenish_running(True)
         self._intro_lead.setText("Replenish started")
         self._intro_stats.setText("Local filter applied. Fetching matching TMDb candidates.")
+        self._intro_stats.setVisible(True)
         worker = FilterReplenishWorker(intent, service=self._service, parent=self._widget)
         worker.progress.connect(self._on_replenish_progress)
         worker.finished_with_result.connect(self._on_replenish_finished)
@@ -565,6 +694,7 @@ class CandidateFiltersView:
         page = progress.get("page") or 1
         accepted = progress.get("accepted_count") or 0
         self._intro_stats.setText(f"Replenish {bucket_id}, page {page}, accepted {accepted}.")
+        self._intro_stats.setVisible(True)
 
     def _on_replenish_finished(self, result: object) -> None:
         payload = dict(result or {}) if isinstance(result, dict) else {"ok": False, "error": "Invalid result"}
@@ -573,10 +703,12 @@ class CandidateFiltersView:
         if payload.get("blocked"):
             self._intro_lead.setText("Conflict: no TMDb call")
             self._intro_stats.setText("Selected replenish options have a compatibility conflict.")
+            self._intro_stats.setVisible(True)
             return
         if payload.get("ok") is not True:
             self._intro_lead.setText("Replenish failed")
             self._intro_stats.setText(str(payload.get("error") or payload.get("message") or "Unknown error"))
+            self._intro_stats.setVisible(True)
             return
         added = int(payload.get("saved_count") or payload.get("created_count") or 0)
         requested = int(payload.get("requested_count") or 30)
@@ -590,12 +722,14 @@ class CandidateFiltersView:
             if added < requested
             else f"Before: {local_before}. Added {added}. Visible now: {visible_after}."
         )
+        self._intro_stats.setVisible(True)
 
     def _on_replenish_failed(self, message: str) -> None:
         self._last_replenish_result = {"ok": False, "error": str(message)}
         self._set_replenish_running(False)
         self._intro_lead.setText("Replenish failed")
         self._intro_stats.setText(str(message or "Unknown error"))
+        self._intro_stats.setVisible(True)
 
     def _remove_replenish_worker(self, worker: FilterReplenishWorker) -> None:
         if self._replenish_worker is worker:
