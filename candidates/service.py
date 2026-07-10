@@ -56,6 +56,7 @@ from candidates.repositories.criteria_repository import (
     load_candidate_criteria,
 )
 from candidates.repositories.pool_repository import load_candidate_pool
+from candidates.replenish.filter_replenisher import replenish_candidates_for_filters
 from candidates.scoring.sort_keys import dedupe_ranked_candidates_by_title_identity
 from candidates.sources.tmdb import builder as tmdb_build
 from candidates.sources.tmdb import country_options as tmdb_country_options
@@ -388,6 +389,70 @@ def replenish_candidate_pool(
     payload["skipped"] = False
     payload["replenish_target"] = view["missing"]
     return payload
+
+
+def replenish_candidate_pool_for_filters(
+    intent: dict,
+    *,
+    limit: int = 30,
+    tmdb_client=None,
+    progress_callback=None,
+    cancel_checker=None,
+    dry_run: bool = False,
+) -> dict:
+    """Replenish the shared candidate pool from explicit GUI filter intent."""
+    before_pool = load_candidate_pool()
+    before_keys = set(before_pool)
+    before_count = len(before_pool)
+    result = replenish_candidates_for_filters(
+        intent,
+        limit=limit,
+        tmdb_client=tmdb_client,
+        progress_callback=progress_callback,
+        cancel_checker=cancel_checker,
+        dry_run=True,
+        existing_pool=before_pool,
+    )
+    result.update({
+        "dry_run": bool(dry_run),
+        "before_pool_count": before_count,
+        "after_pool_count": before_count,
+        "added_pool_keys": [],
+        "save_stats": {},
+    })
+    if result.get("ok") is not True or result.get("blocked") or result.get("cancelled"):
+        return result
+    if dry_run:
+        return result
+
+    candidates = list(result.get("candidates") or [])
+    if not candidates:
+        return result
+
+    stats = tmdb_import.import_tmdb_candidates_to_common_pool(
+        candidates,
+        criteria_name=COMMON_POOL_CRITERIA_NAME,
+        result_metadata={
+            "source": "filter_replenish",
+            "intent": result.get("compatibility", {}).get("intent") or result.get("plan", {}).get("intent"),
+            "plan": {
+                "target_add_count": result.get("plan", {}).get("target_add_count"),
+                "bucket_count": result.get("plan", {}).get("bucket_count"),
+                "country_plan": result.get("plan", {}).get("country_plan"),
+                "media_plan": result.get("plan", {}).get("media_plan"),
+            },
+        },
+    )
+    after_pool = load_candidate_pool()
+    added_keys = sorted(set(after_pool) - before_keys)
+    result.update({
+        "saved_count": len(added_keys),
+        "before_pool_count": before_count,
+        "after_pool_count": len(after_pool),
+        "added_pool_keys": added_keys,
+        "save_stats": stats,
+    })
+    return result
 
 
 def get_onboarding_autofill_plan_view(profile: OnboardingTasteProfile | dict) -> dict:

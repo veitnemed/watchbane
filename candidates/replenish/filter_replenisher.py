@@ -316,7 +316,7 @@ def replenish_candidates_for_filters(
         dry_run=dry_run,
         requested_count=safe_limit,
         created_count=len(selected),
-        saved_count=0 if dry_run else len(selected),
+        saved_count=0,
         candidates=selected,
         compatibility=compatibility,
         plan=plan,
