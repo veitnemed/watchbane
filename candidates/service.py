@@ -14,6 +14,7 @@ from candidates.onboarding.autofill import (
     CountrySelection,
     OnboardingTasteProfile,
     STARTER_POOL_TARGET,
+    TmdbAutofillClient,
     build_country_plan,
     build_fetch_buckets,
     media_weights,
@@ -391,6 +392,36 @@ def replenish_candidate_pool(
     return payload
 
 
+class _FilterReplenishTmdbClient:
+    """Adapter between filter replenish media types and the shared TMDb client."""
+
+    _DISCOVER_PATHS = {
+        "movie": "/discover/movie",
+        "tv": "/discover/tv",
+    }
+
+    def __init__(self, client: TmdbAutofillClient | None = None) -> None:
+        self._client = client or TmdbAutofillClient()
+
+    def discover(self, media_type: str, params: dict) -> dict:
+        path = self._DISCOVER_PATHS.get(str(media_type or "").strip())
+        if path is None:
+            raise ValueError(f"Unsupported TMDb media type for filter replenish: {media_type!r}")
+        return self._client.discover(path, params)
+
+    def details(self, media_type: str, tmdb_id: int, *, language: str = "ru-RU") -> dict:
+        normalized_media_type = str(media_type or "").strip()
+        if normalized_media_type == "movie":
+            return self._client.movie_details(int(tmdb_id), language=language)
+        if normalized_media_type == "tv":
+            return self._client.tv_details(int(tmdb_id), language=language)
+        raise ValueError(f"Unsupported TMDb media type for filter replenish: {media_type!r}")
+
+
+def _build_filter_replenish_tmdb_client() -> _FilterReplenishTmdbClient:
+    return _FilterReplenishTmdbClient()
+
+
 def replenish_candidate_pool_for_filters(
     intent: dict,
     *,
@@ -404,10 +435,11 @@ def replenish_candidate_pool_for_filters(
     before_pool = load_candidate_pool()
     before_keys = set(before_pool)
     before_count = len(before_pool)
+    active_tmdb_client = tmdb_client if tmdb_client is not None else _build_filter_replenish_tmdb_client()
     result = replenish_candidates_for_filters(
         intent,
         limit=limit,
-        tmdb_client=tmdb_client,
+        tmdb_client=active_tmdb_client,
         progress_callback=progress_callback,
         cancel_checker=cancel_checker,
         dry_run=True,

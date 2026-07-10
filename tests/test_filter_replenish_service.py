@@ -81,6 +81,79 @@ def test_service_dry_run_does_not_mutate_pool(monkeypatch) -> None:
     assert len(pool_repository.load_candidate_pool()) == 1
 
 
+def test_service_uses_default_filter_replenish_tmdb_client_when_omitted(monkeypatch) -> None:
+    fake_client = object()
+    captured: dict = {}
+
+    monkeypatch.setattr(candidate_service, "load_candidate_pool", lambda: {})
+    monkeypatch.setattr(candidate_service, "_build_filter_replenish_tmdb_client", lambda: fake_client)
+
+    def fake_replenish_candidates_for_filters(_intent, **kwargs):
+        captured.update(kwargs)
+        return {
+            "ok": True,
+            "created_count": 0,
+            "candidates": [],
+            "compatibility": {},
+            "plan": {},
+        }
+
+    monkeypatch.setattr(
+        candidate_service,
+        "replenish_candidates_for_filters",
+        fake_replenish_candidates_for_filters,
+    )
+
+    result = candidate_service.replenish_candidate_pool_for_filters(
+        FilterReplenishIntent(
+            countries=["US"],
+            media_type="movie",
+            target_add_count=10,
+        ).to_dict(),
+        dry_run=True,
+    )
+
+    assert result["ok"] is True
+    assert result["dry_run"] is True
+    assert captured["tmdb_client"] is fake_client
+
+
+def test_filter_replenish_tmdb_client_maps_media_types_to_tmdb_paths() -> None:
+    class FakeBaseClient:
+        def __init__(self) -> None:
+            self.discover_calls: list[tuple[str, dict]] = []
+            self.detail_calls: list[tuple[str, int, str]] = []
+
+        def discover(self, endpoint: str, params: dict) -> dict:
+            self.discover_calls.append((endpoint, dict(params)))
+            return {"results": []}
+
+        def movie_details(self, tmdb_id: int, language: str = "en") -> dict:
+            self.detail_calls.append(("movie", int(tmdb_id), language))
+            return {}
+
+        def tv_details(self, tmdb_id: int, language: str = "en") -> dict:
+            self.detail_calls.append(("tv", int(tmdb_id), language))
+            return {}
+
+    base_client = FakeBaseClient()
+    client = candidate_service._FilterReplenishTmdbClient(base_client)
+
+    client.discover("movie", {"page": 1})
+    client.discover("tv", {"page": 2})
+    client.details("movie", 10, language="ru-RU")
+    client.details("tv", 20, language="ru-RU")
+
+    assert base_client.discover_calls == [
+        ("/discover/movie", {"page": 1}),
+        ("/discover/tv", {"page": 2}),
+    ]
+    assert base_client.detail_calls == [
+        ("movie", 10, "ru-RU"),
+        ("tv", 20, "ru-RU"),
+    ]
+
+
 def test_service_second_run_skips_existing_candidates(monkeypatch) -> None:
     monkeypatch.setattr("storage.data.load_dataset", lambda: {})
     client = build_mock_tmdb_client("us_gb_new_movies_balanced")
