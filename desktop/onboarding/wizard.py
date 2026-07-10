@@ -338,14 +338,14 @@ class _PresetCardButton(QAbstractButton):
         self._description = description
         self._visual = visual
         self._icon = QPixmap(str(_PRESET_ICON_DIR / visual.icon_filename))
-        self.setMinimumHeight(scale_px(108))
+        self.setMinimumHeight(scale_px(104))
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt override
-        return QSize(scale_px(704), scale_px(108))
+        return QSize(scale_px(704), scale_px(104))
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt override
-        return QSize(scale_px(280), scale_px(108))
+        return QSize(scale_px(280), scale_px(104))
 
     def enterEvent(self, event) -> None:  # noqa: N802 - Qt override
         self.update()
@@ -369,45 +369,45 @@ class _PresetCardButton(QAbstractButton):
         hover = self.underMouse()
         checked = self.isChecked()
 
-        tint_alpha = 0.12 if checked else 0.055 if hover else 0.032
+        tint_alpha = 0.075 if checked else 0.038 if hover else 0.02
         gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
         gradient.setColorAt(0.0, _color(self._visual.accent, tint_alpha))
-        gradient.setColorAt(0.20, QColor("#101B2B"))
-        gradient.setColorAt(1.0, QColor("#081321"))
+        gradient.setColorAt(0.22, QColor("#0F1B2B"))
+        gradient.setColorAt(1.0, QColor("#091523"))
 
         card_path = QPainterPath()
         card_path.addRoundedRect(rect, radius, radius)
         painter.fillPath(card_path, QBrush(gradient))
 
         if checked:
-            border = _color(self._visual.accent, 0.86)
+            border = _color(self._visual.accent, 0.62)
         elif hover:
-            border = _color(self._visual.accent, 0.42)
+            border = _color(self._visual.accent, 0.30)
         else:
-            border = QColor("#223650")
+            border = QColor("#1D314A")
         painter.setPen(QPen(border, scale_px(1)))
         painter.drawPath(card_path)
 
-        strip_rect = QRectF(rect.left(), rect.top() + scale_px(1), scale_px(3), rect.height() - scale_px(2))
+        strip_rect = QRectF(rect.left(), rect.top() + scale_px(2), scale_px(2), rect.height() - scale_px(4))
         strip_path = QPainterPath()
         strip_path.addRoundedRect(strip_rect, scale_px(2), scale_px(2))
-        painter.fillPath(strip_path, _color(self._visual.accent, 0.88))
+        painter.fillPath(strip_path, _color(self._visual.accent, 0.58))
 
-        icon_size = scale_px(68)
+        icon_size = scale_px(58)
         icon_rect = QRectF(
-            rect.left() + scale_px(20),
+            rect.left() + scale_px(24),
             rect.center().y() - icon_size / 2,
             icon_size,
             icon_size,
         )
         if not self._icon.isNull():
             painter.save()
-            painter.setOpacity(0.86 if checked or hover else 0.78)
+            painter.setOpacity(0.68 if checked or hover else 0.58)
             painter.drawPixmap(icon_rect.toRect(), self._icon)
             painter.restore()
 
-        text_left = rect.left() + scale_px(110)
-        text_right_pad = scale_px(72 if checked else 26)
+        text_left = rect.left() + scale_px(104)
+        text_right_pad = scale_px(66 if checked else 26)
         text_width = max(scale_px(80), int(rect.right() - text_left - text_right_pad))
 
         title_font = QFont(FONT_FAMILY)
@@ -417,8 +417,8 @@ class _PresetCardButton(QAbstractButton):
         description_font.setPixelSize(font_px(17))
         description_font.setWeight(QFont.Weight.Medium)
 
-        title_rect = QRectF(text_left, rect.top() + scale_px(25), text_width, scale_px(32))
-        desc_rect = QRectF(text_left, rect.top() + scale_px(61), text_width, scale_px(28))
+        title_rect = QRectF(text_left, rect.top() + scale_px(23), text_width, scale_px(32))
+        desc_rect = QRectF(text_left, rect.top() + scale_px(58), text_width, scale_px(28))
         self._draw_text(painter, title_rect, self._title, title_font, QColor("#F3F7FF"))
         self._draw_text(painter, desc_rect, self._description, description_font, QColor("#AEBBD0"))
 
@@ -433,15 +433,15 @@ class _PresetCardButton(QAbstractButton):
         painter.drawText(rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided)
 
     def _draw_checkmark(self, painter: QPainter, rect: QRectF) -> None:
-        diameter = scale_px(32)
-        center_x = rect.right() - scale_px(41)
+        diameter = scale_px(28)
+        center_x = rect.right() - scale_px(39)
         center_y = rect.center().y()
         circle = QRectF(center_x - diameter / 2, center_y - diameter / 2, diameter, diameter)
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#159FE3"))
+        painter.setBrush(_color("#19AEEB", 0.88))
         painter.drawEllipse(circle)
 
-        pen = QPen(QColor("#F6FBFF"), scale_px(3))
+        pen = QPen(QColor("#F6FBFF"), scale_px(2))
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
