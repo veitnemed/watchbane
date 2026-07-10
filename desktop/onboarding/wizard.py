@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 import re
 from typing import Any
 
@@ -12,11 +13,25 @@ from PyQt6.QtCore import (
     QParallelAnimationGroup,
     QPoint,
     QPropertyAnimation,
+    QRectF,
+    QSize,
     Qt,
     pyqtSignal,
 )
+from PyQt6.QtGui import (
+    QBrush,
+    QColor,
+    QFont,
+    QFontMetrics,
+    QLinearGradient,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+)
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtWidgets import (
+    QAbstractButton,
     QButtonGroup,
     QDialog,
     QFrame,
@@ -60,12 +75,9 @@ from desktop.theme.tokens import (
     COLOR_ACCENT,
     COLOR_ACCENT_HOVER,
     COLOR_ACCENT_SOFT,
-    COLOR_BG,
     COLOR_BORDER,
     COLOR_BORDER_HOVER,
-    COLOR_CARD,
     COLOR_CARD_ALT,
-    COLOR_FOCUS_BORDER,
     COLOR_SURFACE,
     COLOR_TEXT,
     COLOR_TEXT_MUTED,
@@ -73,19 +85,18 @@ from desktop.theme.tokens import (
     COLOR_TEXT_SOFT,
     FONT_BASE,
     FONT_DIALOG_TITLE,
+    FONT_FAMILY,
     FONT_FAMILY_QSS,
     FONT_SMALL,
-    FONT_TITLE,
     RADIUS_BUTTON,
-    RADIUS_CARD_LARGE,
     SPACING_LARGE,
     SPACING_MEDIUM,
     SPACING_SMALL,
     px,
 )
 
-ONBOARDING_BASE_WIDTH = 960
-ONBOARDING_BASE_HEIGHT = 640
+ONBOARDING_BASE_WIDTH = 1586
+ONBOARDING_BASE_HEIGHT = 992
 ONBOARDING_MIN_WIDTH = 720
 ONBOARDING_MIN_HEIGHT = 520
 ONBOARDING_SCALE_PRESETS: tuple[tuple[float, str], ...] = (
@@ -169,13 +180,34 @@ _PRESET_CARDS: tuple[_PresetCard, ...] = (
         PRESET_DARK_THRILLER_CRIME,
         "Мрачный криминал",
         "Dark crime",
-        "Криминал и триллеры.",
+        "Криминал, триллеры, нуар.",
         "Crime and thriller pool.",
     ),
 )
 
 
 _PRESET_CARDS_BY_KEY = {card.key: card for card in _PRESET_CARDS}
+
+
+@dataclass(frozen=True)
+class _PresetVisual:
+    accent: str
+    icon_filename: str
+
+
+_PRESET_ICON_DIR = Path(__file__).resolve().parents[1] / "images" / "logos_for_start_select_menu" / "split_icons"
+
+_PRESET_VISUALS: dict[str, _PresetVisual] = {
+    PRESET_MANUAL: _PresetVisual("#18CDEB", "manual.png"),
+    PRESET_HOLLYWOOD_MAINSTREAM: _PresetVisual("#E0B24A", "hollywood_mainstream.png"),
+    PRESET_RUSSIAN_MAINSTREAM: _PresetVisual("#3A9DFF", "russian_mainstream.png"),
+    PRESET_ANIME: _PresetVisual("#9A5CFF", "anime.png"),
+    PRESET_K_DRAMA: _PresetVisual("#F06AB6", "k_drama.png"),
+    PRESET_TURKISH_DRAMAS: _PresetVisual("#F39A38", "turkish_dramas.png"),
+    PRESET_BRITISH_EUROPEAN_DETECTIVE: _PresetVisual("#61D17D", "british_european_detective.png"),
+    PRESET_FAMILY_ANIMATION: _PresetVisual("#32D6D2", "family_animation.png"),
+    PRESET_DARK_THRILLER_CRIME: _PresetVisual("#F0475C", "dark_thriller_crime.png"),
+}
 
 _GENRE_GROUP_LABELS: dict[str, tuple[str, str]] = {
     "action_adventure": ("Боевик и приключения", "Action & adventure"),
@@ -284,16 +316,164 @@ _QUESTIONS: tuple[_Question, ...] = (
 )
 
 
+def _color(hex_color: str, alpha: float = 1.0) -> QColor:
+    color = QColor(hex_color)
+    color.setAlpha(max(0, min(255, int(round(float(alpha) * 255)))))
+    return color
+
+
+class _PresetCardButton(QAbstractButton):
+    """Painted preset tile matching the startup reference screen."""
+
+    def __init__(self, *, title: str, description: str, visual: _PresetVisual, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("onboardingPresetCard")
+        self.setCheckable(True)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setText(f"{title}\n{description}")
+        self._title = title
+        self._description = description
+        self._visual = visual
+        self._icon = QPixmap(str(_PRESET_ICON_DIR / visual.icon_filename))
+        self.setMinimumHeight(scale_px(108))
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    def sizeHint(self) -> QSize:  # noqa: N802 - Qt override
+        return QSize(scale_px(704), scale_px(108))
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt override
+        return QSize(scale_px(280), scale_px(108))
+
+    def enterEvent(self, event) -> None:  # noqa: N802 - Qt override
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:  # noqa: N802 - Qt override
+        self.update()
+        super().leaveEvent(event)
+
+    def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
+        del event
+        painter = QPainter(self)
+        painter.setRenderHints(
+            QPainter.RenderHint.Antialiasing
+            | QPainter.RenderHint.SmoothPixmapTransform
+            | QPainter.RenderHint.TextAntialiasing
+        )
+
+        rect = QRectF(self.rect()).adjusted(scale_px(1), scale_px(1), -scale_px(1), -scale_px(1))
+        radius = scale_px(10)
+        hover = self.underMouse()
+        checked = self.isChecked()
+
+        tint_alpha = 0.12 if checked else 0.055 if hover else 0.032
+        gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        gradient.setColorAt(0.0, _color(self._visual.accent, tint_alpha))
+        gradient.setColorAt(0.20, QColor("#101B2B"))
+        gradient.setColorAt(1.0, QColor("#081321"))
+
+        card_path = QPainterPath()
+        card_path.addRoundedRect(rect, radius, radius)
+        painter.fillPath(card_path, QBrush(gradient))
+
+        if checked:
+            border = _color(self._visual.accent, 0.86)
+        elif hover:
+            border = _color(self._visual.accent, 0.42)
+        else:
+            border = QColor("#223650")
+        painter.setPen(QPen(border, scale_px(1)))
+        painter.drawPath(card_path)
+
+        strip_rect = QRectF(rect.left(), rect.top() + scale_px(1), scale_px(3), rect.height() - scale_px(2))
+        strip_path = QPainterPath()
+        strip_path.addRoundedRect(strip_rect, scale_px(2), scale_px(2))
+        painter.fillPath(strip_path, _color(self._visual.accent, 0.88))
+
+        icon_size = scale_px(68)
+        icon_rect = QRectF(
+            rect.left() + scale_px(20),
+            rect.center().y() - icon_size / 2,
+            icon_size,
+            icon_size,
+        )
+        if not self._icon.isNull():
+            painter.save()
+            painter.setOpacity(0.86 if checked or hover else 0.78)
+            painter.drawPixmap(icon_rect.toRect(), self._icon)
+            painter.restore()
+
+        text_left = rect.left() + scale_px(110)
+        text_right_pad = scale_px(72 if checked else 26)
+        text_width = max(scale_px(80), int(rect.right() - text_left - text_right_pad))
+
+        title_font = QFont(FONT_FAMILY)
+        title_font.setPixelSize(font_px(20))
+        title_font.setWeight(QFont.Weight.Bold)
+        description_font = QFont(FONT_FAMILY)
+        description_font.setPixelSize(font_px(17))
+        description_font.setWeight(QFont.Weight.Medium)
+
+        title_rect = QRectF(text_left, rect.top() + scale_px(25), text_width, scale_px(32))
+        desc_rect = QRectF(text_left, rect.top() + scale_px(61), text_width, scale_px(28))
+        self._draw_text(painter, title_rect, self._title, title_font, QColor("#F3F7FF"))
+        self._draw_text(painter, desc_rect, self._description, description_font, QColor("#AEBBD0"))
+
+        if checked:
+            self._draw_checkmark(painter, rect)
+
+    def _draw_text(self, painter: QPainter, rect: QRectF, text: str, font: QFont, color: QColor) -> None:
+        painter.setFont(font)
+        painter.setPen(color)
+        metrics = QFontMetrics(font)
+        elided = metrics.elidedText(text, Qt.TextElideMode.ElideRight, int(rect.width()))
+        painter.drawText(rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided)
+
+    def _draw_checkmark(self, painter: QPainter, rect: QRectF) -> None:
+        diameter = scale_px(32)
+        center_x = rect.right() - scale_px(41)
+        center_y = rect.center().y()
+        circle = QRectF(center_x - diameter / 2, center_y - diameter / 2, diameter, diameter)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#159FE3"))
+        painter.drawEllipse(circle)
+
+        pen = QPen(QColor("#F6FBFF"), scale_px(3))
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.drawLine(
+            int(center_x - scale_px(8)),
+            int(center_y),
+            int(center_x - scale_px(2)),
+            int(center_y + scale_px(6)),
+        )
+        painter.drawLine(
+            int(center_x - scale_px(2)),
+            int(center_y + scale_px(6)),
+            int(center_x + scale_px(9)),
+            int(center_y - scale_px(8)),
+        )
+
+
 def _wizard_style() -> str:
     return f"""
 QDialog#onboardingAutofillDialog {{
-    background-color: {COLOR_BG};
+    background-color: #06101C;
     font-family: {FONT_FAMILY_QSS};
 }}
 QFrame#onboardingCard {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
-    border-radius: {px(RADIUS_CARD_LARGE)}px;
+    background-color: qlineargradient(
+        x1:0, y1:0, x2:1, y2:1,
+        stop:0 #0B1B2D,
+        stop:0.48 #0A1828,
+        stop:1 #071321
+    );
+    border: 1px solid #1D334C;
+    border-radius: {px(20)}px;
 }}
 QWidget#onboardingDots,
 QStackedWidget#onboardingStack,
@@ -304,35 +484,35 @@ QWidget#onboardingPage {{
 QLabel#onboardingEyebrow {{
     background-color: transparent;
     border: 0;
-    color: {COLOR_ACCENT_HOVER};
-    font-size: {font_px(FONT_SMALL)}px;
+    color: #25C6FF;
+    font-size: {font_px(18)}px;
     font-weight: 700;
 }}
 QLabel#onboardingTitle {{
     background-color: transparent;
     border: 0;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_TITLE)}px;
+    font-size: {font_px(34)}px;
     font-weight: 750;
 }}
 QLabel#onboardingSubtitle, QLabel#onboardingStatus {{
     background-color: transparent;
     border: 0;
-    color: {COLOR_TEXT_SECONDARY};
-    font-size: {font_px(FONT_BASE)}px;
+    color: #AEBBD0;
+    font-size: {font_px(18)}px;
 }}
 QLabel#onboardingDot {{
     background-color: transparent;
     border: 0;
-    color: {COLOR_TEXT_MUTED};
-    font-size: {font_px(FONT_SMALL)}px;
+    color: #6F7F94;
+    font-size: {font_px(16)}px;
 }}
 QLabel#onboardingDot[active="true"] {{
-    color: {COLOR_ACCENT};
+    color: #18CDEB;
     font-size: {font_px(FONT_DIALOG_TITLE)}px;
 }}
 QLabel#onboardingDot[state="done"] {{
-    color: {COLOR_ACCENT_HOVER};
+    color: #18CDEB;
 }}
 QPushButton#onboardingOption {{
     background-color: {COLOR_SURFACE};
@@ -364,24 +544,30 @@ QScrollArea#onboardingPresetScroll QWidget#onboardingPresetViewport {{
     background-color: transparent;
     border: 0;
 }}
-QPushButton#onboardingPresetCard {{
-    background-color: {COLOR_SURFACE};
-    border: 1px solid {COLOR_BORDER};
-    border-radius: {px(RADIUS_BUTTON)}px;
-    color: {COLOR_TEXT_SOFT};
-    font-size: {font_px(FONT_BASE)}px;
-    font-weight: 650;
-    padding: {px(12)}px {px(14)}px;
-    text-align: left;
+QScrollArea#onboardingPresetScroll QScrollBar:vertical {{
+    background-color: #0A1624;
+    border: 1px solid #1D334C;
+    border-radius: {px(5)}px;
+    width: {px(12)}px;
+    margin: 0;
 }}
-QPushButton#onboardingPresetCard:hover {{
-    background-color: {COLOR_CARD_ALT};
-    border-color: {COLOR_BORDER_HOVER};
+QScrollArea#onboardingPresetScroll QScrollBar::handle:vertical {{
+    background-color: #1E4B78;
+    border-radius: {px(5)}px;
+    min-height: {px(82)}px;
 }}
-QPushButton#onboardingPresetCard:checked {{
-    background-color: {COLOR_ACCENT_SOFT};
-    border-color: {COLOR_ACCENT};
-    color: {COLOR_TEXT};
+QScrollArea#onboardingPresetScroll QScrollBar::handle:vertical:hover {{
+    background-color: #2EA8FF;
+}}
+QScrollArea#onboardingPresetScroll QScrollBar::add-line:vertical,
+QScrollArea#onboardingPresetScroll QScrollBar::sub-line:vertical {{
+    height: 0;
+    background: transparent;
+    border: 0;
+}}
+QScrollArea#onboardingPresetScroll QScrollBar::add-page:vertical,
+QScrollArea#onboardingPresetScroll QScrollBar::sub-page:vertical {{
+    background: transparent;
 }}
 QWidget#onboardingCountryChipHost {{
     background-color: transparent;
@@ -407,18 +593,18 @@ QPushButton#onboardingCountryChip:checked {{
     color: {COLOR_TEXT};
 }}
 QPushButton#onboardingNext, QPushButton#onboardingOpen {{
-    background-color: {COLOR_ACCENT};
-    border: 1px solid {COLOR_ACCENT};
-    border-radius: {px(RADIUS_BUTTON)}px;
+    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #25C6FF, stop:1 #159FE3);
+    border: 1px solid #25C6FF;
+    border-radius: {px(9)}px;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_BASE)}px;
+    font-size: {font_px(FONT_DIALOG_TITLE)}px;
     font-weight: 700;
-    padding: {px(10)}px {px(20)}px;
-    min-width: {px(120)}px;
+    padding: {px(10)}px {px(22)}px;
+    min-width: {px(244)}px;
 }}
 QPushButton#onboardingNext:hover, QPushButton#onboardingOpen:hover {{
-    background-color: {COLOR_ACCENT_HOVER};
-    border-color: {COLOR_ACCENT_HOVER};
+    background-color: #25C6FF;
+    border-color: #25C6FF;
 }}
 QPushButton#onboardingNext:disabled {{
     background-color: {COLOR_CARD_ALT};
@@ -426,17 +612,17 @@ QPushButton#onboardingNext:disabled {{
     color: {COLOR_TEXT_MUTED};
 }}
 QPushButton#onboardingBack, QPushButton#onboardingSkip {{
-    background-color: transparent;
-    border: 1px solid {COLOR_BORDER};
-    border-radius: {px(RADIUS_BUTTON)}px;
-    color: {COLOR_TEXT_SECONDARY};
-    font-size: {font_px(FONT_BASE)}px;
+    background-color: rgba(16, 27, 43, 190);
+    border: 1px solid #2A3D57;
+    border-radius: {px(9)}px;
+    color: #AEBBD0;
+    font-size: {font_px(FONT_DIALOG_TITLE)}px;
     font-weight: 650;
     padding: {px(10)}px {px(18)}px;
 }}
 QPushButton#onboardingBack:hover, QPushButton#onboardingSkip:hover {{
-    background-color: {COLOR_CARD_ALT};
-    border-color: {COLOR_FOCUS_BORDER};
+    background-color: #132337;
+    border-color: #3A567A;
     color: {COLOR_TEXT};
 }}
 QProgressBar#onboardingProgress {{
@@ -532,7 +718,7 @@ class OnboardingAutofillDialog(QDialog):
         self._last_result: dict[str, Any] = {}
 
         root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(scale_px(22), scale_px(22), scale_px(22), scale_px(22))
+        root_layout.setContentsMargins(scale_px(16), scale_px(20), scale_px(16), scale_px(19))
         root_layout.setSpacing(0)
 
         card = QFrame()
@@ -542,10 +728,10 @@ class OnboardingAutofillDialog(QDialog):
 
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(
-            scale_px(34),
-            scale_px(30),
-            scale_px(34),
-            scale_px(28),
+            scale_px(46),
+            scale_px(38),
+            scale_px(46),
+            scale_px(38),
         )
         card_layout.setSpacing(scale_px(SPACING_LARGE))
 
@@ -553,7 +739,7 @@ class OnboardingAutofillDialog(QDialog):
         self._dots.setObjectName("onboardingDots")
         self._dots_layout = QHBoxLayout(self._dots)
         self._dots_layout.setContentsMargins(0, 0, 0, 0)
-        self._dots_layout.setSpacing(scale_px(7))
+        self._dots_layout.setSpacing(scale_px(8))
         card_layout.addWidget(self._dots)
 
         self._stack = QStackedWidget()
@@ -580,15 +766,21 @@ class OnboardingAutofillDialog(QDialog):
         controls.setSpacing(scale_px(SPACING_MEDIUM))
         self._back_button = QPushButton("Назад" if self._ui_language == "ru" else "Back")
         self._back_button.setObjectName("onboardingBack")
+        self._back_button.setMinimumSize(scale_px(136), scale_px(58))
+        self._back_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._back_button.clicked.connect(self._go_back)
         controls.addWidget(self._back_button)
         self._footer_skip_button = QPushButton("Пропустить" if self._ui_language == "ru" else "Skip")
         self._footer_skip_button.setObjectName("onboardingSkip")
+        self._footer_skip_button.setMinimumSize(scale_px(184), scale_px(58))
+        self._footer_skip_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._footer_skip_button.clicked.connect(self._skip)
         controls.addWidget(self._footer_skip_button)
         controls.addStretch(1)
         self._next_button = QPushButton("Далее" if self._ui_language == "ru" else "Next")
         self._next_button.setObjectName("onboardingNext")
+        self._next_button.setMinimumSize(scale_px(288), scale_px(58))
+        self._next_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._next_button.clicked.connect(self._go_next)
         controls.addWidget(self._next_button)
         card_layout.addLayout(controls)
@@ -616,9 +808,6 @@ class OnboardingAutofillDialog(QDialog):
     def _preset_title(self, key: str) -> str:
         card = _PRESET_CARDS_BY_KEY.get(key) or _PRESET_CARDS_BY_KEY[PRESET_MANUAL]
         return self._text(card.title_ru, card.title_en)
-
-    def _preset_card_text(self, card: _PresetCard) -> str:
-        return f"{self._text(card.title_ru, card.title_en)}\n{self._text(card.description_ru, card.description_en)}"
 
     def _apply_preset_defaults(self, key: str) -> None:
         preset_key = str(key or PRESET_MANUAL).strip()
@@ -822,7 +1011,7 @@ class OnboardingAutofillDialog(QDialog):
         page = QWidget()
         page.setObjectName("onboardingPage")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(0, scale_px(9), 0, 0)
         layout.setSpacing(scale_px(SPACING_LARGE))
 
         eyebrow = QLabel(self._text("Стартовый пресет", "Starter preset"))
@@ -846,26 +1035,32 @@ class OnboardingAutofillDialog(QDialog):
         scroll.setObjectName("onboardingPresetScroll")
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
         scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         viewport = QWidget()
         viewport.setObjectName("onboardingPresetViewport")
+        viewport.setMinimumHeight(scale_px(960))
         grid = QGridLayout(viewport)
-        grid.setContentsMargins(0, 0, scale_px(4), 0)
-        grid.setHorizontalSpacing(scale_px(SPACING_MEDIUM))
-        grid.setVerticalSpacing(scale_px(SPACING_MEDIUM))
+        grid.setContentsMargins(0, scale_px(7), scale_px(16), 0)
+        grid.setHorizontalSpacing(scale_px(16))
+        grid.setVerticalSpacing(scale_px(14))
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        grid.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self._preset_group = QButtonGroup(self)
         self._preset_group.setExclusive(True)
         for index, card in enumerate(_PRESET_CARDS):
-            button = QPushButton(self._preset_card_text(card))
-            button.setObjectName("onboardingPresetCard")
-            button.setCheckable(True)
+            visual = _PRESET_VISUALS.get(card.key, _PRESET_VISUALS[PRESET_MANUAL])
+            button = _PresetCardButton(
+                title=self._text(card.title_ru, card.title_en),
+                description=self._text(card.description_ru, card.description_en),
+                visual=visual,
+            )
             button.setProperty("answer", card.key)
             button.setProperty("preset_key", card.key)
-            button.setMinimumHeight(scale_px(76))
-            button.setMinimumWidth(scale_px(280))
-            button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             button.setChecked(card.key == self._current_preset_key())
             self._preset_group.addButton(button)
             grid.addWidget(button, index // 2, index % 2)
@@ -1335,7 +1530,8 @@ class OnboardingAutofillDialog(QDialog):
         self._stack.setCurrentIndex(index)
         if index == self._plan_index():
             self._update_plan_summary()
-        self._animate_current_page(forward=index >= previous_index)
+        if index != previous_index:
+            self._animate_current_page(forward=index >= previous_index)
         self._rebuild_dots()
         self._sync_controls()
 
@@ -1391,10 +1587,9 @@ class OnboardingAutofillDialog(QDialog):
         question, _page, group = self._question_pages[index]
         return question, group
 
-    def _on_preset_selected(self, button: QPushButton) -> None:
+    def _on_preset_selected(self, button: QAbstractButton) -> None:
         preset_key = str(button.property("answer") or PRESET_MANUAL).strip()
         self._apply_preset_defaults(preset_key)
-        self._rebuild_edit_pages(current_index=self._stack.currentIndex())
         self._sync_controls()
 
     def _on_option_selected(self, key: str) -> None:
@@ -1444,7 +1639,7 @@ class OnboardingAutofillDialog(QDialog):
             self._set_page(1)
             return
         if index == 1:
-            self._set_page(self._question_start_index())
+            self._rebuild_edit_pages(current_index=self._question_start_index())
             return
         if index == self._plan_index():
             self._start_autofill()

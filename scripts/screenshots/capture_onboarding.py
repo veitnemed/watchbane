@@ -99,7 +99,8 @@ def main(argv: list[str] | None = None) -> int:
         os.environ["WATCHBANE_DEV_EMPTY_PROFILE"] = "1"
         os.environ["WATCHBANE_DEV_CLEAR_CANDIDATES_ON_START"] = "1"
 
-    from PyQt6.QtGui import QFontDatabase
+    from PyQt6.QtCore import QPoint
+    from PyQt6.QtGui import QCursor, QFontDatabase
     from PyQt6.QtWidgets import QApplication
 
     from desktop.theme.scaling import set_ui_scale
@@ -118,6 +119,8 @@ def main(argv: list[str] | None = None) -> int:
     dialog.raise_()
     dialog.activateWindow()
     _process_events(app, 20)
+    QCursor.setPos(dialog.mapToGlobal(QPoint(6, 6)))
+    _process_events(app, 3, delay=0.02)
 
     output = args.output
     if output is None:
