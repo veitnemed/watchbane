@@ -810,7 +810,7 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
 
 @pytest.mark.parametrize("ui_scale", SCALE_ANCHORS)
 def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
-    from PyQt6.QtWidgets import QLabel, QComboBox, QFrame, QLineEdit, QPushButton, QWidget
+    from PyQt6.QtWidgets import QLabel, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLineEdit, QPushButton, QWidget
 
     _set_anchor_ui_scale(ui_scale)
 
@@ -886,9 +886,29 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
     assert filters_view._apply_button.height() == APPLY_BUTTON_HEIGHT
     assert filters_view._reset_button.height() == APPLY_BUTTON_HEIGHT
     assert filters_view._apply_button.height() >= 30
+    if ui_scale >= 1.25:
+        assert filters_view._apply_button.width() >= filters_view._apply_button.sizeHint().width()
+        assert filters_view._reset_button.width() >= filters_view._reset_button.sizeHint().width()
     assert filters_view._form.scroll.widgetResizable() is True
     assert filters_view._tmdb_score_slider.minimumHeight() >= 34
     assert filters_view._tmdb_votes_slider.minimumHeight() >= 34
+    for row in filters_view.widget.findChildren(QFrame, "candidateFiltersSummaryRow"):
+        row_layout = row.layout()
+        if ui_scale >= 1.25:
+            assert isinstance(row_layout, QGridLayout)
+            label = row.findChild(QLabel, "candidateFiltersSummaryRowLabel")
+            value = row.findChild(QLabel, "candidateFiltersSummaryRowValue")
+            assert label is not None
+            assert value is not None
+            label_row, _label_column, _label_row_span, _label_column_span = row_layout.getItemPosition(
+                row_layout.indexOf(label)
+            )
+            value_row, _value_column, _value_row_span, _value_column_span = row_layout.getItemPosition(
+                row_layout.indexOf(value)
+            )
+            assert value_row > label_row
+        else:
+            assert isinstance(row_layout, QHBoxLayout)
 
     list_session = CandidateSearchSession(service=service)
     list_view = CandidateListView(list_session)

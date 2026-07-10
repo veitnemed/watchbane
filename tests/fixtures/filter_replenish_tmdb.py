@@ -131,6 +131,7 @@ def mock_details(tmdb_id: int, *, media_type: str, language: str = "ru-RU") -> d
         "episode_run_time": [45] if media_type == "tv" else [],
         "genres": [{"id": 18, "name": "Drama"}],
         "origin_country": ["US"],
+        "poster_path": f"/poster-{tmdb_id}.jpg",
         "vote_average": 7.4,
         "vote_count": 300,
         "popularity": 80.0,

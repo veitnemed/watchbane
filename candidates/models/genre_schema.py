@@ -137,6 +137,15 @@ def _iter_raw_genres(values: Any) -> list[str]:
     return [text] if text != "" else []
 
 
+def _looks_like_tmdb_genre_id(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    text = str(value or "").strip()
+    return text.isdigit()
+
+
 def normalize_genre_filter_list(values) -> list[str]:
     """Normalizes user/runtime genre filters to ordered unique canonical keys."""
     keys: list[str] = []
@@ -200,6 +209,8 @@ def normalize_genre_display_labels(values: Any) -> list[str]:
     seen: set[str] = set()
 
     for raw_value in _iter_raw_genres(values):
+        if _looks_like_tmdb_genre_id(raw_value):
+            continue
         genre_key = normalize_genre_to_key(raw_value)
         display_values = build_genres_display([genre_key]) if genre_key is not None else [raw_value]
         for display_value in display_values:

@@ -48,6 +48,28 @@ def test_import_new_tmdb_candidate(monkeypatch) -> None:
     assert candidate["final_score"] > 0
 
 
+def test_import_does_not_store_numeric_tmdb_genre_ids_as_genres(monkeypatch) -> None:
+    saved = {}
+    _patch_importer(monkeypatch, {}, saved)
+
+    stats = importer.import_tmdb_candidates_to_common_pool(
+        [
+            _candidate(
+                genres=[],
+                genres_tmdb=[18, "80", "Drama"],
+                genre_keys=[],
+            )
+        ],
+        criteria_name="pool",
+    )
+
+    assert stats["added"] == 1
+    candidate = next(iter(saved["pool"].values()))
+    assert candidate["genres"] == ["Drama"]
+    assert candidate["genre_keys"] == ["drama"]
+    assert all(str(value).isdigit() is False for value in candidate["genres"])
+
+
 def test_import_skips_watched_localized_title(monkeypatch) -> None:
     saved = {}
     dataset = {

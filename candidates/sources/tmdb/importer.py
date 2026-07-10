@@ -34,6 +34,33 @@ def _count_external_rating_fields(candidate: dict[str, Any]) -> int:
     return sum(1 for field_name in EXTERNAL_RATING_FIELDS if field_name in candidate)
 
 
+def _text_genre_values(values: Any) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    if isinstance(values, str):
+        raw_values = values.split(",")
+    elif isinstance(values, (list, tuple, set)):
+        raw_values = values
+    else:
+        raw_values = [values] if values not in (None, "") else []
+
+    for item in raw_values:
+        if isinstance(item, dict):
+            value = item.get("name") or item.get("title")
+        else:
+            value = item
+        text = str(value or "").strip()
+        if text == "" or text.isdigit() or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _candidate_genres(candidate: dict[str, Any]) -> list[str]:
+    return _text_genre_values(candidate.get("genres")) or _text_genre_values(candidate.get("genres_tmdb"))
+
+
 def normalize_tmdb_candidate_for_common_import(candidate: dict[str, Any], criteria_name: str) -> dict[str, Any]:
     normalized = strip_external_rating_fields(candidate)
     normalized.update({
@@ -50,7 +77,7 @@ def normalize_tmdb_candidate_for_common_import(candidate: dict[str, Any], criter
         "overview": candidate.get("overview") or candidate.get("description") or "",
         "countries": candidate.get("countries") or candidate.get("tmdb_origin_countries") or candidate.get("origin_country") or [],
         "country_codes": candidate.get("country_codes") or candidate.get("tmdb_country_codes") or candidate.get("origin_country") or [],
-        "genres": candidate.get("genres") or candidate.get("genres_tmdb") or [],
+        "genres": _candidate_genres(candidate),
         "genre_keys": candidate.get("genre_keys") or [],
         "criteria_name": criteria_name,
         "source": "tmdb",

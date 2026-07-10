@@ -72,6 +72,18 @@ def _localized_poster_available(record: dict | None, data_language: str) -> bool
     return any(block.get(key) not in (None, "") for key in ("poster_url", "poster_path"))
 
 
+def _any_localized_poster_available(record: dict | None) -> bool:
+    if isinstance(record, dict) is False:
+        return False
+    localized = record.get("localized") if isinstance(record.get("localized"), dict) else {}
+    for block in localized.values():
+        if isinstance(block, dict) is False:
+            continue
+        if any(block.get(key) not in (None, "") for key in ("poster_url", "poster_path")):
+            return True
+    return False
+
+
 def _has_value(value: Any) -> bool:
     if isinstance(value, (list, tuple, set, dict)):
         return len(value) > 0
@@ -245,7 +257,7 @@ def ensure_candidate_localized_poster(
     details = _fetch_details(int(tmdb_id), media_type, language, details_func)
     blocks = localized_blocks_from_tmdb_details(details, current_language=language)
     updated_candidate = deepcopy(candidate)
-    if _localized_poster_available({"localized": blocks}, language):
+    if _any_localized_poster_available({"localized": blocks}):
         updated_candidate = _merge_localized_blocks(updated_candidate, blocks)
     updated_candidate = _merge_detail_fields(updated_candidate, details, media_type, language)
 
@@ -261,7 +273,7 @@ def ensure_candidate_localized_poster(
         if key is not None:
             pool_candidate = pool[key] if isinstance(pool[key], dict) else {}
             updated_pool_candidate = deepcopy(pool_candidate)
-            if _localized_poster_available({"localized": blocks}, language):
+            if _any_localized_poster_available({"localized": blocks}):
                 updated_pool_candidate = _merge_localized_blocks(updated_pool_candidate, blocks)
             updated_pool_candidate = _merge_detail_fields(updated_pool_candidate, details, media_type, language)
             if updated_pool_candidate != pool_candidate:

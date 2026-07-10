@@ -163,6 +163,43 @@ def _localized_poster_info(movie: dict, data_language: str | None) -> dict | Non
     return None
 
 
+def _localized_fallback_poster_info(movie: dict, data_language: str | None) -> dict | None:
+    if data_language in (None, ""):
+        return None
+    localized = _as_dict(movie.get("localized"))
+    requested = _normalize_data_language(data_language)
+    language_keys = [
+        key
+        for key in list(localized)
+        if str(key or "").strip().casefold() != requested
+    ]
+
+    for language_key in language_keys:
+        section = _as_dict(localized.get(language_key))
+        if len(section) == 0:
+            continue
+        source_prefix = f"localized.{language_key}"
+        poster_url, url_field = _first_in_section(section, POSTER_URL_FIELDS)
+        if poster_url is not None:
+            poster_path, _path_field = _first_in_section(section, POSTER_PATH_FIELDS)
+            return {
+                "poster_path": poster_path,
+                "poster_url": poster_url,
+                "source": f"{source_prefix}.{url_field}",
+                "status": "found",
+            }
+
+        poster_path, path_field = _first_in_section(section, POSTER_PATH_FIELDS)
+        if poster_path is not None:
+            return {
+                "poster_path": poster_path,
+                "poster_url": build_tmdb_poster_url(poster_path),
+                "source": f"{source_prefix}.{path_field}",
+                "status": "found",
+            }
+    return None
+
+
 def _poster_search_context(movie: dict, meta_obj: dict | None = None) -> dict:
     """Build read-only search context from movie and optional meta."""
     context = dict(movie)
@@ -213,28 +250,26 @@ def extract_existing_poster_info(movie: dict, *, data_language: str | None = Non
             }
 
         nested_poster = _as_dict(section.get("poster"))
-        if len(nested_poster) == 0:
-            continue
+        if len(nested_poster) > 0:
+            nested_url, nested_url_field = _first_in_section(nested_poster, POSTER_NESTED_URL_FIELDS)
+            if nested_url is not None:
+                prefix = section_name or "root"
+                return {
+                    "poster_path": None,
+                    "poster_url": nested_url,
+                    "source": f"{prefix}.poster.{nested_url_field}",
+                    "status": "found",
+                }
 
-        nested_url, nested_url_field = _first_in_section(nested_poster, POSTER_NESTED_URL_FIELDS)
-        if nested_url is not None:
-            prefix = section_name or "root"
-            return {
-                "poster_path": None,
-                "poster_url": nested_url,
-                "source": f"{prefix}.poster.{nested_url_field}",
-                "status": "found",
-            }
-
-        nested_path, nested_path_field = _first_in_section(nested_poster, POSTER_NESTED_PATH_FIELDS)
-        if nested_path is not None:
-            prefix = section_name or "root"
-            return {
-                "poster_path": nested_path,
-                "poster_url": build_tmdb_poster_url(nested_path),
-                "source": f"{prefix}.poster.{nested_path_field}",
-                "status": "found",
-            }
+            nested_path, nested_path_field = _first_in_section(nested_poster, POSTER_NESTED_PATH_FIELDS)
+            if nested_path is not None:
+                prefix = section_name or "root"
+                return {
+                    "poster_path": nested_path,
+                    "poster_url": build_tmdb_poster_url(nested_path),
+                    "source": f"{prefix}.poster.{nested_path_field}",
+                    "status": "found",
+                }
 
         cover = _clean_text(section.get("cover"))
         if cover is not None and cover.startswith(("http://", "https://")):
@@ -255,6 +290,10 @@ def extract_existing_poster_info(movie: dict, *, data_language: str | None = Non
                 "source": f"{prefix}.image",
                 "status": "found",
             }
+
+        localized_fallback_poster = _localized_fallback_poster_info(section, data_language)
+        if localized_fallback_poster is not None:
+            return localized_fallback_poster
 
     return {
         "poster_path": None,

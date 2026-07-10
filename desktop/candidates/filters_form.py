@@ -198,6 +198,12 @@ def build_filters_form(
         combo.setMaximumWidth(compact_combo_max_width)
         combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
+    _replenish_section, replenish_layout = add_section(
+        tr("candidates.filters.replenish.title"),
+        icon_name="heart",
+        icon_color="#F4A7C5",
+    )
+
     _basic_section, basic_layout = add_section(
         tr("candidates.filters.basic"),
         icon_name="filter",
@@ -251,13 +257,6 @@ def build_filters_form(
         if index >= 0:
             combo.setCurrentIndex(index)
 
-    _replenish_section, replenish_layout = add_section(
-        tr("candidates.filters.replenish.title"),
-        object_name="candidateMoodFilterSection",
-        icon_name="heart",
-        badge_object_name="candidateMoodFilterSectionBadge",
-        icon_color="#F4A7C5",
-    )
     replenish_preset_combo = add_combo(REPLENISH_PRESETS, "candidateReplenishPreset")
     replenish_animation_mode_combo = add_combo(ANIMATION_MODE_OPTIONS, "candidateReplenishAnimationMode")
     replenish_vibe_combo = add_combo(VIBE_OPTIONS, "candidateReplenishVibe")

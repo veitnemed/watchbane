@@ -1,6 +1,7 @@
-from PyQt6.QtWidgets import QCheckBox, QComboBox, QToolButton, QWidget
+from PyQt6.QtWidgets import QCheckBox, QComboBox, QLabel, QToolButton, QWidget
 
 from desktop.candidates.filters_form import build_filters_form
+from desktop.i18n import tr
 
 
 def _build_form(qtbot):
@@ -57,6 +58,20 @@ def test_replenish_controls_exist_and_default_safe(qtbot) -> None:
     assert form.replenish_origin_preference_combo.currentData() == "any"
     assert form.replenish_enabled_check.isChecked() is False
     assert form.replenish_advanced_override_check.isChecked() is False
+
+
+def test_replenish_section_precedes_basic_filters(qtbot) -> None:
+    form = _build_form(qtbot)
+
+    titles = [
+        label.text()
+        for label in form.scroll.findChildren(QLabel, "candidateFilterSectionTitle")
+    ]
+
+    assert titles[:2] == [
+        f"1. {tr('candidates.filters.replenish.title')}",
+        f"2. {tr('candidates.filters.basic')}",
+    ]
 
 
 def test_advanced_filter_controls_live_under_collapsible_settings(qtbot) -> None:

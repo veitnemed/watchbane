@@ -66,6 +66,32 @@ def test_ru_dark_tv_dry_run_selects_30_candidates() -> None:
         assert params["with_origin_country"] == "RU"
 
 
+def test_replenish_details_replace_discover_genre_ids_with_names_and_posters() -> None:
+    client = build_mock_tmdb_client("ru_dark_tv_enough")
+
+    result = replenish_candidates_for_filters(
+        FilterReplenishIntent(
+            countries=["RU"],
+            media_type="tv",
+            include_genres=["Drama"],
+            target_add_count=1,
+        ),
+        tmdb_client=client,
+        dry_run=True,
+    )
+
+    candidate = result["candidates"][0]
+
+    assert result["details_requests"] == 1
+    assert candidate["genre_ids"]
+    assert candidate["genres"] == ["Drama"]
+    assert candidate["genres_tmdb"] == ["Drama"]
+    assert candidate["genre_keys"] == ["drama"]
+    assert all(str(value).isdigit() is False for value in candidate["genres"])
+    assert candidate["poster_path"] == f"/poster-{candidate['tmdb_id']}.jpg"
+    assert candidate["poster_url"].endswith(f"/poster-{candidate['tmdb_id']}.jpg")
+
+
 def test_anime_jp_selects_animation_candidates_across_movie_and_tv() -> None:
     client = build_mock_tmdb_client("anime_jp_enough")
 

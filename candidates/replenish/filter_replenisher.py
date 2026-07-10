@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from candidates.models.keys import pool_entry_key, title_identity_key
@@ -17,6 +18,7 @@ from candidates.sources.tmdb.scoring import (
     compute_tmdb_hidden_gem_score,
     compute_tmdb_quality_score,
 )
+from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate, prepare_tmdb_movie_candidate
 
 
 def _as_intent(intent: FilterReplenishIntent | dict[str, Any]) -> FilterReplenishIntent:
@@ -82,6 +84,22 @@ def _raw_date(raw: dict[str, Any], media_type: str) -> str:
     return str(raw.get("release_date") or "").strip()
 
 
+def _has_value(value: Any) -> bool:
+    if isinstance(value, (list, tuple, set, dict)):
+        return len(value) > 0
+    return value is not None and str(value).strip() != ""
+
+
+def _finalize_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+    normalized = normalize_candidate_for_storage(candidate)
+    normalized["metadata_completeness_score"] = compute_metadata_completeness_score(normalized)
+    normalized["quality_score"] = compute_tmdb_quality_score(normalized)
+    normalized["hidden_gem_score"] = compute_tmdb_hidden_gem_score(normalized)
+    normalized["final_score"] = compute_tmdb_final_score(normalized)
+    normalized["pool_entry_key"] = pool_entry_key(normalized)
+    return normalized
+
+
 def _candidate_from_discover(raw: dict[str, Any], *, media_type: str, bucket: dict[str, Any]) -> dict[str, Any]:
     title = _raw_title(raw, media_type)
     date_value = _raw_date(raw, media_type)
@@ -102,7 +120,6 @@ def _candidate_from_discover(raw: dict[str, Any], *, media_type: str, bucket: di
         "country_codes": origin_country,
         "origin_country": origin_country,
         "genre_ids": list(raw.get("genre_ids") or []),
-        "genres_tmdb": list(raw.get("genre_ids") or []),
         "criteria_name": "pool",
         "source": "tmdb_filter_replenish",
         "source_provider": "tmdb",
@@ -119,13 +136,7 @@ def _candidate_from_discover(raw: dict[str, Any], *, media_type: str, bucket: di
         candidate["first_air_date"] = date_value
     else:
         candidate["release_date"] = date_value
-    normalized = normalize_candidate_for_storage(candidate)
-    normalized["metadata_completeness_score"] = compute_metadata_completeness_score(normalized)
-    normalized["quality_score"] = compute_tmdb_quality_score(normalized)
-    normalized["hidden_gem_score"] = compute_tmdb_hidden_gem_score(normalized)
-    normalized["final_score"] = compute_tmdb_final_score(normalized)
-    normalized["pool_entry_key"] = pool_entry_key(normalized)
-    return normalized
+    return _finalize_candidate(candidate)
 
 
 def _candidate_reject_reason(candidate: dict[str, Any]) -> str | None:
@@ -149,12 +160,68 @@ def _sort_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )
 
 
-def _maybe_fetch_details(tmdb_client: Any, candidate: dict[str, Any], *, language: str) -> bool:
+def _normalized_detail_candidate(details: dict[str, Any], media_type: str, language: str) -> dict[str, Any]:
+    source_query = {"language": language}
+    if media_type == "movie":
+        return prepare_tmdb_movie_candidate(details, source_query=source_query)
+    return prepare_tmdb_candidate(details, source_query=source_query)
+
+
+def _merge_details_into_candidate(
+    candidate: dict[str, Any],
+    details: dict[str, Any],
+    *,
+    language: str,
+) -> dict[str, Any]:
+    if isinstance(details, dict) is False or len(details) == 0:
+        return candidate
+
+    media_type = str(candidate.get("media_type") or "tv")
+    detail_candidate = _normalized_detail_candidate(details, media_type, language)
+    updated = dict(candidate)
+
+    detail_genres = list(detail_candidate.get("genres") or [])
+    if detail_genres:
+        updated["genres"] = deepcopy(detail_genres)
+        updated["genres_tmdb"] = deepcopy(detail_genres)
+
+    for field_name in (
+        "genre_keys",
+        "localized",
+        "poster_path",
+        "poster_url",
+        "backdrop_path",
+        "backdrop_url",
+        "runtime",
+        "runtime_minutes",
+        "episode_run_time",
+        "number_of_seasons",
+        "number_of_episodes",
+        "status",
+        "type",
+        "in_production",
+        "content_rating",
+        "watch_providers",
+        "networks",
+        "production_companies",
+        "actors_top",
+        "crew_top",
+        "keywords",
+        "imdb_id",
+    ):
+        value = detail_candidate.get(field_name)
+        if _has_value(value):
+            updated[field_name] = deepcopy(value)
+
+    return _finalize_candidate(updated)
+
+
+def _maybe_fetch_details(tmdb_client: Any, candidate: dict[str, Any], *, language: str) -> dict[str, Any] | None:
     details = getattr(tmdb_client, "details", None)
     if details is None:
-        return False
-    details(candidate.get("media_type"), int(candidate["tmdb_id"]), language=language)
-    return True
+        return None
+    payload = details(candidate.get("media_type"), int(candidate["tmdb_id"]), language=language)
+    return _merge_details_into_candidate(candidate, payload, language=language)
 
 
 def replenish_candidates_for_filters(
@@ -299,8 +366,10 @@ def replenish_candidates_for_filters(
                     bucket_counter["duplicate_count"] += 1
                     continue
                 language = params.get("language") or "ru-RU"
-                if _maybe_fetch_details(tmdb_client, candidate, language=str(language)):
+                detailed_candidate = _maybe_fetch_details(tmdb_client, candidate, language=str(language))
+                if detailed_candidate is not None:
                     counters["details_requests"] += 1
+                    candidate = detailed_candidate
                 seen_tmdb_keys.add(tmdb_key)
                 seen_title_keys.add(title_key)
                 selected.append(candidate)

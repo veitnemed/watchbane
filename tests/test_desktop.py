@@ -5057,6 +5057,26 @@ def test_build_candidate_readonly_card_uses_localized_poster_for_data_language(m
     assert card["poster_path"] == "/en.jpg"
 
 
+def test_build_candidate_readonly_card_does_not_show_numeric_genre_ids(monkeypatch) -> None:
+    from desktop.candidates.presenters import build_candidate_readonly_card
+
+    monkeypatch.setattr(
+        "desktop.candidates.presenters.resolve_local_poster_path_for_candidate",
+        lambda candidate, data_language="ru": None,
+    )
+    candidate = {
+        "title": "Pool Show",
+        "year": 2020,
+        "genres": ["18", 80, "Drama"],
+        "genre_keys": [],
+    }
+
+    card = build_candidate_readonly_card(candidate, data_language="en")
+
+    assert len(card["genres"]) == 1
+    assert all(str(label).isdigit() is False for label in card["genres"])
+
+
 def test_candidate_poster_url_for_download_uses_data_language_localized_url(monkeypatch) -> None:
     from desktop.candidates.presenters import candidate_poster_url_for_download
 
@@ -5125,6 +5145,53 @@ def test_candidate_localized_poster_enrichment_persists_pool(monkeypatch) -> Non
     assert changed is True
     assert updated["localized"]["en"]["poster_path"] == "/en.jpg"
     assert saved["pool show|2020"]["localized"]["en"]["poster_url"] == "https://image.tmdb.org/t/p/original/en.jpg"
+
+
+def test_candidate_localized_poster_enrichment_persists_fallback_language_poster(monkeypatch) -> None:
+    from candidates.pool import localized_posters
+
+    pool = {
+        "halo|2022": {
+            "pool_entry_key": "halo|2022",
+            "title": "Halo",
+            "year": 2022,
+            "tmdb_id": 52814,
+            "media_type": "tv",
+            "localized": {"ru": {"title": "Halo"}},
+        }
+    }
+    saved = {}
+
+    monkeypatch.setattr(localized_posters.pool_repository, "load_candidate_pool", lambda: copy.deepcopy(pool))
+    monkeypatch.setattr(localized_posters.pool_repository, "save_candidate_pool", lambda data: saved.update(data))
+
+    def fake_details(tmdb_id, *, language=None, append_to_response=None):
+        del append_to_response
+        assert (tmdb_id, language) == (52814, "ru-RU")
+        return {
+            "id": 52814,
+            "name": "Halo",
+            "images": {
+                "posters": [
+                    {
+                        "file_path": "/halo-en.jpg",
+                        "iso_639_1": "en",
+                        "vote_average": 8.0,
+                        "vote_count": 10,
+                    }
+                ],
+            },
+        }
+
+    updated, changed = localized_posters.ensure_candidate_localized_poster(
+        pool["halo|2022"],
+        data_language="ru",
+        details_func=fake_details,
+    )
+
+    assert changed is True
+    assert updated["localized"]["en"]["poster_path"] == "/halo-en.jpg"
+    assert saved["halo|2022"]["localized"]["en"]["poster_url"] == "https://image.tmdb.org/t/p/original/halo-en.jpg"
 
 
 def test_candidate_tmdb_detail_enrichment_persists_tv_fields_when_poster_exists(monkeypatch) -> None:
@@ -5620,16 +5687,12 @@ def test_candidate_filter_sections_define_visual_hierarchy() -> None:
     style = build_candidates_shell_style()
 
     assert "QFrame#candidateFilterSection" in style
-    assert "QFrame#candidateMoodFilterSection" in style
     assert "QLabel#candidateFilterSectionTitle" in style
     assert "QLabel#candidateFilterSectionBadge" in style
-    assert "QLabel#candidateMoodFilterSectionBadge" in style
-    assert "#F4A7C5" in style
     assert "QToolButton#candidateAdvancedFiltersToggle" in style
     assert "QWidget#candidateAdvancedFiltersContent" in style
     assert "QLabel#candidateAdvancedFiltersGroupTitle" in style
-    assert "QFrame#candidateMoodFilterSection QComboBox#candidateReplenishPreset:focus" in style
-    assert "#B85F8A" in style
+    assert "candidateMoodFilterSection" not in style
     assert "QFrame#candidateFilterDivider" in style
     assert f"font-size: {font_px(FONT_SECTION)}px;" in style
     assert "QLabel#candidateSearchFieldLabel" in style
@@ -5930,7 +5993,6 @@ def test_candidate_filters_form_uses_grouped_sections() -> None:
     assert "add_advanced_group" in source
     assert "add_divider" in source
     assert "candidateFilterSection" in source
-    assert "candidateMoodFilterSection" in source
     assert "candidateAdvancedFiltersToggle" in source
     assert "candidateAdvancedFiltersContent" in source
     assert "candidateFilterDivider" in source

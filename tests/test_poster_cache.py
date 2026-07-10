@@ -99,6 +99,47 @@ def test_extract_existing_poster_info_builds_url_from_tmdb_path() -> None:
     assert info["source"] == "tmdb_data.poster_path"
 
 
+def test_extract_existing_poster_info_falls_back_to_other_localized_poster() -> None:
+    from posters.cache import extract_existing_poster_info
+
+    movie = _make_movie(
+        "Halo",
+        8.0,
+        2022,
+        localized={
+            "ru": {"title": "Halo"},
+            "en": {"poster_path": "/halo-en.jpg"},
+        },
+    )
+    original = copy.deepcopy(movie)
+
+    info = extract_existing_poster_info(movie, data_language="ru")
+
+    assert movie == original
+    assert info["status"] == "found"
+    assert info["poster_path"] == "/halo-en.jpg"
+    assert info["poster_url"] == "https://image.tmdb.org/t/p/w342/halo-en.jpg"
+    assert info["source"] == "localized.en.poster_path"
+
+
+def test_extract_existing_poster_info_prefers_root_poster_over_localized_fallback() -> None:
+    from posters.cache import extract_existing_poster_info
+
+    movie = _make_movie(
+        "Hazbin Hotel",
+        8.0,
+        2024,
+        poster_path="/root.jpg",
+        localized={"en": {"poster_path": "/en.jpg"}},
+    )
+
+    info = extract_existing_poster_info(movie, data_language="ru")
+
+    assert info["poster_path"] == "/root.jpg"
+    assert info["poster_url"] == "https://image.tmdb.org/t/p/w342/root.jpg"
+    assert info["source"] == "poster_path"
+
+
 def test_extract_existing_poster_info_missing() -> None:
     from posters.cache import extract_existing_poster_info
 
