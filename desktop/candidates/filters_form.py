@@ -237,6 +237,21 @@ def build_filters_form(
     replenish_advanced_override_check.setObjectName("candidateReplenishAdvancedOverride")
     replenish_advanced_override_check.setChecked(False)
 
+    replenish_action_row = QWidget()
+    replenish_action_row.setObjectName("candidateReplenishActionRow")
+    replenish_action_row.setStyleSheet(TRANSPARENT_STYLE)
+    action_layout_cls = QVBoxLayout if get_ui_scale() >= 1.25 else QHBoxLayout
+    replenish_action_layout = action_layout_cls(replenish_action_row)
+    replenish_action_layout.setContentsMargins(0, 0, 0, 0)
+    replenish_action_layout.setSpacing(layout_px(10))
+    replenish_action_layout.addWidget(replenish_enabled_check)
+    replenish_action_layout.addWidget(replenish_advanced_override_check)
+    if isinstance(replenish_action_layout, QHBoxLayout):
+        replenish_action_layout.addStretch(1)
+    replenish_layout.addWidget(replenish_action_row)
+    replenish_layout.addWidget(make_hint(tr("candidates.filters.replenish.hint.advanced_override")))
+    add_divider(replenish_layout)
+
     replenish_grid = QGridLayout()
     replenish_grid.setContentsMargins(0, 0, 0, 0)
     replenish_grid.setHorizontalSpacing(layout_px(16))
@@ -300,18 +315,6 @@ def build_filters_form(
         tr("candidates.filters.replenish.origin_preference"),
         replenish_origin_preference_combo,
     )
-
-    replenish_action_cell = QWidget()
-    replenish_action_cell.setObjectName("candidateReplenishActionCell")
-    replenish_action_cell.setStyleSheet(TRANSPARENT_STYLE)
-    replenish_action_layout = QVBoxLayout(replenish_action_cell)
-    replenish_action_layout.setContentsMargins(0, 0, 0, 0)
-    replenish_action_layout.setSpacing(layout_px(6))
-    replenish_action_layout.addWidget(replenish_enabled_check)
-    replenish_action_layout.addWidget(replenish_advanced_override_check)
-    replenish_action_layout.addWidget(make_hint(tr("candidates.filters.replenish.hint.advanced_override")))
-    row, column = replenish_grid_position(5)
-    replenish_grid.addWidget(replenish_action_cell, row, column)
     replenish_layout.addLayout(replenish_grid)
 
     def apply_preset_suggestion() -> None:
