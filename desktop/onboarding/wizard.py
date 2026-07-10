@@ -492,14 +492,14 @@ QLabel#onboardingTitle {{
     background-color: transparent;
     border: 0;
     color: {COLOR_TEXT};
-    font-size: {font_px(34)}px;
+    font-size: {font_px(32)}px;
     font-weight: 750;
 }}
 QLabel#onboardingSubtitle, QLabel#onboardingStatus {{
     background-color: transparent;
     border: 0;
     color: #AEBBD0;
-    font-size: {font_px(18)}px;
+    font-size: {font_px(17)}px;
 }}
 QLabel#onboardingDot {{
     background-color: transparent;
@@ -597,10 +597,10 @@ QPushButton#onboardingNext, QPushButton#onboardingOpen {{
     border: 1px solid #25C6FF;
     border-radius: {px(9)}px;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_DIALOG_TITLE)}px;
+    font-size: {font_px(FONT_DIALOG_TITLE - 1)}px;
     font-weight: 700;
-    padding: {px(10)}px {px(22)}px;
-    min-width: {px(244)}px;
+    padding: {px(9)}px {px(20)}px;
+    min-width: {px(232)}px;
 }}
 QPushButton#onboardingNext:hover, QPushButton#onboardingOpen:hover {{
     background-color: #25C6FF;
@@ -616,9 +616,9 @@ QPushButton#onboardingBack, QPushButton#onboardingSkip {{
     border: 1px solid #2A3D57;
     border-radius: {px(9)}px;
     color: #AEBBD0;
-    font-size: {font_px(FONT_DIALOG_TITLE)}px;
+    font-size: {font_px(FONT_DIALOG_TITLE - 1)}px;
     font-weight: 650;
-    padding: {px(10)}px {px(18)}px;
+    padding: {px(9)}px {px(16)}px;
 }}
 QPushButton#onboardingBack:hover, QPushButton#onboardingSkip:hover {{
     background-color: #132337;
@@ -729,11 +729,11 @@ class OnboardingAutofillDialog(QDialog):
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(
             scale_px(46),
-            scale_px(38),
+            scale_px(34),
             scale_px(46),
-            scale_px(38),
+            scale_px(34),
         )
-        card_layout.setSpacing(scale_px(SPACING_LARGE))
+        card_layout.setSpacing(scale_px(SPACING_MEDIUM))
 
         self._dots = QWidget()
         self._dots.setObjectName("onboardingDots")
@@ -766,20 +766,20 @@ class OnboardingAutofillDialog(QDialog):
         controls.setSpacing(scale_px(SPACING_MEDIUM))
         self._back_button = QPushButton("Назад" if self._ui_language == "ru" else "Back")
         self._back_button.setObjectName("onboardingBack")
-        self._back_button.setMinimumSize(scale_px(136), scale_px(58))
+        self._back_button.setMinimumSize(scale_px(128), scale_px(52))
         self._back_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._back_button.clicked.connect(self._go_back)
         controls.addWidget(self._back_button)
         self._footer_skip_button = QPushButton("Пропустить" if self._ui_language == "ru" else "Skip")
         self._footer_skip_button.setObjectName("onboardingSkip")
-        self._footer_skip_button.setMinimumSize(scale_px(184), scale_px(58))
+        self._footer_skip_button.setMinimumSize(scale_px(176), scale_px(52))
         self._footer_skip_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._footer_skip_button.clicked.connect(self._skip)
         controls.addWidget(self._footer_skip_button)
         controls.addStretch(1)
         self._next_button = QPushButton("Далее" if self._ui_language == "ru" else "Next")
         self._next_button.setObjectName("onboardingNext")
-        self._next_button.setMinimumSize(scale_px(288), scale_px(58))
+        self._next_button.setMinimumSize(scale_px(272), scale_px(52))
         self._next_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._next_button.clicked.connect(self._go_next)
         controls.addWidget(self._next_button)
@@ -906,7 +906,7 @@ class OnboardingAutofillDialog(QDialog):
         page.setObjectName("onboardingPage")
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(SPACING_LARGE))
+        layout.setSpacing(scale_px(SPACING_MEDIUM))
 
         self._setup_eyebrow = QLabel(self._text("Первый запуск", "First launch"))
         self._setup_eyebrow.setObjectName("onboardingEyebrow")
@@ -935,7 +935,7 @@ class OnboardingAutofillDialog(QDialog):
             button.setObjectName("onboardingOption")
             button.setCheckable(True)
             button.setProperty("answer", value)
-            button.setMinimumHeight(scale_px(54))
+            button.setMinimumHeight(scale_px(48))
             button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             button.setChecked(value == self._ui_language)
             self._language_group.addButton(button)
@@ -953,7 +953,7 @@ class OnboardingAutofillDialog(QDialog):
             button.setObjectName("onboardingOption")
             button.setCheckable(True)
             button.setProperty("answer", value)
-            button.setMinimumHeight(scale_px(54))
+            button.setMinimumHeight(scale_px(48))
             button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             button.setChecked(abs(value - self._ui_scale) < 0.01)
             self._scale_group.addButton(button)
@@ -965,8 +965,8 @@ class OnboardingAutofillDialog(QDialog):
         self._scale_preview.setObjectName("onboardingScalePreview")
         self._scale_preview.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         preview_layout = QVBoxLayout(self._scale_preview)
-        preview_layout.setContentsMargins(scale_px(14), scale_px(12), scale_px(14), scale_px(12))
-        preview_layout.setSpacing(scale_px(SPACING_SMALL))
+        preview_layout.setContentsMargins(scale_px(12), scale_px(10), scale_px(12), scale_px(10))
+        preview_layout.setSpacing(scale_px(SPACING_SMALL - 1))
 
         self._scale_preview_title = QLabel("")
         self._scale_preview_title.setObjectName("onboardingScalePreviewHeader")
@@ -991,7 +991,7 @@ class OnboardingAutofillDialog(QDialog):
             chip = QLabel("")
             chip.setObjectName("onboardingScalePreviewChip")
             chip.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            chip.setMinimumHeight(scale_px(28))
+            chip.setMinimumHeight(scale_px(24))
             chip.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
             self._scale_preview_chips.append(chip)
             chips_row.addWidget(chip)
@@ -999,7 +999,7 @@ class OnboardingAutofillDialog(QDialog):
         self._scale_preview_action = QPushButton("")
         self._scale_preview_action.setObjectName("onboardingScalePreviewAction")
         self._scale_preview_action.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._scale_preview_action.setMinimumHeight(scale_px(36))
+        self._scale_preview_action.setMinimumHeight(scale_px(32))
         chips_row.addWidget(self._scale_preview_action)
         preview_layout.addLayout(chips_row)
         layout.addWidget(self._scale_preview)
@@ -1164,7 +1164,7 @@ class OnboardingAutofillDialog(QDialog):
         page.setObjectName("onboardingPage")
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(SPACING_LARGE))
+        layout.setSpacing(scale_px(SPACING_MEDIUM))
 
         eyebrow = QLabel(self._text("Стартовая настройка", "Starter setup"))
         eyebrow.setObjectName("onboardingEyebrow")
@@ -1239,7 +1239,7 @@ class OnboardingAutofillDialog(QDialog):
         page.setObjectName("onboardingPage")
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(SPACING_LARGE))
+        layout.setSpacing(scale_px(SPACING_MEDIUM))
 
         eyebrow = QLabel(self._text("План автозаполнения", "Autofill plan"))
         eyebrow.setObjectName("onboardingEyebrow")
@@ -1270,7 +1270,7 @@ class OnboardingAutofillDialog(QDialog):
         page.setObjectName("onboardingPage")
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(SPACING_LARGE))
+        layout.setSpacing(scale_px(SPACING_MEDIUM))
 
         eyebrow = QLabel(self._text("Пул кандидатов", "Candidate pool"))
         eyebrow.setObjectName("onboardingEyebrow")
@@ -1320,7 +1320,7 @@ class OnboardingAutofillDialog(QDialog):
         page.setObjectName("onboardingPage")
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(scale_px(SPACING_LARGE))
+        layout.setSpacing(scale_px(SPACING_MEDIUM))
 
         eyebrow = QLabel(self._text("Готово", "Done"))
         eyebrow.setObjectName("onboardingEyebrow")
