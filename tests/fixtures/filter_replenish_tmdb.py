@@ -190,7 +190,7 @@ SCENARIOS: dict[str, MockTmdbScenario] = {
         pages={
             ("KR", "tv"): _pages(
                 _page(start_id=3000, count=20, prefix="K Drama", media_type="tv", country="KR", year=2024, genre_ids=[18, 10749], original_language="ko"),
-                _page(start_id=3020, count=12, prefix="K Drama", media_type="tv", country="KR", year=2024, genre_ids=[18], original_language="ko"),
+                _page(start_id=3020, count=12, prefix="K Drama Extra", media_type="tv", country="KR", year=2024, genre_ids=[18], original_language="ko"),
             ),
         },
     ),
