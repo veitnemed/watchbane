@@ -13,6 +13,7 @@ from desktop.onboarding.worker import PoolReplenishWorker
 from desktop.settings.app_settings import get_persisted_interface_language, load_app_settings
 from desktop.shell.app_icon import build_app_icon
 from desktop.shell.tabs import build_main_tabs
+from desktop.startup import TmdbStartupGateView
 from desktop.theme import build_app_style
 from desktop.theme.scaling import scale_px
 
@@ -63,6 +64,8 @@ class WatchedMoviesWindow(QMainWindow):
             on_status_message=self._show_status_message,
         )
         self._onboarding_view: OnboardingAutofillDialog | None = None
+        self._tmdb_gate_view: TmdbStartupGateView | None = None
+        self._tmdb_gate_passed = False
         self._pool_refill_worker: PoolReplenishWorker | None = None
         self._pool_refill_timer = QTimer(self)
         self._pool_refill_timer.setInterval(POOL_AUTO_REFILL_CHECK_INTERVAL_MS)
@@ -85,6 +88,8 @@ class WatchedMoviesWindow(QMainWindow):
 
     def maybe_start_pool_auto_refill(self) -> None:
         """Start a quiet background pool top-up when the pool runs low."""
+        if self._tmdb_gate_passed is False or self._tmdb_gate_view is not None:
+            return
         if self._pool_refill_worker is not None or self._onboarding_view is not None:
             return
         if load_app_settings().auto_pool_refill is False:
@@ -121,6 +126,8 @@ class WatchedMoviesWindow(QMainWindow):
 
     def maybe_show_onboarding_autofill(self) -> None:
         """Show first-run deterministic candidate-pool autofill wizard when needed."""
+        if self._tmdb_gate_passed is False:
+            return
         if candidate_service.should_show_onboarding_autofill() is False:
             self.maybe_start_pool_auto_refill()
             return
@@ -154,3 +161,35 @@ class WatchedMoviesWindow(QMainWindow):
         self._root_stack.setCurrentWidget(onboarding)
         onboarding.show()
         log_event("onboarding.view.shown")
+
+    def maybe_show_tmdb_startup_gate(self) -> None:
+        """Block main UI until TMDb network and credentials are ready."""
+        from apis.tmdb_api import reload_tmdb_env
+        from apis.tmdb_connectivity import evaluate_tmdb_startup_readiness
+
+        readiness = evaluate_tmdb_startup_readiness()
+        if readiness.get("ready") is True:
+            self._tmdb_gate_passed = True
+            log_event("startup.tmdb_gate.skipped")
+            self.maybe_show_onboarding_autofill()
+            return
+
+        gate = TmdbStartupGateView(parent=self)
+        gate.setWindowFlag(Qt.WindowType.Widget, True)
+
+        def finish_gate() -> None:
+            reload_tmdb_env()
+            self._tmdb_gate_passed = True
+            self._root_stack.setCurrentWidget(self._main_tabs)
+            log_event("startup.tmdb_gate.passed")
+            self._root_stack.removeWidget(gate)
+            gate.deleteLater()
+            self._tmdb_gate_view = None
+            self.maybe_show_onboarding_autofill()
+
+        gate.passed.connect(finish_gate)
+        self._tmdb_gate_view = gate
+        self._root_stack.addWidget(gate)
+        self._root_stack.setCurrentWidget(gate)
+        gate.show()
+        log_event("startup.tmdb_gate.shown", error=readiness.get("error"))

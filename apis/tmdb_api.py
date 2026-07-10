@@ -113,11 +113,14 @@ def find_dotenv(path: str | Path = ".env") -> Path | None:
     return None
 
 
-def load_dotenv(path: str | Path = ".env") -> None:
-    env_path = find_dotenv(path)
-    if env_path is None:
-        return
+def get_tmdb_env_path() -> Path:
+    """Primary runtime path for persisted TMDb credentials."""
+    return Path(constant.APP_DATA_DIR) / ".env.local"
 
+
+def _load_dotenv_file(env_path: Path, *, overwrite: bool = False) -> None:
+    if env_path.is_file() is False:
+        return
     for raw_line in env_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if line == "" or line.startswith("#") or "=" not in line:
@@ -125,14 +128,86 @@ def load_dotenv(path: str | Path = ".env") -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip("\"'")
-        if key and key not in os.environ:
+        if not key:
+            continue
+        if overwrite or key not in os.environ:
             os.environ[key] = value
+
+
+def load_dotenv(path: str | Path = ".env") -> None:
+    env_path = find_dotenv(path)
+    if env_path is None:
+        return
+    _load_dotenv_file(env_path)
+
+
+def load_app_data_dotenv(*, overwrite: bool = False) -> None:
+    """Load TMDb env files from the runtime data directory."""
+    app_data = Path(constant.APP_DATA_DIR)
+    for name in (".env.local", "tmdb.env", ".env"):
+        _load_dotenv_file(app_data / name, overwrite=overwrite)
+
+
+def reload_tmdb_env() -> None:
+    """Reload TMDb credentials from project and runtime env files."""
+    for env_file in (".env", ".env.local", "tmdb.env"):
+        load_dotenv(env_file)
+    load_app_data_dotenv(overwrite=True)
+
+
+def _load_all_tmdb_env_files() -> None:
+    for env_file in (".env", ".env.local", "tmdb.env"):
+        load_dotenv(env_file)
+    load_app_data_dotenv()
+
+
+def has_tmdb_credentials() -> bool:
+    try:
+        load_tmdb_credentials()
+    except RuntimeError:
+        return False
+    return True
+
+
+def save_tmdb_bearer_token(token: str) -> None:
+    """Persist bearer token to data/.env.local without logging the secret."""
+    normalized = str(token or "").strip()
+    if normalized == "":
+        raise ValueError("TMDb token must not be empty.")
+
+    env_path = get_tmdb_env_path()
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+
+    preserved_lines: list[str] = []
+    token_keys = {*TMDB_BEARER_TOKEN_ENV_VARS, TMDB_API_KEY_ENV_VAR}
+    if env_path.is_file():
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            stripped = raw_line.strip()
+            if stripped.startswith("#") or "=" not in stripped:
+                preserved_lines.append(raw_line)
+                continue
+            key = stripped.split("=", 1)[0].strip()
+            if key in token_keys:
+                continue
+            preserved_lines.append(raw_line)
+
+    while preserved_lines and preserved_lines[-1].strip() == "":
+        preserved_lines.pop()
+
+    payload_lines = list(preserved_lines)
+    if payload_lines:
+        payload_lines.append("")
+    payload_lines.append(f"TMDB_ACCESS_TOKEN={normalized}")
+    env_path.write_text("\n".join(payload_lines) + "\n", encoding="utf-8")
+
+    os.environ["TMDB_ACCESS_TOKEN"] = normalized
+    os.environ.pop("TMDB_TOKEN", None)
+    os.environ.pop(TMDB_API_KEY_ENV_VAR, None)
 
 
 def load_tmdb_credentials() -> tuple[str, str]:
     """Return TMDb auth as ("bearer", token) or ("api_key", key)."""
-    for env_file in [".env", ".env.local", "tmdb.env"]:
-        load_dotenv(env_file)
+    _load_all_tmdb_env_files()
 
     for env_name in TMDB_BEARER_TOKEN_ENV_VARS:
         token = os.getenv(env_name, "").strip()
