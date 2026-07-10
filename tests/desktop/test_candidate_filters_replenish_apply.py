@@ -13,13 +13,19 @@ class FakeReplenishService:
     SEARCH_SORT_MODES = ("final_score",)
     SEARCH_SORT_MODE_LABELS = {"final_score": "Final"}
 
-    def __init__(self, replenish_result: dict | None = None) -> None:
+    def __init__(
+        self,
+        replenish_result: dict | None = None,
+        *,
+        country_options: list[dict] | None = None,
+    ) -> None:
         self.candidates = [
             {
                 "pool_entry_key": "alpha|2024|movie",
                 "title": "Alpha",
                 "year": 2024,
                 "media_type": "movie",
+                "country_codes": ["US"],
                 "is_searchable": True,
                 "is_complete": True,
             }
@@ -32,6 +38,12 @@ class FakeReplenishService:
         }
         self.replenish_calls: list[dict] = []
         self.overview_calls = 0
+        self.search_calls: list[dict] = []
+        self.country_options = country_options or [
+            {"code": "RU", "label": "Russia"},
+            {"code": "JP", "label": "Japan"},
+            {"code": "KR", "label": "Korea"},
+        ]
 
     def get_search_overview_view(self) -> dict:
         self.overview_calls += 1
@@ -48,11 +60,17 @@ class FakeReplenishService:
         }
 
     def search_candidate_pool(self, candidates: list[dict], filters: dict) -> dict:
+        self.search_calls.append(dict(filters))
         media_type = filters.get("media_type")
+        countries = {str(code).strip().upper() for code in filters.get("country") or [] if str(code).strip()}
         result = [
             candidate
             for candidate in candidates
             if media_type in (None, candidate.get("media_type"))
+            and (
+                not countries
+                or bool(countries.intersection(str(code).strip().upper() for code in candidate.get("country_codes") or []))
+            )
         ]
         return {"candidates": result, "filtered_count": len(result)}
 
@@ -65,11 +83,7 @@ class FakeReplenishService:
     def get_search_filter_chip_options_view(self) -> dict:
         return {
             "genres": [{"label": "Drama"}],
-            "countries": [
-                {"code": "RU", "label": "Russia"},
-                {"code": "JP", "label": "Japan"},
-                {"code": "KR", "label": "Korea"},
-            ],
+            "countries": list(self.country_options),
         }
 
     def replenish_candidate_pool_for_filters(
@@ -132,6 +146,26 @@ def test_apply_with_replenish_checked_calls_worker_service_seam(qtbot) -> None:
     assert intent["allow_advanced_override"] is False
     assert view._last_replenish_result["saved_count"] == 3
     assert session.filters is not None
+
+
+def test_preset_country_filters_even_when_country_chip_is_absent(qtbot) -> None:
+    service, session, view = _build_view(
+        qtbot,
+        FakeReplenishService(country_options=[{"code": "US", "label": "United States"}]),
+    )
+    apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
+    preset_combo = view.widget.findChild(QComboBox, "candidateReplenishPreset")
+    assert apply_button is not None
+    assert preset_combo is not None
+
+    preset_combo.setCurrentIndex(preset_combo.findData("russian_mainstream"))
+    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
+
+    qtbot.waitUntil(lambda: len(service.search_calls) == 1)
+
+    assert service.search_calls[0]["country"] == ["RU"]
+    assert session.filtered_count == 0
+    assert session.sorted_candidates() == []
 
 
 def test_apply_with_blocked_replenish_result_keeps_local_results(qtbot) -> None:

@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolic
 
 from candidates import service as candidate_service
 from candidates.models import country_schema, genre_schema
+from candidates.onboarding.taste_presets import get_taste_preset
 from candidates.replenish.filter_intent import FilterReplenishIntent
 from config import constant
 from dataset.language import choose_genre_labels
@@ -263,7 +264,7 @@ class CandidateFiltersView:
 
     def reload_filter_options(self) -> None:
         """Reload pool-derived chip options while preserving the current selection."""
-        selected_countries = self._country_selector.selected_country_codes()
+        selected_countries = self._effective_country_codes()
         selected_include = self._include_genre_selector.selected_genres()
         selected_exclude = self._exclude_genre_selector.selected_genres()
         self._apply_filter_defaults(
@@ -366,7 +367,7 @@ class CandidateFiltersView:
         self._replenish_enabled_check.toggled.connect(update)
 
     def _summary_countries_text(self) -> str:
-        country_codes = self._country_selector.selected_country_codes()
+        country_codes = self._effective_country_codes()
         if not country_codes:
             return tr("candidates.filters.summary.all")
         labels = [
@@ -411,6 +412,25 @@ class CandidateFiltersView:
             label = self._summary_value_labels.get(key)
             if label is not None:
                 label.setText(str(value or tr("candidates.filters.summary.not_set")))
+
+    def _selected_replenish_preset(self):
+        preset_id = self._replenish_preset_combo.currentData()
+        if preset_id in (None, "", "manual"):
+            return None
+        return get_taste_preset(str(preset_id or ""))
+
+    def _effective_country_codes(self) -> list[str]:
+        selected = self._country_selector.selected_country_codes()
+        if selected:
+            return selected
+        preset = self._selected_replenish_preset()
+        if preset is None:
+            return []
+        return [
+            str(code).strip().upper()
+            for code in preset.countries
+            if str(code).strip()
+        ]
 
     def _update_intro(self, *, result_count: int | None = None, result_ok: bool | None = None) -> None:
         overview = self._session.overview()
@@ -597,7 +617,7 @@ class CandidateFiltersView:
         self._media_type_combo.setCurrentIndex(index if index >= 0 else 0)
 
     def _collect_filters(self) -> dict:
-        countries = self._country_selector.selected_country_codes()
+        countries = self._effective_country_codes()
         year_min, year_max = self._year_filter_bounds()
 
         return {
