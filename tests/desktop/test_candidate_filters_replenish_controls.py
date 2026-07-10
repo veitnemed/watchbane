@@ -24,6 +24,12 @@ def _set_combo(combo: QComboBox, value: str | None) -> None:
     combo.setCurrentIndex(index)
 
 
+def _combo_item_enabled(combo: QComboBox, value: str) -> bool:
+    index = combo.findData(value)
+    assert index >= 0
+    return combo.model().item(index).isEnabled()
+
+
 def test_replenish_controls_exist_and_default_safe(qtbot) -> None:
     form = _build_form(qtbot)
 
@@ -85,12 +91,36 @@ def test_family_animation_preset_suggests_animation_only(qtbot) -> None:
 def test_manual_preset_does_not_overwrite_existing_choices(qtbot) -> None:
     form = _build_form(qtbot)
     _set_combo(form.replenish_preset_combo, "anime")
+    _set_combo(form.replenish_preset_combo, "manual")
     form.country_selector.set_selected_codes(["RU"])
     _set_combo(form.media_type_combo, "movie")
     _set_combo(form.replenish_animation_mode_combo, "live_action_only")
 
-    _set_combo(form.replenish_preset_combo, "manual")
-
     assert form.country_selector.selected_country_codes() == ["RU"]
     assert form.media_type_combo.currentData() == "movie"
     assert form.replenish_animation_mode_combo.currentData() == "live_action_only"
+
+
+def test_country_selection_blocks_conflicting_replenish_presets(qtbot) -> None:
+    form = _build_form(qtbot)
+
+    form.country_selector.set_selected_codes(["RU"])
+
+    assert _combo_item_enabled(form.replenish_preset_combo, "hollywood_mainstream") is False
+    assert _combo_item_enabled(form.replenish_preset_combo, "russian_mainstream") is True
+    assert _combo_item_enabled(form.replenish_preset_combo, "manual") is True
+
+
+def test_replenish_preset_disables_conflicting_country_chips(qtbot) -> None:
+    form = _build_form(qtbot)
+
+    _set_combo(form.replenish_preset_combo, "hollywood_mainstream")
+
+    assert form.country_selector.selected_country_codes() == ["US"]
+    assert form.country_selector._chips["US"].isEnabled() is True
+    assert form.country_selector._chips["RU"].isEnabled() is False
+    assert form.country_selector._chips["RU"].toolTip() != ""
+
+    _set_combo(form.replenish_preset_combo, "manual")
+
+    assert form.country_selector._chips["RU"].isEnabled() is True

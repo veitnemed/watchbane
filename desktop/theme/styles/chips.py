@@ -27,6 +27,11 @@ QPushButton#genreFilterChip:checked {{
     border-color: {COLOR_ACCENT};
     color: {COLOR_ACCENT_HOVER};
 }}
+QPushButton#genreFilterChip:disabled {{
+    background-color: {COLOR_CARD};
+    border-color: {COLOR_DIVIDER};
+    color: {COLOR_TEXT_MUTED};
+}}
 QPushButton#genreChipClear {{
     background: transparent;
     border: none;
@@ -65,6 +70,11 @@ QPushButton#countryFilterChip:checked {{
     background-color: {COLOR_ACCENT_SOFT};
     border-color: {COLOR_ACCENT};
     color: {COLOR_ACCENT_HOVER};
+}}
+QPushButton#countryFilterChip:disabled {{
+    background-color: {COLOR_CARD};
+    border-color: {COLOR_DIVIDER};
+    color: {COLOR_TEXT_MUTED};
 }}
 QPushButton#countryChipClear {{
     background: transparent;

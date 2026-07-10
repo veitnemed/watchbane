@@ -45,6 +45,7 @@ class CountryChipSelector(QWidget):
         self._options: list[dict] = []
         self._codes_in_order: list[str] = []
         self._chips: dict[str, QPushButton] = {}
+        self._disabled_codes: set[str] = set()
         self._expand = ChipExpandControl()
 
         root = QVBoxLayout(self)
@@ -87,7 +88,8 @@ class CountryChipSelector(QWidget):
             chip = QPushButton(label)
             chip.setObjectName("countryFilterChip")
             chip.setCheckable(True)
-            chip.setChecked(code in selected)
+            chip.setChecked(code in selected and code not in self._disabled_codes)
+            chip.setEnabled(code not in self._disabled_codes)
             chip.setMinimumHeight(36)
             chip.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
             chip.toggled.connect(self._on_chip_toggled)
@@ -104,10 +106,33 @@ class CountryChipSelector(QWidget):
             chip = self._chips.get(code)
             if chip is None:
                 continue
+            should_select = bool(selected) and code in selected and code not in self._disabled_codes
             chip.blockSignals(True)
-            chip.setChecked(code in selected if selected else False)
+            chip.setChecked(should_select)
             chip.blockSignals(False)
         self._refresh_chip_layout()
+
+    def set_disabled_codes(self, codes, *, reason: str = "") -> None:
+        """Disable individual country chips and clear any now-invalid selection."""
+        disabled = set(_normalize_selected_codes(codes))
+        if disabled == self._disabled_codes:
+            return
+        self._disabled_codes = disabled
+        selection_changed = False
+        for code, chip in self._chips.items():
+            is_disabled = code in disabled
+            chip.blockSignals(True)
+            if is_disabled and chip.isChecked():
+                chip.setChecked(False)
+                selection_changed = True
+            chip.setEnabled(not is_disabled)
+            chip.setToolTip(reason if is_disabled else "")
+            chip.blockSignals(False)
+        self._refresh_chip_layout(update_count_only=not selection_changed)
+
+    def country_codes(self) -> list[str]:
+        """Return available country codes in display order."""
+        return list(self._codes_in_order)
 
     def selected_country_codes(self) -> list[str]:
         """Return selected ISO codes; empty list means all countries."""

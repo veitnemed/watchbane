@@ -321,20 +321,75 @@ def build_filters_form(
     )
     replenish_layout.addLayout(replenish_grid)
 
+    def preset_country_codes(preset_id: str | None) -> set[str]:
+        if preset_id in (None, "", "manual"):
+            return set()
+        preset = get_taste_preset(str(preset_id or ""))
+        return {
+            str(code).strip().upper()
+            for code in (preset.countries if preset is not None else ())
+            if str(code).strip()
+        }
+
+    def set_combo_item_enabled(combo: QComboBox, index: int, enabled: bool, *, reason: str = "") -> None:
+        item = getattr(combo.model(), "item", lambda _index: None)(index)
+        if item is None:
+            return
+        item.setEnabled(enabled)
+        item.setToolTip("" if enabled else reason)
+
+    def refresh_replenish_compatibility() -> None:
+        selected_countries = {
+            str(code).strip().upper()
+            for code in country_selector.selected_country_codes()
+            if str(code).strip()
+        }
+        current_preset_id = str(replenish_preset_combo.currentData() or "manual")
+        current_preset_countries = preset_country_codes(current_preset_id)
+        disabled_country_codes: set[str] = set()
+        if current_preset_countries:
+            disabled_country_codes = {
+                code
+                for code in country_selector.country_codes()
+                if str(code).strip().upper() not in current_preset_countries
+            }
+        country_selector.set_disabled_codes(
+            disabled_country_codes,
+            reason=tr("candidates.filters.replenish.compat.country_locked"),
+        )
+
+        conflict_reason = tr("candidates.filters.replenish.compat.preset_locked")
+        for index in range(replenish_preset_combo.count()):
+            preset_id = str(replenish_preset_combo.itemData(index) or "manual")
+            required_countries = preset_country_codes(preset_id)
+            enabled = True
+            if required_countries and selected_countries:
+                enabled = selected_countries.issubset(required_countries)
+            set_combo_item_enabled(
+                replenish_preset_combo,
+                index,
+                enabled,
+                reason=conflict_reason,
+            )
+
     def apply_preset_suggestion() -> None:
         preset_id = replenish_preset_combo.currentData()
         if preset_id == "manual":
+            refresh_replenish_compatibility()
             return
         preset = get_taste_preset(str(preset_id or ""))
         if preset is None:
+            refresh_replenish_compatibility()
             return
         country_selector.set_selected_codes(list(preset.countries))
         set_combo_data(media_type_combo, None if preset.media_type == "both" else preset.media_type)
         set_combo_data(replenish_animation_mode_combo, preset.animation_mode)
         set_combo_data(replenish_vibe_combo, preset.vibe)
         set_combo_data(replenish_release_preference_combo, preset.release_preference)
+        refresh_replenish_compatibility()
 
     replenish_preset_combo.currentIndexChanged.connect(apply_preset_suggestion)
+    country_selector.selection_changed.connect(refresh_replenish_compatibility)
 
     _genres_section, genres_layout = add_section(tr("candidates.filters.genres"))
     include_genre_selector = GenreChipSelector(object_name="candidateSearchIncludeGenres")
@@ -383,6 +438,7 @@ def build_filters_form(
     form.addStretch(1)
 
     scroll.setWidget(form_host)
+    refresh_replenish_compatibility()
 
     return FiltersFormWidgets(
         scroll=scroll,
