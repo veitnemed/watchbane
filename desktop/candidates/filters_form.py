@@ -129,12 +129,12 @@ def build_filters_form(
         section.setObjectName("candidateFilterSection")
         section_layout = QVBoxLayout(section)
         section_layout.setContentsMargins(
+            layout_px(16),
             layout_px(14),
-            layout_px(12),
-            layout_px(14),
+            layout_px(16),
             layout_px(14),
         )
-        section_layout.setSpacing(layout_px(10))
+        section_layout.setSpacing(layout_px(12))
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)

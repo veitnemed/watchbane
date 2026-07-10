@@ -29,9 +29,9 @@ QLabel#candidateSearchSubtitle {{
     line-height: 1.32;
 }}
 QFrame#candidateFiltersIntro {{
-    background-color: {COLOR_CARD_ELEVATED};
+    background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {px(8)}px;
+    border-radius: {px(RADIUS_CARD)}px;
 }}
 QLabel#candidateFiltersSummaryTitle {{
     background: transparent;
@@ -210,7 +210,7 @@ QWidget#candidateSearchFiltersHost {{
 QFrame#candidateFilterSection {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {px(8)}px;
+    border-radius: {px(RADIUS_CARD)}px;
 }}
 QFrame#candidateFilterSection:hover {{
     border-color: {COLOR_BORDER_HOVER};
