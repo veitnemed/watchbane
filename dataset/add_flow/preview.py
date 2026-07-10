@@ -14,7 +14,6 @@ def build_preview_movie_from_defaults(defaults: dict) -> dict:
     movie = {
         "main_info": main_info,
         "raw_scores": dict(defaults.get(scheme.RAW_SCORES, {})),
-        constant.TAGS_VIBE_SECTION: _normalized_tags_vibe(defaults),
         constant.GENRE_SECTION: _normalized_genre(defaults),
     }
     localized = defaults.get("localized")
@@ -85,13 +84,6 @@ def _poster_url_from_hints(poster_hints: dict | None) -> str | None:
     from posters.cache import build_tmdb_poster_url
 
     return build_tmdb_poster_url(str(poster_path).strip())
-
-
-def _normalized_tags_vibe(defaults: dict) -> dict:
-    tags = dict(defaults.get(scheme.TAGS_VIBE, {}) or {})
-    for feature in constant.TAGS_VIBE:
-        tags.setdefault(feature, 0)
-    return tags
 
 
 def _normalized_genre(defaults: dict) -> dict:

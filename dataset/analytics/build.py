@@ -6,9 +6,9 @@ from dataset.analytics.completeness import (
 )
 from dataset.analytics.reports import (
     build_genre_count_rows,
-    build_imdb_delta_chart_rows,
     build_rating_gap_lists,
     build_suspicious_ratings,
+    build_tmdb_delta_chart_rows,
     build_year_average_points,
 )
 from dataset.analytics.scores import (
@@ -40,7 +40,7 @@ def build_score_analytics(records, entries=None) -> dict:
     genre_count_rows = build_genre_count_rows(analytics_entries)
     year_average_points = build_year_average_points(analytics_entries)
     rating_gap_lists = build_rating_gap_lists(analytics_entries)
-    imdb_delta_chart = build_imdb_delta_chart_rows(analytics_entries)
+    tmdb_delta_chart = build_tmdb_delta_chart_rows(analytics_entries)
     suspicious_ratings = build_suspicious_ratings(analytics_entries)
     return {
         "scores": scores,
@@ -58,8 +58,8 @@ def build_score_analytics(records, entries=None) -> dict:
         "rating_lower_than_public": rating_gap_lists["lower_than_public"],
         "rating_higher_extra_count": rating_gap_lists["higher_extra_count"],
         "rating_lower_extra_count": rating_gap_lists["lower_extra_count"],
-        "imdb_delta_rows": imdb_delta_chart["rows"],
-        "imdb_delta_extra_count": imdb_delta_chart["extra_count"],
+        "tmdb_delta_rows": tmdb_delta_chart["rows"],
+        "tmdb_delta_extra_count": tmdb_delta_chart["extra_count"],
         "suspicious_ratings": suspicious_ratings["items"],
         "suspicious_extra_count": suspicious_ratings["extra_count"],
     }

@@ -46,7 +46,6 @@ def export_dataset_to_excel(overwrite: bool = False) -> bool:
                 row.append(movie["main_info"][feature])
             for feature in constant.RAW_SCORES:
                 row.append(movie["raw_scores"][feature])
-            row.extend([""] * len(constant.TAGS_VIBE))
             row.extend([""] * len(constant.GENRE))
             worksheet.append(row)
 

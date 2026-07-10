@@ -22,7 +22,6 @@ def _movie(title: str) -> dict:
             "media_type": "tv",
         },
         "raw_scores": {},
-        "tags_vibe": {},
         "genre": {},
     }
 

@@ -67,7 +67,6 @@ def test_watched_identity_lookup_uses_indexed_columns(tmp_path) -> None:
                     "media_type": "tv",
                 },
                 "raw_scores": {"tmdb_id": 79788},
-                "tags_vibe": {},
                 "genre": {},
             },
             "Watchmen (2009, movie)": {
@@ -79,7 +78,6 @@ def test_watched_identity_lookup_uses_indexed_columns(tmp_path) -> None:
                     "media_type": "movie",
                 },
                 "raw_scores": {"tmdb_id": 13183},
-                "tags_vibe": {},
                 "genre": {},
             },
         },

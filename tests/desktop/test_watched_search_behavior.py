@@ -13,7 +13,6 @@ def _entry(key: str, title: str, year: int = 2020, media_type: str = "tv"):
         },
         "raw_scores": {"tmdb_score": 7.8, "tmdb_votes": 100, "tmdb_popularity": 10.0},
         "computed_scores": {"tmdb_score": 7.8, "tmdb_votes": 100, "tmdb_popularity": 10.0},
-        "tags_vibe": {},
         "genre": {},
     }
     card = {

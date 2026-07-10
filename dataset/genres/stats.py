@@ -2,9 +2,9 @@
 
 from collections import Counter
 
+from config import constant
 from config import genre_tags
 from storage import data as storage_data
-from apis import kp_api as api
 
 
 def get_dataset_title(dataset_title: str, movie: dict) -> str:
@@ -12,49 +12,39 @@ def get_dataset_title(dataset_title: str, movie: dict) -> str:
     return str(movie.get("main_info", {}).get("title", dataset_title)).strip()
 
 
-def extract_genres(movie_json: dict) -> list:
-    """Достаёт список жанров из полного JSON API."""
-    genres = []
-    for item in movie_json.get("genres", []) or []:
-        if isinstance(item, dict) and item.get("name"):
-            genres.append(str(item["name"]).strip())
-        elif isinstance(item, str):
-            genres.append(item.strip())
-    return [genre for genre in genres if genre != ""]
+def _genre_labels_from_movie(movie: dict) -> list[str]:
+    genre_section = movie.get(constant.GENRE_SECTION, {})
+    if not isinstance(genre_section, dict):
+        return []
 
-
-def count_genres_from_api(data: dict, country: str = "Россия") -> dict:
-    """Обходит датасет, получает жанры из API и считает количество сериалов."""
-    genre_counter = Counter()
-    not_found = []
-    without_genres = []
-    errors = []
-
-    for idx, (dataset_title, movie) in enumerate(data.items(), start=1):
-        title = get_dataset_title(dataset_title, movie)
-        print(f"{idx}/{len(data)}: {title}")
-
-        result = api.find_series_raw(title, country)
-        if result["ok"] is False:
-            if result["error"] in {"not_found", "country_not_found"}:
-                not_found.append(title)
-            else:
-                errors.append((title, result["error"], result["details"]))
+    labels: list[str] = []
+    for feature in constant.GENRE:
+        if genre_section.get(feature) != 1:
             continue
+        label = constant.FIELD_LABELS.get(feature, feature)
+        text = str(label).strip()
+        if text and text not in labels:
+            labels.append(text)
+    return labels
 
-        genres = extract_genres(result["data"])
+
+def count_genres_from_dataset(data: dict) -> dict:
+    """Считает жанры по локальной жанровой разметке watched dataset."""
+    genre_counter = Counter()
+    without_genres = []
+
+    for dataset_title, movie in data.items():
+        title = get_dataset_title(dataset_title, movie)
+        genres = _genre_labels_from_movie(movie)
         if len(genres) == 0:
             without_genres.append(title)
             continue
-
         for genre in genres:
             genre_counter[genre] += 1
 
     return {
         "genre_counter": genre_counter,
-        "not_found": not_found,
         "without_genres": without_genres,
-        "errors": errors,
     }
 
 
@@ -73,34 +63,22 @@ def print_genre_report(result: dict) -> None:
     print("\nИТОГО")
     print("=" * 50)
     print(f"Жанров: {len(genre_counter)}")
-    print(f"Не найдено в API: {len(result['not_found'])}")
-    print(f"Без жанров в API: {len(result['without_genres'])}")
-    print(f"Ошибок API: {len(result['errors'])}")
-
-    if len(result["not_found"]) > 0:
-        print("\nНе найдено:")
-        for title in result["not_found"]:
-            print(f"- {title}")
+    print(f"Без жанровой разметки: {len(result['without_genres'])}")
 
     if len(result["without_genres"]) > 0:
         print("\nБез жанров:")
         for title in result["without_genres"]:
             print(f"- {title}")
 
-    if len(result["errors"]) > 0:
-        print("\nОшибки API:")
-        for title, error, details in result["errors"]:
-            print(f"- {title}: {error} | {details}")
 
-
-def show_dataset_genres(country: str = "Россия") -> None:
-    """Показывает все жанры текущего датасета, загруженные из API."""
+def show_dataset_genres() -> None:
+    """Показывает все жанры текущего датасета из локальной разметки."""
     data = storage_data.load_dataset()
     if len(data) == 0:
         print("Датасет пуст.")
         return
 
-    result = count_genres_from_api(data, country)
+    result = count_genres_from_dataset(data)
     print_genre_report(result)
 
 

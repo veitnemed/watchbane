@@ -7,9 +7,6 @@ def format_resolve_status_lines(statuses: dict) -> list[str]:
         return []
     lines = []
     for key, label in (
-        ("sql", "IMDb SQL"),
-        ("sql_second_pass", "IMDb SQL (2-й проход)"),
-        ("kp_api", "KP API"),
         ("tmdb_api", "TMDb API"),
     ):
         value = statuses.get(key)

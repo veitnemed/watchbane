@@ -22,7 +22,6 @@ def _make_movie(title: str, user_score: float, year: int, poster_url: str | None
         "main_info": main_info,
         "raw_scores": raw_scores,
         "computed_scores": format_score.raw_to_struct(raw_scores, main_info),
-        scheme.TAGS_VIBE: {feature: 0 for feature in constant.TAGS_VIBE},
         constant.GENRE_SECTION: {feature: 0 for feature in constant.GENRE},
     }
     if poster_url is not None:

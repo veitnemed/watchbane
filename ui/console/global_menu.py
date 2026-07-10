@@ -63,7 +63,7 @@ def open_genres_menu() -> None:
 
 def open_tags_menu() -> None:
     """Compatibility wrapper for the old tags menu name."""
-    reference_menu.open_tags_menu()
+    reference_menu.open_reference_menu()
 
 
 def open_candidate_pool_management_menu() -> None:

@@ -7,28 +7,6 @@ from common import valid
 from dataset.models.media_type import normalize_media_type
 
 
-LEGACY_TAG_FIELDS = {
-    "has_psyhology": "has_psychology",
-    "has_relationship_focus": "has_relationships",
-    "has_romantic_tension": "has_romantic_pursuit",
-    "has_love_tension": "has_romantic_pursuit",
-}
-
-REMOVED_TAG_FIELDS = {"has_mystic"}
-
-
-def normalize_tags_vibe(tags_vibe: dict) -> dict:
-    """Приводит теги фильма к актуальной схеме."""
-    normalized = {feature: 0 for feature in constant.TAGS_VIBE}
-    for feature, value in tags_vibe.items():
-        if feature in normalized:
-            normalized[feature] = value
-    for old_feature, active_feature in LEGACY_TAG_FIELDS.items():
-        if old_feature in tags_vibe and active_feature in normalized and active_feature not in tags_vibe:
-            normalized[active_feature] = tags_vibe[old_feature]
-    return normalized
-
-
 def normalize_genre_tags(movie_genre_tags: dict) -> dict:
     """Приводит жанровую разметку фильма к актуальной схеме."""
     normalized = {feature: 0 for feature in constant.GENRE}
@@ -40,26 +18,19 @@ def normalize_genre_tags(movie_genre_tags: dict) -> dict:
 
 
 def normalize_movie_tags(movie: dict) -> dict:
-    """Нормализует теги внутри записи фильма."""
-    if constant.TAGS_VIBE_SECTION in movie:
-        movie[constant.TAGS_VIBE_SECTION] = normalize_tags_vibe(movie[constant.TAGS_VIBE_SECTION])
+    """Нормализует теги внутри записи фильма и удаляет legacy tags_vibe."""
+    movie.pop(constant.TAGS_VIBE_SECTION, None)
     movie[constant.GENRE_SECTION] = normalize_genre_tags(movie.get(constant.GENRE_SECTION, {}))
     return movie
 
 
 def normalize_csv_row(row: dict) -> dict:
     """Приводит строку таблицы к актуальным полям."""
-    normalized = {feature: value for feature, value in row.items() if feature not in REMOVED_TAG_FIELDS}
-    for old_feature, active_feature in LEGACY_TAG_FIELDS.items():
-        if active_feature in constant.TAGS_VIBE and active_feature not in normalized and old_feature in normalized:
-            normalized[active_feature] = normalized[old_feature]
-        normalized.pop(old_feature, None)
-    for feature in constant.TAGS_VIBE:
-        normalized.setdefault(feature, "0")
+    normalized = dict(row)
     for feature in constant.GENRE:
         normalized.setdefault(feature, "0")
     normalized.setdefault("country", "")
-    normalized["media_type"] = normalize_media_type(main_info.get("media_type"))
+    normalized["media_type"] = normalize_media_type(normalized.get("media_type"))
     return normalized
 
 
@@ -99,19 +70,6 @@ def normalize_raw_scores(raw: dict) -> dict:
         else:
             normalized[feature] = valid.parse_float(value)
     return normalized
-
-
-def is_valid_tags_vibe(tags_vibe: dict) -> bool:
-    """Проверяет секцию тегов фильма."""
-    tags_schema = scheme.get_schema(scheme.TAGS_VIBE)
-    if set(tags_vibe.keys()) != set(tags_schema.keys()):
-        return False
-
-    for feature, value in tags_vibe.items():
-        max_value = tags_schema[feature].get("max_value", 1)
-        if valid.is_tags_score(value, max_value) is False:
-            return False
-    return True
 
 
 def is_valid_genre_tags(genre_tags: dict) -> bool:

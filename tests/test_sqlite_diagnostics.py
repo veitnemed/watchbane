@@ -34,7 +34,7 @@ def test_sqlite_diagnostics_reports_health_and_counts(tmp_path, monkeypatch) -> 
 
     report = diagnostics.build_sqlite_diagnostics(path=db_path, base_dir=tmp_path)
 
-    assert report["schema_version"] == 2
+    assert report["schema_version"] == 3
     assert report["quick_check_ok"] is True
     assert report["foreign_key_check_ok"] is True
     assert report["table_counts"]["watched_records"] == 1

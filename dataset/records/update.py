@@ -36,7 +36,6 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
     current_movie = data[dataset_title]
     main_info = dict(current_movie.get("main_info", {}))
     raw_scores = dict(current_movie.get("raw_scores", {}))
-    tags_vibe = dict(current_movie.get(constant.TAGS_VIBE_SECTION, {}))
     genre_tags = dict(current_movie.get(constant.GENRE_SECTION, {}))
     changed_fields = []
 
@@ -71,23 +70,6 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
             if raw_scores.get(field) != value:
                 raw_scores[field] = value
                 changed_fields.append(f"raw_scores.{field}")
-
-    tags_patch = patch_payload.get(constant.TAGS_VIBE_SECTION)
-    if tags_patch is not None:
-        if isinstance(tags_patch, dict) is False:
-            return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректные tags_vibe", "invalid_patch", [])
-        for field, value in tags_patch.items():
-            if field not in constant.TAGS_VIBE:
-                return UpdateRecordResult(
-                    ok=False,
-                    title=dataset_title,
-                    message=f"Ошибка обновления! Неподдерживаемое поле tags_vibe: {field}",
-                    reason="invalid_patch",
-                    changed_fields=[],
-                )
-            if tags_vibe.get(field) != value:
-                tags_vibe[field] = value
-                changed_fields.append(f"{constant.TAGS_VIBE_SECTION}.{field}")
 
     genre_patch = patch_payload.get(constant.GENRE_SECTION)
     if genre_patch is not None:
@@ -132,26 +114,24 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
         dataset_title=dataset_title,
         main_info=main_info,
         raw_scores=raw_scores,
-        tags_vibe=tags_vibe,
         genre_tags=genre_tags,
     )
     if isinstance(normalized, UpdateRecordResult):
         return normalized
 
-    new_main_info, new_raw_scores, new_tags_vibe, new_genre_tags = normalized
+    new_main_info, new_raw_scores, new_genre_tags = normalized
 
     values_error = validate_normalized_update_values(
         dataset_title=dataset_title,
         new_main_info=new_main_info,
         new_raw_scores=new_raw_scores,
-        new_tags_vibe=new_tags_vibe,
         new_genre_tags=new_genre_tags,
     )
     if values_error is not None:
         return values_error
 
     computed_scores = build_computed_scores(new_raw_scores, new_main_info)
-    features = build_feature_vector(computed_scores, new_tags_vibe, new_genre_tags)
+    features = build_feature_vector(computed_scores, new_genre_tags)
     features_error = validate_update_features(features, dataset_title=dataset_title)
     if features_error is not None:
         return features_error
@@ -160,7 +140,6 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
         "main_info": new_main_info,
         "raw_scores": new_raw_scores,
         "computed_scores": computed_scores,
-        constant.TAGS_VIBE_SECTION: new_tags_vibe,
         constant.GENRE_SECTION: new_genre_tags,
     }
     data[dataset_title] = updated_movie

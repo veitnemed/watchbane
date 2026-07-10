@@ -16,6 +16,7 @@ APPROVED_DIRECT_JSON_WRITERS = {
     "scripts/migrations/migrate_json_to_sqlite.py",
     "scripts/migrations/migrate_candidate_pool_tmdb_only.py",
     "scripts/migrations/migrate_watched_raw_scores_tmdb_only.py",
+    "scripts/migrations/strip_watched_tags_vibe.py",
     "scripts/tmdb/refresh_candidate_pool_from_tmdb.py",
     "scripts/tmdb/refresh_watched_from_tmdb.py",
     "dataset/migrations/data_language.py",

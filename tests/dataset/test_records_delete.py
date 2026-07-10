@@ -6,21 +6,17 @@ from common import format_score
 
 
 def _make_movie(title: str, user_score: float, year: int) -> dict:
-    tags_vibe = {feature: 0 for feature in constant.TAGS_VIBE}
     genre_tags = {feature: 0 for feature in constant.GENRE}
+    raw_scores = {
+        "tmdb_score": 8.0,
+        "tmdb_votes": 120000,
+        "tmdb_popularity": 42.5,
+    }
+    main_info = {"title": title, "user_score": user_score, "year": year}
     return {
-        "main_info": {"title": title, "user_score": user_score, "year": year},
-        "raw_scores": {
-            "kp_score": 8.0,
-            "kp_votes": 120000,
-            "imdb_score": 8.0,
-            "imdb_votes": 1200,
-        },
-        "computed_scores": format_score.raw_to_struct(
-            {"kp_score": 8.0, "kp_votes": 120000, "imdb_score": 8.0, "imdb_votes": 1200},
-            {"title": title, "user_score": user_score, "year": year},
-        ),
-        scheme.TAGS_VIBE: tags_vibe,
+        "main_info": main_info,
+        "raw_scores": raw_scores,
+        "computed_scores": format_score.raw_to_struct(raw_scores, main_info),
         constant.GENRE_SECTION: genre_tags,
     }
 

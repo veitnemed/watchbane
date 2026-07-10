@@ -10,7 +10,6 @@ from common import format_score
 
 
 def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0) -> dict:
-    tags_vibe = {feature: 0 for feature in constant.TAGS_VIBE}
     genre_tags = {feature: 0 for feature in constant.GENRE}
 
     return {
@@ -38,7 +37,6 @@ def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0
                 "year": year,
             },
         ),
-        scheme.TAGS_VIBE: tags_vibe,
         constant.GENRE_SECTION: genre_tags,
     }
 

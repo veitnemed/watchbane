@@ -61,7 +61,6 @@ def _watched_payload(title: str, year: int) -> dict:
             "tmdb_votes": 1000,
             "tmdb_popularity": 42.5,
         },
-        constant.TAGS_VIBE_SECTION: {feature: 0 for feature in constant.TAGS_VIBE},
         constant.GENRE_SECTION: {feature: 0 for feature in constant.GENRE},
     }
 

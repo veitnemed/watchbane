@@ -15,7 +15,6 @@ def _movie(title: str = "Show", year: int = 2020) -> dict:
             "imdb_score": 8.8,
         },
         "computed_scores": {},
-        "tags_vibe": {"manual_tag": 1},
         "genre": {"manual_genre": 1},
     }
 
@@ -75,7 +74,7 @@ def test_refresh_watched_by_existing_tmdb_id_updates_meta_and_raw_scores() -> No
     }
     assert "kp_score" not in movie["raw_scores"]
     assert "imdb_score" not in movie["raw_scores"]
-    assert movie["tags_vibe"] == {"manual_tag": 1}
+    assert "tags_vibe" not in movie
     assert movie["genre"] == {"manual_genre": 1}
     assert meta_obj["tmdb_id"] == 123
     assert meta_obj["imdb_id"] == "tt123"

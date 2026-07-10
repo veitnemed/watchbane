@@ -58,7 +58,6 @@ def build_empty_add_defaults(input_title: str, media_type: str = "tv") -> dict:
             "media_type": normalize_media_type(media_type),
         },
         scheme.RAW_SCORES: {},
-        scheme.TAGS_VIBE: {feature: 0 for feature in constant.TAGS_VIBE},
         scheme.GENRE: {feature: 0 for feature in constant.GENRE},
     }
 
@@ -68,7 +67,6 @@ def merge_defaults(base: dict, extra: dict) -> dict:
     merged = {
         scheme.MAIN_INFO: {},
         scheme.RAW_SCORES: {},
-        scheme.TAGS_VIBE: {},
         scheme.GENRE: {},
     }
 
@@ -109,7 +107,6 @@ def build_tmdb_add_defaults(series: dict, genres: list | None = None, data_langu
             "media_type": normalize_media_type(series.get("media_type")),
         },
         scheme.RAW_SCORES: extract_tmdb_raw_scores(series),
-        scheme.TAGS_VIBE: {},
         scheme.GENRE: build_genre_defaults(genres),
     }
     localized_source = dict(series or {})

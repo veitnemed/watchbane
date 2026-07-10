@@ -19,7 +19,6 @@ def _movie(title: str, year: int = 2024) -> dict:
         },
         "raw_scores": {},
         "computed_scores": {},
-        "tags_vibe": {},
         "genre": {},
     }
 

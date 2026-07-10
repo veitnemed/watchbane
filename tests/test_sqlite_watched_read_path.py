@@ -18,7 +18,6 @@ def test_sqlite_runtime_routes_watched_read_path(tmp_path, monkeypatch) -> None:
                     "media_type": "tv",
                 },
                 "raw_scores": {},
-                "tags_vibe": {},
                 "genre": {},
             }
         }

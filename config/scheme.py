@@ -2,15 +2,13 @@
 
 import copy
 from config import genre_tags
-from config import tags_work
 
 
 MAIN_INFO = "main_info"
 RAW_SCORES = "raw_scores"
 GENRE = "genre"
+# Legacy section key stripped during normalize/migration.
 TAGS_VIBE = "tags_vibe"
-
-TAG_FIELDS = tags_work.get_tag_fields()
 
 SHEME_VALIDATORS = {
     MAIN_INFO: {
@@ -49,13 +47,6 @@ SHEME_VALIDATORS = {
         }
     },
     GENRE: {},
-    TAGS_VIBE: {
-        feature: {
-            "tag": ["tags_score"],
-            "type": int,
-            "max_value": 1
-        } for feature in TAG_FIELDS
-    }
 }
 
 SHEME_ADD = copy.deepcopy(SHEME_VALIDATORS)

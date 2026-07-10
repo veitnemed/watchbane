@@ -26,7 +26,6 @@ def build_patch_payload(movie: dict) -> dict:
             "year": movie["main_info"]["year"],
         },
         "raw_scores": movie["raw_scores"],
-        constant.TAGS_VIBE_SECTION: movie.get(constant.TAGS_VIBE_SECTION, {}),
         constant.GENRE_SECTION: movie.get(constant.GENRE_SECTION, {}),
     }
 

@@ -46,11 +46,11 @@ def tag_to_score(value: int, max_value: int = 1) -> float:
     return value / max_value * 10
 
 
-def tags_to_features(tags_vibe: dict, section_name: str = scheme.TAGS_VIBE) -> dict:
+def tags_to_features(tags: dict, section_name: str = scheme.GENRE) -> dict:
     """Преобразует теги фильма в признаки модели."""
     tags_schema = scheme.get_schema(section_name)
     features = {}
-    for feature, value in tags_vibe.items():
+    for feature, value in tags.items():
         max_value = tags_schema[feature].get("max_value", 1)
         features[feature] = tag_to_score(value, max_value)
     return features

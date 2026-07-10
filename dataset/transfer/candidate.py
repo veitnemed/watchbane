@@ -158,7 +158,6 @@ def build_candidate_transfer_payload(candidate: dict) -> dict:
             for field_name in TMDB_TRANSFER_SCORE_FIELDS
             if candidate.get(field_name) not in (None, "")
         },
-        scheme.TAGS_VIBE: {},
         scheme.GENRE: build_candidate_transfer_genre_defaults(candidate),
     }
     localized = build_localized_block_from_legacy(candidate)

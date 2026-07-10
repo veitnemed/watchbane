@@ -27,7 +27,6 @@ def _movie(title: str = "Метод", *, media_type: str = "tv") -> dict:
             "media_type": media_type,
         },
         "raw_scores": {"tmdb_score": 7.4},
-        "tags_vibe": {},
         "genre": {},
     }
 

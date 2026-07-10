@@ -184,7 +184,6 @@ def show_reference_menu():
     """Print reference data menu."""
     show_menu_title("СПРАВОЧНИКИ")
     print(" 1 >> Жанры dataset")
-    print(" 2 >> Теги")
     print(" 0 >> Главное меню\n")
 
 
@@ -198,13 +197,3 @@ def show_genres_menu():
 def show_extra_menu(movies_counter: int, error: int = 0):
     """Compatibility screen for the old extra menu."""
     show_maintenance_menu(movies_counter, "Candidate pool: см. раздел обслуживания", error)
-
-
-def show_tags_menu():
-    """Print tag settings menu."""
-    show_menu_title("НАСТРОЙКА ТЕГОВ")
-    print(" 1 >> Показать теги")
-    print(" 2 >> Добавить тег")
-    print(" 3 >> Удалить тег")
-    print(" 4 >> Удалить все теги")
-    print(" 0 >> Назад\n")

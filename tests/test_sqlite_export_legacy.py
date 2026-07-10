@@ -72,7 +72,6 @@ def test_import_then_export_matches_canonicalized_legacy_data(tmp_path) -> None:
                 "country": "Россия",
             },
             "raw_scores": {},
-            "tags_vibe": {},
             "genre": {},
         }
     }

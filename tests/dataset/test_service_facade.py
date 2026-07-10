@@ -1,20 +1,20 @@
-"""Tests for stats summary, analytics split, and service facade."""
+"""Excel export/import modules stay free of UI imports."""
 
 import importlib
 
 
-def test_dataset_stats_wrapper_reexports_summary() -> None:
-    from dataset.dataset_stats import get_dataset_stats
-    from dataset.stats.summary import get_dataset_stats as source
+def test_excel_work_wrapper_reexports_subpackage() -> None:
+    from dataset.excel.export import export_dataset_to_excel
+    from dataset.excel_work import export_dataset_to_excel as wrapped
 
-    assert get_dataset_stats is source
+    assert export_dataset_to_excel is wrapped
 
 
-def test_score_analytics_wrapper_reexports_build() -> None:
-    from dataset.analytics.build import build_score_analytics as source
-    from dataset.score_analytics import build_score_analytics
+def test_genre_stats_wrapper_reexports_catalog() -> None:
+    from dataset.genres.stats import build_dataset_genre_catalog
+    from dataset.genre_stats import build_dataset_genre_catalog as wrapped
 
-    assert build_score_analytics is source
+    assert build_dataset_genre_catalog is wrapped
 
 
 def test_service_facade_exports_core_operations() -> None:
@@ -28,7 +28,6 @@ def test_service_facade_exports_core_operations() -> None:
     assert hasattr(service, "build_score_analytics")
     assert hasattr(service, "get_dataset_stats")
     assert hasattr(service, "export_dataset_to_excel")
-    assert hasattr(service, "apply_genre_markup")
     assert hasattr(service, "build_tmdb_add_defaults")
 
 
@@ -42,11 +41,11 @@ def test_dataset_package_exports_service() -> None:
 def test_service_facade_resolve_title_data_accepts_media_type(monkeypatch) -> None:
     import dataset.service as service
 
-    captured = {}
-
     def fake_resolve(title, country, **kwargs):
         captured.update({"title": title, "country": country, **kwargs})
         return {"found": False, "media_type": kwargs.get("media_type")}
+
+    captured = {}
 
     monkeypatch.setattr("dataset.resolve.service.search_tmdb_title_for_add", lambda *_args, **_kwargs: {
         "data": None,

@@ -2,7 +2,6 @@
 
 from config import genre_tags
 from config import scheme
-from config import tags_work
 
 APP_DATA_DIR = 'data'
 WATCHED_DIR = 'data/watched'
@@ -27,9 +26,8 @@ EDIT_EXCEL = EXPORTS_DIR + '/edit_dataset.xlsx'
 # Dynamic field lists — populated at import via refresh_dynamic_fields().
 MAIN_INFO: list
 RAW_SCORES: list
-TAGS_VIBE: list
 GENRE: list
-TAGS_VIBE_SECTION = scheme.TAGS_VIBE
+TAGS_VIBE_SECTION = "tags_vibe"
 GENRE_SECTION = scheme.GENRE
 BIAS_FEATURE = "bias"
 COMPUTED_SCORES: list
@@ -42,7 +40,6 @@ ONLY_SCORES: list
 SECTION_LABELS = {
     scheme.MAIN_INFO: "Основная информация",
     scheme.RAW_SCORES: "Исходные данные",
-    scheme.TAGS_VIBE: "Теги вайба",
     scheme.GENRE: "Жанровая разметка",
 }
 
@@ -76,18 +73,17 @@ TRANSLATION = {
 
 def refresh_dynamic_fields() -> None:
     """Обновляет динамические списки признаков и связанные справочники."""
-    global MAIN_INFO, RAW_SCORES, TAGS_VIBE, GENRE
+    global MAIN_INFO, RAW_SCORES, GENRE
     global COMPUTED_SCORES, CSV_FIELDS, FEATURES, RAW_META_FIELDS, FEATURES_CONST
     global ONLY_SCORES, TAG_RULES, FIELD_LABELS
 
     MAIN_INFO = scheme.get_fields(scheme.MAIN_INFO)
     RAW_SCORES = scheme.get_fields(scheme.RAW_SCORES)
-    TAGS_VIBE = scheme.get_fields(scheme.TAGS_VIBE)
     GENRE = scheme.get_fields(scheme.GENRE)
     COMPUTED_SCORES = scheme.get_computed_fields()
 
-    CSV_FIELDS = MAIN_INFO + RAW_SCORES + TAGS_VIBE + GENRE
-    FEATURES = [BIAS_FEATURE] + COMPUTED_SCORES + TAGS_VIBE + GENRE
+    CSV_FIELDS = MAIN_INFO + RAW_SCORES + GENRE
+    FEATURES = [BIAS_FEATURE] + COMPUTED_SCORES + GENRE
     RAW_META_FIELDS = RAW_SCORES
     FEATURES_CONST = COMPUTED_SCORES
 
@@ -105,10 +101,9 @@ def refresh_dynamic_fields() -> None:
         "tmdb_votes": "Голоса TMDb",
         "tmdb_popularity": "Популярность TMDb",
     }
-    FIELD_LABELS.update(tags_work.get_tag_labels())
     FIELD_LABELS.update(genre_tags.get_genre_labels())
 
-    TAG_RULES = tags_work.get_tag_rules()
+    TAG_RULES = {}
 
     TRANSLATION["features"] = {
         BIAS_FEATURE: "Bias",
@@ -116,7 +111,6 @@ def refresh_dynamic_fields() -> None:
         "tmdb_votes": "TMDb votes",
         "tmdb_popularity": "TMDb popularity",
     }
-    TRANSLATION["features"].update(tags_work.get_tag_translations())
     TRANSLATION["features"].update(genre_tags.get_genre_translations())
     TRANSLATION["meta features"] = {
         "year": "Year",

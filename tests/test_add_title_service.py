@@ -52,7 +52,6 @@ def test_build_movie_record_from_defaults_sets_score_from_defaults() -> None:
             "imdb_votes": 2000,
         },
         scheme.GENRE: {"has_drama": 1},
-        scheme.TAGS_VIBE: {},
     }
 
     movie = build_movie_record_from_defaults(defaults, 9.2)
@@ -68,7 +67,6 @@ def test_build_preview_card_uses_genre_labels_ru() -> None:
         scheme.MAIN_INFO: {"title": "Crime Show", "year": 2019, "user_score": None},
         scheme.RAW_SCORES: {},
         scheme.GENRE: {"has_crime": 1, "has_drama": 0},
-        scheme.TAGS_VIBE: {},
     }
     resolved = {"source_values": {"description": "Test overview"}}
     card = build_preview_card_from_defaults(defaults, resolved=resolved)
@@ -87,7 +85,6 @@ def test_build_preview_card_downloads_poster_for_preview(monkeypatch) -> None:
         scheme.MAIN_INFO: {"title": "Poster Show", "year": 2020, "user_score": None},
         scheme.RAW_SCORES: {},
         scheme.GENRE: {},
-        scheme.TAGS_VIBE: {},
     }
     poster_hints = {
         "status": "found",
@@ -155,7 +152,6 @@ def test_build_preview_movie_from_defaults() -> None:
         scheme.MAIN_INFO: {"title": "Alpha", "year": 2020, "user_score": None},
         scheme.RAW_SCORES: {},
         scheme.GENRE: {},
-        scheme.TAGS_VIBE: {},
     }
 
     movie = build_preview_movie_from_defaults(defaults)
@@ -232,7 +228,6 @@ def test_save_add_title_record_passes_pool_candidate(monkeypatch) -> None:
         scheme.MAIN_INFO: {"title": "From Pool", "year": 2020, "country": ""},
         scheme.RAW_SCORES: {},
         scheme.GENRE: {},
-        scheme.TAGS_VIBE: {},
     }
     pool_candidate = {"title": "From Pool", "year": 2020}
 
@@ -260,7 +255,6 @@ def test_save_add_title_record_accepts_friends_1994(monkeypatch) -> None:
         scheme.MAIN_INFO: {"title": "Friends", "year": 1994, "country": "US"},
         scheme.RAW_SCORES: {"tmdb_score": 8.4, "tmdb_votes": 8000},
         scheme.GENRE: {},
-        scheme.TAGS_VIBE: {},
     }
 
     result = save_add_title_record(defaults, 9.0, pool_candidate={"title": "Friends", "year": 1994})
@@ -289,7 +283,6 @@ def test_save_add_title_record_keeps_tmdb_scores_without_kp_imdb(monkeypatch) ->
         scheme.MAIN_INFO: {"title": "TMDb Pool", "year": 2020, "country": "Россия"},
         scheme.RAW_SCORES: {"tmdb_score": 8.1, "tmdb_votes": 1200, "tmdb_popularity": 44.0},
         scheme.GENRE: {},
-        scheme.TAGS_VIBE: {},
     }
 
     save_add_title_record(defaults, 8.0, pool_candidate={"title": "TMDb Pool"})
@@ -328,7 +321,6 @@ def test_save_add_title_record_preserves_movie_media_type(monkeypatch) -> None:
         },
         scheme.RAW_SCORES: {"tmdb_score": 7.3, "tmdb_votes": 9000},
         scheme.GENRE: {},
-        scheme.TAGS_VIBE: {},
     }
 
     save_add_title_record(defaults, 8.0)
@@ -343,7 +335,6 @@ def test_request_user_score_builds_payload_without_other_edits(monkeypatch) -> N
         scheme.MAIN_INFO: {"title": "Console Show", "year": 2019, "country": "RU", "user_score": 7.0},
         scheme.RAW_SCORES: {"imdb_score": 8.1, "imdb_votes": 100},
         scheme.GENRE: {"has_drama": 1},
-        scheme.TAGS_VIBE: {},
     }
 
     monkeypatch.setattr(request_module, "loop_input_with_default", lambda **kwargs: "8.5")

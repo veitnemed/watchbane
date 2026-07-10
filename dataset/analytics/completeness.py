@@ -19,8 +19,7 @@ DATASET_COMPLETENESS_FIELDS: tuple[tuple[str, str], ...] = (
     ("user_score", "Мои оценки"),
     ("year", "Годы"),
     ("genres", "Жанры"),
-    ("imdb", "IMDb"),
-    ("kp", "КП"),
+    ("tmdb", "TMDb"),
     ("description", "Описания"),
     ("poster", "Постеры"),
 )
@@ -28,8 +27,7 @@ DATASET_COMPLETENESS_FIELDS: tuple[tuple[str, str], ...] = (
 DATASET_COMPLETENESS_DISPLAY_KEYS: tuple[str, ...] = (
     "poster",
     "description",
-    "imdb",
-    "kp",
+    "tmdb",
     "genres",
     "year",
 )
@@ -63,13 +61,8 @@ def _entry_has_genres(movie: dict, card: dict) -> bool:
     return False
 
 
-def _entry_has_imdb(movie: dict, card: dict) -> bool:
-    value = card.get("imdb_score", _movie_section(movie, "raw_scores").get("imdb_score", movie.get("imdb_score")))
-    return _has_rating_value(value)
-
-
-def _entry_has_kp(movie: dict, card: dict) -> bool:
-    value = card.get("kp_score", _movie_section(movie, "raw_scores").get("kp_score", movie.get("kp_score")))
+def _entry_has_tmdb(movie: dict, card: dict) -> bool:
+    value = card.get("tmdb_score", _movie_section(movie, "raw_scores").get("tmdb_score", movie.get("tmdb_score")))
     return _has_rating_value(value)
 
 
@@ -106,8 +99,7 @@ _DATASET_COMPLETENESS_CHECKS = {
     "user_score": _entry_has_user_score,
     "year": _entry_has_year,
     "genres": _entry_has_genres,
-    "imdb": _entry_has_imdb,
-    "kp": _entry_has_kp,
+    "tmdb": _entry_has_tmdb,
     "description": _entry_has_description,
     "poster": _entry_has_poster,
 }

@@ -34,7 +34,6 @@ def _movie(title: str = "Метод", *, user_score: float = 8.0, year: int = 20
         "main_info": main_info,
         "raw_scores": raw_scores,
         "computed_scores": format_score.raw_to_struct(raw_scores, main_info),
-        scheme.TAGS_VIBE: {feature: 0 for feature in constant.TAGS_VIBE},
         constant.GENRE_SECTION: {feature: 0 for feature in constant.GENRE},
     }
 

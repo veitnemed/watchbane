@@ -4,7 +4,7 @@ from copy import deepcopy
 
 from config import constant
 from config import scheme
-from dataset.add_flow.preview import _normalized_genre, _normalized_tags_vibe
+from dataset.add_flow.preview import _normalized_genre
 from dataset.storage_movie import add_movie
 
 
@@ -15,7 +15,6 @@ def build_movie_record_from_defaults(defaults: dict, user_score: float) -> dict:
     movie = {
         "main_info": main_info,
         "raw_scores": dict(defaults.get(scheme.RAW_SCORES, {})),
-        constant.TAGS_VIBE_SECTION: _normalized_tags_vibe(defaults),
         constant.GENRE_SECTION: _normalized_genre(defaults),
     }
     localized = defaults.get("localized")

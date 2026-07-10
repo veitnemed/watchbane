@@ -9,15 +9,13 @@ def build_computed_scores(raw_scores: dict, main_info: dict) -> dict:
     return format_score.raw_to_struct(raw_scores, main_info)
 
 
-def build_feature_vector(computed_scores: dict, tags_vibe: dict, genre_tags: dict) -> dict:
+def build_feature_vector(computed_scores: dict, genre_tags: dict) -> dict:
     """Assemble the full ML feature vector for a watched record."""
     features = {
         constant.BIAS_FEATURE: 1.0,
     }
     for feature in computed_scores:
         features[feature] = computed_scores[feature]
-    for feature, value in format_score.tags_to_features(tags_vibe).items():
-        features[feature] = value
     for feature, value in format_score.tags_to_features(genre_tags, constant.GENRE_SECTION).items():
         features[feature] = value
     return features

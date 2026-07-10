@@ -28,7 +28,7 @@ def _indexes(conn, table: str) -> set[str]:
 def test_schema_creates_expected_tables_and_columns(tmp_path) -> None:
     conn = connect(tmp_path / "watchbane.sqlite3")
     try:
-        assert apply_migrations(conn) == 2
+        assert apply_migrations(conn) == 3
 
         tables = {
             row["name"]
@@ -37,7 +37,7 @@ def test_schema_creates_expected_tables_and_columns(tmp_path) -> None:
             )
         }
         assert EXPECTED_TABLES.issubset(tables)
-        assert get_current_schema_version(conn) == 2
+        assert get_current_schema_version(conn) == 3
 
         assert {
             "dataset_key",

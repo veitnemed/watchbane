@@ -9,9 +9,9 @@ from dataset.analytics.scores import normalize_score
 
 RATING_STRONG_GAP = 1.5
 GENRE_COUNT_CHART_LIMIT = 15
-IMDB_DELTA_LIST_PREVIEW_LIMIT = 10
-IMDB_DELTA_LIST_LIMIT = 20
-IMDB_DELTA_CHART_LIMIT = IMDB_DELTA_LIST_LIMIT
+TMDB_DELTA_LIST_PREVIEW_LIMIT = 10
+TMDB_DELTA_LIST_LIMIT = 20
+TMDB_DELTA_CHART_LIMIT = TMDB_DELTA_LIST_LIMIT
 ANALYTICS_LIST_LIMIT = 12
 GENRE_COUNT_TITLE_LIMIT = 3
 
@@ -91,14 +91,14 @@ def build_rating_gap_lists(
     gap: float = RATING_STRONG_GAP,
     limit: int = ANALYTICS_LIST_LIMIT,
 ) -> dict:
-    """Split titles where user score differs strongly from IMDb."""
+    """Split titles where user score differs strongly from TMDb."""
     higher: list[dict] = []
     lower: list[dict] = []
     for item in collect_analytics_entry_items(entries):
         user_score = item.get("user_score")
         if user_score is None:
             continue
-        external_score = item.get("imdb_score")
+        external_score = item.get("tmdb_score")
         if external_score is None:
             continue
         delta = round(float(user_score) - float(external_score), 1)
@@ -106,8 +106,8 @@ def build_rating_gap_lists(
             "title": item["title"],
             "year": item.get("year"),
             "user_score": user_score,
-            "source": "imdb",
-            "source_label": "IMDb",
+            "source": "tmdb",
+            "source_label": "TMDb",
             "external_score": external_score,
             "delta": delta,
         }
@@ -126,25 +126,25 @@ def build_rating_gap_lists(
     }
 
 
-def build_imdb_delta_chart_rows(
+def build_tmdb_delta_chart_rows(
     entries: list[tuple[str, dict, dict]],
     *,
-    limit: int = IMDB_DELTA_LIST_LIMIT,
+    limit: int = TMDB_DELTA_LIST_LIMIT,
 ) -> dict:
-    """Build ranked rows for user_score minus IMDb per watched title."""
+    """Build ranked rows for user_score minus TMDb per watched title."""
     rows: list[dict] = []
     for item in collect_analytics_entry_items(entries):
         user_score = item.get("user_score")
-        imdb_score = item.get("imdb_score")
-        if user_score is None or imdb_score is None:
+        tmdb_score = item.get("tmdb_score")
+        if user_score is None or tmdb_score is None:
             continue
-        delta = round(float(user_score) - float(imdb_score), 1)
+        delta = round(float(user_score) - float(tmdb_score), 1)
         rows.append(
             {
                 "title": item["title"],
                 "year": item.get("year"),
                 "user_score": user_score,
-                "imdb_score": imdb_score,
+                "tmdb_score": tmdb_score,
                 "delta": delta,
             }
         )
@@ -162,15 +162,15 @@ def build_imdb_delta_chart_rows(
     }
 
 
-def format_imdb_delta_line(row: dict) -> str:
-    """Format one IMDb delta row for analytics text lists."""
+def format_tmdb_delta_line(row: dict) -> str:
+    """Format one TMDb delta row for analytics text lists."""
     year = row.get("year")
     year_text = f" ({year})" if year not in (None, "") else ""
     delta = float(row["delta"])
     sign = "+" if delta > 0 else ""
     return (
         f"{row['title']}{year_text} · моя {float(row['user_score']):.1f} · "
-        f"IMDb {float(row['imdb_score']):.1f} · {sign}{delta:.1f}"
+        f"TMDb {float(row['tmdb_score']):.1f} · {sign}{delta:.1f}"
     )
 
 
@@ -196,16 +196,12 @@ def build_suspicious_ratings(
             continue
 
         reasons: list[str] = []
-        for source_label, external_score in (
-            ("IMDb", item.get("imdb_score")),
-            ("КП", item.get("kp_score")),
-        ):
-            if external_score is None:
-                continue
+        external_score = item.get("tmdb_score")
+        if external_score is not None:
             if float(external_score) >= SUSPICIOUS_HIGH_PUBLIC and float(user_score) <= SUSPICIOUS_LOW_USER:
-                reasons.append(f"{source_label} высокий, моя низкая")
+                reasons.append("TMDb высокий, моя низкая")
             if float(external_score) <= SUSPICIOUS_LOW_PUBLIC and float(user_score) >= SUSPICIOUS_HIGH_USER:
-                reasons.append(f"{source_label} низкий, моя высокая")
+                reasons.append("TMDb низкий, моя высокая")
 
         if item.get("has_overview") is False:
             reasons.append("нет описания")

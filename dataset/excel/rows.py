@@ -12,8 +12,6 @@ def build_row(movie: dict) -> list:
         row.append(movie["main_info"][feature])
     for feature in constant.RAW_SCORES:
         row.append(movie["raw_scores"][feature])
-    for feature in constant.TAGS_VIBE:
-        row.append(movie[constant.TAGS_VIBE_SECTION][feature])
     for feature in constant.GENRE:
         row.append(movie.get(constant.GENRE_SECTION, {}).get(feature, 0))
     return row

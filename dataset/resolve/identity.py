@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from difflib import SequenceMatcher
 
-from apis import imdb_sql as sql_search
+from common.text_match import normalize_for_match, transliterate_to_latin
 from dataset.resolve.helpers import add_title_value
 
 
@@ -21,7 +21,7 @@ def extract_api_identity_titles(candidate: dict | None) -> list:
 
 def normalize_identity_title(value) -> str:
     """Нормализует название для безопасного сравнения identity."""
-    return sql_search.normalize_for_match(value).replace("ё", "е")
+    return normalize_for_match(value).replace("ё", "е")
 
 
 def title_identity_match(left, right) -> bool:
@@ -35,8 +35,8 @@ def title_identity_match(left, right) -> bool:
     if min(len(left_norm), len(right_norm)) >= 4 and (left_norm in right_norm or right_norm in left_norm):
         return True
 
-    left_translit = sql_search.transliterate_to_latin(left_norm)
-    right_translit = sql_search.transliterate_to_latin(right_norm)
+    left_translit = transliterate_to_latin(left_norm)
+    right_translit = transliterate_to_latin(right_norm)
     if left_translit and right_translit and left_translit == right_translit:
         return True
 

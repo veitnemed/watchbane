@@ -19,7 +19,6 @@ def get_request_schema() -> dict:
     sections = [
         scheme.MAIN_INFO,
         scheme.RAW_SCORES,
-        scheme.TAGS_VIBE,
         scheme.GENRE,
     ]
     return {
@@ -448,9 +447,6 @@ def request_all_scores(defaults: dict = None) -> dict:
             continue
 
         for feature, field_settings in section_fields.items():
-            if section_name == scheme.TAGS_VIBE:
-                show_score_help(feature)
-
             tags_validators = field_settings["tag"]
             type_func = field_settings["type"]
             field_validators = get_validators(tags_validators, field_settings.get("max_value", 1))

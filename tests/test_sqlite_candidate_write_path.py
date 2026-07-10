@@ -36,7 +36,6 @@ def _watched_movie(title: str, year: int) -> dict:
             "media_type": "tv",
         },
         "raw_scores": {},
-        "tags_vibe": {},
         "genre": {},
     }
 

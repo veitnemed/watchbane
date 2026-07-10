@@ -2,8 +2,7 @@
 
 from dataset.genres.stats import (
     build_dataset_genre_catalog,
-    count_genres_from_api,
-    extract_genres,
+    count_genres_from_dataset,
     get_dataset_title,
     print_genre_report,
     show_dataset_genre_catalog,
@@ -12,8 +11,7 @@ from dataset.genres.stats import (
 
 __all__ = [
     "build_dataset_genre_catalog",
-    "count_genres_from_api",
-    "extract_genres",
+    "count_genres_from_dataset",
     "get_dataset_title",
     "print_genre_report",
     "show_dataset_genre_catalog",

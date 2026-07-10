@@ -86,8 +86,7 @@ def completeness_card_from_movie(movie: dict) -> dict:
         "user_score": main_info.get("user_score", movie.get("user_score")),
         "year": main_info.get("year", movie.get("year")),
         "genres": _genres_from_movie(movie),
-        "imdb_score": raw_scores.get("imdb_score", movie.get("imdb_score")),
-        "kp_score": raw_scores.get("kp_score", movie.get("kp_score")),
+        "tmdb_score": raw_scores.get("tmdb_score", movie.get("tmdb_score")),
         "overview": _overview_from_movie(movie),
         **poster_fields,
     }
@@ -133,11 +132,8 @@ def collect_analytics_entry_items(entries: list[tuple[str, dict, dict]]) -> list
                     display.get("user_score", _movie_section(movie, "main_info").get("user_score", movie.get("user_score")))
                 ),
                 "genres": genre_values,
-                "imdb_score": external_score(
-                    display.get("imdb_score", _movie_section(movie, "raw_scores").get("imdb_score", movie.get("imdb_score")))
-                ),
-                "kp_score": external_score(
-                    display.get("kp_score", _movie_section(movie, "raw_scores").get("kp_score", movie.get("kp_score")))
+                "tmdb_score": external_score(
+                    display.get("tmdb_score", _movie_section(movie, "raw_scores").get("tmdb_score", movie.get("tmdb_score")))
                 ),
                 "has_overview": overview not in (None, "") and bool(str(overview).strip()),
             }

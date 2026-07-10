@@ -9,6 +9,8 @@ import json
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from common.text_match import normalize_for_match, transliterate_to_latin
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_DB_PATH = ROOT_DIR / "datasets" / "dataset_sql_light" / "imdb_light.sqlite3"
@@ -28,16 +30,6 @@ REGION_TO_COUNTRY = {
     "GB": "Великобритания",
     "JP": "Япония",
     "XWW": "Весь мир",
-}
-
-CYRILLIC_TO_LATIN = {
-    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d",
-    "е": "e", "ё": "e", "ж": "zh", "з": "z", "и": "i",
-    "й": "y", "к": "k", "л": "l", "м": "m", "н": "n",
-    "о": "o", "п": "p", "р": "r", "с": "s", "т": "t",
-    "у": "u", "ф": "f", "х": "h", "ц": "ts", "ч": "ch",
-    "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "",
-    "э": "e", "ю": "yu", "я": "ya",
 }
 
 COMMON_TITLE_TYPOS = {
@@ -61,12 +53,6 @@ def make_response(ok: bool, data=None, error: str = None, details: str = None) -
 
 def normalize_text(value) -> str:
     return re.sub(r"\s+", " ", str(value or "").strip())
-
-
-def normalize_for_match(value) -> str:
-    text = normalize_text(value).casefold()
-    text = re.sub(r"[^0-9a-z\u0400-\u04FF]+", " ", text)
-    return re.sub(r"\s+", " ", text).strip()
 
 
 def load_manual_aliases() -> dict[str, str]:
@@ -99,18 +85,6 @@ def resolve_manual_alias(title: str) -> str | None:
 
 def contains_cyrillic(text: str) -> bool:
     return bool(re.search(r"[\u0400-\u04FF]", str(text or "")))
-
-
-def transliterate_to_latin(text: str) -> str:
-    pieces = []
-    for char in normalize_text(text).casefold():
-        if char in CYRILLIC_TO_LATIN:
-            pieces.append(CYRILLIC_TO_LATIN[char])
-        elif char.isascii() and (char.isalnum() or char.isspace()):
-            pieces.append(char)
-        else:
-            pieces.append(" ")
-    return normalize_for_match("".join(pieces))
 
 
 def collapse_repeated_letters(text: str) -> str:

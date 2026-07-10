@@ -3,7 +3,6 @@ from dataset.score_analytics import (
     build_dataset_completeness,
     build_dataset_completeness_from_entries,
     build_genre_count_rows,
-    build_imdb_delta_chart_rows,
     build_rating_gap_lists,
     build_score_analytics,
     build_score_count_points,
@@ -12,11 +11,12 @@ from dataset.score_analytics import (
     build_score_insights,
     build_score_summary,
     build_suspicious_ratings,
+    build_tmdb_delta_chart_rows,
     build_year_average_points,
     collect_user_scores,
-    format_imdb_delta_line,
     format_rating_gap_line,
     format_suspicious_rating_line,
+    format_tmdb_delta_line,
     summarize_dataset_completeness,
 )
 
@@ -34,8 +34,7 @@ def _full_card(**overrides) -> dict:
         "user_score": 8.0,
         "year": 2020,
         "genres": ["Драма"],
-        "imdb_score": 7.5,
-        "kp_score": 7.0,
+        "tmdb_score": 7.5,
         "overview": "Описание фильма.",
         "poster_url": "https://example.com/poster.jpg",
         "poster_path": None,
@@ -247,18 +246,18 @@ def test_build_score_analytics() -> None:
     assert analytics["rating_higher_than_public"] == []
     assert analytics["rating_lower_than_public"] == []
     assert analytics["suspicious_ratings"] == []
-    assert analytics["imdb_delta_rows"] == []
+    assert analytics["tmdb_delta_rows"] == []
 
 
-def test_build_imdb_delta_chart_rows() -> None:
+def test_build_tmdb_delta_chart_rows() -> None:
     movie = _movie(8.0, "Alpha")
     entries = [
-        _entry("A", movie, _full_card(title="Higher", user_score=9.0, imdb_score=6.0)),
-        _entry("B", movie, _full_card(title="Lower", user_score=4.0, imdb_score=8.0)),
-        _entry("C", movie, _full_card(title="NoImdb", user_score=7.0, imdb_score=None)),
+        _entry("A", movie, _full_card(title="Higher", user_score=9.0, tmdb_score=6.0)),
+        _entry("B", movie, _full_card(title="Lower", user_score=4.0, tmdb_score=8.0)),
+        _entry("C", movie, _full_card(title="NoTmdb", user_score=7.0, tmdb_score=None)),
     ]
 
-    result = build_imdb_delta_chart_rows(entries, limit=10)
+    result = build_tmdb_delta_chart_rows(entries, limit=10)
 
     assert [(row["title"], row["delta"]) for row in result["rows"]] == [
         ("Lower", -4.0),
@@ -267,11 +266,11 @@ def test_build_imdb_delta_chart_rows() -> None:
     assert result["extra_count"] == 0
 
 
-def test_format_imdb_delta_line() -> None:
-    line = format_imdb_delta_line(
-        {"title": "Alpha", "year": 2020, "user_score": 9.0, "imdb_score": 6.0, "delta": 3.0}
+def test_format_tmdb_delta_line() -> None:
+    line = format_tmdb_delta_line(
+        {"title": "Alpha", "year": 2020, "user_score": 9.0, "tmdb_score": 6.0, "delta": 3.0}
     )
-    assert line == "Alpha (2020) · моя 9.0 · IMDb 6.0 · +3.0"
+    assert line == "Alpha (2020) · моя 9.0 · TMDb 6.0 · +3.0"
 
 
 def test_build_genre_count_rows() -> None:
@@ -306,9 +305,9 @@ def test_build_year_average_points() -> None:
 def test_build_rating_gap_lists() -> None:
     movie = _movie(9.0, "Alpha")
     entries = [
-        _entry("A", movie, _full_card(title="Higher", user_score=9.0, imdb_score=6.0, kp_score=7.0)),
-        _entry("B", movie, _full_card(title="Lower", user_score=4.0, imdb_score=8.0, kp_score=7.5)),
-        _entry("C", movie, _full_card(title="Close", user_score=7.0, imdb_score=6.5, kp_score=7.0)),
+        _entry("A", movie, _full_card(title="Higher", user_score=9.0, tmdb_score=6.0)),
+        _entry("B", movie, _full_card(title="Lower", user_score=4.0, tmdb_score=8.0)),
+        _entry("C", movie, _full_card(title="Close", user_score=7.0, tmdb_score=6.5)),
     ]
 
     gaps = build_rating_gap_lists(entries, gap=1.5, limit=10)
@@ -316,7 +315,7 @@ def test_build_rating_gap_lists() -> None:
     assert len(gaps["higher_than_public"]) == 1
     assert gaps["higher_than_public"][0]["title"] == "Higher"
     assert gaps["higher_than_public"][0]["delta"] == 3.0
-    assert gaps["higher_than_public"][0]["source_label"] == "IMDb"
+    assert gaps["higher_than_public"][0]["source_label"] == "TMDb"
     assert len(gaps["lower_than_public"]) == 1
     assert gaps["lower_than_public"][0]["title"] == "Lower"
     assert gaps["lower_than_public"][0]["delta"] == -4.0
@@ -329,17 +328,17 @@ def test_build_suspicious_ratings() -> None:
         _entry(
             "A",
             movie,
-            _full_card(title="HighPublic", user_score=5.0, imdb_score=8.0, overview="Есть."),
+            _full_card(title="HighPublic", user_score=5.0, tmdb_score=8.0, overview="Есть."),
         ),
         _entry(
             "B",
             movie,
-            _full_card(title="NoOverview", user_score=7.0, imdb_score=7.0, overview=""),
+            _full_card(title="NoOverview", user_score=7.0, tmdb_score=7.0, overview=""),
         ),
         _entry(
             "C",
             movie,
-            _full_card(title="Normal", user_score=7.0, imdb_score=7.0, overview="Ок."),
+            _full_card(title="Normal", user_score=7.0, tmdb_score=7.0, overview="Ок."),
         ),
     ]
 
@@ -358,7 +357,7 @@ def test_build_score_analytics_mvp_with_entries() -> None:
         _entry(
             "A",
             movie,
-            _full_card(title="Gap", user_score=9.0, imdb_score=6.0, year=2020, genres=["Драма"]),
+            _full_card(title="Gap", user_score=9.0, tmdb_score=6.0, year=2020, genres=["Драма"]),
         )
     ]
     analytics = build_score_analytics({"A": movie}, entries=entries)
@@ -367,8 +366,8 @@ def test_build_score_analytics_mvp_with_entries() -> None:
     assert analytics["year_average_points"] == [{"year": 2020, "average": 9.0, "count": 1}]
     assert len(analytics["rating_higher_than_public"]) == 1
     assert analytics["rating_higher_extra_count"] == 0
-    assert analytics["imdb_delta_rows"][0]["delta"] == 3.0
-    assert analytics["imdb_delta_extra_count"] == 0
+    assert analytics["tmdb_delta_rows"][0]["delta"] == 3.0
+    assert analytics["tmdb_delta_extra_count"] == 0
 
 
 def test_dataset_completeness_empty() -> None:
@@ -376,7 +375,7 @@ def test_dataset_completeness_empty() -> None:
 
     assert result["total"] == 0
     assert result["overall_percent"] == 0.0
-    assert len(result["items"]) == 7
+    assert len(result["items"]) == 6
     assert all(item["count"] == 0 for item in result["items"])
     assert all(item["percent"] == 0.0 for item in result["items"])
 
@@ -396,28 +395,26 @@ def test_dataset_completeness_partial_entries() -> None:
         ("A", movie, _full_card()),
         ("B", movie, _full_card(poster_url=None, poster_path=None, poster_src=None)),
         ("C", movie, _full_card(overview="")),
-        ("D", movie, _full_card(imdb_score=None)),
-        ("E", movie, _full_card(kp_score=None)),
-        ("F", movie, _full_card(genres=[])),
-        ("G", movie, _full_card(year=None)),
+        ("D", movie, _full_card(tmdb_score=None)),
+        ("E", movie, _full_card(genres=[])),
+        ("F", movie, _full_card(year=None)),
     ]
     result = build_dataset_completeness_from_entries(entries)
 
-    assert result["total"] == 7
+    assert result["total"] == 6
     by_key = {item["key"]: item for item in result["items"]}
-    assert by_key["poster"]["count"] == 6
-    assert by_key["description"]["count"] == 6
-    assert by_key["imdb"]["count"] == 6
-    assert by_key["kp"]["count"] == 6
-    assert by_key["genres"]["count"] == 6
-    assert by_key["year"]["count"] == 6
-    assert by_key["user_score"]["count"] == 7
+    assert by_key["poster"]["count"] == 5
+    assert by_key["description"]["count"] == 5
+    assert by_key["tmdb"]["count"] == 5
+    assert by_key["genres"]["count"] == 5
+    assert by_key["year"]["count"] == 5
+    assert by_key["user_score"]["count"] == 6
 
 
 def test_dataset_completeness_reads_raw_scores_without_card_fields() -> None:
     movie = {
         "main_info": {"title": "Alpha", "user_score": 8.0, "year": 2020},
-        "raw_scores": {"imdb_score": 7.8, "kp_score": 6.9},
+        "raw_scores": {"tmdb_score": 7.8},
         "genres": ["Драма"],
         "overview": "Есть описание.",
         "poster_url": "https://example.com/a.jpg",
@@ -425,8 +422,7 @@ def test_dataset_completeness_reads_raw_scores_without_card_fields() -> None:
     result = build_dataset_completeness_from_entries([("Alpha", movie, {})])
 
     by_key = {item["key"]: item for item in result["items"]}
-    assert by_key["imdb"]["count"] == 1
-    assert by_key["kp"]["count"] == 1
+    assert by_key["tmdb"]["count"] == 1
     assert by_key["description"]["count"] == 1
     assert by_key["poster"]["count"] == 1
 
@@ -445,16 +441,16 @@ def test_summarize_dataset_completeness_ok() -> None:
 def test_summarize_dataset_completeness_with_issues() -> None:
     movie = _movie(8.0, "Alpha")
     completeness = build_dataset_completeness_from_entries(
-        [("Alpha", movie, _full_card(kp_score=None))]
+        [("Alpha", movie, _full_card(tmdb_score=None))]
     )
     summary = summarize_dataset_completeness(completeness)
 
     assert summary["overall_percent"] < 100.0
     assert len(summary["worst_items"]) == 1
-    assert summary["worst_items"][0]["key"] == "kp"
+    assert summary["worst_items"][0]["key"] == "tmdb"
     assert summary["headline_text"].startswith("Полнота dataset:")
     assert summary["subline_text"].startswith("Нужно заполнить:")
-    assert "КП 0/1" in summary["subline_text"]
+    assert "TMDb 0/1" in summary["subline_text"]
 
 
 def test_summarize_dataset_completeness_limits_worst_items() -> None:
@@ -462,10 +458,9 @@ def test_summarize_dataset_completeness_limits_worst_items() -> None:
     entries = [
         ("A", movie, _full_card(poster_url=None, poster_path=None, poster_src=None)),
         ("B", movie, _full_card(overview="")),
-        ("C", movie, _full_card(imdb_score=None)),
-        ("D", movie, _full_card(kp_score=None)),
-        ("E", movie, _full_card(genres=[])),
-        ("F", movie, _full_card(year=None)),
+        ("C", movie, _full_card(tmdb_score=None)),
+        ("D", movie, _full_card(genres=[])),
+        ("E", movie, _full_card(year=None)),
     ]
     summary = summarize_dataset_completeness(build_dataset_completeness_from_entries(entries))
 

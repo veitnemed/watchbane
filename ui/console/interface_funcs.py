@@ -258,18 +258,11 @@ def delete_watched_record() -> None:
         print("Данные не изменены.")
 
 
-def load_genre_markup():
-    """Загружает жанровую разметку для текущего датасета с подтверждением."""
+def show_dataset_genres() -> None:
+    """Показывает все жанры текущего датасета через API."""
     ui.clean_terminal()
-    result = service.apply_genre_markup()
-    print(f"\nОбработано записей: {result['total']}")
-    print(f"Подтверждено: {result['updated']}")
-    print(f"Пропущено: {result['skipped']}")
-    print(f"Не найдено: {len(result['not_found'])}")
-    print(f"Ошибок API: {len(result['errors'])}")
+    service.show_dataset_genres()
 
-
-def show_api_features():
     """Ищет сериал через TMDb и печатает краткую сводку найденного объекта."""
     title = request.loop_input(
         text='Название сериала >> ',

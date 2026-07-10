@@ -75,7 +75,7 @@ def add_movie(
     return result
 
 
-def add_movies(title: str, user_score: str, raw_scores: dict, tags_vibe: dict, genre_tags: dict = None) -> bool:
+def add_movies(title: str, user_score: str, raw_scores: dict, genre_tags: dict = None) -> bool:
     """Добавляет фильм через старый формат аргументов."""
     main_info = {}
     main_info["title"] = title
@@ -88,7 +88,6 @@ def add_movies(title: str, user_score: str, raw_scores: dict, tags_vibe: dict, g
     movie = {}
     movie["main_info"] = main_info
     movie["raw_scores"] = raw_scores
-    movie[constant.TAGS_VIBE_SECTION] = tags_vibe
     movie[constant.GENRE_SECTION] = {} if genre_tags is None else genre_tags
 
     return add_movie(movie).ok
@@ -143,16 +142,6 @@ def build_movie_from_row(row: dict, row_number: int) -> dict:
                 return None
             raw_scores[feature] = valid.parse_float(value)
 
-    tags_vibe = {}
-    tags_schema = scheme.get_schema(scheme.TAGS_VIBE)
-    for feature in constant.TAGS_VIBE:
-        value = row[feature].strip()
-        max_value = tags_schema[feature].get("max_value", 1)
-        if valid.is_tags_score(value, max_value) is False:
-            print(f'Строка {row_number}: некорректное значение {feature}')
-            return None
-        tags_vibe[feature] = int(value)
-
     genre_values = {}
     genre_schema = scheme.get_schema(scheme.GENRE)
     for feature in constant.GENRE:
@@ -172,6 +161,5 @@ def build_movie_from_row(row: dict, row_number: int) -> dict:
     movie = {}
     movie["main_info"] = main_info
     movie["raw_scores"] = raw_scores
-    movie[constant.TAGS_VIBE_SECTION] = tags_vibe
     movie[constant.GENRE_SECTION] = genre_values
     return movie

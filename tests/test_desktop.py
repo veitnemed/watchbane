@@ -14,7 +14,6 @@ from common import format_score
 
 
 def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0) -> dict:
-    tags_vibe = {feature: 0 for feature in constant.TAGS_VIBE}
     genre_tags = {feature: 0 for feature in constant.GENRE}
 
     return {
@@ -42,7 +41,6 @@ def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0
                 "year": year,
             },
         ),
-        scheme.TAGS_VIBE: tags_vibe,
         constant.GENRE_SECTION: genre_tags,
     }
 
@@ -427,7 +425,6 @@ def test_add_dataset_record_preserves_localized_payload(monkeypatch) -> None:
             "country": "JP",
         },
         "raw_scores": raw_scores,
-        constant.TAGS_VIBE_SECTION: {feature: 0 for feature in constant.TAGS_VIBE},
         constant.GENRE_SECTION: {feature: 0 for feature in constant.GENRE},
         "localized": {
             "ru": {

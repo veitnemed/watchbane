@@ -11,11 +11,9 @@ from dataset.models.media_type import normalize_media_type
 from dataset.models.results import AddRecordResult, UpdateRecordResult
 from storage.normalize import (
     is_valid_genre_tags,
-    is_valid_tags_vibe,
     normalize_genre_tags,
     normalize_main_info,
     normalize_raw_scores,
-    normalize_tags_vibe,
 )
 
 
@@ -24,7 +22,6 @@ class ParsedAddPayload:
     title: str
     main_info: dict
     input_raw_scores: dict
-    tags_vibe: dict
     genre_tags: dict
     year: object
     media_type: str
@@ -53,7 +50,6 @@ def validate_add_record_payload(record_payload: dict, *, data: dict) -> AddRecor
         )
 
     try:
-        tags_vibe = normalize_tags_vibe(record_payload[constant.TAGS_VIBE_SECTION])
         genre_tags = normalize_genre_tags(record_payload.get(constant.GENRE_SECTION, {}))
         user_score = main_info["user_score"]
         year = main_info["year"]
@@ -106,14 +102,6 @@ def validate_add_record_payload(record_payload: dict, *, data: dict) -> AddRecor
             reason="invalid_payload",
         )
 
-    if is_valid_tags_vibe(tags_vibe) is False:
-        return AddRecordResult(
-            ok=False,
-            title=title,
-            message="Ошибка добавления! Некорректные tags_vibe",
-            reason="invalid_payload",
-        )
-
     if is_valid_genre_tags(genre_tags) is False:
         return AddRecordResult(
             ok=False,
@@ -126,7 +114,6 @@ def validate_add_record_payload(record_payload: dict, *, data: dict) -> AddRecor
         title=title,
         main_info=main_info,
         input_raw_scores=input_raw_scores,
-        tags_vibe=tags_vibe,
         genre_tags=genre_tags,
         year=year,
         media_type=media_type,
@@ -134,7 +121,7 @@ def validate_add_record_payload(record_payload: dict, *, data: dict) -> AddRecor
 
 
 def validate_add_features(features: dict, *, title: str) -> AddRecordResult | None:
-    required_features = {constant.BIAS_FEATURE, *constant.TAGS_VIBE, *constant.GENRE}
+    required_features = {constant.BIAS_FEATURE, *constant.GENRE}
     supported_computed = set(constant.COMPUTED_SCORES)
     supported_features = required_features | supported_computed
     if required_features.issubset(set(features.keys())) is False or set(features.keys()).issubset(supported_features) is False:
@@ -165,7 +152,7 @@ def validate_update_patch_structure(
             changed_fields=[],
         )
 
-    allowed_sections = {"main_info", "raw_scores", constant.TAGS_VIBE_SECTION, constant.GENRE_SECTION}
+    allowed_sections = {"main_info", "raw_scores", constant.GENRE_SECTION}
     unsupported_sections = [section for section in patch_payload.keys() if section not in allowed_sections]
     if len(unsupported_sections) > 0:
         return UpdateRecordResult(
@@ -219,7 +206,6 @@ def validate_normalized_update_values(
     dataset_title: str,
     new_main_info: dict,
     new_raw_scores: dict,
-    new_tags_vibe: dict,
     new_genre_tags: dict,
 ) -> UpdateRecordResult | None:
     if valid.is_correct_score(str(new_main_info["user_score"])) is False:
@@ -230,8 +216,6 @@ def validate_normalized_update_values(
         return UpdateRecordResult(False, dataset_title, "Error update record! Incorrect country", "invalid_patch", [])
     if valid.is_valid_raw_meta(new_raw_scores) is False:
         return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректные raw_scores", "invalid_patch", [])
-    if is_valid_tags_vibe(new_tags_vibe) is False:
-        return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректные tags_vibe", "invalid_patch", [])
     if is_valid_genre_tags(new_genre_tags) is False:
         return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректная genre-разметка", "invalid_patch", [])
     return None
@@ -254,16 +238,14 @@ def normalize_update_sections(
     dataset_title: str,
     main_info: dict,
     raw_scores: dict,
-    tags_vibe: dict,
     genre_tags: dict,
-) -> tuple[dict, dict, dict, dict] | UpdateRecordResult:
+) -> tuple[dict, dict, dict] | UpdateRecordResult:
     try:
         main_info = dict(main_info)
         main_info["title"] = dataset_title
         return (
             normalize_main_info(main_info),
             normalize_raw_scores(raw_scores),
-            normalize_tags_vibe(tags_vibe),
             normalize_genre_tags(genre_tags),
         )
     except (KeyError, TypeError, ValueError):

@@ -16,7 +16,6 @@ def _defaults(title: str = "Show") -> dict:
             "tmdb_votes": 1200,
             "tmdb_popularity": 44.2,
         },
-        scheme.TAGS_VIBE: {feature: 0 for feature in constant.TAGS_VIBE},
         scheme.GENRE: {feature: 0 for feature in constant.GENRE},
     }
 

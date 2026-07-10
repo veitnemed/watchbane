@@ -71,4 +71,3 @@ def test_empty_defaults_stay_valid_for_manual_add() -> None:
     assert defaults[scheme.MAIN_INFO]["user_score"] is None
     assert defaults[scheme.RAW_SCORES] == {}
     assert isinstance(defaults[scheme.GENRE], dict)
-    assert isinstance(defaults[scheme.TAGS_VIBE], dict)
