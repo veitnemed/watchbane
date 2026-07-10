@@ -495,7 +495,7 @@ def test_candidate_detail_card_profile_scales_with_ui_scale(qapp) -> None:
     width_75 = detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width
 
     assert width_75 < width_100
-    assert width_75 == scaling.poster_px(layout.DETAIL_POSTER_WIDTH)
+    assert width_75 == scaling.poster_px(260)
 
 
 def test_settings_dialog_displays_current_scale(monkeypatch, tmp_path, qapp) -> None:
@@ -765,7 +765,13 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
     assert watched_profile.detail_info_min_width == scaling.detail_px(layout.DETAIL_INFO_MIN_WIDTH)
     assert watched_profile.detail_poster_width >= 240
     assert watched_profile.detail_poster_height >= 360
-    assert candidate_profile.detail_poster_width == watched_profile.detail_poster_width
+    assert candidate_profile.detail_poster_width < watched_profile.detail_poster_width
+    assert candidate_profile.detail_content_max_width < watched_profile.detail_content_max_width
+    assert candidate_profile.detail_content_max_width >= (
+        candidate_profile.detail_poster_width
+        + candidate_profile.detail_poster_right_gap
+        + candidate_profile.detail_info_min_width
+    )
     assert preview_profile.detail_poster_width > 0
     assert preview_profile.detail_poster_height > 0
 

@@ -29,36 +29,36 @@ from desktop.theme.shell_layout import CANDIDATE_ROOT_SPACING_PX
 CANDIDATE_YEAR_MIN = 2000
 
 REPLENISH_PRESETS = (
-    ("Manual", "manual"),
-    ("Hollywood mainstream", "hollywood_mainstream"),
-    ("Russian mainstream", "russian_mainstream"),
-    ("Anime", "anime"),
-    ("K-drama", "k_drama"),
-    ("Turkish dramas", "turkish_dramas"),
-    ("British / European detective", "british_european_detective"),
-    ("Family animation", "family_animation"),
-    ("Dark thriller / crime", "dark_thriller_crime"),
+    ("candidates.filters.replenish.preset.manual", "manual"),
+    ("candidates.filters.replenish.preset.hollywood_mainstream", "hollywood_mainstream"),
+    ("candidates.filters.replenish.preset.russian_mainstream", "russian_mainstream"),
+    ("candidates.filters.replenish.preset.anime", "anime"),
+    ("candidates.filters.replenish.preset.k_drama", "k_drama"),
+    ("candidates.filters.replenish.preset.turkish_dramas", "turkish_dramas"),
+    ("candidates.filters.replenish.preset.british_european_detective", "british_european_detective"),
+    ("candidates.filters.replenish.preset.family_animation", "family_animation"),
+    ("candidates.filters.replenish.preset.dark_thriller_crime", "dark_thriller_crime"),
 )
 ANIMATION_MODE_OPTIONS = (
-    ("Any", "any"),
-    ("Animation only", "animation_only"),
-    ("Live action only", "live_action_only"),
+    ("candidates.filters.replenish.animation.any", "any"),
+    ("candidates.filters.replenish.animation.animation_only", "animation_only"),
+    ("candidates.filters.replenish.animation.live_action_only", "live_action_only"),
 )
 VIBE_OPTIONS = (
-    ("Mixed", "mixed"),
-    ("Light", "light"),
-    ("Dark", "dark"),
+    ("candidates.filters.replenish.vibe.mixed", "mixed"),
+    ("candidates.filters.replenish.vibe.light", "light"),
+    ("candidates.filters.replenish.vibe.dark", "dark"),
 )
 RELEASE_OPTIONS = (
-    ("Mixed", "mixed"),
-    ("New", "new"),
-    ("Classic", "classic"),
+    ("candidates.filters.replenish.release.mixed", "mixed"),
+    ("candidates.filters.replenish.release.new", "new"),
+    ("candidates.filters.replenish.release.classic", "classic"),
 )
 ORIGIN_OPTIONS = (
-    ("Any", "any"),
-    ("Domestic", "domestic"),
-    ("Foreign", "foreign"),
-    ("Mixed", "mixed"),
+    ("candidates.filters.replenish.origin.any", "any"),
+    ("candidates.filters.replenish.origin.domestic", "domestic"),
+    ("candidates.filters.replenish.origin.foreign", "foreign"),
+    ("candidates.filters.replenish.origin.mixed", "mixed"),
 )
 
 
@@ -145,7 +145,7 @@ def build_filters_form(
     country_selector = CountryChipSelector([])
     basic_layout.addWidget(field_label(tr("candidates.filters.country")))
     basic_layout.addWidget(country_selector)
-    add_hint(basic_layout, "Countries are TMDb origin countries, not language filters.")
+    add_hint(basic_layout, tr("candidates.filters.country_hint"))
     add_divider(basic_layout)
 
     media_type_combo = QComboBox()
@@ -180,8 +180,8 @@ def build_filters_form(
     def add_combo(options: tuple[tuple[str, str], ...], object_name: str) -> QComboBox:
         combo = QComboBox()
         combo.setObjectName(object_name)
-        for label, value in options:
-            combo.addItem(label, value)
+        for label_key, value in options:
+            combo.addItem(tr(label_key), value)
         return combo
 
     def set_combo_data(combo: QComboBox, value: str | None) -> None:
@@ -189,39 +189,39 @@ def build_filters_form(
         if index >= 0:
             combo.setCurrentIndex(index)
 
-    _replenish_section, replenish_layout = add_section("Taste / Replenish")
+    _replenish_section, replenish_layout = add_section(tr("candidates.filters.replenish.title"))
     replenish_preset_combo = add_combo(REPLENISH_PRESETS, "candidateReplenishPreset")
     replenish_animation_mode_combo = add_combo(ANIMATION_MODE_OPTIONS, "candidateReplenishAnimationMode")
     replenish_vibe_combo = add_combo(VIBE_OPTIONS, "candidateReplenishVibe")
     replenish_release_preference_combo = add_combo(RELEASE_OPTIONS, "candidateReplenishReleasePreference")
     replenish_origin_preference_combo = add_combo(ORIGIN_OPTIONS, "candidateReplenishOriginPreference")
-    replenish_enabled_check = QCheckBox("Enable replenish: add up to 30 candidates matching these filters")
+    replenish_enabled_check = QCheckBox(tr("candidates.filters.replenish.enable"))
     replenish_enabled_check.setObjectName("candidateReplenishEnabled")
     replenish_enabled_check.setChecked(False)
-    replenish_advanced_override_check = QCheckBox("Advanced override for unusual combinations")
+    replenish_advanced_override_check = QCheckBox(tr("candidates.filters.replenish.advanced_override"))
     replenish_advanced_override_check.setObjectName("candidateReplenishAdvancedOverride")
     replenish_advanced_override_check.setChecked(False)
 
-    replenish_layout.addWidget(field_label("Preset"))
+    replenish_layout.addWidget(field_label(tr("candidates.filters.replenish.preset")))
     replenish_layout.addWidget(replenish_preset_combo)
-    add_hint(replenish_layout, "Anime expects JP origin with Animation only.")
+    add_hint(replenish_layout, tr("candidates.filters.replenish.hint.anime"))
     add_divider(replenish_layout)
-    replenish_layout.addWidget(field_label("Animation mode"))
+    replenish_layout.addWidget(field_label(tr("candidates.filters.replenish.animation_mode")))
     replenish_layout.addWidget(replenish_animation_mode_combo)
-    add_hint(replenish_layout, "Live action only excludes TMDb Animation titles.")
+    add_hint(replenish_layout, tr("candidates.filters.replenish.hint.live_action"))
     add_divider(replenish_layout)
-    replenish_layout.addWidget(field_label("Vibe"))
+    replenish_layout.addWidget(field_label(tr("candidates.filters.replenish.vibe")))
     replenish_layout.addWidget(replenish_vibe_combo)
     add_divider(replenish_layout)
-    replenish_layout.addWidget(field_label("Release preference"))
+    replenish_layout.addWidget(field_label(tr("candidates.filters.replenish.release_preference")))
     replenish_layout.addWidget(replenish_release_preference_combo)
     add_divider(replenish_layout)
-    replenish_layout.addWidget(field_label("Origin preference"))
+    replenish_layout.addWidget(field_label(tr("candidates.filters.replenish.origin_preference")))
     replenish_layout.addWidget(replenish_origin_preference_combo)
     add_divider(replenish_layout)
     replenish_layout.addWidget(replenish_enabled_check)
     replenish_layout.addWidget(replenish_advanced_override_check)
-    add_hint(replenish_layout, "Advanced override is for unusual manual combinations.")
+    add_hint(replenish_layout, tr("candidates.filters.replenish.hint.advanced_override"))
 
     def apply_preset_suggestion() -> None:
         preset_id = replenish_preset_combo.currentData()

@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QCheckBox, QLabel, QPushButton
 from desktop.candidates.filters_form import build_filters_form
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.i18n import tr
 
 
 class UiTextService:
@@ -99,10 +100,10 @@ def test_replenish_form_explains_origin_animation_and_advanced_override(qtbot) -
 
     hint_text = "\n".join(label.text() for label in form.scroll.findChildren(QLabel, "candidateSearchHint"))
 
-    assert "origin countries, not language" in hint_text
-    assert "Anime expects JP origin with Animation only" in hint_text
-    assert "Live action only excludes TMDb Animation" in hint_text
-    assert "Advanced override is for unusual manual combinations" in hint_text
+    assert tr("candidates.filters.country_hint") in hint_text
+    assert tr("candidates.filters.replenish.hint.anime") in hint_text
+    assert tr("candidates.filters.replenish.hint.live_action") in hint_text
+    assert tr("candidates.filters.replenish.hint.advanced_override") in hint_text
 
 
 def test_apply_without_replenish_reports_local_filter_applied(qtbot) -> None:

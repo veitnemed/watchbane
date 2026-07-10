@@ -6693,8 +6693,9 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
     assert "build_candidate_detail_entry" not in source
     assert "CANDIDATE_DETAIL_CARD_PROFILE" in source
     assert "detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE" in source
-    assert CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
-    assert CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_height == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_height
+    assert CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width < DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
+    assert CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_height < DETAIL_CARD_LAYOUT_PROFILE.detail_poster_height
+    assert CANDIDATE_DETAIL_CARD_PROFILE.detail_content_max_width < DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_user_score is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_mark_watched_button is True
     assert CANDIDATE_DETAIL_CARD_PROFILE.include_bottom_stretch is False
