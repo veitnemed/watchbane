@@ -6,7 +6,18 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QCheckBox, QComboBox, QFrame, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from candidates.onboarding.taste_presets import get_taste_preset
 from desktop.candidates.filters_controls import (
@@ -23,7 +34,8 @@ from desktop.i18n import tr
 from desktop.shared.widgets.country_chip_selector import CountryChipSelector
 from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
 from desktop.shared.widgets.range_slider import RangeSlider
-from desktop.theme.scaling import layout_px
+from desktop.theme import TRANSPARENT_STYLE
+from desktop.theme.scaling import get_ui_scale, layout_px
 from desktop.theme.shell_layout import CANDIDATE_ROOT_SPACING_PX
 
 CANDIDATE_YEAR_MIN = 2000
@@ -106,6 +118,7 @@ def build_filters_form(
     form = QVBoxLayout(form_host)
     form.setContentsMargins(0, 0, 0, 0)
     form.setSpacing(CANDIDATE_ROOT_SPACING_PX)
+    compact_combo_max_width = layout_px(420)
 
     def add_section(title: str) -> tuple[QFrame, QVBoxLayout]:
         section = QFrame()
@@ -134,12 +147,20 @@ def build_filters_form(
         section_layout.addWidget(divider)
         section_layout.addSpacing(layout_px(2))
 
-    def add_hint(section_layout: QVBoxLayout, text: str) -> QLabel:
+    def make_hint(text: str) -> QLabel:
         hint = QLabel(text)
         hint.setObjectName("candidateSearchHint")
         hint.setWordWrap(True)
+        return hint
+
+    def add_hint(section_layout: QVBoxLayout, text: str) -> QLabel:
+        hint = make_hint(text)
         section_layout.addWidget(hint)
         return hint
+
+    def constrain_combo_width(combo: QComboBox) -> None:
+        combo.setMaximumWidth(compact_combo_max_width)
+        combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
     _basic_section, basic_layout = add_section(tr("candidates.filters.basic"))
     country_selector = CountryChipSelector([])
@@ -153,6 +174,7 @@ def build_filters_form(
     media_type_combo.addItem(tr("watched.filters.media_all"), None)
     media_type_combo.addItem(tr("media_type.tv"), "tv")
     media_type_combo.addItem(tr("media_type.movie"), "movie")
+    constrain_combo_width(media_type_combo)
     basic_layout.addWidget(field_label(tr("candidates.filters.media_type")))
     basic_layout.addWidget(media_type_combo)
     add_divider(basic_layout)
@@ -182,6 +204,7 @@ def build_filters_form(
         combo.setObjectName(object_name)
         for label_key, value in options:
             combo.addItem(tr(label_key), value)
+        constrain_combo_width(combo)
         return combo
 
     def set_combo_data(combo: QComboBox, value: str | None) -> None:
@@ -202,26 +225,82 @@ def build_filters_form(
     replenish_advanced_override_check.setObjectName("candidateReplenishAdvancedOverride")
     replenish_advanced_override_check.setChecked(False)
 
-    replenish_layout.addWidget(field_label(tr("candidates.filters.replenish.preset")))
-    replenish_layout.addWidget(replenish_preset_combo)
-    add_hint(replenish_layout, tr("candidates.filters.replenish.hint.anime"))
-    add_divider(replenish_layout)
-    replenish_layout.addWidget(field_label(tr("candidates.filters.replenish.animation_mode")))
-    replenish_layout.addWidget(replenish_animation_mode_combo)
-    add_hint(replenish_layout, tr("candidates.filters.replenish.hint.live_action"))
-    add_divider(replenish_layout)
-    replenish_layout.addWidget(field_label(tr("candidates.filters.replenish.vibe")))
-    replenish_layout.addWidget(replenish_vibe_combo)
-    add_divider(replenish_layout)
-    replenish_layout.addWidget(field_label(tr("candidates.filters.replenish.release_preference")))
-    replenish_layout.addWidget(replenish_release_preference_combo)
-    add_divider(replenish_layout)
-    replenish_layout.addWidget(field_label(tr("candidates.filters.replenish.origin_preference")))
-    replenish_layout.addWidget(replenish_origin_preference_combo)
-    add_divider(replenish_layout)
-    replenish_layout.addWidget(replenish_enabled_check)
-    replenish_layout.addWidget(replenish_advanced_override_check)
-    add_hint(replenish_layout, tr("candidates.filters.replenish.hint.advanced_override"))
+    replenish_grid = QGridLayout()
+    replenish_grid.setContentsMargins(0, 0, 0, 0)
+    replenish_grid.setHorizontalSpacing(layout_px(22))
+    replenish_grid.setVerticalSpacing(layout_px(16))
+    replenish_column_count = 1 if get_ui_scale() >= 1.25 else 2
+    for column in range(replenish_column_count):
+        replenish_grid.setColumnStretch(column, 1)
+
+    def replenish_grid_position(index: int) -> tuple[int, int]:
+        return index // replenish_column_count, index % replenish_column_count
+
+    def add_replenish_field(
+        row: int,
+        column: int,
+        label_text: str,
+        combo: QComboBox,
+        *,
+        hint_text: str | None = None,
+    ) -> None:
+        cell = QWidget()
+        cell.setObjectName("candidateReplenishField")
+        cell.setStyleSheet(TRANSPARENT_STYLE)
+        cell_layout = QVBoxLayout(cell)
+        cell_layout.setContentsMargins(0, 0, 0, 0)
+        cell_layout.setSpacing(layout_px(7))
+        cell_layout.addWidget(field_label(label_text))
+        cell_layout.addWidget(combo)
+        if hint_text:
+            cell_layout.addWidget(make_hint(hint_text))
+        replenish_grid.addWidget(cell, row, column)
+
+    row, column = replenish_grid_position(0)
+    add_replenish_field(
+        row,
+        column,
+        tr("candidates.filters.replenish.preset"),
+        replenish_preset_combo,
+        hint_text=tr("candidates.filters.replenish.hint.anime"),
+    )
+    row, column = replenish_grid_position(1)
+    add_replenish_field(
+        row,
+        column,
+        tr("candidates.filters.replenish.animation_mode"),
+        replenish_animation_mode_combo,
+        hint_text=tr("candidates.filters.replenish.hint.live_action"),
+    )
+    row, column = replenish_grid_position(2)
+    add_replenish_field(row, column, tr("candidates.filters.replenish.vibe"), replenish_vibe_combo)
+    row, column = replenish_grid_position(3)
+    add_replenish_field(
+        row,
+        column,
+        tr("candidates.filters.replenish.release_preference"),
+        replenish_release_preference_combo,
+    )
+    row, column = replenish_grid_position(4)
+    add_replenish_field(
+        row,
+        column,
+        tr("candidates.filters.replenish.origin_preference"),
+        replenish_origin_preference_combo,
+    )
+
+    replenish_action_cell = QWidget()
+    replenish_action_cell.setObjectName("candidateReplenishActionCell")
+    replenish_action_cell.setStyleSheet(TRANSPARENT_STYLE)
+    replenish_action_layout = QVBoxLayout(replenish_action_cell)
+    replenish_action_layout.setContentsMargins(0, 0, 0, 0)
+    replenish_action_layout.setSpacing(layout_px(7))
+    replenish_action_layout.addWidget(replenish_enabled_check)
+    replenish_action_layout.addWidget(replenish_advanced_override_check)
+    replenish_action_layout.addWidget(make_hint(tr("candidates.filters.replenish.hint.advanced_override")))
+    row, column = replenish_grid_position(5)
+    replenish_grid.addWidget(replenish_action_cell, row, column)
+    replenish_layout.addLayout(replenish_grid)
 
     def apply_preset_suggestion() -> None:
         preset_id = replenish_preset_combo.currentData()

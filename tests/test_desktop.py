@@ -5524,8 +5524,8 @@ def test_format_pool_stats_user_uses_plain_language() -> None:
         {"unique_total": 305, "ready_total": 204, "incomplete_total": 101},
     )
     assert "305 сериалов" in text
-    assert "204 с полной TMDb metadata" in text
-    assert "101 требуют metadata диагностики" in text
+    assert "204 с полными данными TMDb" in text
+    assert "101 требуют диагностики данных" in text
     assert "ready" not in text
     assert "pool" not in text.lower()
 
