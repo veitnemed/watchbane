@@ -39,6 +39,17 @@ from desktop.theme.shell_layout import (
 
 APPLY_BUTTON_WIDTH_RATIO = 0.25
 APPLY_BUTTON_HEIGHT = control_px(40)
+FILTER_REPLENISH_DEFAULT_BATCH_SIZE = 30
+FILTER_REPLENISH_MAX_BATCH_SIZE = 30
+
+
+def clamp_filter_replenish_batch_size(value) -> int:
+    """Return the safe per-apply replenish batch size."""
+    try:
+        requested = int(value)
+    except (TypeError, ValueError):
+        requested = FILTER_REPLENISH_DEFAULT_BATCH_SIZE
+    return max(1, min(FILTER_REPLENISH_MAX_BATCH_SIZE, requested))
 
 
 def _genre_labels_for_language(labels, data_language: str) -> list[str]:
@@ -477,7 +488,7 @@ class CandidateFiltersView:
             vibe=self._replenish_vibe_combo.currentData(),
             release_preference=self._replenish_release_preference_combo.currentData(),
             origin_preference=self._replenish_origin_preference_combo.currentData(),
-            target_add_count=30,
+            target_add_count=clamp_filter_replenish_batch_size(FILTER_REPLENISH_DEFAULT_BATCH_SIZE),
             data_language=self._data_language,
             allow_advanced_override=self._replenish_advanced_override_check.isChecked(),
         ).to_dict()

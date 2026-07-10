@@ -195,7 +195,7 @@ def build_filters_form(
     replenish_vibe_combo = add_combo(VIBE_OPTIONS, "candidateReplenishVibe")
     replenish_release_preference_combo = add_combo(RELEASE_OPTIONS, "candidateReplenishReleasePreference")
     replenish_origin_preference_combo = add_combo(ORIGIN_OPTIONS, "candidateReplenishOriginPreference")
-    replenish_enabled_check = QCheckBox("Add up to 30 candidates matching these filters")
+    replenish_enabled_check = QCheckBox("Enable replenish: add up to 30 candidates matching these filters")
     replenish_enabled_check.setObjectName("candidateReplenishEnabled")
     replenish_enabled_check.setChecked(False)
     replenish_advanced_override_check = QCheckBox("Advanced override for unusual combinations")

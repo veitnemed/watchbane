@@ -5,7 +5,7 @@ from copy import deepcopy
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QCheckBox, QComboBox, QPushButton
 
-from desktop.candidates.filters_view import CandidateFiltersView
+from desktop.candidates.filters_view import CandidateFiltersView, clamp_filter_replenish_batch_size
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 
 
@@ -160,3 +160,10 @@ def test_apply_with_blocked_replenish_result_keeps_local_results(qtbot) -> None:
 
     assert view._last_replenish_result["blocked"] is True
     assert session.filters is not None
+
+
+def test_replenish_batch_size_is_clamped_to_30() -> None:
+    assert clamp_filter_replenish_batch_size(30) == 30
+    assert clamp_filter_replenish_batch_size(999) == 30
+    assert clamp_filter_replenish_batch_size("bad") == 30
+    assert clamp_filter_replenish_batch_size(0) == 1
