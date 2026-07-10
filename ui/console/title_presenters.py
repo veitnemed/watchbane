@@ -15,17 +15,6 @@ def short_text(value, limit: int = 50) -> str:
     return text[:limit] + "..."
 
 
-def print_sql_add_preview(sql_data: dict) -> None:
-    """Показывает краткую SQL-сводку перед API-обогащением."""
-    genres_line = ", ".join(sql_data.get("genres", []) or []) or "нет данных"
-    print("\nSQL нашёл базовый объект:")
-    print(f"Название: {sql_data.get('title')}")
-    print(f"Оригинальное: {sql_data.get('original_title') or 'нет данных'}")
-    print(f"Год: {sql_data.get('year') or 'нет данных'}")
-    print(f"Жанры: {genres_line}")
-    print(f"IMDb: {sql_data.get('imdb_rating') or '-'} / голосов {sql_data.get('imdb_votes') or '-'}")
-
-
 def print_api_add_preview(api_data: dict) -> None:
     """Показывает краткую TMDb-сводку для будущего сохранения."""
     countries = extract_country_value(api_data)
@@ -55,40 +44,3 @@ def print_final_add_preview(defaults: dict) -> None:
     print(f"Год: {defaults.get(scheme.MAIN_INFO, {}).get('year') or 'нет данных'}")
     print(f"TMDb: {raw_scores.get('tmdb_score') or '-'} / голосов {raw_scores.get('tmdb_votes') or '-'}")
     print(f"Жанры: {', '.join(genres) if len(genres) > 0 else 'нет данных'}")
-
-
-def print_sql_title_result(data: dict) -> None:
-    """Печатает компактную карточку результата SQL-поиска."""
-    title = data.get("title") or "нет данных"
-    original_title = data.get("original_title") or "нет данных"
-    year = data.get("year") or "?"
-    genres = ", ".join(data.get("genres", [])) or "нет данных"
-    production_countries = ", ".join(data.get("production_countries", [])) or "нет данных в IMDb light"
-    title_regions = ", ".join(data.get("title_region_countries", [])) or "нет данных"
-    description = short_text(data.get("description"), 180) or "нет данных в IMDb light"
-    match = data.get("match", {})
-    credits = data.get("credits", {})
-    directors = ", ".join(credits.get("directors", [])[:5]) or "нет данных"
-    actors = ", ".join((credits.get("actors") or credits.get("actresses") or [])[:8]) or "нет данных"
-
-    print(f"\n{title} ({year})")
-    print(f"Оригинальное название: {original_title}")
-    print(f"Жанры: {genres}")
-    print(f"Страна производства: {production_countries}")
-    print(f"Описание: {description}")
-    print(f"Регионы локализаций названия: {title_regions}")
-    print(f"IMDb: {data.get('imdb_rating', '-')} | голосов: {data.get('imdb_votes', '-')}")
-    print(f"Режиссеры: {directors}")
-    print(f"Актеры: {actors}")
-    print(f"Совпадение: {match.get('matched_source')} | score: {match.get('score')}")
-    print(f"Matched titles: {', '.join(match.get('matched_titles', [])[:8]) or 'нет данных'}")
-    print(f"URL: {data.get('url')}")
-
-    alternatives = data.get("alternatives", [])
-    if len(alternatives) > 0:
-        print("\nПохожие варианты:")
-        for idx, item in enumerate(alternatives[:5], start=1):
-            print(
-                f"{idx}) {item.get('title')} ({item.get('year')}) "
-                f"| IMDb: {item.get('imdb_rating')} | votes: {item.get('imdb_votes')}"
-            )

@@ -62,11 +62,7 @@ def build_add_defaults_from_tmdb(input_title: str, tmdb_data: dict | None) -> di
 
 def build_add_defaults_by_priority(
     input_title: str,
-    sql_data: dict | None,
-    api_data: dict | None,
     tmdb_data: dict | None,
-    sql_source: str | None = None,
 ) -> dict:
-    """Compatibility wrapper: ignores SQL/KP inputs and uses only TMDb data."""
-    del sql_data, api_data, sql_source
+    """Compatibility wrapper: builds add-title defaults from TMDb data only."""
     return build_add_defaults_from_tmdb(input_title, tmdb_data)

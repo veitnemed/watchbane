@@ -291,7 +291,6 @@ def test_console_add_flow_uses_add_named_helpers() -> None:
 
     assert hasattr(request, "resolve_title_for_add")
     assert hasattr(request, "confirm_or_edit_dataset_genres")
-    assert hasattr(title_presenters, "print_sql_add_preview")
     assert hasattr(title_presenters, "print_api_add_preview")
     assert hasattr(title_presenters, "print_final_add_preview")
 

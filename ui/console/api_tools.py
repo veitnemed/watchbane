@@ -19,16 +19,10 @@ def _print_api_ping_result(name: str, host: str, result: dict, elapsed_ms: float
 
 
 def ping_external_apis() -> None:
-    """Check Kinopoisk and TMDb availability with short API requests."""
-    from apis import kp_api
+    """Check TMDb availability with a short API request."""
     from apis import tmdb_api
 
-    print("\u041f\u0438\u043d\u0433 \u0432\u043d\u0435\u0448\u043d\u0438\u0445 API...\n")
-
-    started = time.monotonic()
-    kp_result = kp_api.check_api_available()
-    kp_ms = round((time.monotonic() - started) * 1000, 1)
-    _print_api_ping_result("Kinopoisk API", "api.kinopoisk.dev", kp_result, kp_ms)
+    print("\u041f\u0438\u043d\u0433 TMDb API...\n")
 
     started = time.monotonic()
     tmdb_result = tmdb_api.check_api_available()

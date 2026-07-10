@@ -17,7 +17,6 @@ __all__ = [
     "is_correct_tag_name",
     "load_json",
     "save_json",
-    "remove_default_tag_if_only_tag",
 ]
 
 
@@ -81,8 +80,3 @@ def save_json(file_name: str, data: dict) -> None:
     """Сохраняет JSON-файл."""
     with open(file_name, 'w', encoding='UTF-8') as file:
         json.dump(data, file, ensure_ascii=False, indent=4)
-
-
-def remove_default_tag_if_only_tag(tags: dict) -> dict:
-    """Оставлено для совместимости со старым кодом."""
-    return tags

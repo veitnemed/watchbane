@@ -25,26 +25,6 @@ def popularity_by_votes(votes: int, year: int, min_votes: int, max_votes: int) -
     return clip_0_10(score)
 
 
-def popularity_kp(kp_votes: int, year: int) -> float:
-    """Deprecated: legacy KP popularity helper kept for old diagnostics."""
-    return popularity_by_votes(
-        votes=kp_votes,
-        year=year,
-        min_votes=50000,
-        max_votes=5000000
-    )
-
-
-def popularity_score(imdb_votes: int, year: int) -> float:
-    """Deprecated: legacy IMDb popularity helper kept for old diagnostics."""
-    return popularity_by_votes(
-        votes=imdb_votes,
-        year=year,
-        min_votes=200,
-        max_votes=10000
-    )
-
-
 def raw_to_struct(raw: dict, main_info: dict):
     """Преобразует сырые оценки в вычисленные признаки модели."""
     computed_scores = {}

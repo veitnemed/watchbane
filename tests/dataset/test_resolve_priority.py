@@ -32,18 +32,7 @@ def test_tmdb_data_produces_defaults() -> None:
     assert built["source_values"]["description"] == "Overview text"
 
 
-def test_priority_wrapper_ignores_sql_and_kp_data() -> None:
-    sql_data = {
-        "title": "SQL Title",
-        "year": 2010,
-        "imdb_rating": 6.0,
-        "imdb_votes": 100,
-    }
-    api_data = {
-        "name": "KP Title",
-        "rating": {"kp": 8.0, "imdb": 7.0},
-        "votes": {"kp": 1000, "imdb": 500},
-    }
+def test_priority_wrapper_uses_tmdb_data_only() -> None:
     tmdb_data = {
         "title": "TMDb Title",
         "year": 2015,
@@ -51,7 +40,7 @@ def test_priority_wrapper_ignores_sql_and_kp_data() -> None:
         "overview": "Overview text",
     }
 
-    built = build_add_defaults_by_priority("Input Title", sql_data, api_data, tmdb_data)
+    built = build_add_defaults_by_priority("Input Title", tmdb_data)
 
     assert built["defaults"]["main_info"]["title"] == "TMDb Title"
     assert built["sources"]["year"] == "tmdb_api"
@@ -60,16 +49,13 @@ def test_priority_wrapper_ignores_sql_and_kp_data() -> None:
     assert built["defaults"]["genre"]["has_drama"] == 1
     assert "sql_identity" not in built
     assert "kp_score" not in built["defaults"]["raw_scores"]
-    assert "kp_votes" not in built["defaults"]["raw_scores"]
     assert "imdb_score" not in built["defaults"]["raw_scores"]
-    assert "imdb_votes" not in built["defaults"]["raw_scores"]
     assert "kp_api" not in set(built["sources"].values())
     assert "imdb_sql" not in set(built["sources"].values())
-    assert "imdb_sql_second_pass" not in set(built["sources"].values())
 
 
 def test_empty_tmdb_title_falls_back_to_input_source() -> None:
-    built = build_add_defaults_by_priority("Input Title", {"title": "SQL"}, {"name": "KP"}, {})
+    built = build_add_defaults_by_priority("Input Title", {})
 
     assert built["defaults"]["main_info"]["title"] == "Input Title"
     assert built["sources"]["title"] == "input"
@@ -79,8 +65,6 @@ def test_empty_tmdb_title_falls_back_to_input_source() -> None:
 def test_genre_defaults_cover_full_schema() -> None:
     built = build_add_defaults_by_priority(
         "Test",
-        None,
-        {"name": "Ignored", "genres": [{"name": "ignored"}]},
         {"title": "Test", "genres_tmdb": ["драма"]},
     )
     assert set(built["defaults"]["genre"].keys()) == set(constant.GENRE)

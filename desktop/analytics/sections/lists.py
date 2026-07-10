@@ -1,4 +1,4 @@
-"""Text list sections: IMDb delta, rating gaps, suspicious and dense scores."""
+"""Text list sections: rating gaps, suspicious and dense scores."""
 
 from __future__ import annotations
 
@@ -15,55 +15,6 @@ from desktop.analytics.sections.common import clear_layout, format_metric
 
 
 class AnalyticsListsMixin:
-    def _fill_imdb_delta(self, rows: list[dict], extra_count: int) -> None:
-        self._imdb_delta_rows = list(rows)
-        self._imdb_delta_extra_count = int(extra_count or 0)
-        self._render_imdb_delta_list()
-
-    def _expand_imdb_delta_list(self) -> None:
-        self._imdb_delta_expanded = True
-        self._render_imdb_delta_list()
-
-    def _collapse_imdb_delta_list(self) -> None:
-        self._imdb_delta_expanded = False
-        self._render_imdb_delta_list()
-
-    def _render_imdb_delta_list(self) -> None:
-        clear_layout(self._imdb_delta_layout)
-        rows = self._imdb_delta_rows
-        if not rows:
-            self._imdb_delta_layout.addWidget(
-                self._make_list_placeholder("Нет тайтлов с вашей оценкой и IMDb для сравнения.")
-            )
-            return
-
-        lines = [service.format_imdb_delta_line(row) for row in rows]
-        if self._imdb_delta_expanded:
-            visible_lines = lines
-        else:
-            visible_lines = lines[:service.IMDB_DELTA_LIST_PREVIEW_LIMIT]
-
-        for line in visible_lines:
-            self._imdb_delta_layout.addWidget(self._make_insight_line(line))
-
-        hidden_count = len(lines) - len(visible_lines)
-        if hidden_count > 0:
-            self._imdb_delta_layout.addWidget(
-                self._make_list_expand_button(
-                    f"Показать ещё {hidden_count}",
-                    self._expand_imdb_delta_list,
-                )
-            )
-        elif self._imdb_delta_expanded and len(lines) > service.IMDB_DELTA_LIST_PREVIEW_LIMIT:
-            self._imdb_delta_layout.addWidget(
-                self._make_list_expand_button("Свернуть", self._collapse_imdb_delta_list)
-            )
-
-        if self._imdb_delta_extra_count > 0:
-            self._imdb_delta_layout.addWidget(
-                self._make_list_extra(f"ещё {self._imdb_delta_extra_count} в базе")
-            )
-
     def _make_list_expand_button(self, text: str, handler):
         from PyQt6.QtWidgets import QPushButton
 

@@ -24,20 +24,20 @@ META_JSON = WATCHED_DIR + '/meta.json'
 DIR_TXT = EXPORTS_DIR
 EDIT_EXCEL = EXPORTS_DIR + '/edit_dataset.xlsx'
 
-MAIN_INFO = []
-RAW_SCORES = []
-TAGS_VIBE = []
-GENRE = []
+# Dynamic field lists — populated at import via refresh_dynamic_fields().
+MAIN_INFO: list
+RAW_SCORES: list
+TAGS_VIBE: list
+GENRE: list
 TAGS_VIBE_SECTION = scheme.TAGS_VIBE
 GENRE_SECTION = scheme.GENRE
 BIAS_FEATURE = "bias"
-
-COMPUTED_SCORES = []
-
-CSV_FIELDS = []
-FEATURES = []
-RAW_META_FIELDS = []
-FEATURES_CONST = []
+COMPUTED_SCORES: list
+CSV_FIELDS: list
+FEATURES: list
+RAW_META_FIELDS: list
+FEATURES_CONST: list
+ONLY_SCORES: list
 
 SECTION_LABELS = {
     scheme.MAIN_INFO: "Основная информация",
@@ -56,7 +56,7 @@ FIELD_LABELS = {
     "tmdb_popularity": "Популярность TMDb",
 }
 
-TAG_RULES = {}
+TAG_RULES: dict
 
 TRANSLATION = {
     "features": {

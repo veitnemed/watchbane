@@ -33,7 +33,6 @@ SCORE_CHART_HEIGHT = CHART_BASE_HEIGHT
 SCORE_DISTRIBUTION_CHART_HEIGHT = CHART_BASE_HEIGHT
 GENRE_COUNT_CHART_HEIGHT = CHART_BASE_HEIGHT
 YEAR_AVERAGE_CHART_HEIGHT = CHART_BASE_HEIGHT
-IMDB_DELTA_CHART_HEIGHT = CHART_BASE_HEIGHT
 
 CHART_BAR_ROW_HEIGHT = layout_px(24)
 CHART_BAR_MIN_HEIGHT = layout_px(120)
@@ -51,9 +50,6 @@ CHART_MARGIN_HBAR = {
 }
 CHART_FONT_SIZE = font_px(12)
 CHART_AXIS_TITLE_SIZE = font_px(11)
-
-IMDB_DELTA_NEGATIVE_COLOR = "#9f6b6b"
-IMDB_DELTA_CHART_TITLE_LIMIT = 28
 
 
 def bar_chart_height(row_count: int, *, base: int = CHART_BASE_HEIGHT) -> int:
@@ -445,91 +441,6 @@ def build_year_average_html(points: list[dict]) -> str:
         config={"displayModeBar": False, "responsive": True},
     )
     return _plotly_html_page(chart, YEAR_AVERAGE_CHART_HEIGHT)
-
-
-def _chart_title_label(title: str, limit: int = IMDB_DELTA_CHART_TITLE_LIMIT) -> str:
-    text = str(title)
-    if len(text) <= limit:
-        return text
-    return f"{text[: limit - 1]}…"
-
-
-def _format_imdb_delta_hover(row: dict) -> str:
-    title = escape(str(row["title"]))
-    year = row.get("year")
-    year_text = f" ({year})" if year not in (None, "") else ""
-    user_score = float(row["user_score"])
-    imdb_score = float(row["imdb_score"])
-    delta = float(row["delta"])
-    sign = "+" if delta > 0 else ""
-    return (
-        f"{title}{year_text}<br>"
-        f"Моя: {user_score:.1f}<br>"
-        f"IMDb: {imdb_score:.1f}<br>"
-        f"Отличие: {sign}{delta:.1f}"
-    )
-
-
-def build_imdb_delta_figure(rows: list[dict]):
-    """Build a horizontal diverging bar chart for user_score minus IMDb."""
-    import plotly.graph_objects as go
-
-    labels = [_chart_title_label(str(row["title"])) for row in rows]
-    deltas = [float(row["delta"]) for row in rows]
-    hover_texts = [_format_imdb_delta_hover(row) for row in rows]
-    colors = [BAR_COLOR if delta >= 0 else IMDB_DELTA_NEGATIVE_COLOR for delta in deltas]
-    height = bar_chart_height(len(rows))
-
-    fig = go.Figure(
-        data=[
-            go.Bar(
-                x=deltas,
-                y=labels,
-                orientation="h",
-                marker={
-                    "color": colors,
-                    "line": {"color": GRID_COLOR, "width": 1},
-                },
-                hovertext=hover_texts,
-                hovertemplate="%{hovertext}<extra></extra>",
-            )
-        ]
-    )
-    fig.add_vline(x=0, line_color=GRID_COLOR, line_width=1)
-    _apply_chart_layout(fig, height=height, margin=CHART_MARGIN_HBAR, bargap=0.24)
-    fig.update_layout(
-        xaxis={
-            "title": {"text": "Отличие (моя − IMDb)", "font": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE}},
-            "gridcolor": GRID_COLOR,
-            "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
-            "zeroline": False,
-            "dtick": 0.5,
-        },
-        yaxis={
-            "title": {"text": ""},
-            "gridcolor": GRID_COLOR,
-            "linecolor": GRID_COLOR,
-            "tickfont": {"color": MUTED_TEXT, "size": CHART_AXIS_TITLE_SIZE},
-            "autorange": "reversed",
-            "showgrid": False,
-        },
-    )
-    return fig
-
-
-def build_imdb_delta_html(rows: list[dict]) -> str:
-    """Build standalone HTML for IMDb delta chart."""
-    import plotly.io as pio
-
-    fig = build_imdb_delta_figure(rows)
-    chart = pio.to_html(
-        fig,
-        include_plotlyjs=True,
-        full_html=False,
-        config={"displayModeBar": False, "responsive": True},
-    )
-    return _plotly_html_page(chart, int(fig.layout.height))
 
 
 def _format_score_count_hover(point: dict) -> str:

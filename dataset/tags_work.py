@@ -13,7 +13,6 @@ from config.tags_work import (
     is_correct_tag_name,
     load_json,
     load_tags,
-    remove_default_tag_if_only_tag,
     save_json,
     save_tags,
 )
@@ -42,7 +41,6 @@ __all__ = [
     "load_json",
     "load_tags",
     "move_edit_files_to_backup",
-    "remove_default_tag_if_only_tag",
     "save_json",
     "save_tags",
 ]

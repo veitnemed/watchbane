@@ -114,10 +114,6 @@ def test_tmdb_request_diagnostics_reports_outliers() -> None:
 
 def test_ping_external_apis_prints_status(monkeypatch, capsys) -> None:
     monkeypatch.setattr(
-        "apis.kp_api.check_api_available",
-        lambda: {"ok": True, "data": True},
-    )
-    monkeypatch.setattr(
         "apis.tmdb_api.check_api_available",
         lambda: {"ok": False, "error": "missing_token", "details": "TMDb credentials not found."},
     )
@@ -125,10 +121,9 @@ def test_ping_external_apis_prints_status(monkeypatch, capsys) -> None:
     interface_funcs.ping_external_apis()
     output = capsys.readouterr().out
 
-    assert "Пинг внешних API" in output
-    assert "Kinopoisk API" in output
+    assert "Пинг TMDb API" in output
     assert "TMDb API" in output
-    assert "Статус: OK" in output
+    assert "Kinopoisk API" not in output
     assert "Статус: Ошибка" in output
 
 
@@ -139,5 +134,5 @@ def test_maintenance_diagnostics_menu_has_api_ping_item() -> None:
 
     assert "1 >> Пинг API" in menu_source
     assert "ping_external_apis" in handler_source
-    assert "Kinopoisk API" in func_source
     assert "TMDb API" in func_source
+    assert "Kinopoisk API" not in func_source
