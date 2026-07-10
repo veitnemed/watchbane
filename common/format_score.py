@@ -37,20 +37,4 @@ def raw_to_struct(raw: dict, main_info: dict):
     return computed_scores
 
 
-def tag_to_score(value: int, max_value: int = 1) -> float:
-    """Переводит значение тега в шкалу от 0 до 10."""
-    if max_value is None:
-        return clip_0_10(value)
-    if max_value <= 0:
-        return 0
-    return value / max_value * 10
-
-
-def tags_to_features(tags: dict, section_name: str = scheme.GENRE) -> dict:
-    """Преобразует теги фильма в признаки модели."""
-    tags_schema = scheme.get_schema(section_name)
-    features = {}
-    for feature, value in tags.items():
-        max_value = tags_schema[feature].get("max_value", 1)
-        features[feature] = tag_to_score(value, max_value)
-    return features
+FORMATTERS = {}

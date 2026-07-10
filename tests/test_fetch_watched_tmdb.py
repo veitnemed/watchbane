@@ -10,7 +10,6 @@ from candidates.models.keys import title_identity_key
 
 
 def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0) -> dict:
-    genre_tags = {feature: 0 for feature in constant.GENRE}
 
     return {
         "main_info": {
@@ -35,7 +34,6 @@ def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0
                 "year": year,
             },
         ),
-        constant.GENRE_SECTION: genre_tags,
     }
 
 

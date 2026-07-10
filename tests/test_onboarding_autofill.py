@@ -1333,7 +1333,7 @@ def test_onboarding_wizard_plan_summary_shows_preset_axes(qapp) -> None:
 def test_onboarding_preset_ui_smoke_object_names_and_screenshot_path(qapp) -> None:
     from pathlib import Path
 
-    from PyQt6.QtWidgets import QPushButton, QScrollArea, QWidget
+    from PyQt6.QtWidgets import QAbstractButton, QPushButton, QScrollArea, QWidget
 
     from desktop.onboarding import OnboardingAutofillDialog
 
@@ -1345,7 +1345,7 @@ def test_onboarding_preset_ui_smoke_object_names_and_screenshot_path(qapp) -> No
         assert dialog._preset_page.objectName() == "onboardingPage"
         assert dialog._preset_page.findChild(QScrollArea, "onboardingPresetScroll") is not None
         assert dialog._preset_page.findChild(QWidget, "onboardingPresetViewport") is not None
-        cards = dialog._preset_page.findChildren(QPushButton, "onboardingPresetCard")
+        cards = dialog._preset_page.findChildren(QAbstractButton, "onboardingPresetCard")
         assert cards
         preset_keys = {str(card.property("preset_key") or "") for card in cards}
         assert {PRESET_ANIME, PRESET_K_DRAMA, PRESET_MANUAL}.issubset(preset_keys)

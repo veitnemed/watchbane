@@ -25,7 +25,7 @@ def test_tmdb_data_builds_defaults_with_tmdb_raw_scores() -> None:
         "tmdb_votes": 456,
         "tmdb_popularity": 12.3,
     }
-    assert defaults[scheme.GENRE]["has_drama"] == 1
+    assert defaults["genres_tmdb"] == ["Drama"]
 
 
 def test_tmdb_defaults_do_not_create_kp_or_imdb_fields() -> None:
@@ -70,4 +70,4 @@ def test_empty_defaults_stay_valid_for_manual_add() -> None:
     assert defaults[scheme.MAIN_INFO]["title"] == "Manual Title"
     assert defaults[scheme.MAIN_INFO]["user_score"] is None
     assert defaults[scheme.RAW_SCORES] == {}
-    assert isinstance(defaults[scheme.GENRE], dict)
+    assert "genres_tmdb" not in defaults

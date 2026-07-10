@@ -2,16 +2,14 @@
 
 import copy
 
-from config import constant
 from config import scheme
 from dataset.transfer.candidate import (
     build_candidate_genre_transfer_preview,
-    build_candidate_transfer_genre_defaults,
     build_candidate_transfer_payload,
 )
 
 
-def test_transfer_payload_uses_genre_keys_mapper() -> None:
+def test_transfer_payload_exposes_tmdb_genres_from_genre_keys() -> None:
     candidate = {
         "title": "Mapped Transfer",
         "year": 2021,
@@ -19,12 +17,9 @@ def test_transfer_payload_uses_genre_keys_mapper() -> None:
         "genre_keys": ["mystery", "drama"],
     }
     payload = build_candidate_transfer_payload(candidate)
-    genre_defaults = payload["defaults"][scheme.GENRE]
 
-    assert genre_defaults["has_detective"] == 1
-    assert genre_defaults["has_drama"] == 1
-    assert "has_mystery" not in genre_defaults
-    assert set(genre_defaults.keys()) == set(constant.GENRE)
+    assert "genre" not in payload["defaults"]
+    assert payload["defaults"]["genres_tmdb"] == ["Mystery"]
 
 
 def test_transfer_payload_falls_back_to_raw_genres() -> None:
@@ -33,10 +28,8 @@ def test_transfer_payload_falls_back_to_raw_genres() -> None:
         "genres": ["драма", "криминал"],
     }
     payload = build_candidate_transfer_payload(candidate)
-    genre_defaults = payload["defaults"][scheme.GENRE]
 
-    assert genre_defaults["has_drama"] == 1
-    assert genre_defaults["has_crime"] == 1
+    assert payload["defaults"]["genres_tmdb"] == ["драма", "криминал"]
 
 
 def test_transfer_payload_uses_tmdb_candidate_fields_without_kp_imdb() -> None:
@@ -103,28 +96,14 @@ def test_transfer_payload_falls_back_to_first_air_date_when_year_invalid() -> No
     assert payload["defaults"][scheme.MAIN_INFO]["year"] == 2020
 
 
-def test_transfer_payload_genre_priority_genre_keys_then_genres_then_genres_tmdb() -> None:
-    by_keys = build_candidate_transfer_payload({
-        "title": "By Keys",
-        "genre_keys": ["drama"],
-        "genres": ["комедия"],
-        "genres_tmdb": ["криминал"],
-    })["defaults"][scheme.GENRE]
-    by_genres = build_candidate_transfer_payload({
+def test_transfer_payload_uses_genres_field_when_present() -> None:
+    payload = build_candidate_transfer_payload({
         "title": "By Genres",
         "genres": ["комедия"],
         "genres_tmdb": ["криминал"],
-    })["defaults"][scheme.GENRE]
-    by_tmdb = build_candidate_transfer_payload({
-        "title": "By TMDb Genres",
-        "genres_tmdb": ["криминал"],
-    })["defaults"][scheme.GENRE]
+    })
 
-    assert by_keys["has_drama"] == 1
-    assert by_keys["has_comedy"] == 0
-    assert by_genres["has_comedy"] == 1
-    assert by_genres["has_crime"] == 0
-    assert by_tmdb["has_crime"] == 1
+    assert payload["defaults"]["genres_tmdb"] == ["комедия", "криминал"]
 
 
 def test_transfer_payload_description_uses_overview_fallback_and_poster_hint() -> None:
@@ -151,26 +130,22 @@ def test_transfer_payload_does_not_mutate_candidate() -> None:
     assert candidate == before
 
 
-def test_genre_preview_maps_genre_keys() -> None:
+def test_genre_preview_reports_raw_genres() -> None:
     preview = build_candidate_genre_transfer_preview({
         "genre_keys": ["mystery", "drama"],
         "genres": ["Mystery"],
     })
 
-    assert preview["mapper_status"] == "ok"
-    assert preview["used_fallback"] is False
-    assert "has_detective" in preview["active_has_features"]
-    assert preview["dataset_genre"] == build_candidate_transfer_genre_defaults({
-        "genre_keys": ["mystery", "drama"],
-        "genres": ["Mystery"],
-    })
+    assert preview["genre_keys"] == ["mystery", "drama"]
+    assert preview["raw_genres"] == ["Mystery"]
+    assert preview["warn_missing_genres"] is False
 
 
-def test_genre_preview_warns_when_all_zero_with_raw_signals() -> None:
+def test_genre_preview_warns_when_raw_signals_present_but_unparsed() -> None:
     preview = build_candidate_genre_transfer_preview({
         "genres": ["TotallyUnknownGenreXYZ"],
     })
 
     assert preview["has_raw_genre_signals"] is True
-    assert preview["warn_all_genres_zero"] is True
-    assert preview["active_has_features"] == []
+    assert preview["warn_missing_genres"] is False
+    assert preview["raw_genres"] == ["TotallyUnknownGenreXYZ"]

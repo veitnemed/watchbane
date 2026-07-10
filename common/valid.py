@@ -21,11 +21,6 @@ def parse_int(value) -> int:
     return int(value)
 
 
-def is_valid_features(features: dict) -> bool:
-    """Check that feature keys match the current model schema."""
-    return set(constant.FEATURES) == set(features.keys())
-
-
 def has_control_characters(text: str) -> bool:
     """Return True when the string contains control characters."""
     return any(unicodedata.category(char).startswith("C") for char in text)

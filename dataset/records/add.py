@@ -2,18 +2,13 @@
 
 from copy import deepcopy
 
-from config import constant
 from common import valid
 from dataset.meta.merge import extract_extra_meta
 from dataset.models.identity import build_dataset_record_key, find_case_insensitive_key
 from dataset.models.results import AddRecordResult
-from dataset.records.features import build_computed_scores, build_feature_vector
+from dataset.records.features import build_computed_scores
 from dataset.records.side_effects import run_after_add_side_effects
-from dataset.records.validation import (
-    ParsedAddPayload,
-    validate_add_features,
-    validate_add_record_payload,
-)
+from dataset.records.validation import ParsedAddPayload, validate_add_record_payload
 from storage.data import load_dataset, load_meta, save_dataset_and_meta
 from storage.normalize import normalize_main_info, normalize_raw_scores
 
@@ -59,7 +54,6 @@ def add_dataset_record(
     title = parsed.title
     main_info = parsed.main_info
     input_raw_scores = parsed.input_raw_scores
-    genre_tags = parsed.genre_tags
     year = parsed.year
     media_type = parsed.media_type
     dataset_key = build_dataset_record_key(data, title, year=year, media_type=media_type)
@@ -120,21 +114,18 @@ def add_dataset_record(
     raw_scores = normalize_raw_scores(raw_scores)
     new_main_info = normalize_main_info(main_info)
     computed_scores = build_computed_scores(raw_scores, new_main_info)
-    features = build_feature_vector(computed_scores, genre_tags)
-
-    feature_error = validate_add_features(features, title=title)
-    if feature_error is not None:
-        return feature_error
 
     new_movie = {
         "main_info": new_main_info,
         "raw_scores": raw_scores,
         "computed_scores": computed_scores,
-        constant.GENRE_SECTION: genre_tags,
     }
     localized = record_payload.get("localized")
     if isinstance(localized, dict):
         new_movie["localized"] = deepcopy(localized)
+    genres_tmdb = record_payload.get("genres_tmdb")
+    if isinstance(genres_tmdb, list) and genres_tmdb:
+        new_movie["genres_tmdb"] = list(genres_tmdb)
 
     data[dataset_key] = new_movie
     try:

@@ -91,7 +91,7 @@ def choose_genres_by_numbers(
     print(prompt_title)
     print(f"{prompt_hint}\n")
     if used_catalog_fallback:
-        print("(в pool жанров пока нет — показан общий каталог genre_tags)\n")
+        print("(в pool жанров пока нет — показан общий каталог TMDb)\n")
     for idx, genre_name in enumerate(genres, start=1):
         print(f"{idx}. {genre_name}")
 

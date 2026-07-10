@@ -6,7 +6,6 @@ from common import format_score
 
 
 def _make_movie(title: str, user_score: float, year: int) -> dict:
-    genre_tags = {feature: 0 for feature in constant.GENRE}
     raw_scores = {
         "tmdb_score": 8.0,
         "tmdb_votes": 120000,
@@ -17,7 +16,6 @@ def _make_movie(title: str, user_score: float, year: int) -> dict:
         "main_info": main_info,
         "raw_scores": raw_scores,
         "computed_scores": format_score.raw_to_struct(raw_scores, main_info),
-        constant.GENRE_SECTION: genre_tags,
     }
 
 

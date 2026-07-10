@@ -129,7 +129,6 @@ data/
 
   exports/
     candidate_pool/
-    edit_dataset.xlsx
 
   logs/
     api_requests.log
@@ -137,15 +136,11 @@ data/
   backups/
 ```
 
-В git остаются только справочники:
-
-- `config/tags.json`;
-- `config/genre_tags.json`;
-- `apis/sql_title_aliases.json`.
+В git остаются только схемы и справочники в `config/` (`scheme.py`, `constant.py`).
 
 Runtime SQLite DB, WAL/SHM, legacy JSON exports and generated files from
-`data/` are not committed. Legacy JSON can be imported/exported explicitly but
-is not runtime storage.
+`data/` are not committed. Legacy JSON paths live in
+`scripts/migrations/legacy_paths.py` for import/export only.
 
 ## Watched-База
 
@@ -159,30 +154,28 @@ main_info:
   user_score
   year
   country
+  media_type
 
 raw_scores:
-  kp_score
-  kp_votes
-  imdb_score
-  imdb_votes
-  kp_popularity
-  imdb_popularity
+  tmdb_score
+  tmdb_votes
+  tmdb_popularity
 
-tags_vibe:
-  пользовательские vibe-теги
-
-genre:
-  has_* жанровые признаки
+computed_scores:
+  derived TMDb display fields for UI/analytics
 ```
 
 `watched_records.meta_json` хранит внешнее enrichment:
 
 - `tmdb_id`;
-- `imdb_id`;
-- `kp_id`;
+- `imdb_id` (external reference из TMDb, не IMDb datasource);
 - description/overview;
+- `genres`, `genre_keys`, `genres_tmdb`;
 - poster hints;
 - source/raw metadata.
+
+Legacy `tags_vibe`, `kp_*`, `imdb_*` raw scores и ручная `has_*` genre markup
+больше не являются частью активной watched-модели и удаляются миграциями.
 
 Правило: пользовательская watched-запись не должна зависеть от доступности API. API помогает заполнить данные, но не является источником правды.
 

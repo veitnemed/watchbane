@@ -12,7 +12,7 @@ from pathlib import Path
 from common.text_match import normalize_for_match, transliterate_to_latin
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
+ROOT_DIR = Path(__file__).resolve().parents[3]
 DEFAULT_DB_PATH = ROOT_DIR / "datasets" / "dataset_sql_light" / "imdb_light.sqlite3"
 ALIASES_PATH = Path(__file__).resolve().with_name("sql_title_aliases.json")
 

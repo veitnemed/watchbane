@@ -1,13 +1,6 @@
-"""Excel export/import modules stay free of UI imports."""
+"""Dataset service facade tests."""
 
 import importlib
-
-
-def test_excel_work_wrapper_reexports_subpackage() -> None:
-    from dataset.excel.export import export_dataset_to_excel
-    from dataset.excel_work import export_dataset_to_excel as wrapped
-
-    assert export_dataset_to_excel is wrapped
 
 
 def test_genre_stats_wrapper_reexports_catalog() -> None:
@@ -27,7 +20,6 @@ def test_service_facade_exports_core_operations() -> None:
     assert hasattr(service, "save_add_title_record")
     assert hasattr(service, "build_score_analytics")
     assert hasattr(service, "get_dataset_stats")
-    assert hasattr(service, "export_dataset_to_excel")
     assert hasattr(service, "build_tmdb_add_defaults")
 
 

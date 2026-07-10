@@ -14,34 +14,22 @@ from common import format_score
 
 
 def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0) -> dict:
-    genre_tags = {feature: 0 for feature in constant.GENRE}
+    raw_scores = {
+        "tmdb_score": raw_score,
+        "tmdb_votes": 1200,
+        "tmdb_popularity": 10.0,
+    }
+    main_info = {
+        "title": title,
+        "user_score": user_score,
+        "year": year,
+    }
 
     return {
-        "main_info": {
-            "title": title,
-            "user_score": user_score,
-            "year": year,
-        },
-        "raw_scores": {
-            "kp_score": raw_score,
-            "kp_votes": 120000,
-            "imdb_score": raw_score,
-            "imdb_votes": 1200,
-        },
-        "computed_scores": format_score.raw_to_struct(
-            {
-                "kp_score": raw_score,
-                "kp_votes": 120000,
-                "imdb_score": raw_score,
-                "imdb_votes": 1200,
-            },
-            {
-                "title": title,
-                "user_score": user_score,
-                "year": year,
-            },
-        ),
-        constant.GENRE_SECTION: genre_tags,
+        "main_info": main_info,
+        "raw_scores": raw_scores,
+        "computed_scores": format_score.raw_to_struct(raw_scores, main_info),
+        "genres_tmdb": ["Drama"],
     }
 
 
@@ -425,7 +413,7 @@ def test_add_dataset_record_preserves_localized_payload(monkeypatch) -> None:
             "country": "JP",
         },
         "raw_scores": raw_scores,
-        constant.GENRE_SECTION: {feature: 0 for feature in constant.GENRE},
+        "genres_tmdb": ["Animation"],
         "localized": {
             "ru": {
                 "title": "\u041d\u0430\u0440\u0443\u0442\u043e",
@@ -1110,7 +1098,7 @@ def test_build_watched_movie_card_respects_data_language() -> None:
             "en": {"title": "Trigger"},
         },
         "country_codes": ["RU"],
-        "genre": {"has_drama": 1},
+        "genre_keys": ["drama"],
     }
 
     ru_card = build_watched_movie_card(movie, poster_cache={}, data_language="ru")
@@ -2346,7 +2334,7 @@ def test_build_watched_movie_card_computes_tmdb_final_score_for_low_vote_watched
     movie = {
         "main_info": {"title": "Открытый брак", "year": 2023, "user_score": 4.0},
         "raw_scores": {"tmdb_score": 8.5, "tmdb_votes": 8, "tmdb_popularity": 10.402},
-        "genre": {"has_drama": 1, "has_comedy": 1, "has_melodrama": 1},
+        "genre_keys": ["drama", "comedy", "melodrama"],
     }
     meta = {
         "Открытый брак": {
@@ -5408,6 +5396,11 @@ def test_candidate_list_view_applies_localized_poster_worker_result(monkeypatch)
     view._model = FakeModel()
     view._results_list = FakeResultsList()
     view._show_detail_entry = lambda entry: calls.update({"entry": entry})
+    view._build_detail_entry = lambda candidate: (
+        "Pool Show",
+        {},
+        {"poster_url": candidate["localized"]["en"]["poster_url"]},
+    )
     view._start_poster_download = lambda url, identity, seq: calls.update(
         {"download": (url, identity, seq)}
     )
@@ -6108,6 +6101,7 @@ def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch,
     monkeypatch.setattr(main_window_module, "OnboardingAutofillDialog", FakeOnboarding)
 
     window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
+    window._tmdb_gate_passed = True
     try:
         window.maybe_show_onboarding_autofill()
         onboarding = window._onboarding_view

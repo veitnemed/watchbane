@@ -1,6 +1,6 @@
 # Инструкции для агента в `dataset`
 
-Эта папка — доменный слой watched-базы: добавление, обновление, удаление, meta, Excel, статистика, жанры и теги.
+Эта папка — доменный слой watched-базы: добавление, обновление, удаление, meta, статистика и аналитика.
 
 ## Рабочие правила
 
@@ -18,12 +18,10 @@
 - `models/` — results, identity, schema.
 - `records/` — add, update, delete, features, side_effects.
 - `meta/` — lookup, sync, payload, merge.
-- `resolve/` — SQL/KP/TMDb defaults orchestration.
+- `resolve/` — TMDb defaults orchestration.
 - `add_flow/` — resolve bundle, preview, save.
 - `transfer/` — candidate → watched payloads.
-- `excel/` — export/import rows.
-- `tags/` — vibe tag mutations на dataset.
-- `genres/` — mapping, catalog, API import.
+- `genres/` — TMDb genre mapping helpers (read/report).
 - `stats/` — summary, popularity.
 - `analytics/` — score analytics (read-only).
 - `views/` — formatters (dict → str).
@@ -31,13 +29,11 @@
 ## Compatibility wrappers (не удалять до миграции импортов)
 
 - `dataset_records.py` → `records/*`, `models/results`
-- `storage_movie.py` → `records/builder`, `records/recompute`, `excel/rows`
+- `storage_movie.py` → `records/builder`, `records/recompute`
 - `title_resolve.py` → `resolve/*`, `transfer/candidate`, `meta/payload`
 - `add_title_service.py` → `add_flow/*`
 - `delete_record.py` → `records/delete`, `views/delete_formatters`
-- `excel_work.py` → `excel/*`
-- `genre_import.py`, `genre_stats.py` → `genres/*`
-- `tags_work.py` → `tags/*`
+- `genre_stats.py` → `genres/*`
 - `dataset_stats.py`, `filter_popularity.py` → `stats/*`
 - `score_analytics.py` → `analytics/*`
 

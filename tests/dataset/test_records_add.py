@@ -14,7 +14,6 @@ def _valid_add_payload(title: str = "New Title") -> dict:
             "tmdb_votes": 1000,
             "tmdb_popularity": 42.5,
         },
-        constant.GENRE_SECTION: {feature: 0 for feature in constant.GENRE},
     }
 
 

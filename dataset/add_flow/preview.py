@@ -1,10 +1,9 @@
 """Preview movie/card builders for add-title flow."""
 
-from config import constant
 from config import scheme
 from common.cards import build_watched_movie_card
-from dataset.language import choose_genre_labels
 from dataset.models.media_type import normalize_media_type
+from dataset.resolve.genres import extract_tmdb_genres
 
 
 def build_preview_movie_from_defaults(defaults: dict) -> dict:
@@ -14,8 +13,10 @@ def build_preview_movie_from_defaults(defaults: dict) -> dict:
     movie = {
         "main_info": main_info,
         "raw_scores": dict(defaults.get(scheme.RAW_SCORES, {})),
-        constant.GENRE_SECTION: _normalized_genre(defaults),
     }
+    genres_tmdb = extract_tmdb_genres(defaults)
+    if genres_tmdb:
+        movie["genres_tmdb"] = genres_tmdb
     localized = defaults.get("localized")
     if isinstance(localized, dict):
         movie["localized"] = dict(localized)
@@ -40,16 +41,6 @@ def build_preview_card_from_defaults(
     )
     preview_main_info = preview_movie.get(scheme.MAIN_INFO, {})
     card["media_type"] = normalize_media_type(preview_main_info.get("media_type"))
-
-    genre_section = _normalized_genre(defaults)
-    genre_keys = [
-        feature
-        for feature in constant.GENRE
-        if genre_section.get(feature) == 1
-    ]
-    genres_display = choose_genre_labels(genre_keys, data_language)
-    if len(genres_display) > 0:
-        card["genres"] = genres_display
 
     source_values = (resolved or {}).get("source_values") or {}
     description = source_values.get("description")
@@ -84,10 +75,3 @@ def _poster_url_from_hints(poster_hints: dict | None) -> str | None:
     from posters.cache import build_tmdb_poster_url
 
     return build_tmdb_poster_url(str(poster_path).strip())
-
-
-def _normalized_genre(defaults: dict) -> dict:
-    genre_values = dict(defaults.get(scheme.GENRE, {}) or {})
-    for feature in constant.GENRE:
-        genre_values.setdefault(feature, 0)
-    return genre_values

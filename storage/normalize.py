@@ -1,34 +1,21 @@
-"""Приводит данные фильма, тегов и строк таблицы к актуальной схеме."""
+"""Приводит данные фильма к актуальной схеме."""
 
-from config import constant
-from config import genre_tags
-from config import scheme
 from common import valid
 from dataset.models.media_type import normalize_media_type
 
-
-def normalize_genre_tags(movie_genre_tags: dict) -> dict:
-    """Приводит жанровую разметку фильма к актуальной схеме."""
-    normalized = {feature: 0 for feature in constant.GENRE}
-    for feature, value in movie_genre_tags.items():
-        active_feature = genre_tags.map_feature_name(feature)
-        if active_feature in normalized:
-            normalized[active_feature] = value
-    return normalized
+LEGACY_PAYLOAD_SECTIONS = ("tags_vibe", "genre")
 
 
 def normalize_movie_tags(movie: dict) -> dict:
-    """Нормализует теги внутри записи фильма и удаляет legacy tags_vibe."""
-    movie.pop(constant.TAGS_VIBE_SECTION, None)
-    movie[constant.GENRE_SECTION] = normalize_genre_tags(movie.get(constant.GENRE_SECTION, {}))
+    """Strip legacy watched payload sections during persistence."""
+    for section_name in LEGACY_PAYLOAD_SECTIONS:
+        movie.pop(section_name, None)
     return movie
 
 
 def normalize_csv_row(row: dict) -> dict:
     """Приводит строку таблицы к актуальным полям."""
     normalized = dict(row)
-    for feature in constant.GENRE:
-        normalized.setdefault(feature, "0")
     normalized.setdefault("country", "")
     normalized["media_type"] = normalize_media_type(normalized.get("media_type"))
     return normalized
@@ -36,12 +23,16 @@ def normalize_csv_row(row: dict) -> dict:
 
 def is_supported_csv_fields(fieldnames: list) -> bool:
     """Проверяет заголовки табличного файла."""
+    from config import constant
+
     normalized = normalize_csv_row({field: "" for field in fieldnames})
     return all(field in normalized for field in constant.CSV_FIELDS)
 
 
 def normalize_main_info(main_info: dict) -> dict:
     """Приводит основные данные фильма к нужным типам."""
+    from config import constant
+
     normalized = {}
     for feature in constant.MAIN_INFO:
         if feature == "title":
@@ -58,6 +49,8 @@ def normalize_main_info(main_info: dict) -> dict:
 
 def normalize_raw_scores(raw: dict) -> dict:
     """Приводит сырые оценки и голоса к нужным типам."""
+    from config import constant
+
     if isinstance(raw, dict) is False:
         return {}
     normalized = {}
@@ -70,16 +63,3 @@ def normalize_raw_scores(raw: dict) -> dict:
         else:
             normalized[feature] = valid.parse_float(value)
     return normalized
-
-
-def is_valid_genre_tags(genre_tags: dict) -> bool:
-    """Проверяет секцию жанровой разметки фильма."""
-    genre_schema = scheme.get_schema(scheme.GENRE)
-    if set(genre_tags.keys()) != set(genre_schema.keys()):
-        return False
-
-    for feature, value in genre_tags.items():
-        max_value = genre_schema[feature].get("max_value", 1)
-        if valid.is_tags_score(value, max_value) is False:
-            return False
-    return True

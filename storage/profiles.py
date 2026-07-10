@@ -306,7 +306,6 @@ def apply_profile_to_constants(name: str) -> None:
     constant.DIR_META = constant.WATCHED_DIR
     constant.META_JSON = str(data_dir / "watched" / "meta.json")
     constant.DIR_TXT = constant.EXPORTS_DIR
-    constant.EDIT_EXCEL = str(data_dir / "exports" / "edit_dataset.xlsx")
     _apply_module_level_path_caches(data_dir)
 
 

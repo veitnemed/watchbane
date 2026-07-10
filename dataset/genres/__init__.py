@@ -1,1 +1,1 @@
-"""Genre mapping, catalog, API import (target package)."""
+"""TMDb genre helpers for watched dataset analytics."""

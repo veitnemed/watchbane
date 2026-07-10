@@ -56,6 +56,7 @@ def test_export_writes_json_with_ranked_items(tmp_path, monkeypatch) -> None:
 
 def test_export_applies_query_substring_filter(tmp_path, monkeypatch) -> None:
     _patch_pipeline(monkeypatch, _pool())
+    monkeypatch.setattr(export.candidate_service, "is_fts_search_enabled", lambda: False)
     output = tmp_path / "review.json"
 
     export.main(["--query", "криминаль", "--output", str(output)])

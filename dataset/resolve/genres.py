@@ -1,9 +1,5 @@
-"""Genre extraction and defaults for title resolve."""
+"""Genre extraction for title resolve (TMDb metadata only)."""
 
-from dataset.genres.mapping import (
-    normalize_genre_label_to_key,
-    raw_genres_to_dataset_genres,
-)
 from dataset.resolve.helpers import unique_preserve_order
 
 
@@ -41,26 +37,13 @@ def extract_candidate_fallback_genres(candidate: dict) -> list:
 
 
 def split_known_genres(genres: list) -> tuple[list, list]:
-    """Разделяет жанры на известные dataset и неизвестные подсказки."""
-    mapping = raw_genres_to_dataset_genres(genres)
-    unmapped_keys = set(mapping["unmapped_genre_keys"])
-    known: list[str] = []
-    unknown = list(mapping["unmapped_raw_genres"])
-
-    for raw_genre in unique_preserve_order(mapping["mapped_raw_genres"]):
-        genre_key = normalize_genre_label_to_key(raw_genre)
-        if genre_key is None or genre_key in unmapped_keys:
-            if raw_genre not in unknown:
-                unknown.append(raw_genre)
-            continue
-        known.append(raw_genre)
-
-    return known, unknown
-
-
-def build_genre_defaults(genres: list) -> dict:
-    """Собирает значения genre по списку жанров."""
-    return dict(raw_genres_to_dataset_genres(genres)["dataset_genre"])
+    """Разделяет жанры на известные и неизвестные подсказки (TMDb labels)."""
+    known = []
+    for genre in unique_preserve_order(genres):
+        text = str(genre or "").strip()
+        if text != "":
+            known.append(text)
+    return known, []
 
 
 def extract_tmdb_genres(series: dict | None) -> list:

@@ -1,17 +1,11 @@
 """Candidate pool -> dataset transfer payloads."""
 
-from config import constant
-from config import genre_tags
 from config import scheme
-from dataset.genres.mapping import candidate_genre_keys_to_dataset_genres
 from dataset.language import build_localized_block_from_legacy
 from dataset.meta.payload import build_candidate_meta_payload
 from dataset.models.media_type import normalize_media_type
 from dataset.resolve.countries import extract_country_value
-from dataset.resolve.genres import (
-    build_genre_defaults,
-    extract_candidate_fallback_genres,
-)
+from dataset.resolve.genres import extract_candidate_fallback_genres
 
 TMDB_TRANSFER_SCORE_FIELDS = ("tmdb_score", "tmdb_votes", "tmdb_popularity")
 
@@ -85,66 +79,23 @@ def _extract_transfer_fallback_genres(candidate: dict) -> list[str]:
     return []
 
 
-def build_candidate_transfer_genre_defaults(candidate: dict) -> dict:
-    """Собирает genre defaults для переноса кандидата из pool genre_keys или raw genres."""
-    genre_keys = candidate.get("genre_keys")
-    if isinstance(genre_keys, list) and len(genre_keys) > 0:
-        genre_result = candidate_genre_keys_to_dataset_genres(genre_keys)
-        if genre_result["status"] != "missing":
-            return dict(genre_result["dataset_genre"])
-    return build_genre_defaults(_extract_transfer_fallback_genres(candidate))
-
-
 def build_candidate_genre_transfer_preview(candidate: dict) -> dict:
-    """Собирает read-only диагностику жанров для preview переноса candidate -> dataset."""
+    """Собирает read-only диагностику TMDb-жанров для preview переноса candidate -> dataset."""
     genre_keys = _normalize_candidate_genre_keys(candidate)
-    mapper_status = "missing"
-    mapped_genre_keys: list[str] = []
-    unmapped_genre_keys: list[str] = []
-    used_fallback = False
-    dataset_genre = {feature: 0 for feature in constant.GENRE}
-
-    if len(genre_keys) > 0:
-        genre_result = candidate_genre_keys_to_dataset_genres(genre_keys)
-        mapper_status = genre_result["status"]
-        mapped_genre_keys = list(genre_result["mapped_genre_keys"])
-        unmapped_genre_keys = list(genre_result["unmapped_genre_keys"])
-        if mapper_status != "missing":
-            dataset_genre = dict(genre_result["dataset_genre"])
-
-    if mapper_status == "missing":
-        used_fallback = True
-        dataset_genre = build_genre_defaults(_extract_transfer_fallback_genres(candidate))
-
-    active_has_features = [
-        feature_name
-        for feature_name in constant.GENRE
-        if dataset_genre.get(feature_name) == 1
-    ]
-    genre_labels = genre_tags.get_genre_labels()
-    active_has_labels = [
-        genre_labels.get(feature_name, feature_name)
-        for feature_name in active_has_features
-    ]
+    raw_genres = _extract_raw_genre_strings(candidate) or _extract_transfer_fallback_genres(candidate)
     has_raw_genre_signals = _candidate_has_raw_genre_signals(candidate)
 
     return {
         "genre_keys": genre_keys,
-        "mapper_status": mapper_status,
-        "mapped_genre_keys": mapped_genre_keys,
-        "unmapped_genre_keys": unmapped_genre_keys,
-        "dataset_genre": dataset_genre,
-        "active_has_features": active_has_features,
-        "active_has_labels": active_has_labels,
-        "used_fallback": used_fallback,
-        "raw_genres": _extract_raw_genre_strings(candidate),
+        "raw_genres": raw_genres,
         "has_raw_genre_signals": has_raw_genre_signals,
-        "warn_all_genres_zero": has_raw_genre_signals and len(active_has_features) == 0,
+        "warn_missing_genres": has_raw_genre_signals and len(raw_genres) == 0,
     }
 
 
 def build_candidate_transfer_payload(candidate: dict) -> dict:
     """Собирает defaults и meta для переноса кандидата из общего пула в dataset."""
+    raw_genres = _extract_raw_genre_strings(candidate) or _extract_transfer_fallback_genres(candidate)
     defaults = {
         scheme.MAIN_INFO: {
             "title": candidate.get("title") or candidate.get("name") or "",
@@ -158,8 +109,9 @@ def build_candidate_transfer_payload(candidate: dict) -> dict:
             for field_name in TMDB_TRANSFER_SCORE_FIELDS
             if candidate.get(field_name) not in (None, "")
         },
-        scheme.GENRE: build_candidate_transfer_genre_defaults(candidate),
     }
+    if raw_genres:
+        defaults["genres_tmdb"] = raw_genres
     localized = build_localized_block_from_legacy(candidate)
     if localized:
         defaults["localized"] = localized

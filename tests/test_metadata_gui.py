@@ -8,7 +8,6 @@ from common import format_score
 
 
 def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0, **extra) -> dict:
-    genre_tags = {feature: 0 for feature in constant.GENRE}
 
     movie = {
         "main_info": {
@@ -35,7 +34,6 @@ def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0
                 "year": year,
             },
         ),
-        constant.GENRE_SECTION: genre_tags,
     }
     movie.update(extra)
     return movie

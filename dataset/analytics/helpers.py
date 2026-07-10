@@ -43,18 +43,19 @@ def _genres_from_movie(movie: dict) -> list[str]:
         if text is not None:
             return [text]
 
-    genre_section = _movie_section(movie, constant.GENRE_SECTION)
-    labels = constant.FIELD_LABELS
-    result: list[str] = []
-    for feature in constant.GENRE:
-        if genre_section.get(feature) != 1:
-            continue
-        label = _clean_text(labels.get(feature))
-        if label is None:
-            label = feature.removeprefix("has_").replace("_", " ").title()
-        if label not in result:
-            result.append(label)
-    return result
+    localized = movie.get("localized")
+    if isinstance(localized, dict):
+        for block in localized.values():
+            if not isinstance(block, dict):
+                continue
+            values = block.get("genres")
+            if isinstance(values, list):
+                genres = [_clean_text(item) for item in values]
+                genres = [genre for genre in genres if genre is not None]
+                if genres:
+                    return genres
+
+    return []
 
 
 def _overview_from_movie(movie: dict) -> str | None:

@@ -1,6 +1,5 @@
 """Печать карточек и превью для поиска тайтлов."""
 
-from config import constant
 from config import scheme
 from dataset.resolve.countries import extract_country_value
 from dataset.resolve.defaults import extract_tmdb_description, extract_tmdb_raw_scores, extract_tmdb_title
@@ -32,11 +31,7 @@ def print_api_add_preview(api_data: dict) -> None:
 
 def print_final_add_preview(defaults: dict) -> None:
     """Показывает итоговые значения, которые попадут в форму добавления."""
-    genres = [
-        constant.FIELD_LABELS.get(feature, feature)
-        for feature, value in defaults.get(scheme.GENRE, {}).items()
-        if int(value or 0) > 0
-    ]
+    genres = extract_tmdb_genres(defaults)
     raw_scores = defaults.get(scheme.RAW_SCORES, {})
 
     print("\nИтог для добавления:")

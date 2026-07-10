@@ -109,9 +109,7 @@ def show_watched_menu(movies_counter: int, error: int = 0):
     print(" 1 >> Показать просмотренное")
     print(" 2 >> Переименовать запись")
     print(" 3 >> Удалить просмотренную запись")
-    print(" 4 >> Открыть Excel")
-    print(" 5 >> Загрузить Excel")
-    print(" 6 >> Добавить запись")
+    print(" 4 >> Добавить запись")
     print(" 0 >> Главное меню\n")
 
 

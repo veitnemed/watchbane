@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from config import genre_tags
-
+from candidates.models import genre_schema
 from candidates.models.schema import is_candidate_complete as schema_is_candidate_complete
 
 
@@ -19,13 +18,7 @@ def normalize_genre_list(raw_value: str) -> list:
 
 def get_available_genres() -> list:
     """Возвращает список доступных жанров для выбора в критериях."""
-    tags = genre_tags.load_genre_tags()
-    genres = []
-    for settings in tags.values():
-        source = str(settings.get("source", "")).strip()
-        if source != "":
-            genres.append(source)
-    return sorted(set(genres))
+    return sorted(set(genre_schema.GENRE_KEY_TO_DISPLAY.values()))
 
 
 def is_candidate_complete(candidate: dict) -> bool:

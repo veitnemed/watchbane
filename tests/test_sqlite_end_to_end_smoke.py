@@ -61,7 +61,6 @@ def _watched_payload(title: str, year: int) -> dict:
             "tmdb_votes": 1000,
             "tmdb_popularity": 42.5,
         },
-        constant.GENRE_SECTION: {feature: 0 for feature in constant.GENRE},
     }
 
 

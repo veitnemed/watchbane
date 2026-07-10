@@ -3,9 +3,6 @@
 from functools import partial
 
 from common import valid
-from config import constant
-from dataset import service
-from storage import files as storage_files
 from ui.console import backup_menu
 from ui.console import interface_funcs
 from ui.console import menu_state
@@ -20,7 +17,7 @@ def open_watched_menu() -> None:
         _data, movies_counter = menu_state.get_menu_state()
         ui.show_watched_menu(movies_counter)
 
-        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 6)])
+        command = request.loop_input(text=">> ", funcs_list=[partial(valid.is_correct_select_menu, 4)])
         if command == "0":
             return
         if command == "1":
@@ -30,11 +27,6 @@ def open_watched_menu() -> None:
         elif command == "3":
             interface_funcs.delete_watched_record()
         elif command == "4":
-            if service.export_dataset_to_excel(overwrite=True):
-                storage_files.open_file(constant.EDIT_EXCEL)
-        elif command == "5":
-            service.replace_dataset_from_excel()
-        elif command == "6":
             interface_funcs.request_object()
 
         ui.press_enter()

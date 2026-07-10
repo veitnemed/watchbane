@@ -1,12 +1,11 @@
 """TMDb-only default values for add-title flow."""
 
-from config import constant
 from config import scheme
 from dataset.language import build_localized_block_from_legacy
 from dataset.models.media_type import normalize_media_type
 from dataset.tmdb_localized import localized_blocks_from_tmdb_details
 from dataset.resolve.countries import extract_country_value
-from dataset.resolve.genres import build_genre_defaults, extract_tmdb_genres
+from dataset.resolve.genres import extract_tmdb_genres
 
 
 def extract_tmdb_title(series: dict) -> str:
@@ -58,7 +57,6 @@ def build_empty_add_defaults(input_title: str, media_type: str = "tv") -> dict:
             "media_type": normalize_media_type(media_type),
         },
         scheme.RAW_SCORES: {},
-        scheme.GENRE: {feature: 0 for feature in constant.GENRE},
     }
 
 
@@ -67,21 +65,11 @@ def merge_defaults(base: dict, extra: dict) -> dict:
     merged = {
         scheme.MAIN_INFO: {},
         scheme.RAW_SCORES: {},
-        scheme.GENRE: {},
     }
 
     for section_name in merged.keys():
         base_section = base.get(section_name, {}) if isinstance(base, dict) else {}
         extra_section = extra.get(section_name, {}) if isinstance(extra, dict) else {}
-
-        if section_name == scheme.GENRE:
-            keys = set(base_section.keys()) | set(extra_section.keys())
-            for key in keys:
-                merged[section_name][key] = max(
-                    int(base_section.get(key, 0) or 0),
-                    int(extra_section.get(key, 0) or 0),
-                )
-            continue
 
         merged[section_name].update(base_section)
         for key, value in extra_section.items():
@@ -107,7 +95,6 @@ def build_tmdb_add_defaults(series: dict, genres: list | None = None, data_langu
             "media_type": normalize_media_type(series.get("media_type")),
         },
         scheme.RAW_SCORES: extract_tmdb_raw_scores(series),
-        scheme.GENRE: build_genre_defaults(genres),
     }
     localized_source = dict(series or {})
     tmdb_localized = localized_blocks_from_tmdb_details(series, current_language=data_language)
@@ -130,6 +117,8 @@ def build_tmdb_add_defaults(series: dict, genres: list | None = None, data_langu
         localized[selected_language]["overview"] = selected_overview
     if localized:
         defaults["localized"] = localized
+    if genres:
+        defaults["genres_tmdb"] = list(genres)
     return defaults
 
 

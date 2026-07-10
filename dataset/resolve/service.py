@@ -10,7 +10,7 @@ from dataset.language import build_localized_block_from_legacy, normalize_data_l
 from dataset.models.media_type import normalize_media_type
 from dataset.resolve.countries import extract_country_value
 from dataset.resolve.defaults import build_empty_add_defaults
-from dataset.resolve.genres import build_genre_defaults, extract_tmdb_genres
+from dataset.resolve.genres import extract_tmdb_genres
 from dataset.resolve.sources import search_tmdb_defaults_data
 from dataset.tmdb_localized import localized_blocks_from_tmdb_details
 
@@ -91,7 +91,8 @@ def _build_tmdb_add_defaults(
         for key in ("tmdb_score", "tmdb_votes", "tmdb_popularity")
         if tmdb_data.get(key) not in (None, "")
     }
-    defaults[scheme.GENRE] = build_genre_defaults(genres)
+    if genres:
+        defaults["genres_tmdb"] = list(genres)
     localized_source = dict(tmdb_data or {})
     tmdb_localized = localized_blocks_from_tmdb_details(
         tmdb_data,

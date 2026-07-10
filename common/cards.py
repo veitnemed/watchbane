@@ -372,20 +372,6 @@ def _resolve_country(
     return None
 
 
-def _genres_from_flags(movie: dict, data_language: str) -> list[str]:
-    genre_section = _as_dict(movie.get(constant.GENRE_SECTION))
-    genre_keys = []
-
-    for feature in constant.GENRE:
-        if genre_section.get(feature) != 1:
-            continue
-        genre_keys.append(feature)
-
-    if len(genre_keys) > 0:
-        return choose_genre_labels(genre_keys, data_language)
-    return []
-
-
 def _genres(movie: dict, data_language: str = "ru") -> list[str]:
     genre_keys = _as_list(movie.get("genre_keys"))
     if len(genre_keys) > 0:
@@ -409,7 +395,15 @@ def _genres(movie: dict, data_language: str = "ru") -> list[str]:
                 return choose_genre_labels(keys, data_language)
             return genre_schema.normalize_genre_display_labels(values)
 
-    return _genres_from_flags(movie, data_language)
+    localized = _as_dict(movie.get("localized"))
+    for block in localized.values():
+        if not isinstance(block, dict):
+            continue
+        values = _list_text_values(block.get("genres"))
+        if len(values) > 0:
+            return genre_schema.normalize_genre_display_labels(values)
+
+    return []
 
 
 def _resolve_genres(

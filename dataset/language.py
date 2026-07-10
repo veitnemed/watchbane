@@ -13,8 +13,14 @@ DATA_LANGUAGE_TMDB_LOCALES = {
     "en": "en-US",
 }
 _ENGLISH_GENRE_LABELS_BY_KEY = {
+    "drama": ("Drama",),
+    "comedy": ("Comedy",),
+    "crime": ("Crime",),
+    "thriller": ("Thriller",),
+    "horror": ("Horror",),
     "action_adventure": ("Action", "Adventure"),
     "sci_fi_fantasy": ("Sci-Fi", "Fantasy"),
+    "mystery": ("Detective",),
     "detective": ("Detective",),
     "melodrama": ("Melodrama",),
     "romance": ("Romance",),
@@ -24,7 +30,23 @@ _LEGACY_DATASET_GENRE_KEY_ALIASES = {
     "has_fantasy": "sci_fi_fantasy",
     "has_detective": "mystery",
     "has_melodrama": "melodrama",
+    "has_drama": "drama",
+    "has_comedy": "comedy",
+    "has_crime": "crime",
+    "has_thriller": "thriller",
+    "has_horror": "horror",
 }
+
+
+def _canonical_genre_key(raw_key: str) -> str:
+    key = str(raw_key or "").strip()
+    if key == "":
+        return ""
+    if key in _LEGACY_DATASET_GENRE_KEY_ALIASES:
+        return _LEGACY_DATASET_GENRE_KEY_ALIASES[key]
+    if key.startswith("has_"):
+        return key.removeprefix("has_")
+    return key
 
 
 def normalize_data_language(value) -> str:
@@ -296,9 +318,8 @@ def choose_display_overview(record: dict, language: str) -> str | None:
 
 
 def choose_genre_labels(genre_keys, language: str) -> list[str]:
-    """Map genre keys to labels for data language using configured labels/translations."""
+    """Map genre keys to labels for data language using candidate genre schema."""
     from candidates.models import genre_schema
-    from config import genre_tags
 
     normalized = normalize_data_language(language)
     if isinstance(genre_keys, str):
@@ -308,7 +329,6 @@ def choose_genre_labels(genre_keys, language: str) -> list[str]:
     else:
         keys = []
 
-    tags = genre_tags.load_genre_tags()
     labels: list[str] = []
     seen: set[str] = set()
 
@@ -316,7 +336,9 @@ def choose_genre_labels(genre_keys, language: str) -> list[str]:
         key = str(raw_key or "").strip()
         if key == "":
             continue
-        canonical_key = _LEGACY_DATASET_GENRE_KEY_ALIASES.get(key, key)
+        canonical_key = _canonical_genre_key(key)
+        if canonical_key == "":
+            continue
         if normalized == "en" and canonical_key in _ENGLISH_GENRE_LABELS_BY_KEY:
             for text in _ENGLISH_GENRE_LABELS_BY_KEY[canonical_key]:
                 label = _clean_text(text)
@@ -324,21 +346,10 @@ def choose_genre_labels(genre_keys, language: str) -> list[str]:
                     seen.add(label)
                     labels.append(label)
             continue
-        tag_key = key if key in tags else f"has_{key}"
-        settings = tags.get(tag_key)
-        if isinstance(settings, dict):
-            text = settings.get("translation") if normalized == "en" else settings.get("label")
-            label = _clean_text(text)
-            if label is not None and label not in seen:
-                seen.add(label)
-                labels.append(label)
-            continue
 
-        display_labels = genre_schema.build_genres_display([key])
+        display_labels = genre_schema.build_genres_display([canonical_key])
         if normalized == "en" and len(display_labels) == 0:
-            display_labels = [key.replace("_", " ").title()]
-        elif normalized == "en":
-            display_labels = [key.replace("_", " ").title()]
+            display_labels = [canonical_key.replace("_", " ").title()]
         for display_label in display_labels:
             label = _clean_text(display_label)
             if label is not None and label not in seen:

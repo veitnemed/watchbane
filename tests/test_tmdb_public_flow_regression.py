@@ -69,19 +69,13 @@ def test_candidate_build_public_flow_has_no_kp_imdb_imports_or_rating_fields(mon
 
 
 def test_add_title_public_flow_uses_only_tmdb(monkeypatch) -> None:
-    from apis import imdb_sql, kp_api
+    import importlib
+
     from dataset.resolve import service as resolve_service
 
-    monkeypatch.setattr(
-        imdb_sql,
-        "search_title_in_sql",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("IMDb SQL must not be called")),
-    )
-    monkeypatch.setattr(
-        kp_api,
-        "find_series_raw",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("KP API must not be called")),
-    )
+    apis_package = importlib.import_module("apis")
+    assert not hasattr(apis_package, "kp_api")
+    assert not hasattr(apis_package, "imdb_sql")
 
     result = resolve_service.resolve_title_data_for_add(
         "Show",

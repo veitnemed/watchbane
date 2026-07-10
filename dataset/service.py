@@ -20,8 +20,6 @@ from dataset.analytics.reports import (
     format_suspicious_rating_line,
     format_tmdb_delta_line,
 )
-from dataset.excel.export import export_dataset_to_excel
-from dataset.excel.import_flow import replace_dataset_from_excel
 from dataset.genres.stats import (
     build_dataset_genre_catalog,
     show_dataset_genre_catalog,
@@ -99,7 +97,6 @@ __all__ = [
     "build_watched_delete_preview",
     "build_watched_lookup_cache",
     "delete_watched_record",
-    "export_dataset_to_excel",
     "format_rating_gap_line",
     "format_resolve_status_lines",
     "format_suspicious_rating_line",
@@ -109,7 +106,6 @@ __all__ = [
     "get_dataset_stats",
     "load_watched_entries",
     "prepare_card_for_display",
-    "replace_dataset_from_excel",
     "reload_poster_cache",
     "resolve_title_data_for_add",
     "resolve_title_for_add",

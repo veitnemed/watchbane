@@ -4,12 +4,11 @@ from config import constant
 from dataset.meta.sync import sync_raw_scores_to_meta
 from dataset.models.identity import find_dataset_title
 from dataset.models.results import UpdateRecordResult
-from dataset.records.features import build_computed_scores, build_feature_vector
+from dataset.records.features import build_computed_scores
 from dataset.records.validation import (
     normalize_update_sections,
     validate_main_info_patch,
     validate_normalized_update_values,
-    validate_update_features,
     validate_update_patch_structure,
 )
 from storage.data import load_dataset, save_dataset
@@ -36,7 +35,6 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
     current_movie = data[dataset_title]
     main_info = dict(current_movie.get("main_info", {}))
     raw_scores = dict(current_movie.get("raw_scores", {}))
-    genre_tags = dict(current_movie.get(constant.GENRE_SECTION, {}))
     changed_fields = []
 
     main_patch = patch_payload.get("main_info")
@@ -71,23 +69,6 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
                 raw_scores[field] = value
                 changed_fields.append(f"raw_scores.{field}")
 
-    genre_patch = patch_payload.get(constant.GENRE_SECTION)
-    if genre_patch is not None:
-        if isinstance(genre_patch, dict) is False:
-            return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректная genre-разметка", "invalid_patch", [])
-        for field, value in genre_patch.items():
-            if field not in constant.GENRE:
-                return UpdateRecordResult(
-                    ok=False,
-                    title=dataset_title,
-                    message=f"Ошибка обновления! Неподдерживаемое поле genre: {field}",
-                    reason="invalid_patch",
-                    changed_fields=[],
-                )
-            if genre_tags.get(field) != value:
-                genre_tags[field] = value
-                changed_fields.append(f"{constant.GENRE_SECTION}.{field}")
-
     if len(changed_fields) == 0:
         if raw_patch is not None:
             try:
@@ -114,34 +95,30 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
         dataset_title=dataset_title,
         main_info=main_info,
         raw_scores=raw_scores,
-        genre_tags=genre_tags,
     )
     if isinstance(normalized, UpdateRecordResult):
         return normalized
 
-    new_main_info, new_raw_scores, new_genre_tags = normalized
+    new_main_info, new_raw_scores = normalized
 
     values_error = validate_normalized_update_values(
         dataset_title=dataset_title,
         new_main_info=new_main_info,
         new_raw_scores=new_raw_scores,
-        new_genre_tags=new_genre_tags,
     )
     if values_error is not None:
         return values_error
 
     computed_scores = build_computed_scores(new_raw_scores, new_main_info)
-    features = build_feature_vector(computed_scores, new_genre_tags)
-    features_error = validate_update_features(features, dataset_title=dataset_title)
-    if features_error is not None:
-        return features_error
 
     updated_movie = {
         "main_info": new_main_info,
         "raw_scores": new_raw_scores,
         "computed_scores": computed_scores,
-        constant.GENRE_SECTION: new_genre_tags,
     }
+    for field_name in ("localized", "genres_tmdb"):
+        if field_name in current_movie:
+            updated_movie[field_name] = current_movie[field_name]
     data[dataset_title] = updated_movie
 
     try:

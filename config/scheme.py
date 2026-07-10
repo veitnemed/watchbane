@@ -1,14 +1,9 @@
 """Описывает секции данных фильма и правила полей."""
 
 import copy
-from config import genre_tags
-
 
 MAIN_INFO = "main_info"
 RAW_SCORES = "raw_scores"
-GENRE = "genre"
-# Legacy section key stripped during normalize/migration.
-TAGS_VIBE = "tags_vibe"
 
 SHEME_VALIDATORS = {
     MAIN_INFO: {
@@ -46,7 +41,6 @@ SHEME_VALIDATORS = {
             "formated": None
         }
     },
-    GENRE: {},
 }
 
 SHEME_ADD = copy.deepcopy(SHEME_VALIDATORS)
@@ -62,14 +56,6 @@ def get_fields(selection_name: str) -> list:
 def get_schema(selection_name: str) -> dict:
     """Возвращает схему секции."""
     sheme_copy = copy.deepcopy(SHEME_VALIDATORS)
-    if selection_name == GENRE:
-        return {
-            feature: {
-                "tag": ["tags_score"],
-                "type": int,
-                "max_value": 1
-            } for feature in genre_tags.get_genre_fields()
-        }
     return sheme_copy[selection_name]
 
 

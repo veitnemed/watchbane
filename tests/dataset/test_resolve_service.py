@@ -149,18 +149,11 @@ def test_resolve_title_data_for_add_result_has_no_sql_kp_contract_fields() -> No
 
 
 def test_resolve_title_data_for_add_does_not_call_kp_or_imdb_modules(monkeypatch) -> None:
-    from apis import imdb_sql, kp_api
+    import importlib
 
-    monkeypatch.setattr(
-        imdb_sql,
-        "search_title_in_sql",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("IMDb SQL must not be called")),
-    )
-    monkeypatch.setattr(
-        kp_api,
-        "find_series_raw",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("KP API must not be called")),
-    )
+    apis_package = importlib.import_module("apis")
+    assert not hasattr(apis_package, "kp_api")
+    assert not hasattr(apis_package, "imdb_sql")
 
     result = resolve_service.resolve_title_data_for_add(
         "Input Title",

@@ -16,7 +16,6 @@ from dataset.resolve.service import (
 )
 from dataset.transfer.candidate import (
     build_candidate_genre_transfer_preview,
-    build_candidate_transfer_genre_defaults,
     build_candidate_transfer_payload,
 )
 
@@ -26,7 +25,6 @@ __all__ = [
     "build_api_defaults",
     "build_candidate_genre_transfer_preview",
     "build_candidate_meta_payload",
-    "build_candidate_transfer_genre_defaults",
     "build_candidate_transfer_payload",
     "build_empty_add_defaults",
     "build_poster_hints_from_candidate",

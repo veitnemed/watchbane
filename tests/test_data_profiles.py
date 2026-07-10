@@ -25,7 +25,6 @@ def isolated_profiles(monkeypatch, tmp_path):
         "DIR_META",
         "META_JSON",
         "DIR_TXT",
-        "EDIT_EXCEL",
     )
     original_constants = {name: getattr(constant, name) for name in constant_attrs}
     module_attrs = []

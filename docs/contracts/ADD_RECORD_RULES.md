@@ -145,17 +145,11 @@ ui.console.interface_funcs.mark_candidate_as_watched()
 
 ## Genres
 
-Dataset хранит жанры как `has_*` поля из `config/genre_tags.json`.
+Watched и UI используют TMDb metadata: `genres_tmdb`, `genre_keys`, `genres` в `meta_json` / payload.
 
-Кандидаты могут приходить с:
+Кандидаты приходят с `genre_keys` и TMDb genres; canonical keys — `candidates/models/genre_schema.py`.
 
-- `genre_keys`;
-- TMDb genres;
-- raw labels.
-
-Маппинг выполняется через candidates/dataset helpers, а не вручную в UI.
-
-Новые `has_*` нельзя добавлять по ходу пользовательского сценария. Расширение жанрового каталога - отдельная структурная задача.
+Расширение жанрового каталога — отдельная структурная задача в candidate schema, не в watched `has_*` markup.
 
 ## Meta
 

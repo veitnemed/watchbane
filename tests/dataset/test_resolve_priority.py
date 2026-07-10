@@ -1,6 +1,5 @@
 """Tests for TMDb-only add defaults priority wrapper."""
 
-from config import constant
 from dataset.resolve.priority import build_add_defaults_by_priority, build_add_defaults_from_tmdb
 
 
@@ -27,8 +26,7 @@ def test_tmdb_data_produces_defaults() -> None:
         "tmdb_votes": 500,
         "tmdb_popularity": 12.3,
     }
-    assert built["defaults"]["genre"]["has_crime"] == 1
-    assert built["defaults"]["genre"]["has_drama"] == 1
+    assert built["defaults"]["genres_tmdb"] == ["Crime", "Drama"]
     assert built["source_values"]["description"] == "Overview text"
 
 
@@ -45,8 +43,7 @@ def test_priority_wrapper_uses_tmdb_data_only() -> None:
     assert built["defaults"]["main_info"]["title"] == "TMDb Title"
     assert built["sources"]["year"] == "tmdb_api"
     assert built["sources"]["genres"] == "tmdb_api"
-    assert built["defaults"]["genre"]["has_crime"] == 1
-    assert built["defaults"]["genre"]["has_drama"] == 1
+    assert built["defaults"]["genres_tmdb"] == ["Crime", "Drama"]
     assert "sql_identity" not in built
     assert "kp_score" not in built["defaults"]["raw_scores"]
     assert "imdb_score" not in built["defaults"]["raw_scores"]
@@ -62,9 +59,9 @@ def test_empty_tmdb_title_falls_back_to_input_source() -> None:
     assert built["defaults"]["raw_scores"] == {}
 
 
-def test_genre_defaults_cover_full_schema() -> None:
+def test_genre_defaults_expose_tmdb_labels() -> None:
     built = build_add_defaults_by_priority(
         "Test",
         {"title": "Test", "genres_tmdb": ["драма"]},
     )
-    assert set(built["defaults"]["genre"].keys()) == set(constant.GENRE)
+    assert built["defaults"]["genres_tmdb"] == ["драма"]

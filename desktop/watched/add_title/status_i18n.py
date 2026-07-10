@@ -5,9 +5,6 @@ from __future__ import annotations
 from desktop.i18n import tr
 
 _SOURCE_LABEL_KEYS = {
-    "sql": "add_title.resolve.source.sql",
-    "sql_second_pass": "add_title.resolve.source.sql_second_pass",
-    "kp_api": "add_title.resolve.source.kp_api",
     "tmdb_api": "add_title.resolve.source.tmdb_api",
 }
 
@@ -51,7 +48,7 @@ def format_resolve_status_lines_for_ui(statuses: dict) -> list[str]:
     if not isinstance(statuses, dict):
         return []
     lines: list[str] = []
-    for key in ("sql", "sql_second_pass", "kp_api", "tmdb_api"):
+    for key in ("tmdb_api",):
         value = statuses.get(key)
         if value in (None, ""):
             continue

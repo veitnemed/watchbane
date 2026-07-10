@@ -19,7 +19,6 @@ def get_request_schema() -> dict:
     sections = [
         scheme.MAIN_INFO,
         scheme.RAW_SCORES,
-        scheme.GENRE,
     ]
     return {
         section_name: copy.deepcopy(scheme.get_schema(section_name))
@@ -85,12 +84,10 @@ def short_text(value, limit: int = 50) -> str:
 
 
 def _available_genre_options() -> list[tuple[str, str]]:
-    """Возвращает доступные жанры датасета в порядке текущей схемы."""
-    options = []
-    for feature in constant.GENRE:
-        label = get_label(feature)
-        options.append((feature, label))
-    return options
+    """Возвращает доступные жанры TMDb в порядке candidate genre schema."""
+    from candidates.models import genre_schema
+
+    return list(genre_schema.GENRE_KEY_TO_DISPLAY.items())
 
 
 def choose_genre_names_by_numbers(
@@ -146,32 +143,6 @@ def choose_genre_names_by_numbers(
             if genre_name not in selected_genres:
                 selected_genres.append(genre_name)
         return selected_genres
-
-
-def choose_genre_values_by_numbers(default_values: dict | None = None) -> dict:
-    """Собирает секцию genre через выбор жанров по номерам."""
-    if default_values is None:
-        default_values = {}
-
-    options = _available_genre_options()
-    selected_features = [
-        feature for feature, _ in options
-        if int(default_values.get(feature, 0) or 0) == 1
-    ]
-    selected_labels = [get_label(feature) for feature in selected_features]
-
-    selected_genres = choose_genre_names_by_numbers(
-        selected_labels,
-        prompt_title="Доступные жанры датасета:",
-        prompt_hint="Выберите жанры по номерам через пробел. Пустой ввод оставит значения по умолчанию, 0 очистит выбор.",
-        input_label="Номера жанров",
-    )
-
-    selected_set = set(selected_genres)
-    genre_values = {}
-    for feature, label in options:
-        genre_values[feature] = 1 if label in selected_set else 0
-    return genre_values
 
 
 def confirm_or_edit_tmdb_genres(series: dict) -> list:
@@ -441,10 +412,6 @@ def request_all_scores(defaults: dict = None) -> dict:
         section = {}
 
         print(f'\n--- {get_section_label(section_name)} ---')
-
-        if section_name == scheme.GENRE:
-            movie[section_name] = choose_genre_values_by_numbers(defaults.get(section_name, {}))
-            continue
 
         for feature, field_settings in section_fields.items():
             tags_validators = field_settings["tag"]

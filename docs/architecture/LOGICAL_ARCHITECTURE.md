@@ -19,9 +19,9 @@ Domain
   posters/      poster domain/cache logic
 
 Infra
-  apis/         external/local data clients; public candidate flow uses TMDb
-  storage/      runtime data read/write
-  config/       settings, tags, constants
+  apis/         TMDb client (legacy KP/IMDb in archive/legacy/apis/)
+  storage/      runtime data read/write (SQLite canonical; JSON import/export via scripts)
+  config/       scheme, constants, path aliases
   common/       shared small utilities
 
 Project

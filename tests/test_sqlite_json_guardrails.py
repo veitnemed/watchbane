@@ -17,6 +17,8 @@ APPROVED_DIRECT_JSON_WRITERS = {
     "scripts/migrations/migrate_candidate_pool_tmdb_only.py",
     "scripts/migrations/migrate_watched_raw_scores_tmdb_only.py",
     "scripts/migrations/strip_watched_tags_vibe.py",
+    "scripts/migrations/strip_watched_genre_section.py",
+    "scripts/migrations/strip_candidate_kp_imdb_fields.py",
     "scripts/tmdb/refresh_candidate_pool_from_tmdb.py",
     "scripts/tmdb/refresh_watched_from_tmdb.py",
     "dataset/migrations/data_language.py",
@@ -24,18 +26,12 @@ APPROVED_DIRECT_JSON_WRITERS = {
     "storage/profiles.py",
 }
 
-MIGRATED_STORAGE_MARKERS = (
-    "FILE_NAME",
-    "META_JSON",
-    "CANDIDATE_POOL_JSON",
-    "CRITERIA_POOL_JSON",
+from scripts.migrations.legacy_paths import LEGACY_JSON_MARKERS
+
+MIGRATED_STORAGE_MARKERS = LEGACY_JSON_MARKERS + (
     "watchlist.json",
     "hidden.json",
     "posters.json",
-    "data/watched/titles.json",
-    "data/watched/meta.json",
-    "data/candidates/pool.json",
-    "data/candidates/criteria.json",
 )
 
 WRITE_MARKERS = (

@@ -1,6 +1,5 @@
 """Собирает константы проекта: пути, поля и подписи."""
 
-from config import genre_tags
 from config import scheme
 
 APP_DATA_DIR = 'data'
@@ -11,6 +10,8 @@ EXPORTS_DIR = 'data/exports'
 LOGS_DIR = 'data/logs'
 
 DATA_DIR = WATCHED_DIR
+
+# Legacy JSON paths (import/export/migrations only; SQLite is runtime storage).
 FILE_NAME = WATCHED_DIR + '/titles.json'
 CRITERIA_POOL_JSON = CANDIDATES_DIR + '/criteria.json'
 CANDIDATE_POOL_JSON = CANDIDATES_DIR + '/pool.json'
@@ -20,16 +21,12 @@ BACKUP_DIR = 'data/backups/'
 DIR_META = WATCHED_DIR
 META_JSON = WATCHED_DIR + '/meta.json'
 
+# Legacy alias kept for archive scripts that write reports under exports/.
 DIR_TXT = EXPORTS_DIR
-EDIT_EXCEL = EXPORTS_DIR + '/edit_dataset.xlsx'
 
 # Dynamic field lists — populated at import via refresh_dynamic_fields().
 MAIN_INFO: list
 RAW_SCORES: list
-GENRE: list
-TAGS_VIBE_SECTION = "tags_vibe"
-GENRE_SECTION = scheme.GENRE
-BIAS_FEATURE = "bias"
 COMPUTED_SCORES: list
 CSV_FIELDS: list
 FEATURES: list
@@ -40,14 +37,12 @@ ONLY_SCORES: list
 SECTION_LABELS = {
     scheme.MAIN_INFO: "Основная информация",
     scheme.RAW_SCORES: "Исходные данные",
-    scheme.GENRE: "Жанровая разметка",
 }
 
 FIELD_LABELS = {
     "title": "Название",
     "user_score": "Ваша оценка",
     "year": "Год выхода",
-    BIAS_FEATURE: "Свободный член",
     "tmdb_score": "Рейтинг TMDb",
     "tmdb_votes": "Голоса TMDb",
     "tmdb_popularity": "Популярность TMDb",
@@ -57,7 +52,6 @@ TAG_RULES: dict
 
 TRANSLATION = {
     "features": {
-        BIAS_FEATURE: "Bias",
         "tmdb_score": "TMDb score",
         "tmdb_votes": "TMDb votes",
         "tmdb_popularity": "TMDb popularity",
@@ -73,17 +67,16 @@ TRANSLATION = {
 
 def refresh_dynamic_fields() -> None:
     """Обновляет динамические списки признаков и связанные справочники."""
-    global MAIN_INFO, RAW_SCORES, GENRE
+    global MAIN_INFO, RAW_SCORES
     global COMPUTED_SCORES, CSV_FIELDS, FEATURES, RAW_META_FIELDS, FEATURES_CONST
     global ONLY_SCORES, TAG_RULES, FIELD_LABELS
 
     MAIN_INFO = scheme.get_fields(scheme.MAIN_INFO)
     RAW_SCORES = scheme.get_fields(scheme.RAW_SCORES)
-    GENRE = scheme.get_fields(scheme.GENRE)
     COMPUTED_SCORES = scheme.get_computed_fields()
 
-    CSV_FIELDS = MAIN_INFO + RAW_SCORES + GENRE
-    FEATURES = [BIAS_FEATURE] + COMPUTED_SCORES + GENRE
+    CSV_FIELDS = MAIN_INFO + RAW_SCORES
+    FEATURES = list(COMPUTED_SCORES)
     RAW_META_FIELDS = RAW_SCORES
     FEATURES_CONST = COMPUTED_SCORES
 
@@ -96,22 +89,18 @@ def refresh_dynamic_fields() -> None:
         "title": "Название",
         "user_score": "Ваша оценка",
         "year": "Год выхода",
-        BIAS_FEATURE: "Свободный член",
         "tmdb_score": "Рейтинг TMDb",
         "tmdb_votes": "Голоса TMDb",
         "tmdb_popularity": "Популярность TMDb",
     }
-    FIELD_LABELS.update(genre_tags.get_genre_labels())
 
     TAG_RULES = {}
 
     TRANSLATION["features"] = {
-        BIAS_FEATURE: "Bias",
         "tmdb_score": "TMDb score",
         "tmdb_votes": "TMDb votes",
         "tmdb_popularity": "TMDb popularity",
     }
-    TRANSLATION["features"].update(genre_tags.get_genre_translations())
     TRANSLATION["meta features"] = {
         "year": "Year",
         "tmdb_score": "TMDb score",

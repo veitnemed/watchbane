@@ -6,14 +6,12 @@ from dataset.filter_popularity import (
 
 
 def _movie(*, country: str = "", genres: list[str] | None = None) -> dict:
-    genre_section = {feature: 0 for feature in constant.GENRE}
     movie = {
         "main_info": {
             "title": "Title",
             "user_score": 8.0,
             "country": country,
         },
-        constant.GENRE_SECTION: genre_section,
     }
     if genres:
         movie["genres"] = genres

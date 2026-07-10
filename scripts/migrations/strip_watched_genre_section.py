@@ -1,4 +1,4 @@
-"""One-time migration to strip legacy tags_vibe from watched records."""
+"""One-time migration to strip legacy genre section from watched records."""
 
 from __future__ import annotations
 
@@ -16,8 +16,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from scripts.migrations.legacy_paths import FILE_NAME, META_JSON
 
-REPORT_PATH = ROOT_DIR / "data" / "diagnostics" / "watched_tags_vibe_strip_migration_report.json"
-LEGACY_SECTION = "tags_vibe"
+REPORT_PATH = ROOT_DIR / "data" / "diagnostics" / "watched_genre_strip_migration_report.json"
+LEGACY_SECTION = "genre"
 
 
 def _timestamp() -> str:
@@ -40,7 +40,7 @@ def meta_path() -> Path:
 
 
 def backup_path_for(path: Path, timestamp: str) -> Path:
-    return path.with_name(f"{path.stem}.before_tags_vibe_strip.{timestamp}{path.suffix}")
+    return path.with_name(f"{path.stem}.before_genre_strip.{timestamp}{path.suffix}")
 
 
 def read_json(path: Path) -> Any:
@@ -56,13 +56,13 @@ def write_json(path: Path, data: Any) -> None:
         json.dump(data, file, ensure_ascii=False, indent=4)
 
 
-def strip_tags_vibe(movie: dict[str, Any]) -> bool:
+def strip_genre_section(movie: dict[str, Any]) -> bool:
     if not isinstance(movie, dict):
         return False
     return movie.pop(LEGACY_SECTION, None) is not None
 
 
-def migrate_watched_tags_vibe(
+def migrate_watched_genre_section(
     dataset: dict[str, Any],
     meta: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -75,12 +75,12 @@ def migrate_watched_tags_vibe(
     }
 
     for title, movie in list(migrated_dataset.items()):
-        if strip_tags_vibe(movie):
+        if strip_genre_section(movie):
             migrated_dataset[title] = movie
             stats["dataset_records_migrated"] += 1
 
     for title, movie in list(migrated_meta.items()):
-        if isinstance(movie, dict) and strip_tags_vibe(movie):
+        if isinstance(movie, dict) and strip_genre_section(movie):
             migrated_meta[title] = movie
             stats["meta_records_migrated"] += 1
 
@@ -109,7 +109,7 @@ def migrate_sqlite_watched(db_path: Path, *, dry_run: bool = False) -> dict[str,
         timestamp = utc_now()
         for dataset_key, payload_text in rows:
             payload = loads_json(payload_text, {})
-            if not isinstance(payload, dict) or strip_tags_vibe(payload) is False:
+            if not isinstance(payload, dict) or strip_genre_section(payload) is False:
                 continue
             migrated += 1
             if dry_run:
@@ -130,7 +130,7 @@ def migrate_sqlite_watched(db_path: Path, *, dry_run: bool = False) -> dict[str,
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Strip legacy tags_vibe from watched records.")
+    parser = argparse.ArgumentParser(description="Strip legacy genre section from watched records.")
     parser.add_argument("--dry-run", action="store_true", help="Report only; do not write files.")
     parser.add_argument(
         "--sqlite",
@@ -143,7 +143,7 @@ def main() -> int:
     meta = meta_path()
     dataset = read_json(watched)
     meta_data = read_json(meta)
-    migrated_dataset, migrated_meta, stats = migrate_watched_tags_vibe(dataset, meta_data)
+    migrated_dataset, migrated_meta, stats = migrate_watched_genre_section(dataset, meta_data)
     stats.update(migrate_sqlite_watched(Path(args.sqlite), dry_run=args.dry_run))
 
     report = {
