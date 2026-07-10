@@ -522,7 +522,7 @@ def test_candidate_detail_card_profile_scales_with_ui_scale(qapp) -> None:
     width_75 = detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width
 
     assert width_75 < width_100
-    assert width_75 == scaling.poster_px(260)
+    assert width_75 == scaling.poster_px(layout.DETAIL_POSTER_WIDTH)
 
 
 def test_settings_dialog_displays_current_scale(monkeypatch, tmp_path, qapp) -> None:
@@ -783,6 +783,8 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
     assert shell_layout.CANDIDATE_LIST_MAX_WIDTH_PX == scaling.list_px(layout.CANDIDATE_LIST_MAX_WIDTH)
     assert shell_layout.CANDIDATE_LIST_MIN_WIDTH_PX >= 180
     assert shell_layout.CANDIDATE_LIST_MIN_WIDTH_PX < shell_layout.CANDIDATE_LIST_MAX_WIDTH_PX
+    assert shell_layout.CANDIDATE_SPLITTER_LIST_DEFAULT_PX == shell_layout.SPLITTER_SIDEBAR_DEFAULT_PX
+    assert shell_layout.CANDIDATE_SPLITTER_DETAIL_DEFAULT_PX == shell_layout.SPLITTER_DETAIL_DEFAULT_PX
 
     watched_profile = profiles.DETAIL_CARD_LAYOUT_PROFILE
     candidate_profile = profiles.CANDIDATE_DETAIL_CARD_PROFILE
@@ -792,8 +794,11 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
     assert watched_profile.detail_info_min_width == scaling.detail_px(layout.DETAIL_INFO_MIN_WIDTH)
     assert watched_profile.detail_poster_width >= 240
     assert watched_profile.detail_poster_height >= 360
-    assert candidate_profile.detail_poster_width < watched_profile.detail_poster_width
-    assert candidate_profile.detail_content_max_width < watched_profile.detail_content_max_width
+    assert candidate_profile.detail_poster_width == watched_profile.detail_poster_width
+    assert candidate_profile.detail_poster_height == watched_profile.detail_poster_height
+    assert candidate_profile.detail_content_max_width == watched_profile.detail_content_max_width
+    assert candidate_profile.detail_info_min_width == watched_profile.detail_info_min_width
+    assert candidate_profile.detail_section_max_width == watched_profile.detail_section_max_width
     assert candidate_profile.detail_content_max_width >= (
         candidate_profile.detail_poster_width
         + candidate_profile.detail_poster_right_gap

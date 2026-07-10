@@ -57,8 +57,8 @@ from desktop.theme.scaling import list_px
 
 logger = logging.getLogger(__name__)
 
-CANDIDATE_LIST_STRETCH = 3
-CANDIDATE_DETAIL_STRETCH = 7
+CANDIDATE_LIST_STRETCH = 0
+CANDIDATE_DETAIL_STRETCH = 1
 CANDIDATE_LIST_ITEM_SPACING = list_px(2)
 
 
