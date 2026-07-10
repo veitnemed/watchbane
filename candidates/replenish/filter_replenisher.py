@@ -329,6 +329,9 @@ def replenish_candidates_for_filters(
                     "page": page,
                     "raw_seen_count": len(results),
                     "accepted_count": bucket_counter["accepted_count"],
+                    "selected_count": len(selected),
+                    "target_count": safe_limit,
+                    "stage": "page",
                 })
             for raw in results:
                 if bucket_counter["accepted_count"] >= bucket_target or len(selected) >= safe_limit:
@@ -374,6 +377,16 @@ def replenish_candidates_for_filters(
                 seen_title_keys.add(title_key)
                 selected.append(candidate)
                 bucket_counter["accepted_count"] += 1
+                if progress_callback is not None:
+                    progress_callback({
+                        "bucket_id": bucket.get("bucket_id"),
+                        "page": page,
+                        "raw_seen_count": len(results),
+                        "accepted_count": bucket_counter["accepted_count"],
+                        "selected_count": len(selected),
+                        "target_count": safe_limit,
+                        "stage": "accepted",
+                    })
             total_pages = int((response or {}).get("total_pages") or page)
             if page >= total_pages:
                 break

@@ -219,5 +219,9 @@ def test_progress_callback_receives_bucket_page_events() -> None:
     )
 
     assert result["created_count"] == 21
-    assert [event["page"] for event in events] == [1, 2]
+    page_events = [event for event in events if event.get("stage") == "page"]
+    accepted_events = [event for event in events if event.get("stage") == "accepted"]
+    assert [event["page"] for event in page_events] == [1, 2]
     assert all(event["bucket_id"].startswith("RU:tv") for event in events)
+    assert accepted_events[-1]["selected_count"] == 21
+    assert accepted_events[-1]["target_count"] == 30

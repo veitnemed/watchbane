@@ -60,6 +60,22 @@ QLabel#candidateFiltersIntroStats {{
     font-size: {font_px(FONT_BASE + 1)}px;
     font-weight: 600;
 }}
+QProgressBar#candidateReplenishProgressBar {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER_ACTIVE};
+    border-radius: {px(8)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 700;
+    min-height: {px(18)}px;
+    max-height: {px(18)}px;
+    text-align: center;
+}}
+QProgressBar#candidateReplenishProgressBar::chunk {{
+    background-color: {COLOR_ADD_BUTTON_TOP};
+    border-radius: {px(7)}px;
+    margin: {px(2)}px;
+}}
 QFrame#candidateFiltersSummaryRow {{
     background: transparent;
     min-height: {px(26)}px;

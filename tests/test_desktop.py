@@ -5692,6 +5692,8 @@ def test_candidate_filter_sections_define_visual_hierarchy() -> None:
     assert "QToolButton#candidateAdvancedFiltersToggle" in style
     assert "QWidget#candidateAdvancedFiltersContent" in style
     assert "QLabel#candidateAdvancedFiltersGroupTitle" in style
+    assert "QProgressBar#candidateReplenishProgressBar" in style
+    assert "QProgressBar#candidateReplenishProgressBar::chunk" in style
     assert "candidateMoodFilterSection" not in style
     assert "QFrame#candidateFilterDivider" in style
     assert f"font-size: {font_px(FONT_SECTION)}px;" in style

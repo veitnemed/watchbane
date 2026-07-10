@@ -5,7 +5,17 @@ from __future__ import annotations
 from typing import Callable
 
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from candidates import service as candidate_service
 from candidates.models import country_schema, genre_schema
@@ -187,6 +197,15 @@ class CandidateFiltersView:
         self._intro_stats.setWordWrap(True)
         self._intro_stats.setVisible(False)
         intro_layout.addWidget(self._intro_stats)
+
+        self._replenish_progress_bar = QProgressBar()
+        self._replenish_progress_bar.setObjectName("candidateReplenishProgressBar")
+        self._replenish_progress_bar.setRange(0, FILTER_REPLENISH_DEFAULT_BATCH_SIZE)
+        self._replenish_progress_bar.setValue(0)
+        self._replenish_progress_bar.setFormat(f"0 / {FILTER_REPLENISH_DEFAULT_BATCH_SIZE}")
+        self._replenish_progress_bar.setTextVisible(True)
+        self._replenish_progress_bar.setVisible(False)
+        intro_layout.addWidget(self._replenish_progress_bar)
 
         self._summary_value_labels: dict[str, QLabel] = {}
 
@@ -696,6 +715,8 @@ class CandidateFiltersView:
             if self._replenish_enabled_check.isChecked()
             else None
         )
+        if self._pending_replenish_intent is None:
+            self._hide_replenish_progress()
         self._replenish_local_count_before = None
         self._local_apply_requested = True
         self._session.apply_filters_async(filters, parent=self._widget)
@@ -708,13 +729,29 @@ class CandidateFiltersView:
         self._apply_button.setEnabled(not self._is_replenishing and not self._session.is_loading)
         self._reset_button.setEnabled(not self._is_replenishing and not self._session.is_loading)
 
+    def _set_replenish_progress(self, value: int, maximum: int) -> None:
+        maximum = max(1, int(maximum or FILTER_REPLENISH_DEFAULT_BATCH_SIZE))
+        value = max(0, min(maximum, int(value or 0)))
+        self._replenish_progress_bar.setRange(0, maximum)
+        self._replenish_progress_bar.setValue(value)
+        self._replenish_progress_bar.setFormat(f"{value} / {maximum}")
+        self._replenish_progress_bar.setVisible(True)
+
+    def _hide_replenish_progress(self) -> None:
+        self._replenish_progress_bar.setRange(0, FILTER_REPLENISH_DEFAULT_BATCH_SIZE)
+        self._replenish_progress_bar.setValue(0)
+        self._replenish_progress_bar.setFormat(f"0 / {FILTER_REPLENISH_DEFAULT_BATCH_SIZE}")
+        self._replenish_progress_bar.setVisible(False)
+
     def _start_filter_replenish(self, intent: dict, *, local_count_before: int | None = None) -> None:
         if self._replenish_worker is not None:
             return
         self._replenish_local_count_before = 0 if local_count_before is None else int(local_count_before)
         self._set_replenish_running(True)
-        self._intro_lead.setText("Replenish started")
-        self._intro_stats.setText("Local filter applied. Fetching matching TMDb candidates.")
+        target = clamp_filter_replenish_batch_size(intent.get("target_add_count", FILTER_REPLENISH_DEFAULT_BATCH_SIZE))
+        self._set_replenish_progress(0, target)
+        self._intro_lead.setText(tr("candidates.filters.replenish.status.started"))
+        self._intro_stats.setText(tr("candidates.filters.replenish.status.fetching"))
         self._intro_stats.setVisible(True)
         worker = FilterReplenishWorker(intent, service=self._service, parent=self._widget)
         worker.progress.connect(self._on_replenish_progress)
@@ -728,10 +765,13 @@ class CandidateFiltersView:
     def _on_replenish_progress(self, progress: object) -> None:
         if isinstance(progress, dict) is False:
             return
-        bucket_id = progress.get("bucket_id") or "bucket"
-        page = progress.get("page") or 1
-        accepted = progress.get("accepted_count") or 0
-        self._intro_stats.setText(f"Replenish {bucket_id}, page {page}, accepted {accepted}.")
+        accepted = int(progress.get("accepted_count") or 0)
+        selected = int(progress.get("selected_count") or accepted)
+        target = int(progress.get("target_count") or self._replenish_progress_bar.maximum() or FILTER_REPLENISH_DEFAULT_BATCH_SIZE)
+        self._set_replenish_progress(selected, target)
+        self._intro_stats.setText(
+            tr("candidates.filters.replenish.status.progress", current=selected, total=target)
+        )
         self._intro_stats.setVisible(True)
 
     def _on_replenish_finished(self, result: object) -> None:
@@ -739,17 +779,20 @@ class CandidateFiltersView:
         self._last_replenish_result = payload
         self._set_replenish_running(False)
         if payload.get("blocked"):
+            self._hide_replenish_progress()
             self._intro_lead.setText("Conflict: no TMDb call")
             self._intro_stats.setText("Selected replenish options have a compatibility conflict.")
             self._intro_stats.setVisible(True)
             return
         if payload.get("ok") is not True:
+            self._hide_replenish_progress()
             self._intro_lead.setText("Replenish failed")
             self._intro_stats.setText(str(payload.get("error") or payload.get("message") or "Unknown error"))
             self._intro_stats.setVisible(True)
             return
         added = int(payload.get("saved_count") or payload.get("created_count") or 0)
         requested = int(payload.get("requested_count") or 30)
+        self._set_replenish_progress(added, requested)
         local_before = 0 if self._replenish_local_count_before is None else int(self._replenish_local_count_before)
         self.reload_filter_options()
         reapplied = self._session.reload_from_pool(force=True)
@@ -765,6 +808,7 @@ class CandidateFiltersView:
     def _on_replenish_failed(self, message: str) -> None:
         self._last_replenish_result = {"ok": False, "error": str(message)}
         self._set_replenish_running(False)
+        self._hide_replenish_progress()
         self._intro_lead.setText("Replenish failed")
         self._intro_stats.setText(str(message or "Unknown error"))
         self._intro_stats.setVisible(True)

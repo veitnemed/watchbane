@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QCheckBox, QComboBox, QPushButton
+from PyQt6.QtWidgets import QCheckBox, QComboBox, QProgressBar, QPushButton
 
 from desktop.candidates.filters_view import CandidateFiltersView, clamp_filter_replenish_batch_size
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
@@ -97,7 +97,14 @@ class FakeReplenishService:
         del cancel_checker, dry_run
         self.replenish_calls.append(dict(intent))
         if progress_callback is not None:
-            progress_callback({"bucket_id": "RU:tv:1", "page": 1, "accepted_count": 1})
+            progress_callback({
+                "bucket_id": "RU:tv:1",
+                "page": 1,
+                "accepted_count": 1,
+                "selected_count": 1,
+                "target_count": 30,
+                "stage": "accepted",
+            })
         return dict(self.replenish_result)
 
 
@@ -114,14 +121,17 @@ def test_apply_with_replenish_unchecked_keeps_old_behavior(qtbot) -> None:
     service, _session, view = _build_view(qtbot)
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
     checkbox = view.widget.findChild(QCheckBox, "candidateReplenishEnabled")
+    progress = view.widget.findChild(QProgressBar, "candidateReplenishProgressBar")
     assert apply_button is not None
     assert checkbox is not None
+    assert progress is not None
     assert checkbox.isChecked() is False
 
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: service.overview_calls >= 1)
 
     assert service.replenish_calls == []
+    assert progress.isHidden() is True
 
 
 def test_apply_with_replenish_checked_calls_worker_service_seam(qtbot) -> None:
@@ -129,9 +139,11 @@ def test_apply_with_replenish_checked_calls_worker_service_seam(qtbot) -> None:
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
     checkbox = view.widget.findChild(QCheckBox, "candidateReplenishEnabled")
     media_combo = view.widget.findChild(QComboBox, "candidateSearchMediaType")
+    progress = view.widget.findChild(QProgressBar, "candidateReplenishProgressBar")
     assert apply_button is not None
     assert checkbox is not None
     assert media_combo is not None
+    assert progress is not None
 
     checkbox.setChecked(True)
     media_combo.setCurrentIndex(media_combo.findData("movie"))
@@ -146,6 +158,10 @@ def test_apply_with_replenish_checked_calls_worker_service_seam(qtbot) -> None:
     assert intent["allow_advanced_override"] is False
     assert view._last_replenish_result["saved_count"] == 3
     assert session.filters is not None
+    assert progress.isVisible() is True
+    assert progress.maximum() == 30
+    assert progress.value() == 3
+    assert progress.text() == "3 / 30"
 
 
 def test_preset_country_filters_even_when_country_chip_is_absent(qtbot) -> None:
@@ -183,8 +199,10 @@ def test_apply_with_blocked_replenish_result_keeps_local_results(qtbot) -> None:
     )
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
     checkbox = view.widget.findChild(QCheckBox, "candidateReplenishEnabled")
+    progress = view.widget.findChild(QProgressBar, "candidateReplenishProgressBar")
     assert apply_button is not None
     assert checkbox is not None
+    assert progress is not None
 
     checkbox.setChecked(True)
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
@@ -194,6 +212,7 @@ def test_apply_with_blocked_replenish_result_keeps_local_results(qtbot) -> None:
 
     assert view._last_replenish_result["blocked"] is True
     assert session.filters is not None
+    assert progress.isHidden() is True
 
 
 def test_replenish_batch_size_is_clamped_to_30() -> None:
