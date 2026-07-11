@@ -16,6 +16,7 @@ REQUIRED_BACKUP_TABLES = {
     "candidate_records",
     "candidate_criteria",
     "candidate_actions",
+    "candidate_impressions",
     "app_settings",
     "poster_cache_entries",
 }

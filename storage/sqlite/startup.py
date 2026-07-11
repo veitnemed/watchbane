@@ -20,6 +20,7 @@ def is_sqlite_runtime_empty(db_path: str | Path | None = None) -> bool:
             "SELECT COUNT(*) AS count FROM candidate_records",
             "SELECT COUNT(*) AS count FROM candidate_criteria",
             "SELECT COUNT(*) AS count FROM candidate_actions",
+            "SELECT COUNT(*) AS count FROM candidate_impressions",
             "SELECT COUNT(*) AS count FROM app_settings",
             "SELECT COUNT(*) AS count FROM poster_cache_entries",
         )

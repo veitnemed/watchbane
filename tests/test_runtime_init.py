@@ -53,7 +53,7 @@ def test_ensure_runtime_data_layout_initializes_sqlite_without_runtime_json(monk
     assert result["ok"] is True
     assert result["backup_created"] is False
     assert result["backend"] == "sqlite"
-    assert result["sqlite_schema_version"] == 3
+    assert result["sqlite_schema_version"] == 4
     assert (tmp_path / "watchbane.sqlite3").is_file()
     for path in (titles_json, meta_json, pool_json, criteria_json, watchlist_json, hidden_json):
         assert path.exists() is False

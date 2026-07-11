@@ -186,3 +186,24 @@ def apply_v3(conn: sqlite3.Connection) -> None:
         """
     )
 
+
+def apply_v4(conn: sqlite3.Connection) -> None:
+    """Add recommendation impression history independent from user actions."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS candidate_impressions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          identity_key TEXT NOT NULL,
+          media_type TEXT NOT NULL,
+          shown_count INTEGER NOT NULL DEFAULT 0,
+          first_shown_at TEXT NOT NULL,
+          last_shown_at TEXT NOT NULL,
+          last_deck_id TEXT,
+          UNIQUE(identity_key, media_type)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_candidate_impressions_last_shown
+          ON candidate_impressions(last_shown_at);
+        """
+    )
+

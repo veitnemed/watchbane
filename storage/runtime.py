@@ -162,6 +162,7 @@ def _clear_candidate_startup_tables() -> None:
             conn.execute("DELETE FROM candidate_records")
             conn.execute("DELETE FROM candidate_criteria")
             conn.execute("DELETE FROM candidate_actions")
+            conn.execute("DELETE FROM candidate_impressions")
             conn.execute("DELETE FROM onboarding_profiles")
     finally:
         conn.close()

@@ -20,7 +20,7 @@ def test_migration_v3_creates_candidate_fts(tmp_path) -> None:
         row = conn.execute(
             "SELECT name FROM sqlite_master WHERE name = 'candidate_fts'"
         ).fetchone()
-        assert version == 3
+        assert version == 4
         assert row is not None
     finally:
         conn.close()
@@ -105,7 +105,7 @@ def test_save_candidate_pool_rebuilds_fts_index(tmp_path, monkeypatch) -> None:
     )
     conn = connect(db_path)
     try:
-        assert get_current_schema_version(conn) == 3
+        assert get_current_schema_version(conn) == 4
         hits = search_fts(conn, "dark")
         assert hits and hits[0][0] == "dark|2017"
     finally:

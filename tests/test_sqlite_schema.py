@@ -10,6 +10,7 @@ EXPECTED_TABLES = {
     "candidate_records",
     "candidate_criteria",
     "candidate_actions",
+    "candidate_impressions",
     "app_settings",
     "poster_cache_entries",
     "onboarding_profiles",
@@ -28,7 +29,7 @@ def _indexes(conn, table: str) -> set[str]:
 def test_schema_creates_expected_tables_and_columns(tmp_path) -> None:
     conn = connect(tmp_path / "watchbane.sqlite3")
     try:
-        assert apply_migrations(conn) == 3
+        assert apply_migrations(conn) == 4
 
         tables = {
             row["name"]
@@ -37,7 +38,7 @@ def test_schema_creates_expected_tables_and_columns(tmp_path) -> None:
             )
         }
         assert EXPECTED_TABLES.issubset(tables)
-        assert get_current_schema_version(conn) == 3
+        assert get_current_schema_version(conn) == 4
 
         assert {
             "dataset_key",
@@ -103,6 +104,16 @@ def test_schema_creates_expected_tables_and_columns(tmp_path) -> None:
             "error_text",
             "created_at",
         }.issubset(_columns(conn, "candidate_autofill_requests"))
+
+        assert {
+            "id",
+            "identity_key",
+            "media_type",
+            "shown_count",
+            "first_shown_at",
+            "last_shown_at",
+            "last_deck_id",
+        }.issubset(_columns(conn, "candidate_impressions"))
     finally:
         conn.close()
 
@@ -131,5 +142,6 @@ def test_schema_creates_query_indexes(tmp_path) -> None:
         assert "idx_poster_cache_title_year" in _indexes(conn, "poster_cache_entries")
         assert "idx_onboarding_profiles_completed" in _indexes(conn, "onboarding_profiles")
         assert "idx_candidate_autofill_profile" in _indexes(conn, "candidate_autofill_requests")
+        assert "idx_candidate_impressions_last_shown" in _indexes(conn, "candidate_impressions")
     finally:
         conn.close()
