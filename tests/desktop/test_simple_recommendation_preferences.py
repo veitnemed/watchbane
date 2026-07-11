@@ -126,6 +126,7 @@ def test_simple_preferences_save_and_start_one_auto_refill(qtbot) -> None:
 
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: len(service.replenish_calls) == 1)
+    qtbot.waitUntil(lambda: view._replenish_worker is None)
 
     saved = load_simple_recommendation_preferences()
     assert saved.to_dict() == {
@@ -138,7 +139,7 @@ def test_simple_preferences_save_and_start_one_auto_refill(qtbot) -> None:
 
 
 def test_sufficient_local_pool_skips_network_refill(qtbot) -> None:
-    service = SimplePreferenceService(30)
+    service = SimplePreferenceService(50)
     session, view = _build_view(qtbot, service)
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
 
@@ -155,6 +156,7 @@ def test_network_error_keeps_local_results(qtbot) -> None:
 
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: view._last_replenish_result is not None)
+    qtbot.waitUntil(lambda: view._replenish_worker is None)
 
     assert session.filtered_count == 1
     assert [item["title"] for item in session.sorted_candidates()] == ["Candidate 0"]

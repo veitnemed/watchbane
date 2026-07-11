@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Callable
 
 from PyQt6.QtCore import QSize, Qt
@@ -20,6 +21,11 @@ from candidates import service as candidate_service
 from candidates.preferences import SimpleRecommendationPreferences
 from candidates.models import country_schema, genre_schema
 from candidates.onboarding.taste_presets import get_taste_preset
+from candidates.recommendation_deck_service import (
+    DEFAULT_ACTIVE_LIMIT,
+    DEFAULT_REFILL_THRESHOLD,
+    count_automatic_recommendation_candidates,
+)
 from candidates.replenish.filter_intent import FilterReplenishIntent
 from config import constant
 from dataset.language import choose_genre_labels
@@ -68,6 +74,10 @@ def clamp_filter_replenish_batch_size(value) -> int:
     return max(1, min(FILTER_REPLENISH_MAX_BATCH_SIZE, requested))
 
 
+def _replenish_intent_signature(intent: dict) -> str:
+    return json.dumps(dict(intent or {}), ensure_ascii=False, sort_keys=True, default=str)
+
+
 def _genre_labels_for_language(labels, data_language: str) -> list[str]:
     result: list[str] = []
     seen: set[str] = set()
@@ -109,8 +119,12 @@ class CandidateFiltersView:
         self._replenish_worker: FilterReplenishWorker | None = None
         self._last_replenish_result: dict | None = None
         self._pending_replenish_intent: dict | None = None
+        self._pending_replenish_generation: int | None = None
         self._replenish_local_count_before: int | None = None
         self._local_apply_requested = False
+        self._replenish_generation = 0
+        self._active_replenish_generation: int | None = None
+        self._active_replenish_signature: str | None = None
 
         view = self
 
@@ -501,10 +515,29 @@ class CandidateFiltersView:
             mood=str(self._form.simple_mood_combo.currentData() or "any"),
         ).normalized()
 
-    def _simple_pool_needs_replenish(self) -> bool:
-        stats = self._session.overview().get("stats") or {}
-        pool_size = int(stats.get("unique_total") or stats.get("storage_total") or 0)
-        return pool_size < FILTER_REPLENISH_DEFAULT_BATCH_SIZE
+    def _simple_pool_needs_replenish(
+        self,
+        preferences: SimpleRecommendationPreferences,
+    ) -> bool:
+        filters = preferences.to_candidate_filters(DEFAULT_BROWSE_FILTERS)
+        filters["only_unwatched"] = True
+        filters["hide_hidden"] = True
+        candidates = list(self._session.overview().get("candidates") or [])
+        try:
+            search_view = self._service.search_candidate_pool(candidates, filters)
+            matching = list(
+                search_view.get("filtered_candidates")
+                or search_view.get("candidates")
+                or []
+            )
+        except Exception:
+            matching = candidates
+        eligible_count = count_automatic_recommendation_candidates(
+            matching,
+            filters,
+            capacity=DEFAULT_ACTIVE_LIMIT + DEFAULT_REFILL_THRESHOLD,
+        )
+        return eligible_count < DEFAULT_ACTIVE_LIMIT + DEFAULT_REFILL_THRESHOLD
 
     def _selected_replenish_preset(self):
         preset_id = self._replenish_preset_combo.currentData()
@@ -557,6 +590,7 @@ class CandidateFiltersView:
         local_apply_completed = self._local_apply_requested
         if self._session.last_error:
             self._pending_replenish_intent = None
+            self._pending_replenish_generation = None
             self._replenish_local_count_before = None
             self._local_apply_requested = False
             self._intro_lead.setText(tr("candidates.filters.error.lead"))
@@ -578,11 +612,14 @@ class CandidateFiltersView:
                 self._intro_lead.setText("Local filter applied")
         if self._pending_replenish_intent is not None and self._replenish_worker is None:
             intent = self._pending_replenish_intent
+            generation = self._pending_replenish_generation
             self._pending_replenish_intent = None
+            self._pending_replenish_generation = None
             self._replenish_local_count_before = int(self._session.filtered_count or 0)
             self._start_filter_replenish(
                 intent,
                 local_count_before=self._replenish_local_count_before,
+                generation=generation,
             )
         self._local_apply_requested = False
 
@@ -770,11 +807,19 @@ class CandidateFiltersView:
         return self._on_before_apply(filters)
 
     def _apply_filters(self) -> None:
+        self._replenish_generation += 1
+        if self._replenish_worker is not None:
+            self._replenish_worker.cancel()
         if self._advanced_mode_toggle.isChecked():
             filters = self.on_before_apply(self._collect_filters())
             self._pending_replenish_intent = (
                 self._collect_replenish_intent(filters)
                 if self._replenish_enabled_check.isChecked()
+                else None
+            )
+            self._pending_replenish_generation = (
+                self._replenish_generation
+                if self._pending_replenish_intent is not None
                 else None
             )
         else:
@@ -788,7 +833,12 @@ class CandidateFiltersView:
                     data_language=self._data_language,
                     target_add_count=FILTER_REPLENISH_DEFAULT_BATCH_SIZE,
                 )
-                if self._simple_pool_needs_replenish()
+                if self._simple_pool_needs_replenish(preferences)
+                else None
+            )
+            self._pending_replenish_generation = (
+                self._replenish_generation
+                if self._pending_replenish_intent is not None
                 else None
             )
         if self._pending_replenish_intent is None:
@@ -819,9 +869,59 @@ class CandidateFiltersView:
         self._replenish_progress_bar.setFormat(f"0 / {FILTER_REPLENISH_DEFAULT_BATCH_SIZE}")
         self._replenish_progress_bar.setVisible(False)
 
-    def _start_filter_replenish(self, intent: dict, *, local_count_before: int | None = None) -> None:
+    def request_recommendation_refill(self, preferences: dict) -> bool:
+        """Queue one async refill for the currently active recommendation intent."""
+        current = dict(preferences or {})
+        mood = str(
+            current.get("_recommendation_mood")
+            or current.get("mood")
+            or current.get("vibe")
+            or "mixed"
+        ).strip().casefold()
+        vibe = mood if mood in {"light", "dark"} else "mixed"
+        collection = str(
+            current.get("_recommendation_collection")
+            or current.get("release_preference")
+            or "mixed"
+        ).strip().casefold()
+        release_preference = collection if collection in {"new", "classic"} else "mixed"
+        is_simple_intent = "_recommendation_mood" in current
+        intent = FilterReplenishIntent.from_filters(
+            current,
+            preset_id="manual" if is_simple_intent else None,
+            vibe=vibe,
+            release_preference=release_preference,
+            origin_preference="any" if is_simple_intent else None,
+            genre_groups=(
+                current.get("_recommendation_genre_groups")
+                or current.get("genre_groups")
+                or []
+            ),
+            target_add_count=FILTER_REPLENISH_DEFAULT_BATCH_SIZE,
+            data_language=self._data_language,
+        ).to_dict()
+        signature = _replenish_intent_signature(intent)
         if self._replenish_worker is not None:
-            return
+            if signature == self._active_replenish_signature:
+                return False
+            self._replenish_generation += 1
+            self._replenish_worker.cancel()
+            self._pending_replenish_intent = intent
+            self._pending_replenish_generation = self._replenish_generation
+            return True
+        return self._start_filter_replenish(intent, generation=self._replenish_generation)
+
+    def _start_filter_replenish(
+        self,
+        intent: dict,
+        *,
+        local_count_before: int | None = None,
+        generation: int | None = None,
+    ) -> bool:
+        signature = _replenish_intent_signature(intent)
+        if self._replenish_worker is not None:
+            return False
+        request_generation = self._replenish_generation if generation is None else int(generation)
         self._replenish_local_count_before = 0 if local_count_before is None else int(local_count_before)
         self._set_replenish_running(True)
         target = clamp_filter_replenish_batch_size(intent.get("target_add_count", FILTER_REPLENISH_DEFAULT_BATCH_SIZE))
@@ -830,15 +930,35 @@ class CandidateFiltersView:
         self._intro_stats.setText(tr("candidates.filters.replenish.status.fetching"))
         self._intro_stats.setVisible(True)
         worker = FilterReplenishWorker(intent, service=self._service, parent=self._widget)
-        worker.progress.connect(self._on_replenish_progress)
-        worker.finished_with_result.connect(self._on_replenish_finished)
-        worker.failed.connect(self._on_replenish_failed)
+        worker.progress.connect(
+            lambda progress, request_generation=request_generation: self._on_replenish_progress(
+                progress,
+                request_generation,
+            )
+        )
+        worker.finished_with_result.connect(
+            lambda result, request_generation=request_generation: self._on_replenish_finished(
+                result,
+                request_generation,
+            )
+        )
+        worker.failed.connect(
+            lambda message, request_generation=request_generation: self._on_replenish_failed(
+                message,
+                request_generation,
+            )
+        )
         worker.finished.connect(lambda worker=worker: self._remove_replenish_worker(worker))
         worker.finished.connect(worker.deleteLater)
         self._replenish_worker = worker
+        self._active_replenish_generation = request_generation
+        self._active_replenish_signature = signature
         worker.start()
+        return True
 
-    def _on_replenish_progress(self, progress: object) -> None:
+    def _on_replenish_progress(self, progress: object, generation: int | None = None) -> None:
+        if generation is not None and generation != self._replenish_generation:
+            return
         if isinstance(progress, dict) is False:
             return
         accepted = int(progress.get("accepted_count") or 0)
@@ -850,7 +970,10 @@ class CandidateFiltersView:
         )
         self._intro_stats.setVisible(True)
 
-    def _on_replenish_finished(self, result: object) -> None:
+    def _on_replenish_finished(self, result: object, generation: int | None = None) -> None:
+        if generation is not None and generation != self._replenish_generation:
+            self._set_replenish_running(False)
+            return
         payload = dict(result or {}) if isinstance(result, dict) else {"ok": False, "error": "Invalid result"}
         self._last_replenish_result = payload
         self._set_replenish_running(False)
@@ -881,7 +1004,10 @@ class CandidateFiltersView:
         )
         self._intro_stats.setVisible(True)
 
-    def _on_replenish_failed(self, message: str) -> None:
+    def _on_replenish_failed(self, message: str, generation: int | None = None) -> None:
+        if generation is not None and generation != self._replenish_generation:
+            self._set_replenish_running(False)
+            return
         self._last_replenish_result = {"ok": False, "error": str(message)}
         self._set_replenish_running(False)
         self._hide_replenish_progress()
@@ -892,3 +1018,11 @@ class CandidateFiltersView:
     def _remove_replenish_worker(self, worker: FilterReplenishWorker) -> None:
         if self._replenish_worker is worker:
             self._replenish_worker = None
+            self._active_replenish_generation = None
+            self._active_replenish_signature = None
+            if self._pending_replenish_intent is not None and self._session.is_loading is False:
+                intent = self._pending_replenish_intent
+                generation = self._pending_replenish_generation
+                self._pending_replenish_intent = None
+                self._pending_replenish_generation = None
+                self._start_filter_replenish(intent, generation=generation)

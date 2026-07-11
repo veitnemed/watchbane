@@ -74,6 +74,7 @@ class CandidateListView(CandidateListActionsMixin):
         service=None,
         deck_service: RecommendationDeckService | None = None,
         on_watched_added: Callable[[object], None] | None = None,
+        on_refill_needed: Callable[[dict], bool] | None = None,
     ) -> None:
         self._session = session
         self._service = service or session.service
@@ -81,6 +82,7 @@ class CandidateListView(CandidateListActionsMixin):
             pool_loader=self._load_pool_for_deck,
         )
         self._on_watched_added = on_watched_added
+        self._on_refill_needed = on_refill_needed
         self._data_language = get_persisted_data_language()
         self._all_candidates: list[dict] = []
         self._candidates: list[dict] = []
@@ -102,6 +104,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_load_scheduled = False
         self._poster_prefetch_busy = False
         self._poster_prefetch_failed = 0
+        self._refill_requested_deck_ids: set[str] = set()
 
         self._widget = QWidget()
         self._widget.setObjectName("candidateListRoot")
@@ -405,6 +408,40 @@ class CandidateListView(CandidateListActionsMixin):
         if self._deck is not None:
             self._update_deck_status()
 
+    def _present_recommendation_deck(self, deck: dict) -> None:
+        self._deck = deck
+        self._deck_dirty = False
+        self._all_candidates = list(deck.get("active") or [])[:30]
+        self._pool_unique_total = len(self._all_candidates)
+        self._detail_entries = {}
+        self._search_index = build_candidate_search_index(self._all_candidates)
+        self._update_deck_status()
+        self._apply_visible_candidates()
+        self._poster_prefetch.allow_failed_retries()
+        self._poster_prefetch.enqueue_candidates(
+            self._all_candidates,
+            data_language=self._data_language,
+        )
+        if not self._all_candidates:
+            self._clear_detail(show_filters_hint=False)
+
+    def _maybe_request_recommendation_refill(self) -> None:
+        deck = self._deck or {}
+        if deck.get("refill_needed") is not True or self._on_refill_needed is None:
+            return
+        deck_id = str(deck.get("deck_id") or "")
+        if deck_id and deck_id in self._refill_requested_deck_ids:
+            return
+        try:
+            self._on_refill_needed(self._deck_preferences())
+        except Exception:
+            logger.exception("recommendation refill request failed")
+            return
+        if deck_id:
+            self._refill_requested_deck_ids.add(deck_id)
+        if deck.get("underfilled_reason") in {"no_eligible_candidates", "active_underfilled", "reserve_exhausted"}:
+            self._deck_status_label.setText(tr("recommendations.state.replenishing"))
+
     def _load_recommendation_deck(self, *, force_new: bool) -> None:
         if not self._recommendations_active:
             self._deck_dirty = True
@@ -430,21 +467,8 @@ class CandidateListView(CandidateListActionsMixin):
         finally:
             self._new_deck_button.setEnabled(True)
 
-        self._deck = deck
-        self._deck_dirty = False
-        self._all_candidates = list(deck.get("active") or [])[:30]
-        self._pool_unique_total = len(self._all_candidates)
-        self._detail_entries = {}
-        self._search_index = build_candidate_search_index(self._all_candidates)
-        self._update_deck_status()
-        self._apply_visible_candidates()
-        self._poster_prefetch.allow_failed_retries()
-        self._poster_prefetch.enqueue_candidates(
-            self._all_candidates,
-            data_language=self._data_language,
-        )
-        if not self._all_candidates:
-            self._clear_detail(show_filters_hint=False)
+        self._present_recommendation_deck(deck)
+        self._maybe_request_recommendation_refill()
 
     def _on_new_deck_clicked(self) -> None:
         self._load_recommendation_deck(force_new=True)
@@ -467,20 +491,25 @@ class CandidateListView(CandidateListActionsMixin):
             self._deck_status_label.show()
             return
 
-        self._deck = updated
-        self._all_candidates = list(updated.get("active") or [])[:30]
-        self._pool_unique_total = len(self._all_candidates)
-        self._detail_entries.pop(candidate_detail_identity(candidate), None)
+        top_up = getattr(self._deck_service, "top_up_deck", None)
+        if updated.get("refill_needed") is True and callable(top_up):
+            try:
+                updated = top_up(
+                    str(updated["deck_id"]),
+                    datetime.now(timezone.utc),
+                )
+            except Exception:
+                logger.exception("local recommendation deck top-up failed")
         self._selected_candidate = None
         self._selected_identity = None
-        self._search_index = build_candidate_search_index(self._all_candidates)
-        self._apply_visible_candidates()
+        self._present_recommendation_deck(updated)
         if self._candidates:
             row = min(max(0, current_row), len(self._candidates) - 1)
             self._results_list.setCurrentIndex(self._model.index(row, 0))
         else:
             self._clear_detail(show_filters_hint=False)
         self._update_deck_status()
+        self._maybe_request_recommendation_refill()
         if self._candidates:
             self._deck_status_label.setText(tr(f"recommendations.action.done.{action}"))
         # TODO: add transactional undo when the shell supports actionable toast notifications.
@@ -623,7 +652,26 @@ class CandidateListView(CandidateListActionsMixin):
         self._poster_request_seq += 1
         self._deck_dirty = True
         if self._recommendations_active and not self._session.is_loading:
-            self._load_recommendation_deck(force_new=False)
+            top_up = getattr(self._deck_service, "top_up_deck", None)
+            deck = self._deck
+            if (
+                isinstance(deck, dict)
+                and dict(deck.get("preferences") or {}) == self._deck_preferences()
+                and callable(top_up)
+            ):
+                try:
+                    updated = top_up(
+                        str(deck["deck_id"]),
+                        datetime.now(timezone.utc),
+                    )
+                except Exception:
+                    logger.exception("recommendation deck refresh top-up failed")
+                    self._load_recommendation_deck(force_new=False)
+                else:
+                    self._present_recommendation_deck(updated)
+                    self._maybe_request_recommendation_refill()
+            else:
+                self._load_recommendation_deck(force_new=False)
 
     def _on_result_selected(self, current: QModelIndex, _previous: QModelIndex = QModelIndex()) -> None:
         started = perf_counter()

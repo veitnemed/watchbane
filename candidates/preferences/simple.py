@@ -22,7 +22,7 @@ ORIGIN_COUNTRIES = {
 MOOD_GENRE_GROUPS = {
     "any": [],
     "light": ["comedy"],
-    "dark": ["thriller", "crime"],
+    "dark": ["crime", "mystery", "thriller"],
     "dynamic": ["action_adventure"],
     "drama": ["drama"],
 }
@@ -57,6 +57,9 @@ class SimpleRecommendationPreferences:
 
     def to_candidate_filters(self, defaults: dict | None = None) -> dict:
         preferences = self.normalized()
+        genre_groups = list(MOOD_GENRE_GROUPS[preferences.mood])
+        if preferences.collection == "unusual":
+            genre_groups.extend(["mystery", "sci_fi_fantasy"])
         return {
             **dict(defaults or {}),
             "country": list(ORIGIN_COUNTRIES[preferences.origin]),
@@ -69,6 +72,8 @@ class SimpleRecommendationPreferences:
             "min_tmdb_votes": None,
             "_recommendation_collection": preferences.collection,
             "_recommendation_origin": preferences.origin,
+            "_recommendation_mood": preferences.mood,
+            "_recommendation_genre_groups": list(dict.fromkeys(genre_groups)),
         }
 
     def to_replenish_intent(
@@ -82,7 +87,7 @@ class SimpleRecommendationPreferences:
         release = preferences.collection if preferences.collection in {"new", "classic"} else "mixed"
         genre_groups = list(MOOD_GENRE_GROUPS[preferences.mood])
         if preferences.collection == "unusual":
-            genre_groups.extend(["mystery", "fantasy"])
+            genre_groups.extend(["mystery", "sci_fi_fantasy"])
         return FilterReplenishIntent(
             preset_id="manual",
             countries=list(ORIGIN_COUNTRIES[preferences.origin]),

@@ -99,6 +99,11 @@ def build_main_tabs(
     candidate_list_view = CandidateListView(
         candidate_session,
         on_watched_added=on_candidate_moved_to_watched,
+        on_refill_needed=getattr(
+            candidate_filters_view,
+            "request_recommendation_refill",
+            None,
+        ),
     )
     registry.register(ShellTabSpec("candidates", languages.tr("tabs.candidates"), candidate_list_view))
     registry.register(ShellTabSpec("watched", languages.tr("tabs.watched"), watched_tab_view))

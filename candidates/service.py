@@ -460,6 +460,9 @@ def replenish_candidate_pool_for_filters(
     candidates = list(result.get("candidates") or [])
     if not candidates:
         return result
+    if cancel_checker is not None and cancel_checker():
+        result.update({"ok": False, "cancelled": True, "candidates": []})
+        return result
 
     stats = tmdb_import.import_tmdb_candidates_to_common_pool(
         candidates,
