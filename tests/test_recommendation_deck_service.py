@@ -94,6 +94,24 @@ def test_user_states_and_recent_impressions_are_excluded(tmp_path) -> None:
     assert candidate_state_identity_key(recent) not in shown
 
 
+def test_recent_impressions_are_reused_when_fresh_pool_is_exhausted(tmp_path) -> None:
+    db_path = tmp_path / "deck.sqlite3"
+    pool = _pool(40)
+    record_impressions(
+        pool.values(),
+        deck_id="previous",
+        shown_at=(NOW - timedelta(days=2)).isoformat(timespec="seconds"),
+        path=db_path,
+    )
+
+    deck = _service(pool, db_path).build_deck({}, NOW, limit_active=30, reserve_size=70)
+
+    assert len(deck["active"]) == 30
+    assert len(deck["reserve"]) == 10
+    assert deck["recently_seen_reused"] == 40
+    assert deck["excluded"]["recently_seen"] == 40
+
+
 def test_apply_action_promotes_closest_quality_at_removed_position(tmp_path) -> None:
     service = _service(_pool(8), tmp_path / "deck.sqlite3")
     deck = service.build_deck({}, NOW, limit_active=3, reserve_size=4)

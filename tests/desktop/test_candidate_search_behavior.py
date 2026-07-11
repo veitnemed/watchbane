@@ -212,6 +212,7 @@ def _build_views(
     filters_view.widget.show()
     list_view.widget.show()
     list_view.on_tab_activated()
+    qtbot.waitUntil(lambda: list_view._deck is not None)
     return service, session, filters_view, list_view
 
 

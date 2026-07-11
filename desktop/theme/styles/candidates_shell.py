@@ -322,8 +322,8 @@ QFrame#candidateFilterSection {{
     border-radius: {px(10)}px;
 }}
 QFrame#candidateSimplePreferencesSection {{
-    background-color: {COLOR_MOOD_SURFACE};
-    border: 1px solid {COLOR_MOOD_BORDER};
+    background-color: {COLOR_CARD_ELEVATED};
+    border: 1px solid {COLOR_BORDER_HOVER};
     border-radius: {px(10)}px;
 }}
 QLabel#candidateSimplePreferencesLead {{

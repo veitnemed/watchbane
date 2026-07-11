@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 
 from desktop.candidates.presenters import candidate_detail_identity
-from desktop.candidates.workers.poster_worker import CandidatePosterDownloadWorker
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +15,7 @@ class CandidateListActionsMixin:
     # Expected CandidateListView attributes:
     # _show_status, _list_widget/_results_list, _selected_candidate, _selected_identity,
     # _on_watched_added callbacks, _session/_service state, _detail_entries,
-    # _detail_card, _model, _widget, _poster_request_seq, _poster_worker.
+    # _detail_card, _model, _widget, _poster_request_seq, _poster_prefetch.
 
     def _candidate_rank(self, candidate: dict) -> int | None:
         candidates = getattr(self, "_candidates", None) or []
@@ -93,22 +92,10 @@ class CandidateListActionsMixin:
         self._session.remove_candidate(candidate)
 
     def _start_poster_download(self, poster_url: str, identity: str, request_seq: int) -> None:
-        worker = CandidatePosterDownloadWorker(poster_url, parent=self._widget)
-        worker.finished_with_path.connect(
-            lambda local_path, seq=request_seq, ident=identity: self._on_poster_download_finished(
-                seq,
-                ident,
-                local_path,
-            )
-        )
-        worker.finished.connect(worker.deleteLater)
-        self._poster_worker = worker
-        worker.start()
+        del request_seq
+        self._poster_prefetch.enqueue(identity, poster_url, priority=True)
 
-    def _on_poster_download_finished(self, request_seq: int, identity: str, local_path: str) -> None:
-        if request_seq != self._poster_request_seq:
-            return
-
+    def _on_poster_prefetch_ready(self, identity: str, local_path: str) -> None:
         entry = self._detail_entries.get(identity)
         if entry is not None:
             entry_key, movie, card = entry
@@ -117,6 +104,7 @@ class CandidateListActionsMixin:
             updated_card["poster_src"] = local_path
             self._detail_entries[identity] = (entry_key, movie, updated_card)
 
-        self._detail_card.apply_local_poster_path(local_path)
         self._model.update_poster_path(identity, local_path)
         self._results_list.viewport().update()
+        if identity == self._selected_identity:
+            self._detail_card.apply_local_poster_path(local_path)

@@ -116,7 +116,8 @@ class DetailCard(DetailCardPosterMixin):
     def _sync_poster_column_minimum_height(self) -> None:
         overview_layout = self._overview_frame.layout()
         if self._overview_frame.isVisible() and overview_layout is not None:
-            overview_height = overview_layout.heightForWidth(self._profile.detail_poster_width)
+            overview_width = self._overview_frame.width() or self._profile.detail_poster_width
+            overview_height = overview_layout.heightForWidth(overview_width)
             if overview_height < 0:
                 overview_height = overview_layout.sizeHint().height()
             self._overview_frame.setMinimumHeight(max(0, overview_height))
@@ -214,6 +215,7 @@ class DetailCard(DetailCardPosterMixin):
 
         self._main_info_expanded = False
         self._set_main_info_items(build_main_info_items(card))
+        self._apply_media_theme_properties()
 
         if has_overview_text(card):
             self._overview_label.setText(get_overview_display(card))
@@ -283,6 +285,8 @@ class DetailCard(DetailCardPosterMixin):
             if widget is None or id(widget) in seen:
                 continue
             seen.add(id(widget))
+            if widget.property("mediaType") == self._media_type_theme:
+                continue
             widget.setProperty("mediaType", self._media_type_theme)
             widget.style().unpolish(widget)
             widget.style().polish(widget)
@@ -326,7 +330,6 @@ class DetailCard(DetailCardPosterMixin):
         self._resize_user_score_badge()
         self._user_score_badge.show()
         self._user_score_badge.raise_()
-        self._apply_media_theme_properties()
 
     def _resize_user_score_badge(self) -> None:
         badge_width = max(
@@ -361,14 +364,16 @@ class DetailCard(DetailCardPosterMixin):
         from PyQt6.QtCore import Qt
         from PyQt6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
         from desktop.theme import FILM_TEXT_MUTED, TRANSPARENT_STYLE
-        from desktop.theme.scaling import get_ui_scale
 
         clear_layout(grid)
         compact_row_height = min(
             self._profile.detail_main_info_row_height,
             self._profile.detail_main_info_compact_row_height,
         )
-        stacked_info_rows = get_ui_scale() >= 1.25 and self._profile.include_bottom_stretch
+        stacked_info_rows = (
+            detail_profiles.use_stacked_detail_info_rows()
+            and self._profile.include_bottom_stretch
+        )
         icon_size = max(16, min(22, compact_row_height // 2))
         for row, item in enumerate(items):
             row_widget = QWidget()

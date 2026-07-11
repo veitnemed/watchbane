@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
+
 from desktop.i18n import tr
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.posters import resolve_local_poster_path
@@ -21,7 +23,8 @@ from desktop.theme import (
 )
 from desktop.theme.scaling import list_px
 
-_thumb_pixmap_cache: dict[str, object] = {}
+LIST_THUMB_PIXMAP_CACHE_LIMIT = 192
+_thumb_pixmap_cache: OrderedDict[str, object] = OrderedDict()
 
 
 def clear_list_thumb_pixmap_cache(poster_path: str | None = None) -> None:
@@ -67,10 +70,13 @@ def _load_list_thumb_pixmap(poster_path: str | None):
         return None
     cached = _thumb_pixmap_cache.get(poster_path)
     if cached is not None:
+        _thumb_pixmap_cache.move_to_end(poster_path)
         return cached if cached is not False else None
     pixmap = QPixmap(poster_path)
     if pixmap.isNull():
         _thumb_pixmap_cache[poster_path] = False
+        while len(_thumb_pixmap_cache) > LIST_THUMB_PIXMAP_CACHE_LIMIT:
+            _thumb_pixmap_cache.popitem(last=False)
         return None
     scaled = pixmap.scaled(
         detail_profiles.LIST_THUMB_WIDTH,
@@ -79,6 +85,8 @@ def _load_list_thumb_pixmap(poster_path: str | None):
         Qt.TransformationMode.SmoothTransformation,
     )
     _thumb_pixmap_cache[poster_path] = scaled
+    while len(_thumb_pixmap_cache) > LIST_THUMB_PIXMAP_CACHE_LIMIT:
+        _thumb_pixmap_cache.popitem(last=False)
     return scaled
 
 

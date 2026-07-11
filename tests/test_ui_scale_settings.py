@@ -219,6 +219,35 @@ def test_save_app_settings_preserves_non_ui_settings(monkeypatch, tmp_path) -> N
     assert payload["theme"] == "dark"
     assert payload["ui_scale"] == 1.10
     assert payload["interface_language"] == "en"
+
+
+def test_app_settings_reads_are_cached_and_save_invalidates(monkeypatch) -> None:
+    import desktop.settings.app_settings as settings_module
+
+    reads = []
+    payload = {"interface_language": "ru", "data_language": "ru"}
+    settings_module.invalidate_app_settings_cache()
+    monkeypatch.setattr(
+        settings_module.app_settings_store,
+        "load_sqlite_settings_dict",
+        lambda: reads.append(dict(payload)) or dict(payload),
+    )
+    monkeypatch.setattr(
+        settings_module.app_settings_store,
+        "save_sqlite_settings_dict",
+        lambda updated: payload.update(updated),
+    )
+
+    assert settings_module.load_app_settings().interface_language == "ru"
+    assert settings_module.load_app_settings().interface_language == "ru"
+    assert len(reads) == 1
+
+    settings_module.save_app_settings(
+        settings_module.AppSettings(interface_language="en", data_language="ru")
+    )
+
+    assert settings_module.load_app_settings().interface_language == "en"
+    assert len(reads) == 2
     assert payload["data_language"] == "ru"
 
 
@@ -791,7 +820,10 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
     preview_profile = profiles.ADD_TITLE_PREVIEW_CARD_PROFILE
     assert watched_profile.detail_poster_width == profiles.detail_poster_px(layout.DETAIL_POSTER_WIDTH)
     assert watched_profile.detail_poster_height == profiles.detail_poster_px(layout.DETAIL_POSTER_HEIGHT)
-    assert watched_profile.detail_info_min_width == scaling.detail_px(layout.DETAIL_INFO_MIN_WIDTH)
+    assert watched_profile.detail_info_min_width == profiles.compact_detail_px(
+        layout.DETAIL_INFO_MIN_WIDTH,
+        280,
+    )
     assert watched_profile.detail_poster_width >= 240
     assert watched_profile.detail_poster_height >= 360
     assert candidate_profile.detail_poster_width == watched_profile.detail_poster_width

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QTabWidget, QWidget
 
 from desktop.candidates.filters_view import CandidateFiltersView
@@ -117,6 +118,7 @@ def build_main_tabs(
     registry.register(ShellTabSpec("settings", languages.tr("tabs.settings"), settings_tab_view))
 
     tabs.currentChanged.connect(registry.on_current_changed)
+    QTimer.singleShot(0, lambda: registry.on_current_changed(tabs.currentIndex()))
 
     context = AppTabsContext(
         watched_tab_view=watched_tab_view,

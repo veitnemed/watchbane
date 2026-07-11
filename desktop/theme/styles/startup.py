@@ -16,6 +16,14 @@ QFrame#startupGateCard {{
     border-radius: {px(RADIUS_CARD)}px;
     max-width: {px(660)}px;
 }}
+QLabel#startupGateTitle,
+QLabel#startupGateSubtitle,
+QLabel#startupGateTokenLabel,
+QLabel#startupGateHint,
+QLabel#startupGateError {{
+    background: transparent;
+    border: none;
+}}
 QLabel#startupGateTitle {{
     color: {COLOR_TEXT};
     font-size: {font_px(FONT_DIALOG_TITLE)}px;
@@ -35,6 +43,12 @@ QLabel#startupGateNetworkStatus {{
 QLabel#startupGateTokenLabel {{
     color: {COLOR_TEXT};
     font-size: {font_px(FONT_BASE)}px;
+}}
+QLabel#startupGateHint {{
+    color: {COLOR_TEXT_MUTED};
+}}
+QLabel#startupGateError {{
+    color: {COLOR_TEXT_SECONDARY};
 }}
 QLineEdit#startupTokenInput {{
     background-color: {COLOR_SURFACE};

@@ -3752,6 +3752,7 @@ def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
     assert content is not None
     assert toggle is not None
     assert toggle.isHidden() is False
+    assert toggle.minimumWidth() >= toggle.fontMetrics().horizontalAdvance(toggle.text())
     assert content.width() <= DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width
     assert content.width() >= content.minimumSizeHint().width()
 
@@ -4526,6 +4527,25 @@ def test_detail_card_movie_mode_sets_film_theme_properties(qapp) -> None:
     detail.show_empty()
 
     assert media_badge.isHidden() is True
+
+
+def test_high_scale_detail_overview_follows_main_content(monkeypatch, qapp) -> None:
+    from PyQt6.QtWidgets import QWidget
+
+    import desktop.shared.detail.card_layout as card_layout
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+
+    monkeypatch.setattr(card_layout, "use_stacked_detail_layout", lambda: True)
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    overview = detail.widget.findChild(QWidget, "detailOverviewSection")
+    top_row = detail.widget.findChild(QWidget, "detailTopRow")
+    poster_column = detail.widget.findChild(QWidget, "detailPosterColumn")
+
+    assert overview is not None and top_row is not None and poster_column is not None
+    assert overview.parentWidget() is top_row
+    assert overview.parentWidget() is not poster_column
+    assert overview.minimumWidth() == 0
+    assert overview.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
 
 
 def test_detail_card_movie_style_uses_film_tokens() -> None:
@@ -6122,6 +6142,7 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
         parent,
         on_status_message=lambda _message, _timeout_ms: None,
     )
+    qapp.processEvents()
 
     assert tabs.count() == 4
     assert [tabs.tabText(index) for index in range(tabs.count())] == [
@@ -6135,11 +6156,12 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     assert len(registry._specs) == len(set(registry._specs))
     assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
     assert all(hasattr(spec.view, "widget") for spec in registry._specs.values())
+    assert registry._specs["candidates"].view.activation_count == 1
 
     for index in range(tabs.count()):
         registry.on_current_changed(index)
 
-    assert registry._specs["candidates"].view.activation_count == 1
+    assert registry._specs["candidates"].view.activation_count == 2
 
 
 def test_main_tab_registry_focus_activates_current_view(qapp) -> None:
@@ -6678,118 +6700,23 @@ def test_watched_tab_selection_resets_detail_scroll() -> None:
     assert bar.value == 0
 
 
-def test_watched_tab_selection_lazily_syncs_current_language_poster(monkeypatch) -> None:
+def test_watched_tab_selection_is_local_only(monkeypatch) -> None:
     from desktop.watched.tab import WatchedTabView
 
     movie = {"main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5}}
-    item_data = {}
-
-    class FakeItem:
-        def setData(self, role, value):
-            item_data["data"] = (role, value)
-
-        def setToolTip(self, value):
-            item_data["tooltip"] = value
-
-    class FakeListWidget:
-        def count(self):
-            return 1
-
-        def item(self, row):
-            return FakeItem() if row == 0 else None
-
-        def viewport(self):
-            return self
-
-        def update(self):
-            item_data["updated"] = True
-
     view = WatchedTabView.__new__(WatchedTabView)
     view._data_language = "en"
     view._visible_entries = [("Naruto", movie, {"title": "Naruto", "poster_src": "ru.jpg"})]
     view._entries = list(view._visible_entries)
-    view._list_widget = FakeListWidget()
-    calls = {}
-
-    def fake_sync(movie_arg, *, data_language="ru"):
-        calls["sync"] = (movie_arg, data_language)
-        return {"updated": True}
-
-    def fake_prepare(movie_arg, *, data_language="ru"):
-        calls["prepare"] = (movie_arg, data_language)
-        return {"title": "Naruto", "poster_src": "en.jpg"}
-
-    monkeypatch.setattr("desktop.watched.tab.sync_poster_for_display", fake_sync)
-    monkeypatch.setattr("desktop.watched.tab.prepare_card_for_display", fake_prepare)
+    monkeypatch.setattr(
+        "dataset.read_models.watched.sync_poster_for_display",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("network sync in selection")),
+    )
 
     updated = view._entry_with_current_language_poster(0)
 
-    assert calls["sync"] == (movie, "en")
-    assert calls["prepare"] == (movie, "en")
-    assert updated[2]["poster_src"] == "en.jpg"
-    assert view._visible_entries[0] == updated
-    assert view._entries[0] == updated
-    assert item_data["data"][1] == updated
-    assert item_data["updated"] is True
-
-
-def test_watched_tab_selection_clears_replaced_poster_pixmap_cache(monkeypatch) -> None:
-    from desktop.watched.tab import WatchedTabView
-
-    movie = {"main_info": {"title": "Naruto", "year": 2002, "user_score": 8.5}}
-
-    class FakeItem:
-        def setData(self, _role, _value):
-            pass
-
-        def setToolTip(self, _value):
-            pass
-
-    class FakeListWidget:
-        def count(self):
-            return 1
-
-        def item(self, row):
-            return FakeItem() if row == 0 else None
-
-        def viewport(self):
-            return self
-
-        def update(self):
-            pass
-
-    view = WatchedTabView.__new__(WatchedTabView)
-    view._data_language = "en"
-    view._visible_entries = [("Naruto", movie, {"title": "Naruto", "poster_src": "ru.jpg"})]
-    view._entries = list(view._visible_entries)
-    view._list_widget = FakeListWidget()
-    cleared = []
-
-    monkeypatch.setattr(
-        "desktop.watched.tab.sync_poster_for_display",
-        lambda movie_arg, *, data_language="ru": {
-            "updated": True,
-            "download": {"local_path": "poster.jpg"},
-            "entry": {"local_path": "poster.jpg"},
-        },
-    )
-    monkeypatch.setattr(
-        "desktop.watched.tab.prepare_card_for_display",
-        lambda movie_arg, *, data_language="ru": {"title": "Naruto", "poster_src": "poster.jpg"},
-    )
-    monkeypatch.setattr(
-        "desktop.watched.tab.clear_detail_poster_source_cache",
-        lambda path=None: cleared.append(("detail", path)),
-    )
-    monkeypatch.setattr(
-        "desktop.watched.tab.clear_list_thumb_pixmap_cache",
-        lambda path=None: cleared.append(("list", path)),
-    )
-
-    view._entry_with_current_language_poster(0)
-
-    assert ("detail", "poster.jpg") in cleared
-    assert ("list", "poster.jpg") in cleared
+    assert updated is view._visible_entries[0]
+    assert updated[2]["poster_src"] == "ru.jpg"
 
 
 def test_poster_pixmap_cache_clear_helpers() -> None:
@@ -6803,6 +6730,44 @@ def test_poster_pixmap_cache_clear_helpers() -> None:
 
     assert "poster.jpg" not in card_poster._detail_poster_source_cache
     assert "poster.jpg" not in list_delegate._thumb_pixmap_cache
+
+
+def test_poster_pixmap_caches_are_bounded(qapp, tmp_path) -> None:
+    from PyQt6.QtGui import QPixmap
+
+    from desktop.shared.detail import card_poster, list_delegate
+
+    card_poster.clear_detail_poster_source_cache()
+    list_delegate.clear_list_thumb_pixmap_cache()
+    total = max(
+        card_poster.DETAIL_POSTER_SOURCE_CACHE_LIMIT,
+        list_delegate.LIST_THUMB_PIXMAP_CACHE_LIMIT,
+    ) + 3
+    for index in range(total):
+        path = tmp_path / f"poster-{index}.png"
+        pixmap = QPixmap(4, 6)
+        assert pixmap.save(str(path))
+        card_poster.load_detail_poster_source_pixmap(str(path))
+        list_delegate._load_list_thumb_pixmap(str(path))
+
+    assert len(card_poster._detail_poster_source_cache) <= card_poster.DETAIL_POSTER_SOURCE_CACHE_LIMIT
+    assert len(list_delegate._thumb_pixmap_cache) <= list_delegate.LIST_THUMB_PIXMAP_CACHE_LIMIT
+
+
+def test_startup_gate_labels_and_simple_preferences_have_explicit_surfaces() -> None:
+    from desktop.theme.styles.candidates_shell import build_candidates_shell_style
+    from desktop.theme.styles.startup import build_startup_gate_style
+
+    startup_style = build_startup_gate_style()
+    candidate_style = build_candidates_shell_style()
+
+    assert "QLabel#startupGateHint" in startup_style
+    assert "QLabel#startupGateError" in startup_style
+    assert "background: transparent" in startup_style
+    simple_section = candidate_style.split("QFrame#candidateSimplePreferencesSection", 1)[1].split("}", 1)[0]
+    assert "COLOR_MOOD" not in simple_section
+    assert "background-color: #142238" in simple_section
+    assert "border: 1px solid #2D4562" in simple_section
 
 
 def test_candidate_list_view_uses_list_search_module() -> None:
@@ -6914,7 +6879,8 @@ def test_candidate_list_view_starts_async_poster_download() -> None:
     assert "CandidatePosterDownloadWorker" not in view_source
     assert "candidate_poster_url_for_download" in view_source
     assert "_start_poster_download" in view_source
-    assert "CandidatePosterDownloadWorker" in actions_source
+    assert "CandidatePosterDownloadWorker" not in actions_source
+    assert "_poster_prefetch.enqueue" in actions_source
     assert "apply_local_poster_path" in actions_source
 
 

@@ -229,7 +229,11 @@ class RecommendationDeckService:
             for row in impression_repository.get_recently_seen(cutoff, path=self._db_path)
         }
 
-    def _eligible_candidates(self, preferences: dict, now: datetime) -> tuple[list[dict], dict[str, int]]:
+    def _eligible_candidates(
+        self,
+        preferences: dict,
+        now: datetime,
+    ) -> tuple[list[dict], list[dict], dict[str, int]]:
         pool = self._pool_loader()
         source = list(pool.values()) if isinstance(pool, dict) else list(pool or [])
         watched = self._watched_identities()
@@ -240,6 +244,7 @@ class RecommendationDeckService:
         criteria["hide_hidden"] = False
         seen: set[tuple[str, str]] = set()
         eligible: list[dict] = []
+        recent_fallback: list[dict] = []
         counters = {
             "pool_total": len(source),
             "watched": 0,
@@ -265,9 +270,6 @@ class RecommendationDeckService:
             if any(key in excluded_actions for key in candidate_state_identity_keys(candidate)):
                 counters["actioned"] += 1
                 continue
-            if identity in recently_seen:
-                counters["recently_seen"] += 1
-                continue
             year = _number(candidate.get("year"))
             if year is not None and int(year) > now.year:
                 counters["future_release"] += 1
@@ -278,8 +280,12 @@ class RecommendationDeckService:
             if candidate_matches(candidate, criteria) is False:
                 counters["preferences"] += 1
                 continue
+            if identity in recently_seen:
+                counters["recently_seen"] += 1
+                recent_fallback.append(candidate)
+                continue
             eligible.append(candidate)
-        return eligible, counters
+        return eligible, recent_fallback, counters
 
     def build_deck(
         self,
@@ -292,8 +298,13 @@ class RecommendationDeckService:
         current = _as_utc(now)
         active_limit = max(0, int(limit_active))
         reserve_limit = max(0, int(reserve_size))
-        eligible, excluded = self._eligible_candidates(dict(preferences or {}), current)
-        ranked = _rank_candidates(eligible, current.date().isoformat())
+        eligible, recent_fallback, excluded = self._eligible_candidates(
+            dict(preferences or {}),
+            current,
+        )
+        reused_recent = len(eligible) == 0 and len(recent_fallback) > 0
+        selection_pool = recent_fallback if reused_recent else eligible
+        ranked = _rank_candidates(selection_pool, current.date().isoformat())
         unknown_limit = _unknown_rating_limit(dict(preferences or {}), active_limit)
         active, remaining = _select_active_with_unknown_quota(
             ranked,
@@ -322,6 +333,7 @@ class RecommendationDeckService:
             "refill_needed": len(reserve) < self._refill_threshold,
             "underfilled_reason": underfilled_reason,
             "eligible_count": len(eligible),
+            "recently_seen_reused": len(active) + len(reserve) if reused_recent else 0,
             "excluded": excluded,
         }
         self._decks[deck_id] = deck

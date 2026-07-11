@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 import math
 import os
 import re
 
 from config import app_settings_store
+from config import constant
 
 APP_UI_SCALE_DEFAULT = 1.0
 APP_UI_SCALE_MIN = 0.50
@@ -106,9 +108,20 @@ def _settings_from_payload(payload) -> AppSettings:
     )
 
 
-def load_app_settings() -> AppSettings:
-    """Load persisted desktop settings, falling back to defaults on invalid input."""
+@lru_cache(maxsize=8)
+def _load_app_settings_for_data_root(_data_root: str) -> AppSettings:
     return _settings_from_payload(app_settings_store.load_sqlite_settings_dict())
+
+
+def invalidate_app_settings_cache() -> None:
+    """Forget process-local settings after a write or runtime profile change."""
+    _load_app_settings_for_data_root.cache_clear()
+
+
+def load_app_settings() -> AppSettings:
+    """Load persisted settings once per active runtime data root."""
+    data_root = os.path.normcase(os.path.abspath(str(constant.APP_DATA_DIR)))
+    return _load_app_settings_for_data_root(data_root)
 
 
 def save_app_settings(settings: AppSettings) -> None:
@@ -121,6 +134,7 @@ def save_app_settings(settings: AppSettings) -> None:
         fts_search_enabled=normalize_fts_search_enabled(settings.fts_search_enabled),
     )
     app_settings_store.save_sqlite_settings_dict(asdict(normalized))
+    invalidate_app_settings_cache()
 
 
 def get_persisted_ui_scale() -> float:

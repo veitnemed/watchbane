@@ -20,9 +20,6 @@ from desktop.startup.worker import TmdbNetworkProbeWorker, TmdbStartupValidateWo
 from desktop.theme.scaling import font_px, scale_px
 from desktop.theme.styles.startup import build_startup_gate_style
 from desktop.theme.tokens import (
-    COLOR_TEXT,
-    COLOR_TEXT_MUTED,
-    COLOR_TEXT_SECONDARY,
     FONT_BASE,
     FONT_DIALOG_TITLE,
     FONT_FAMILY,
@@ -109,7 +106,6 @@ class TmdbStartupGateView(QWidget):
         hint.setMinimumHeight(scale_px(52))
         hint.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         hint.setFont(QFont(FONT_FAMILY, font_px(FONT_SMALL)))
-        hint.setStyleSheet(f"color: {COLOR_TEXT_MUTED};")
 
         self._error_label = QLabel("")
         self._error_label.setObjectName("startupGateError")
@@ -117,7 +113,6 @@ class TmdbStartupGateView(QWidget):
         self._error_label.setMinimumHeight(scale_px(34))
         self._error_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._error_label.setFont(QFont(FONT_FAMILY, font_px(FONT_SMALL)))
-        self._error_label.setStyleSheet(f"color: {COLOR_TEXT_SECONDARY};")
         self._error_label.hide()
 
         button_row = QHBoxLayout()

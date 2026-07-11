@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
+
 from desktop.i18n import tr
 from desktop.shared.detail.posters import get_poster_cache_directory, open_path_in_shell
 from desktop.theme import build_poster_image_style, build_poster_placeholder_style
 
-_detail_poster_source_cache: dict[str, object] = {}
+DETAIL_POSTER_SOURCE_CACHE_LIMIT = 16
+_detail_poster_source_cache: OrderedDict[str, object] = OrderedDict()
 
 
 def clear_detail_poster_source_cache(poster_path: str | None = None) -> None:
@@ -22,12 +25,17 @@ def load_detail_poster_source_pixmap(poster_path: str):
 
     cached = _detail_poster_source_cache.get(poster_path)
     if cached is not None:
+        _detail_poster_source_cache.move_to_end(poster_path)
         return cached if cached is not False else None
     pixmap = QPixmap(poster_path)
     if pixmap.isNull():
         _detail_poster_source_cache[poster_path] = False
+        while len(_detail_poster_source_cache) > DETAIL_POSTER_SOURCE_CACHE_LIMIT:
+            _detail_poster_source_cache.popitem(last=False)
         return None
     _detail_poster_source_cache[poster_path] = pixmap
+    while len(_detail_poster_source_cache) > DETAIL_POSTER_SOURCE_CACHE_LIMIT:
+        _detail_poster_source_cache.popitem(last=False)
     return pixmap
 
 

@@ -189,6 +189,11 @@ def _preview_poster_path(poster_url: str) -> Path:
     return PREVIEW_POSTER_DIR / f"{digest}.jpg"
 
 
+def preview_poster_path_for_url(poster_url: str) -> Path:
+    """Return the deterministic preview-cache destination without downloading."""
+    return _preview_poster_path(str(poster_url or "").strip())
+
+
 def local_preview_poster_path_if_cached(poster_url: str) -> str | None:
     """Return preview-cache path when the file already exists. Never downloads."""
     url = str(poster_url or "").strip()

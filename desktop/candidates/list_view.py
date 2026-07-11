@@ -7,7 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from time import perf_counter
 
-from PyQt6.QtCore import QModelIndex, Qt
+from PyQt6.QtCore import QModelIndex, QTimer, Qt
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -29,6 +29,7 @@ from candidates.scoring.rating_confidence import has_unknown_rating
 from desktop.candidates.list_actions import CandidateListActionsMixin
 from desktop.candidates.list_delegate import build_candidate_list_item_delegate
 from desktop.candidates.list_model import CandidateListModel
+from desktop.candidates.poster_prefetch import CandidatePosterPrefetchController
 from desktop.candidates.presenters import (
     build_candidate_readonly_detail_entry,
     build_candidate_search_index,
@@ -89,18 +90,25 @@ class CandidateListView(CandidateListActionsMixin):
         self._pool_unique_total = 0
         self._detail_entries: dict[str, tuple] = {}
         self._poster_request_seq = 0
-        self._poster_worker = None
         self._localized_poster_workers: list[CandidateLocalizedPosterWorker] = []
         self._localized_poster_inflight: set[str] = set()
+        self._pending_localized_poster: tuple[dict, str, int] | None = None
         self._model = CandidateListModel(parent=None, data_language=self._data_language)
         self._delegate = None
         self._last_logged_search_signature: tuple | None = None
         self._deck: dict | None = None
         self._recommendations_active = False
         self._deck_dirty = True
+        self._deck_load_scheduled = False
+        self._poster_prefetch_busy = False
+        self._poster_prefetch_failed = 0
 
         self._widget = QWidget()
         self._widget.setObjectName("candidateListRoot")
+        self._poster_prefetch = CandidatePosterPrefetchController(parent=self._widget)
+        self._poster_prefetch.poster_ready.connect(self._on_poster_prefetch_ready)
+        self._poster_prefetch.busy_changed.connect(self._on_poster_prefetch_busy_changed)
+        self._poster_prefetch.batch_finished.connect(self._on_poster_prefetch_batch_finished)
         root_layout = QVBoxLayout(self._widget)
         root_layout.setContentsMargins(
             CANDIDATE_ROOT_MARGIN_PX,
@@ -244,9 +252,15 @@ class CandidateListView(CandidateListActionsMixin):
             self._watchlist_action_button,
             self._hidden_action_button,
         )
-        for column, button in enumerate(action_buttons):
-            action_buttons_layout.addWidget(button, 0, column)
-            action_buttons_layout.setColumnStretch(column, 1)
+        if detail_profiles.use_compact_detail_content():
+            for index, button in enumerate(action_buttons[:2]):
+                action_buttons_layout.addWidget(button, 0, index)
+                action_buttons_layout.setColumnStretch(index, 1)
+            action_buttons_layout.addWidget(action_buttons[2], 1, 0, 1, 2)
+        else:
+            for column, button in enumerate(action_buttons):
+                action_buttons_layout.addWidget(button, 0, column)
+                action_buttons_layout.setColumnStretch(column, 1)
         action_layout.addLayout(action_buttons_layout)
         self._detail_card.add_main_info_footer(self._action_panel)
         self._set_action_panel_enabled(False)
@@ -263,14 +277,24 @@ class CandidateListView(CandidateListActionsMixin):
     def on_tab_activated(self) -> None:
         self._refresh_data_language()
         self._recommendations_active = True
-        self._load_recommendation_deck(force_new=False)
+        if self._deck_load_scheduled:
+            return
+        self._deck_load_scheduled = True
+        self._deck_status_label.setText(tr("recommendations.state.loading"))
+        self._deck_status_label.show()
+        QTimer.singleShot(25, self._run_scheduled_deck_load)
+
+    def _run_scheduled_deck_load(self) -> None:
+        self._deck_load_scheduled = False
+        if self._recommendations_active:
+            self._load_recommendation_deck(force_new=False)
 
     @property
     def widget(self) -> QWidget:
         return self._widget
 
     def _load_pool_for_deck(self) -> dict:
-        view = self._service.get_search_overview_view()
+        view = self._session.overview()
         candidates = (view.get("candidates") or []) if isinstance(view, dict) else []
         return {
             candidate_detail_identity(candidate): candidate
@@ -355,10 +379,31 @@ class CandidateListView(CandidateListActionsMixin):
                 text = tr("recommendations.state.empty")
         elif self._session.last_error:
             text = tr("recommendations.state.local_available", active=active_count)
+        elif self._poster_prefetch_busy:
+            text = tr("recommendations.feed.loading_posters", count=active_count)
+        elif self._poster_prefetch_failed > 0:
+            text = tr("recommendations.feed.posters_unavailable", count=active_count)
         else:
             text = tr("recommendations.feed.count", count=active_count)
         self._deck_status_label.setText(text)
+        self._deck_status_label.setToolTip(
+            tr("recommendations.feed.posters_unavailable_hint")
+            if self._poster_prefetch_failed > 0 and not self._poster_prefetch_busy
+            else ""
+        )
         self._deck_status_label.show()
+
+    def _on_poster_prefetch_busy_changed(self, busy: bool) -> None:
+        self._poster_prefetch_busy = bool(busy)
+        if busy:
+            self._poster_prefetch_failed = 0
+        if self._deck is not None:
+            self._update_deck_status()
+
+    def _on_poster_prefetch_batch_finished(self, _succeeded: int, failed: int) -> None:
+        self._poster_prefetch_failed = max(0, int(failed))
+        if self._deck is not None:
+            self._update_deck_status()
 
     def _load_recommendation_deck(self, *, force_new: bool) -> None:
         if not self._recommendations_active:
@@ -393,6 +438,11 @@ class CandidateListView(CandidateListActionsMixin):
         self._search_index = build_candidate_search_index(self._all_candidates)
         self._update_deck_status()
         self._apply_visible_candidates()
+        self._poster_prefetch.allow_failed_retries()
+        self._poster_prefetch.enqueue_candidates(
+            self._all_candidates,
+            data_language=self._data_language,
+        )
         if not self._all_candidates:
             self._clear_detail(show_filters_hint=False)
 
@@ -646,6 +696,9 @@ class CandidateListView(CandidateListActionsMixin):
         worker_key = f"{self._data_language}:{identity}"
         if worker_key in self._localized_poster_inflight:
             return
+        if any(worker.isRunning() for worker in self._localized_poster_workers):
+            self._pending_localized_poster = (dict(candidate), identity, request_seq)
+            return
         self._localized_poster_inflight.add(worker_key)
 
         worker = CandidateLocalizedPosterWorker(identity, candidate, self._data_language, parent=self._widget)
@@ -672,6 +725,11 @@ class CandidateListView(CandidateListActionsMixin):
         ]
         if worker_key:
             self._localized_poster_inflight.discard(worker_key)
+        pending = getattr(self, "_pending_localized_poster", None)
+        self._pending_localized_poster = None
+        if pending is not None and pending[1] == self._selected_identity:
+            candidate, identity, request_seq = pending
+            self._start_localized_poster_enrichment(candidate, identity, request_seq)
 
     def _replace_candidate_by_identity(self, identity: str, updated_candidate: dict) -> dict | None:
         replacement = None

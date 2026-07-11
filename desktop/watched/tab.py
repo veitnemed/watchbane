@@ -11,8 +11,6 @@ from candidates import title_state_service
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language
 from desktop.shared.detail import DetailCard
-from desktop.shared.detail.card_poster import clear_detail_poster_source_cache
-from desktop.shared.detail.list_delegate import clear_list_thumb_pixmap_cache
 from desktop.shared.widgets.list_search import resolve_selection_row
 from desktop.theme.scaling import layout_px
 from desktop.theme.shell_layout import (
@@ -33,7 +31,6 @@ from desktop.watched.model import (
     format_watched_list_status,
     load_watched_entries,
     prepare_card_for_display,
-    sync_poster_for_display,
 )
 from desktop.watched.sidebar import build_watched_sidebar
 from desktop.watched.library_states import (
@@ -461,60 +458,9 @@ class WatchedTabView(WatchedTabActionsMixin):
         self._show_detail_entry(self._entry_with_current_language_poster(row))
 
     def _entry_with_current_language_poster(self, row: int) -> WatchedEntry:
-        entry = self._visible_entries[row]
-        if getattr(self, "_library_section", SECTION_WATCHED) != SECTION_WATCHED:
-            return entry
-        key, movie, _card = entry
-        try:
-            result = sync_poster_for_display(movie, data_language=self._data_language)
-        except Exception:
-            return entry
-
-        if result.get("updated") is not True:
-            return entry
-
-        self._clear_replaced_poster_pixmap_cache(result)
-        updated_entry = (
-            key,
-            movie,
-            prepare_card_for_display(movie, data_language=self._data_language),
-        )
-        self._visible_entries[row] = updated_entry
-        self._update_list_item_entry(row, updated_entry)
-        for index, existing in enumerate(self._entries):
-            if existing[0] == key:
-                self._entries[index] = updated_entry
-                break
-        for index, existing in enumerate(getattr(self, "_watched_entries", [])):
-            if existing[0] == key:
-                self._watched_entries[index] = updated_entry
-                break
-        return updated_entry
-
-    def _update_list_item_entry(self, row: int, entry: WatchedEntry) -> None:
-        if row < 0 or row >= self._list_widget.count():
-            return
-        item = self._list_widget.item(row)
-        if item is None:
-            return
-        item.setData(Qt.ItemDataRole.UserRole, entry)
-        item.setToolTip(format_list_label(entry[2]))
-        self._list_widget.viewport().update()
-
-    def _clear_replaced_poster_pixmap_cache(self, result: dict) -> None:
-        paths = []
-        download = result.get("download")
-        if isinstance(download, dict):
-            paths.append(download.get("local_path"))
-        entry = result.get("entry")
-        if isinstance(entry, dict):
-            paths.append(entry.get("local_path"))
-
-        for path in paths:
-            if path in (None, ""):
-                continue
-            clear_detail_poster_source_cache(str(path))
-            clear_list_thumb_pixmap_cache(str(path))
+        # Selection must remain a local-only operation. Network poster refreshes
+        # belong to import/maintenance flows, never the GUI selection path.
+        return self._visible_entries[row]
 
     def _show_empty_details(self) -> None:
         if self._search_input.text().strip():

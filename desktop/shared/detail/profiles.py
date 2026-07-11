@@ -164,13 +164,40 @@ from desktop.theme.layout import (
 )
 from desktop.theme.scaling import get_ui_scale
 
+DETAIL_COMPACT_UI_SCALE = 1.10
+DETAIL_STACKED_UI_SCALE = 1.25
+DETAIL_STACKED_INFO_UI_SCALE = 1.00
+DETAIL_COMPACT_POSTER_WIDTH = 300
+
+
+def use_compact_detail_content() -> bool:
+    """Tighten fixed detail geometry before the two columns need to stack."""
+    return get_ui_scale() >= DETAIL_COMPACT_UI_SCALE
+
+
+def use_stacked_detail_info_rows() -> bool:
+    """Keep long metadata labels and values from competing for one line."""
+    return get_ui_scale() >= DETAIL_STACKED_INFO_UI_SCALE
+
+
+def use_stacked_detail_layout() -> bool:
+    """Use the narrow-column detail composition once scaled panes stop fitting."""
+    return get_ui_scale() >= DETAIL_STACKED_UI_SCALE
+
 
 def detail_poster_px(value: int | float) -> int:
     """Scale full detail posters without letting high UI scales overflow the viewport."""
     scaled = poster_px(value)
-    if get_ui_scale() < 1.25:
+    if not use_compact_detail_content():
         return scaled
-    return max(1, int(round(scaled / get_ui_scale())))
+    compact_ratio = DETAIL_COMPACT_POSTER_WIDTH / DETAIL_POSTER_WIDTH
+    compact_base = float(value) * compact_ratio
+    return max(1, int(round(poster_px(compact_base) / get_ui_scale())))
+
+
+def compact_detail_px(value: int | float, compact_value: int | float) -> int:
+    selected = compact_value if use_compact_detail_content() else value
+    return detail_px(selected)
 
 POSTER_BASE_WIDTH = 220
 POSTER_BASE_HEIGHT = 330
@@ -231,8 +258,8 @@ class DetailCardLayoutProfile:
     detail_poster_height: int = detail_poster_px(DETAIL_POSTER_HEIGHT)
     detail_poster_border_width: int = poster_px(DETAIL_POSTER_BORDER_WIDTH)
     detail_poster_radius: int = poster_px(DETAIL_POSTER_RADIUS)
-    detail_poster_right_gap: int = detail_px(DETAIL_POSTER_RIGHT_GAP)
-    detail_info_min_width: int = detail_px(DETAIL_INFO_MIN_WIDTH)
+    detail_poster_right_gap: int = compact_detail_px(DETAIL_POSTER_RIGHT_GAP, 24)
+    detail_info_min_width: int = compact_detail_px(DETAIL_INFO_MIN_WIDTH, 280)
     detail_info_max_width: int = detail_px(DETAIL_INFO_MAX_WIDTH)
     detail_info_column_max_width: int = detail_px(DETAIL_INFO_COLUMN_MAX_WIDTH)
     detail_info_top_offset: int = detail_px(DETAIL_INFO_TOP_OFFSET)
