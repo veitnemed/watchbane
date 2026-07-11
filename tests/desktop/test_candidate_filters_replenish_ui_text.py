@@ -89,6 +89,7 @@ def _build_view(qtbot, service: UiTextService | None = None):
     service = service or UiTextService()
     session = CandidateSearchSession(service=service)
     view = CandidateFiltersView(session, service=service)
+    view._form.advanced_mode_toggle.setChecked(True)
     qtbot.addWidget(view.widget)
     view.widget.show()
     return service, session, view

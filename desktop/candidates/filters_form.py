@@ -73,6 +73,30 @@ ORIGIN_OPTIONS = (
     ("candidates.filters.replenish.origin.foreign", "foreign"),
     ("candidates.filters.replenish.origin.mixed", "mixed"),
 )
+SIMPLE_MEDIA_OPTIONS = (
+    ("preferences.media.both", "both"),
+    ("preferences.media.movie", "movie"),
+    ("preferences.media.tv", "tv"),
+)
+SIMPLE_COLLECTION_OPTIONS = (
+    ("preferences.collection.mixed", "mixed"),
+    ("preferences.collection.new", "new"),
+    ("preferences.collection.classic", "classic"),
+    ("preferences.collection.unusual", "unusual"),
+)
+SIMPLE_ORIGIN_OPTIONS = (
+    ("preferences.origin.any", "any"),
+    ("preferences.origin.russia", "russia"),
+    ("preferences.origin.west", "west"),
+    ("preferences.origin.asia", "asia"),
+)
+SIMPLE_MOOD_OPTIONS = (
+    ("preferences.mood.any", "any"),
+    ("preferences.mood.light", "light"),
+    ("preferences.mood.dark", "dark"),
+    ("preferences.mood.dynamic", "dynamic"),
+    ("preferences.mood.drama", "drama"),
+)
 
 
 @dataclass
@@ -80,6 +104,11 @@ class FiltersFormWidgets:
     """Widget handles for the filters scroll form."""
 
     scroll: QScrollArea
+    simple_media_combo: QComboBox
+    simple_collection_combo: QComboBox
+    simple_origin_combo: QComboBox
+    simple_mood_combo: QComboBox
+    advanced_mode_toggle: QToolButton
     country_selector: CountryChipSelector
     media_type_combo: QComboBox
     year_range_label: QLabel
@@ -198,6 +227,62 @@ def build_filters_form(
         combo.setMaximumWidth(compact_combo_max_width)
         combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
+    def add_combo(options: tuple[tuple[str, str], ...], object_name: str) -> QComboBox:
+        combo = QComboBox()
+        combo.setObjectName(object_name)
+        for label_key, value in options:
+            combo.addItem(tr(label_key), value)
+        constrain_combo_width(combo)
+        return combo
+
+    simple_section, simple_layout = add_section(
+        tr("preferences.title"),
+        object_name="candidateSimplePreferencesSection",
+        icon_name="heart",
+        icon_color="#F4A7C5",
+    )
+    simple_lead = QLabel(tr("preferences.lead"))
+    simple_lead.setObjectName("candidateSimplePreferencesLead")
+    simple_lead.setWordWrap(True)
+    simple_layout.addWidget(simple_lead)
+    simple_grid = QGridLayout()
+    simple_grid.setContentsMargins(0, 0, 0, 0)
+    simple_grid.setHorizontalSpacing(layout_px(12))
+    simple_grid.setVerticalSpacing(layout_px(10))
+    simple_columns = 1 if get_ui_scale() >= 1.25 else 2
+    for column in range(simple_columns):
+        simple_grid.setColumnStretch(column, 1)
+
+    simple_media_combo = add_combo(SIMPLE_MEDIA_OPTIONS, "simplePreferenceMedia")
+    simple_collection_combo = add_combo(SIMPLE_COLLECTION_OPTIONS, "simplePreferenceCollection")
+    simple_origin_combo = add_combo(SIMPLE_ORIGIN_OPTIONS, "simplePreferenceOrigin")
+    simple_mood_combo = add_combo(SIMPLE_MOOD_OPTIONS, "simplePreferenceMood")
+
+    def add_simple_field(index: int, label_key: str, combo: QComboBox) -> None:
+        cell = QWidget()
+        cell.setObjectName("candidateSimplePreferenceField")
+        cell.setStyleSheet(TRANSPARENT_STYLE)
+        cell_layout = QVBoxLayout(cell)
+        cell_layout.setContentsMargins(0, 0, 0, 0)
+        cell_layout.setSpacing(layout_px(5))
+        cell_layout.addWidget(field_label(tr(label_key)))
+        cell_layout.addWidget(combo)
+        simple_grid.addWidget(cell, index // simple_columns, index % simple_columns)
+
+    add_simple_field(0, "preferences.media.label", simple_media_combo)
+    add_simple_field(1, "preferences.collection.label", simple_collection_combo)
+    add_simple_field(2, "preferences.origin.label", simple_origin_combo)
+    add_simple_field(3, "preferences.mood.label", simple_mood_combo)
+    simple_layout.addLayout(simple_grid)
+
+    advanced_mode_toggle = QToolButton()
+    advanced_mode_toggle.setObjectName("candidateRecommendationAdvancedModeToggle")
+    advanced_mode_toggle.setCheckable(True)
+    advanced_mode_toggle.setChecked(False)
+    advanced_mode_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+    advanced_mode_toggle.setArrowType(Qt.ArrowType.RightArrow)
+    form.addWidget(advanced_mode_toggle)
+
     _replenish_section, replenish_layout = add_section(
         tr("candidates.filters.replenish.title"),
         icon_name="heart",
@@ -243,14 +328,6 @@ def build_filters_form(
     year_slider.setObjectName("candidateSearchYearRange")
     year_slider.rangeChanged.connect(on_year_range_changed)
     basic_layout.addWidget(year_slider)
-
-    def add_combo(options: tuple[tuple[str, str], ...], object_name: str) -> QComboBox:
-        combo = QComboBox()
-        combo.setObjectName(object_name)
-        for label_key, value in options:
-            combo.addItem(tr(label_key), value)
-        constrain_combo_width(combo)
-        return combo
 
     def set_combo_data(combo: QComboBox, value: str | None) -> None:
         index = combo.findData(value)
@@ -505,6 +582,19 @@ def build_filters_form(
     visibility_layout.addWidget(only_complete_check)
     visibility_layout.addWidget(only_unwatched_check)
     visibility_layout.addWidget(hide_hidden_check)
+
+    advanced_sections = (_replenish_section, _basic_section, _advanced_section)
+
+    def set_advanced_mode(checked: bool) -> None:
+        for section in advanced_sections:
+            section.setVisible(bool(checked))
+        advanced_mode_toggle.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
+        advanced_mode_toggle.setText(
+            tr("preferences.advanced.hide") if checked else tr("preferences.advanced.show")
+        )
+
+    advanced_mode_toggle.toggled.connect(set_advanced_mode)
+    set_advanced_mode(False)
     form.addStretch(1)
 
     scroll.setWidget(form_host)
@@ -512,6 +602,11 @@ def build_filters_form(
 
     return FiltersFormWidgets(
         scroll=scroll,
+        simple_media_combo=simple_media_combo,
+        simple_collection_combo=simple_collection_combo,
+        simple_origin_combo=simple_origin_combo,
+        simple_mood_combo=simple_mood_combo,
+        advanced_mode_toggle=advanced_mode_toggle,
         country_selector=country_selector,
         media_type_combo=media_type_combo,
         year_range_label=year_range_label,

@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
 )
 
 from candidates import service as candidate_service
+from candidates.preferences import SimpleRecommendationPreferences
 from candidates.models import country_schema, genre_schema
 from candidates.onboarding.taste_presets import get_taste_preset
 from candidates.replenish.filter_intent import FilterReplenishIntent
@@ -41,6 +42,10 @@ from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FI
 from desktop.candidates.workers.filter_replenish_worker import FilterReplenishWorker
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language, get_persisted_interface_language
+from desktop.settings.recommendation_preferences import (
+    load_simple_recommendation_preferences,
+    save_simple_recommendation_preferences,
+)
 from desktop.theme.scaling import control_px, layout_px
 from desktop.theme.shell_layout import (
     CANDIDATE_ROOT_MARGIN_PX,
@@ -207,6 +212,9 @@ class CandidateFiltersView:
         intro_layout.addWidget(self._replenish_progress_bar)
 
         self._summary_value_labels: dict[str, QLabel] = {}
+        self._summary_name_labels: dict[str, QLabel] = {}
+        self._summary_rows: dict[str, QFrame] = {}
+        self._summary_dividers: dict[str, QFrame] = {}
 
         def add_summary_row(key: str, icon_name: str, label_key: str) -> None:
             row = QFrame()
@@ -234,12 +242,15 @@ class CandidateFiltersView:
             row_layout.addWidget(label, stretch=1)
             row_layout.addWidget(value, stretch=1)
             self._summary_value_labels[key] = value
+            self._summary_name_labels[key] = label
+            self._summary_rows[key] = row
 
             intro_layout.addWidget(row)
             divider = QFrame()
             divider.setObjectName("candidateFiltersSummaryDivider")
             divider.setFrameShape(QFrame.Shape.HLine)
             divider.setFrameShadow(QFrame.Shadow.Plain)
+            self._summary_dividers[key] = divider
             intro_layout.addWidget(divider)
 
         add_summary_row("countries", "globe", "candidates.filters.summary.countries")
@@ -260,6 +271,7 @@ class CandidateFiltersView:
             on_year_range_changed=self._on_year_range_changed,
         )
         self._form.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._set_simple_preferences_controls(load_simple_recommendation_preferences())
 
         content_layout = QHBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -296,6 +308,10 @@ class CandidateFiltersView:
     @property
     def _country_selector(self):
         return self._form.country_selector
+
+    @property
+    def _advanced_mode_toggle(self):
+        return self._form.advanced_mode_toggle
 
     @property
     def _year_range_label(self):
@@ -384,6 +400,11 @@ class CandidateFiltersView:
         self._replenish_release_preference_combo.currentIndexChanged.connect(update)
         self._replenish_origin_preference_combo.currentIndexChanged.connect(update)
         self._replenish_enabled_check.toggled.connect(update)
+        self._form.simple_media_combo.currentIndexChanged.connect(update)
+        self._form.simple_collection_combo.currentIndexChanged.connect(update)
+        self._form.simple_origin_combo.currentIndexChanged.connect(update)
+        self._form.simple_mood_combo.currentIndexChanged.connect(update)
+        self._advanced_mode_toggle.toggled.connect(update)
 
     def _summary_countries_text(self) -> str:
         country_codes = self._effective_country_codes()
@@ -417,6 +438,35 @@ class CandidateFiltersView:
     def _update_summary_rows(self) -> None:
         if not hasattr(self, "_summary_value_labels"):
             return
+        if self._advanced_mode_toggle.isChecked() is False:
+            simple_values = {
+                "countries": ("preferences.origin.label", self._form.simple_origin_combo.currentText()),
+                "media_type": ("preferences.media.label", self._form.simple_media_combo.currentText()),
+                "year": ("preferences.collection.label", self._form.simple_collection_combo.currentText()),
+                "preset": ("preferences.mood.label", self._form.simple_mood_combo.currentText()),
+            }
+            for key, row in self._summary_rows.items():
+                visible = key in simple_values
+                row.setVisible(visible)
+                self._summary_dividers[key].setVisible(visible)
+            for key, (label_key, value) in simple_values.items():
+                self._summary_name_labels[key].setText(tr(label_key))
+                self._summary_value_labels[key].setText(value)
+            return
+        advanced_label_keys = {
+            "countries": "candidates.filters.summary.countries",
+            "media_type": "candidates.filters.summary.media_type",
+            "year": "candidates.filters.summary.year",
+            "preset": "candidates.filters.summary.preset",
+            "vibe": "candidates.filters.summary.vibe",
+            "release": "candidates.filters.summary.release",
+            "origin": "candidates.filters.summary.origin",
+            "replenish": "candidates.filters.summary.replenish",
+        }
+        for key, row in self._summary_rows.items():
+            row.show()
+            self._summary_dividers[key].show()
+            self._summary_name_labels[key].setText(tr(advanced_label_keys[key]))
         values = {
             "countries": self._summary_countries_text(),
             "media_type": self._media_type_combo.currentText(),
@@ -431,6 +481,30 @@ class CandidateFiltersView:
             label = self._summary_value_labels.get(key)
             if label is not None:
                 label.setText(str(value or tr("candidates.filters.summary.not_set")))
+
+    def _set_simple_preferences_controls(self, preferences: SimpleRecommendationPreferences) -> None:
+        values = preferences.normalized().to_dict()
+        for combo, key in (
+            (self._form.simple_media_combo, "media"),
+            (self._form.simple_collection_combo, "collection"),
+            (self._form.simple_origin_combo, "origin"),
+            (self._form.simple_mood_combo, "mood"),
+        ):
+            index = combo.findData(values[key])
+            combo.setCurrentIndex(index if index >= 0 else 0)
+
+    def _simple_preferences_from_controls(self) -> SimpleRecommendationPreferences:
+        return SimpleRecommendationPreferences(
+            media=str(self._form.simple_media_combo.currentData() or "both"),
+            collection=str(self._form.simple_collection_combo.currentData() or "mixed"),
+            origin=str(self._form.simple_origin_combo.currentData() or "any"),
+            mood=str(self._form.simple_mood_combo.currentData() or "any"),
+        ).normalized()
+
+    def _simple_pool_needs_replenish(self) -> bool:
+        stats = self._session.overview().get("stats") or {}
+        pool_size = int(stats.get("unique_total") or stats.get("storage_total") or 0)
+        return pool_size < FILTER_REPLENISH_DEFAULT_BATCH_SIZE
 
     def _selected_replenish_preset(self):
         preset_id = self._replenish_preset_combo.currentData()
@@ -682,6 +756,10 @@ class CandidateFiltersView:
         self._hide_hidden_check.setChecked(False)
 
     def _reset_filters(self) -> None:
+        if self._advanced_mode_toggle.isChecked() is False:
+            self._set_simple_preferences_controls(SimpleRecommendationPreferences())
+            self._apply_filters()
+            return
         self._clear_filter_controls()
         self._apply_filters()
 
@@ -692,12 +770,27 @@ class CandidateFiltersView:
         return self._on_before_apply(filters)
 
     def _apply_filters(self) -> None:
-        filters = self.on_before_apply(self._collect_filters())
-        self._pending_replenish_intent = (
-            self._collect_replenish_intent(filters)
-            if self._replenish_enabled_check.isChecked()
-            else None
-        )
+        if self._advanced_mode_toggle.isChecked():
+            filters = self.on_before_apply(self._collect_filters())
+            self._pending_replenish_intent = (
+                self._collect_replenish_intent(filters)
+                if self._replenish_enabled_check.isChecked()
+                else None
+            )
+        else:
+            preferences = self._simple_preferences_from_controls()
+            save_simple_recommendation_preferences(preferences)
+            filters = self.on_before_apply(
+                preferences.to_candidate_filters(DEFAULT_BROWSE_FILTERS)
+            )
+            self._pending_replenish_intent = (
+                preferences.to_replenish_intent(
+                    data_language=self._data_language,
+                    target_add_count=FILTER_REPLENISH_DEFAULT_BATCH_SIZE,
+                )
+                if self._simple_pool_needs_replenish()
+                else None
+            )
         if self._pending_replenish_intent is None:
             self._hide_replenish_progress()
         self._replenish_local_count_before = None

@@ -122,6 +122,10 @@ QLabel#candidateSearchFieldLabel {{
     padding: {px(2)}px 0 0 0;
 }}
 QComboBox#candidateSearchMediaType,
+QComboBox#simplePreferenceMedia,
+QComboBox#simplePreferenceCollection,
+QComboBox#simplePreferenceOrigin,
+QComboBox#simplePreferenceMood,
 QComboBox#candidateReplenishPreset,
 QComboBox#candidateReplenishAnimationMode,
 QComboBox#candidateReplenishVibe,
@@ -136,6 +140,10 @@ QComboBox#candidateReplenishOriginPreference {{
     min-height: {px(28)}px;
 }}
 QComboBox#candidateSearchMediaType:focus,
+QComboBox#simplePreferenceMedia:focus,
+QComboBox#simplePreferenceCollection:focus,
+QComboBox#simplePreferenceOrigin:focus,
+QComboBox#simplePreferenceMood:focus,
 QComboBox#candidateReplenishPreset:focus,
 QComboBox#candidateReplenishAnimationMode:focus,
 QComboBox#candidateReplenishVibe:focus,
@@ -144,6 +152,10 @@ QComboBox#candidateReplenishOriginPreference:focus {{
     border: 1px solid {COLOR_FOCUS_BORDER};
 }}
 QComboBox#candidateSearchMediaType::drop-down,
+QComboBox#simplePreferenceMedia::drop-down,
+QComboBox#simplePreferenceCollection::drop-down,
+QComboBox#simplePreferenceOrigin::drop-down,
+QComboBox#simplePreferenceMood::drop-down,
 QComboBox#candidateReplenishPreset::drop-down,
 QComboBox#candidateReplenishAnimationMode::drop-down,
 QComboBox#candidateReplenishVibe::drop-down,
@@ -153,6 +165,10 @@ QComboBox#candidateReplenishOriginPreference::drop-down {{
     width: {px(26)}px;
 }}
 QComboBox#candidateSearchMediaType::down-arrow,
+QComboBox#simplePreferenceMedia::down-arrow,
+QComboBox#simplePreferenceCollection::down-arrow,
+QComboBox#simplePreferenceOrigin::down-arrow,
+QComboBox#simplePreferenceMood::down-arrow,
 QComboBox#candidateReplenishPreset::down-arrow,
 QComboBox#candidateReplenishAnimationMode::down-arrow,
 QComboBox#candidateReplenishVibe::down-arrow,
@@ -297,6 +313,16 @@ QFrame#candidateFilterSection {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(10)}px;
 }}
+QFrame#candidateSimplePreferencesSection {{
+    background-color: {COLOR_MOOD_SURFACE};
+    border: 1px solid {COLOR_MOOD_BORDER};
+    border-radius: {px(10)}px;
+}}
+QLabel#candidateSimplePreferencesLead {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+}}
 QFrame#candidateFilterSection:hover {{
     border-color: {COLOR_BORDER_HOVER};
 }}
@@ -316,7 +342,8 @@ QLabel#candidateFilterSectionBadge {{
     font-weight: 700;
     padding: 0;
 }}
-QToolButton#candidateAdvancedFiltersToggle {{
+QToolButton#candidateAdvancedFiltersToggle,
+QToolButton#candidateRecommendationAdvancedModeToggle {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
@@ -326,7 +353,8 @@ QToolButton#candidateAdvancedFiltersToggle {{
     padding: {px(6)}px {px(10)}px;
     min-height: {px(30)}px;
 }}
-QToolButton#candidateAdvancedFiltersToggle:hover {{
+QToolButton#candidateAdvancedFiltersToggle:hover,
+QToolButton#candidateRecommendationAdvancedModeToggle:hover {{
     background-color: {COLOR_CONTROL_HOVER};
     border-color: {COLOR_BORDER_HOVER};
 }}

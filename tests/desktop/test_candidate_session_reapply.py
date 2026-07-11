@@ -127,6 +127,7 @@ def test_replenish_gui_reloads_pool_and_reapplies_without_loop(qtbot) -> None:
     service = ReapplyService()
     session = CandidateSearchSession(service=service)
     view = CandidateFiltersView(session, service=service)
+    view._form.advanced_mode_toggle.setChecked(True)
     qtbot.addWidget(view.widget)
     view.widget.show()
 

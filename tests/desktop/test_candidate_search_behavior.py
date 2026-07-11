@@ -202,6 +202,7 @@ def _build_views(
     deck_service = deck_service or FakeRecommendationDeckService(service)
     session = CandidateSearchSession(service=service)
     filters_view = CandidateFiltersView(session, service=service)
+    filters_view._form.advanced_mode_toggle.setChecked(True)
     list_view = CandidateListView(session, service=service, deck_service=deck_service)
     list_widget = list_view.widget.findChild(QListView, "candidateListWidget")
     assert list_widget is not None

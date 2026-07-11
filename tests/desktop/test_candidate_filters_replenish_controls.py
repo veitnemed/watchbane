@@ -68,9 +68,10 @@ def test_replenish_section_precedes_basic_filters(qtbot) -> None:
         for label in form.scroll.findChildren(QLabel, "candidateFilterSectionTitle")
     ]
 
-    assert titles[:2] == [
-        f"1. {tr('candidates.filters.replenish.title')}",
-        f"2. {tr('candidates.filters.basic')}",
+    assert titles[:3] == [
+        f"1. {tr('preferences.title')}",
+        f"2. {tr('candidates.filters.replenish.title')}",
+        f"3. {tr('candidates.filters.basic')}",
     ]
 
 
