@@ -7,6 +7,7 @@ from candidates.recommendation_deck_service import (
     DEFAULT_UNKNOWN_RATING_LIMIT,
     EXPANDED_UNKNOWN_RATING_LIMIT,
     RecommendationDeckService,
+    _base_score,
     _rank_candidates,
 )
 from candidates.scoring.rating_confidence import has_unknown_rating
@@ -93,17 +94,23 @@ def test_user_states_and_recent_impressions_are_excluded(tmp_path) -> None:
     assert candidate_state_identity_key(recent) not in shown
 
 
-def test_apply_action_promotes_first_reserve_item(tmp_path) -> None:
+def test_apply_action_promotes_closest_quality_at_removed_position(tmp_path) -> None:
     service = _service(_pool(8), tmp_path / "deck.sqlite3")
     deck = service.build_deck({}, NOW, limit_active=3, reserve_size=4)
-    removed = deck["active"][0]
-    expected_promotion = deck["reserve"][0]
+    removed_index = 1
+    removed = deck["active"][removed_index]
+    expected_promotion = min(
+        deck["reserve"],
+        key=lambda item: abs(_base_score(item) - _base_score(removed)),
+    )
 
     updated = service.apply_action_and_refill(deck["deck_id"], removed, "hidden")
 
     assert len(updated["active"]) == 3
     assert candidate_state_identity_key(removed) not in _identities(updated["active"])
-    assert candidate_state_identity_key(expected_promotion) in _identities(updated["active"])
+    assert candidate_state_identity_key(updated["active"][removed_index]) == candidate_state_identity_key(
+        expected_promotion
+    )
     assert len(updated["reserve"]) == 3
     promotion_identity = candidate_state_identity_key(expected_promotion).rsplit("|", 1)[0]
     assert get_impression(promotion_identity, expected_promotion["media_type"], path=tmp_path / "deck.sqlite3")

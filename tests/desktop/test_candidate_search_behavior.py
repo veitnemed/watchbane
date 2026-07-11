@@ -314,6 +314,8 @@ def test_recommendation_copy_is_available_in_ru_and_en() -> None:
 
     keys = (
         "tabs.candidates",
+        "recommendations.feed.title",
+        "recommendations.feed.count",
         "recommendations.new_deck",
         "recommendations.reasons.title",
         "recommendations.action.watched",
@@ -325,7 +327,7 @@ def test_recommendation_copy_is_available_in_ru_and_en() -> None:
         assert all(translate(key, interface_language=language) != key for key in keys)
 
 
-def test_long_overview_keeps_recommendation_action_panel_visible(qtbot) -> None:
+def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> None:
     service = FakeCandidateService(_candidate_set(1, long_overview=True))
     _service, _session, _filters_view, list_view = _build_views(qtbot, service)
     list_view.widget.resize(1280, 720)
@@ -334,11 +336,14 @@ def test_long_overview_keeps_recommendation_action_panel_visible(qtbot) -> None:
     qtbot.wait(10)
     panel = list_view.widget.findChild(QFrame, "recommendationActionPanel")
     detail_scroll = list_view.widget.findChild(QScrollArea, "candidateSearchDetailScroll")
+    main_info_panel = list_view.widget.findChild(QFrame, "detailMainInfoPanel")
 
     assert panel is not None and panel.isVisible()
     assert detail_scroll is not None
-    assert panel.parentWidget() is detail_scroll.parentWidget()
-    assert panel.geometry().bottom() <= panel.parentWidget().contentsRect().bottom()
+    assert main_info_panel is not None
+    assert detail_scroll.widget().isAncestorOf(panel)
+    assert panel.parentWidget().objectName() == "detailMainInfoSection"
+    assert panel.geometry().top() >= main_info_panel.geometry().bottom()
 
 
 def test_filters_view_reload_filter_options_uses_new_pool_genres(qtbot) -> None:

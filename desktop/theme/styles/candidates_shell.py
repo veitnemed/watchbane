@@ -212,6 +212,15 @@ QLabel#recommendationsDeckStatus {{
     font-size: {font_px(FONT_SMALL)}px;
     padding: 0 {px(4)}px;
 }}
+QWidget#recommendationsFeedHeader {{
+    background: transparent;
+}}
+QLabel#recommendationsFeedTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SECTION)}px;
+    font-weight: 700;
+}}
 QPushButton#recommendationsNewDeckButton {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER_HOVER};
@@ -227,9 +236,8 @@ QPushButton#recommendationsNewDeckButton:hover {{
     border-color: {COLOR_FOCUS_BORDER};
 }}
 QFrame#recommendationActionPanel {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER_HOVER};
-    border-radius: {px(8)}px;
+    background: transparent;
+    border: none;
 }}
 QLabel#recommendationReasonsTitle {{
     background: transparent;

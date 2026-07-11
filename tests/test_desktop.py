@@ -96,7 +96,7 @@ def test_i18n_translator_defaults_and_fallbacks(monkeypatch) -> None:
         lambda: AppSettings(interface_language="ru", data_language="en"),
     )
 
-    assert translator_module.tr("tabs.watched") == "Моё"
+    assert translator_module.tr("tabs.watched") == "Коллекция"
 
     monkeypatch.setattr(
         translator_module,
@@ -105,7 +105,7 @@ def test_i18n_translator_defaults_and_fallbacks(monkeypatch) -> None:
     )
     monkeypatch.delitem(translator_module.TRANSLATIONS["en"], "tabs.watched")
 
-    assert translator_module.tr("tabs.watched") == "Моё"
+    assert translator_module.tr("tabs.watched") == "Коллекция"
     assert translator_module.tr("missing.translation.key") == "missing.translation.key"
 
 
@@ -115,7 +115,7 @@ def test_i18n_translator_respects_interface_language_env(monkeypatch) -> None:
     monkeypatch.setenv("WATCHBANE_INTERFACE_LANGUAGE", "en")
 
     assert translator_module.get_interface_language() == "en"
-    assert translator_module.tr("tabs.watched") == "My library"
+    assert translator_module.tr("tabs.watched") == "Collection"
 
 
 def test_desktop_language_context_keeps_interface_and_data_independent(monkeypatch) -> None:
@@ -210,11 +210,11 @@ def test_interface_and_data_language_are_independent() -> None:
     }
 
     save_app_settings(AppSettings(interface_language="en", data_language="ru"))
-    assert tr("tabs.watched") == "My library"
+    assert tr("tabs.watched") == "Collection"
     assert build_candidate_readonly_card(candidate, data_language="ru")["title"] == "Лучше звоните Солу"
 
     save_app_settings(AppSettings(interface_language="ru", data_language="en"))
-    assert tr("tabs.watched") == "Моё"
+    assert tr("tabs.watched") == "Коллекция"
     assert build_candidate_readonly_card(candidate, data_language="en")["title"] == "Better Call Saul"
 
 
@@ -6125,9 +6125,9 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
 
     assert tabs.count() == 4
     assert [tabs.tabText(index) for index in range(tabs.count())] == [
-        "Моё",
-        "Фильтры",
         "Рекомендации",
+        "Коллекция",
+        "Поиск",
         "Настройки",
     ]
     assert hasattr(context, "analytics_tab_view") is False
@@ -6283,9 +6283,9 @@ def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> N
     )
 
     assert [tabs.tabText(index) for index in range(tabs.count())] == [
-        "My library",
-        "Filters",
         "Recommendations",
+        "Collection",
+        "Search",
         "Settings",
     ]
     assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}

@@ -57,6 +57,12 @@ class DetailCard(DetailCardPosterMixin):
     def widget(self):
         return self._frame
 
+    def add_main_info_footer(self, widget) -> None:
+        """Place a screen-specific control block directly after main information."""
+        layout = self._main_info_section.layout()
+        if layout is not None:
+            layout.addWidget(widget)
+
     def set_mark_watched_handler(self, handler) -> None:
         """Optional callback for candidate transfer to watched dataset."""
         self._mark_watched_handler = handler

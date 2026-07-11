@@ -373,6 +373,14 @@ class RecommendationDeckService:
 
         deck = self._decks[deck_id]
         target_identity = candidate_state_identity_key(candidate)
+        removed_index = next(
+            (
+                index
+                for index, item in enumerate(deck["active"])
+                if candidate_state_identity_key(item) == target_identity
+            ),
+            len(deck["active"]),
+        )
         deck["active"] = [
             item for item in deck["active"] if candidate_state_identity_key(item) != target_identity
         ]
@@ -382,18 +390,23 @@ class RecommendationDeckService:
         promoted = None
         if len(deck["active"]) < deck["active_limit"] and deck["reserve"]:
             unknown_count = sum(has_unknown_rating(item) for item in deck["active"])
-            promotion_index = next(
-                (
-                    index
-                    for index, item in enumerate(deck["reserve"])
-                    if not has_unknown_rating(item) or unknown_count < deck["unknown_rating_limit"]
-                ),
-                None,
-            )
-            if promotion_index is not None:
+            promotable_indexes = [
+                index
+                for index, item in enumerate(deck["reserve"])
+                if not has_unknown_rating(item) or unknown_count < deck["unknown_rating_limit"]
+            ]
+            if promotable_indexes:
+                removed_score = _base_score(candidate)
+                promotion_index = min(
+                    promotable_indexes,
+                    key=lambda index: (
+                        abs(_base_score(deck["reserve"][index]) - removed_score),
+                        index,
+                    ),
+                )
                 promoted = deck["reserve"].pop(promotion_index)
         if promoted is not None:
-            deck["active"].append(promoted)
+            deck["active"].insert(min(removed_index, len(deck["active"])), promoted)
             impression_repository.record_impressions(
                 [promoted],
                 deck_id=deck_id,

@@ -10,7 +10,6 @@ from time import perf_counter
 from PyQt6.QtCore import QModelIndex, Qt
 from PyQt6.QtWidgets import (
     QAbstractItemView,
-    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -34,7 +33,6 @@ from desktop.candidates.presenters import (
     build_candidate_readonly_detail_entry,
     build_candidate_search_index,
     candidate_detail_identity,
-    candidate_sort_mode_label,
     candidate_poster_url_for_download,
 )
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
@@ -50,8 +48,6 @@ from desktop.theme.shell_layout import (
     CANDIDATE_LIST_SPACING_PX,
     CANDIDATE_ROOT_MARGIN_PX,
     CANDIDATE_ROOT_SPACING_PX,
-    CANDIDATE_SORT_COMBO_MAX_WIDTH_PX,
-    CANDIDATE_SORT_ROW_SPACING_PX,
     CANDIDATE_SPLITTER_DETAIL_DEFAULT_PX,
     CANDIDATE_SPLITTER_LIST_DEFAULT_PX,
     DETAIL_TAB_TOP_MARGIN_PX,
@@ -114,20 +110,7 @@ class CandidateListView(CandidateListActionsMixin):
         )
         root_layout.setSpacing(CANDIDATE_ROOT_SPACING_PX)
 
-        sort_label = QLabel(tr("common.sort"))
-        sort_label.setObjectName("candidateSortLabel")
-        self._sort_combo = QComboBox()
-        self._sort_combo.setObjectName("candidateListSort")
-        for mode in self._service.SEARCH_SORT_MODES:
-            self._sort_combo.addItem(
-                candidate_sort_mode_label(mode),
-                mode,
-            )
-        self._sort_combo.setCurrentIndex(0)
-        self._sort_combo.setMaximumWidth(CANDIDATE_SORT_COMBO_MAX_WIDTH_PX)
-        self._sort_combo.currentIndexChanged.connect(self._on_sort_changed)
-
-        self._counter_label = QLabel("")
+        self._counter_label = QLabel("", self._widget)
         self._counter_label.setObjectName("candidateListCounter")
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -141,7 +124,7 @@ class CandidateListView(CandidateListActionsMixin):
         list_layout.setContentsMargins(0, LEFT_PANEL_TOP_COMPENSATION_PX, 0, 0)
         list_layout.setSpacing(CANDIDATE_LIST_SPACING_PX)
 
-        self._search_input = QLineEdit()
+        self._search_input = QLineEdit(list_panel)
         self._search_input.setObjectName("candidateListSearch")
         self._search_input.setPlaceholderText(tr("candidates.search.placeholder"))
         self._search_input.setClearButtonEnabled(True)
@@ -150,28 +133,28 @@ class CandidateListView(CandidateListActionsMixin):
             self._on_search_query_changed,
             parent=self._widget,
         )
-        list_layout.addWidget(self._search_input)
+        self._search_input.hide()
 
         self._deck_status_label = QLabel("")
         self._deck_status_label.setObjectName("recommendationsDeckStatus")
         self._deck_status_label.setWordWrap(True)
         self._deck_status_label.hide()
 
-        sort_row = QWidget()
-        sort_row.setObjectName("candidateSortRow")
-        sort_row_layout = QHBoxLayout(sort_row)
-        sort_row_layout.setContentsMargins(0, 0, 0, 0)
-        sort_row_layout.setSpacing(CANDIDATE_SORT_ROW_SPACING_PX)
-        sort_row_layout.addWidget(sort_label)
-        sort_row_layout.addWidget(self._sort_combo)
-        sort_row_layout.addWidget(self._deck_status_label, stretch=1)
+        feed_header = QWidget()
+        feed_header.setObjectName("recommendationsFeedHeader")
+        feed_header_layout = QHBoxLayout(feed_header)
+        feed_header_layout.setContentsMargins(0, 0, 0, 0)
+        feed_header_layout.setSpacing(list_px(10))
+        self._feed_title = QLabel(tr("recommendations.feed.title"))
+        self._feed_title.setObjectName("recommendationsFeedTitle")
+        feed_header_layout.addWidget(self._feed_title)
+        feed_header_layout.addStretch(1)
+        feed_header_layout.addWidget(self._deck_status_label)
         self._new_deck_button = QPushButton(tr("recommendations.new_deck"))
         self._new_deck_button.setObjectName("recommendationsNewDeckButton")
         self._new_deck_button.clicked.connect(self._on_new_deck_clicked)
-        sort_row_layout.addWidget(self._new_deck_button)
-        sort_label.hide()
-        self._sort_combo.hide()
-        list_layout.addWidget(sort_row)
+        self._new_deck_button.hide()
+        list_layout.addWidget(feed_header)
 
         self._results_list = QListView()
         self._results_list.setObjectName("candidateListWidget")
@@ -191,7 +174,7 @@ class CandidateListView(CandidateListActionsMixin):
         if selection_model is not None:
             selection_model.currentChanged.connect(self._on_result_selected)
         list_layout.addWidget(self._results_list, stretch=1)
-        list_layout.addWidget(self._counter_label)
+        self._counter_label.hide()
         splitter.addWidget(list_panel)
 
         detail_panel = QWidget()
@@ -223,10 +206,10 @@ class CandidateListView(CandidateListActionsMixin):
         self._action_panel.setObjectName("recommendationActionPanel")
         action_layout = QVBoxLayout(self._action_panel)
         action_layout.setContentsMargins(
-            list_px(14),
-            list_px(10),
-            list_px(14),
+            0,
             list_px(12),
+            0,
+            0,
         )
         action_layout.setSpacing(list_px(8))
         self._reason_title = QLabel(tr("recommendations.reasons.title"))
@@ -265,7 +248,7 @@ class CandidateListView(CandidateListActionsMixin):
             action_buttons_layout.addWidget(button, 0, column)
             action_buttons_layout.setColumnStretch(column, 1)
         action_layout.addLayout(action_buttons_layout)
-        detail_layout.addWidget(self._action_panel)
+        self._detail_card.add_main_info_footer(self._action_panel)
         self._set_action_panel_enabled(False)
 
         splitter.addWidget(detail_panel)
@@ -362,8 +345,6 @@ class CandidateListView(CandidateListActionsMixin):
     def _update_deck_status(self) -> None:
         deck = self._deck or {}
         active_count = len(deck.get("active") or [])
-        reserve_count = len(deck.get("reserve") or [])
-        reason = deck.get("underfilled_reason")
         if active_count == 0:
             excluded = deck.get("excluded") if isinstance(deck.get("excluded"), dict) else {}
             processed_count = int(excluded.get("watched") or 0) + int(excluded.get("actioned") or 0)
@@ -374,18 +355,8 @@ class CandidateListView(CandidateListActionsMixin):
                 text = tr("recommendations.state.empty")
         elif self._session.last_error:
             text = tr("recommendations.state.local_available", active=active_count)
-        elif reason:
-            text = tr(
-                "recommendations.state.underfilled",
-                active=active_count,
-                reserve=reserve_count,
-            )
         else:
-            text = tr(
-                "recommendations.state.ready",
-                active=active_count,
-                reserve=reserve_count,
-            )
+            text = tr("recommendations.feed.count", count=active_count)
         self._deck_status_label.setText(text)
         self._deck_status_label.show()
 
@@ -466,12 +437,6 @@ class CandidateListView(CandidateListActionsMixin):
         if action == "watched" and self._on_watched_added is not None:
             self._on_watched_added(updated.get("last_action", {}).get("transition"))
 
-    def _on_sort_changed(self, _index: int) -> None:
-        mode = self._sort_combo.currentData()
-        if mode in self._service.SEARCH_SORT_MODES:
-            self._session.set_sort_mode(str(mode))
-            self._rebuild_list_delegate()
-
     def _rebuild_list_delegate(self) -> None:
         self._delegate = build_candidate_list_item_delegate(
             self._results_list,
@@ -492,15 +457,6 @@ class CandidateListView(CandidateListActionsMixin):
 
     def _fts_search_enabled(self) -> bool:
         return bool(getattr(self._service, "is_fts_search_enabled", lambda: False)())
-
-    def _sync_sort_combo_from_session(self) -> None:
-        mode = self._session.sort_mode
-        index = self._sort_combo.findData(mode)
-        if index < 0 or self._sort_combo.currentIndex() == index:
-            return
-        self._sort_combo.blockSignals(True)
-        self._sort_combo.setCurrentIndex(index)
-        self._sort_combo.blockSignals(False)
 
     def _detail_search_context(self) -> dict | None:
         if self._fts_search_enabled() is False:
