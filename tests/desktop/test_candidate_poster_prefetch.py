@@ -173,6 +173,40 @@ def test_failed_request_settles_and_finishes_batch(qapp, monkeypatch) -> None:
     assert url not in controller._attempted_urls
 
 
+def test_network_host_cooldown_settles_later_posters_without_requests(qapp, monkeypatch) -> None:
+    import desktop.candidates.poster_prefetch as module
+
+    _patch_candidate_posters(monkeypatch)
+    monkeypatch.setattr(module, "local_preview_poster_path_if_cached", lambda _url: None)
+    controller = module.CandidatePosterPrefetchController(parent=qapp)
+    monkeypatch.setattr(controller, "_pump", lambda: None)
+    failed_url = "https://image.tmdb.org/t/p/w342/one.jpg"
+    queued_url = "https://image.tmdb.org/t/p/w342/two.jpg"
+
+    batch_id = controller.start_batch(
+        [
+            _candidate(1, poster_url=failed_url),
+            _candidate(2, poster_url=queued_url),
+        ],
+        data_language="ru",
+        priority_count=2,
+    )
+    controller._suspend_host(
+        failed_url,
+        module.QNetworkReply.NetworkError.ConnectionRefusedError,
+        "connection refused",
+    )
+    controller._pump = module.CandidatePosterPrefetchController._pump.__get__(controller)
+    controller._pump()
+
+    assert controller._active == {}
+    assert controller._queue == module.deque()
+    assert controller._batch is not None
+    assert controller._batch.batch_id == batch_id
+    assert controller._batch.failed == 2
+    assert controller._batch.settled == 2
+
+
 def test_replaced_batch_events_do_not_update_new_generation(qapp, monkeypatch) -> None:
     import desktop.candidates.poster_prefetch as module
 

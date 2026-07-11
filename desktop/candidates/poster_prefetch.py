@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
+import logging
 from pathlib import Path
 from time import monotonic
 
@@ -21,6 +22,9 @@ from posters.download_images import (
 
 
 POSTER_PREFETCH_MAX_CONCURRENT = 4
+POSTER_NETWORK_FAILURE_COOLDOWN_SECONDS = 60.0
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -61,6 +65,7 @@ class CandidatePosterPrefetchController(QObject):
         self._active: dict[QNetworkReply, str] = {}
         self._attempted_urls: set[str] = set()
         self._failed_at: dict[str, float] = {}
+        self._unavailable_hosts: dict[str, float] = {}
         self._busy = False
         self._network_succeeded = 0
         self._network_failed = 0
@@ -270,6 +275,9 @@ class CandidatePosterPrefetchController(QObject):
         while self._queue and len(self._active) < self._max_concurrent:
             source_url = self._queue.popleft()
             self._queued_urls.discard(source_url)
+            if self._host_is_in_cooldown(source_url):
+                self._finish_url(source_url, None)
+                continue
             download_url = normalize_tmdb_poster_download_url(source_url)
             if download_url is None:
                 self._finish_url(source_url, None)
@@ -293,10 +301,13 @@ class CandidatePosterPrefetchController(QObject):
     def _on_reply_finished(self, reply: QNetworkReply) -> None:
         source_url = self._active.pop(reply, "")
         local_path = None
-        if reply.error() == QNetworkReply.NetworkError.NoError:
+        network_error = reply.error()
+        if network_error == QNetworkReply.NetworkError.NoError:
             content = bytes(reply.readAll())
             if 0 < len(content) <= MAX_POSTER_BYTES and not QImage.fromData(content).isNull():
                 local_path = self._write_preview(source_url, content)
+        elif self._is_host_network_failure(network_error):
+            self._suspend_host(source_url, network_error, reply.errorString())
         reply.deleteLater()
         self._finish_url(source_url, local_path)
         self._pump()
@@ -350,6 +361,60 @@ class CandidatePosterPrefetchController(QObject):
                     failed=False,
                     cache_hit=False,
                 )
+
+    def _host_is_in_cooldown(self, source_url: str) -> bool:
+        host = self._host_for_url(source_url)
+        if host == "":
+            return False
+        until = self._unavailable_hosts.get(host)
+        if until is None:
+            return False
+        if until > monotonic():
+            return True
+        self._unavailable_hosts.pop(host, None)
+        return False
+
+    def _suspend_host(
+        self,
+        source_url: str,
+        network_error: QNetworkReply.NetworkError,
+        error_text: str,
+    ) -> None:
+        host = self._host_for_url(source_url)
+        if host == "":
+            return
+        self._unavailable_hosts[host] = monotonic() + POSTER_NETWORK_FAILURE_COOLDOWN_SECONDS
+        logger.info(
+            "candidate poster host paused host=%s error=%s detail=%s cooldown_seconds=%.0f",
+            host,
+            network_error.name,
+            str(error_text or ""),
+            POSTER_NETWORK_FAILURE_COOLDOWN_SECONDS,
+        )
+
+    @staticmethod
+    def _host_for_url(source_url: str) -> str:
+        return QUrl(str(source_url or "")).host().casefold()
+
+    @staticmethod
+    def _is_host_network_failure(network_error: QNetworkReply.NetworkError) -> bool:
+        return network_error in {
+            QNetworkReply.NetworkError.ConnectionRefusedError,
+            QNetworkReply.NetworkError.RemoteHostClosedError,
+            QNetworkReply.NetworkError.HostNotFoundError,
+            QNetworkReply.NetworkError.TimeoutError,
+            QNetworkReply.NetworkError.TemporaryNetworkFailureError,
+            QNetworkReply.NetworkError.NetworkSessionFailedError,
+            QNetworkReply.NetworkError.BackgroundRequestNotAllowedError,
+            QNetworkReply.NetworkError.TooManyRedirectsError,
+            QNetworkReply.NetworkError.InsecureRedirectError,
+            QNetworkReply.NetworkError.UnknownNetworkError,
+            QNetworkReply.NetworkError.UnknownProxyError,
+            QNetworkReply.NetworkError.UnknownContentError,
+            QNetworkReply.NetworkError.ProtocolUnknownError,
+            QNetworkReply.NetworkError.ProtocolInvalidOperationError,
+            QNetworkReply.NetworkError.SslHandshakeFailedError,
+        }
 
     def _settle_batch_candidate(
         self,
