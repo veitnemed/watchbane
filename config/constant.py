@@ -1,17 +1,22 @@
 """Собирает константы проекта: пути, поля и подписи."""
 
 from config import scheme
+from config.app_paths import get_app_paths
 
-APP_DATA_DIR = 'data'
-WATCHED_DIR = 'data/watched'
-CANDIDATES_DIR = 'data/candidates'
-CACHE_DIR = 'data/cache'
-EXPORTS_DIR = 'data/exports'
-LOGS_DIR = 'data/logs'
+_APP_PATHS = get_app_paths()
+
+APP_DATA_DIR = str(_APP_PATHS.data_dir)
+WATCHED_DIR = str(_APP_PATHS.watched_dir)
+CANDIDATES_DIR = str(_APP_PATHS.candidates_dir)
+CACHE_DIR = str(_APP_PATHS.cache_dir)
+POSTERS_DIR = str(_APP_PATHS.posters_dir)
+EXPORTS_DIR = str(_APP_PATHS.exports_dir)
+LOGS_DIR = str(_APP_PATHS.logs_dir)
+CONFIG_DIR = str(_APP_PATHS.config_dir)
 
 DATA_DIR = WATCHED_DIR
-API_LOG_FILE = LOGS_DIR + '/api_requests.log'
-BACKUP_DIR = 'data/backups/'
+API_LOG_FILE = str(_APP_PATHS.logs_dir / "api_requests.log")
+BACKUP_DIR = str(_APP_PATHS.backups_dir) + "/"
 
 DIR_META = WATCHED_DIR
 

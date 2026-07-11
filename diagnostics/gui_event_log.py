@@ -12,8 +12,10 @@ from threading import Lock
 from typing import Any
 
 
-ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_GUI_LOG_DIR = ROOT_DIR / "logs" / "reports"
+from config import constant
+
+
+DEFAULT_GUI_LOG_DIR = Path(constant.LOGS_DIR) / "reports"
 GUI_EVENT_LOG_ENV = "SERIES_LIST_GUI_EVENT_LOG"
 _LOCK = Lock()
 _SESSION_LOG_PATH: Path | None = None
@@ -38,10 +40,10 @@ def _clean(value: Any) -> Any:
     return str(value)
 
 
-def start_gui_event_log(log_dir: str | Path = DEFAULT_GUI_LOG_DIR) -> Path:
+def start_gui_event_log(log_dir: str | Path | None = None) -> Path:
     """Create a JSONL event log for the current GUI process."""
     global _SESSION_ENABLED, _SESSION_LOG_PATH
-    output_dir = Path(log_dir)
+    output_dir = Path(DEFAULT_GUI_LOG_DIR if log_dir is None else log_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     with _LOCK:
         _SESSION_ENABLED = True
@@ -56,7 +58,7 @@ def gui_event_log_enabled() -> bool:
     return value.strip().casefold() in {"1", "true", "yes", "on"}
 
 
-def start_gui_event_log_if_enabled(log_dir: str | Path = DEFAULT_GUI_LOG_DIR) -> Path | None:
+def start_gui_event_log_if_enabled(log_dir: str | Path | None = None) -> Path | None:
     if gui_event_log_enabled() is False:
         return None
     return start_gui_event_log(log_dir)

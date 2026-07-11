@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from config import constant
 from storage import profiles
 from storage import runtime
@@ -74,6 +76,7 @@ def test_dev_empty_profile_flag_backs_up_and_removes_runtime_db(monkeypatch, tmp
 
     monkeypatch.setattr(constant, "APP_DATA_DIR", str(data_root))
     profiles.set_base_data_dir(data_root)
+    monkeypatch.setenv("WATCHBANE_DATA_DIR", str(tmp_path))
     monkeypatch.setenv(runtime.DEV_EMPTY_PROFILE_ENV, "1")
     monkeypatch.delenv(runtime.DEV_CLEAR_CANDIDATES_ENV, raising=False)
 
@@ -89,6 +92,7 @@ def test_dev_clear_candidates_flag_does_not_clear_watched(monkeypatch, tmp_path)
     data_root = tmp_path / "data"
     monkeypatch.setattr(constant, "APP_DATA_DIR", str(data_root))
     profiles.set_base_data_dir(data_root)
+    monkeypatch.setenv("WATCHBANE_DATA_DIR", str(tmp_path))
     runtime.ensure_runtime_data_layout()
     conn = connect(data_root / "watchbane.sqlite3")
     try:
@@ -118,3 +122,20 @@ def test_dev_clear_candidates_flag_does_not_clear_watched(monkeypatch, tmp_path)
     assert result["applied"] is True
     assert watched == 1
     assert candidates == 0
+
+
+def test_dev_reset_refuses_main_runtime_without_data_dir_override(monkeypatch, tmp_path) -> None:
+    data_root = tmp_path / "main-runtime"
+    data_root.mkdir()
+    sentinel = data_root / "watchbane.sqlite3"
+    sentinel.write_bytes(b"do-not-touch")
+    monkeypatch.setattr(constant, "APP_DATA_DIR", str(data_root))
+    profiles.set_base_data_dir(data_root)
+    monkeypatch.setenv(runtime.DEV_EMPTY_PROFILE_ENV, "1")
+    monkeypatch.delenv(runtime.DEV_CLEAR_CANDIDATES_ENV, raising=False)
+    monkeypatch.delenv("WATCHBANE_DATA_DIR", raising=False)
+
+    with pytest.raises(runtime.DevStartupResetSafetyError):
+        runtime.apply_dev_startup_reset_from_env()
+
+    assert sentinel.read_bytes() == b"do-not-touch"

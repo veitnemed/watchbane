@@ -46,6 +46,7 @@ def _isolate_runtime_data(monkeypatch, request, tmp_path):
     monkeypatch.delenv("WATCHBANE_UI_SCALE", raising=False)
     monkeypatch.delenv("WATCHBANE_INTERFACE_LANGUAGE", raising=False)
     monkeypatch.delenv("WATCHBANE_DATA_LANGUAGE", raising=False)
+    monkeypatch.delenv("WATCHBANE_DATA_DIR", raising=False)
 
     import posters.cache as poster_cache_module
 

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from config import constant
+from config.app_paths import get_app_paths
 
 MAIN_PROFILE = "main"
 SANDBOX_PROFILE = "sandbox"
@@ -254,55 +255,76 @@ def _with_sep(path: Path) -> str:
     return str(path) + os.sep
 
 
-def _apply_module_level_path_caches(data_dir: Path) -> None:
+def _apply_module_level_path_caches(*, cache_dir: Path, posters_dir: Path, logs_dir: Path) -> None:
     poster_cache = sys.modules.get("posters.cache")
     if poster_cache is not None:
-        poster_cache.DEFAULT_POSTER_CACHE_DIR = data_dir / "cache" / "posters"
+        poster_cache.DEFAULT_POSTER_CACHE_DIR = posters_dir
         poster_cache.DEFAULT_POSTER_CACHE_JSON = poster_cache.DEFAULT_POSTER_CACHE_DIR / "posters.json"
         poster_cache.DEFAULT_POSTER_IMAGES_DIR = poster_cache.DEFAULT_POSTER_CACHE_DIR / "images"
 
     poster_download = sys.modules.get("posters.download_images")
     if poster_download is not None:
-        poster_download.DEFAULT_POSTER_IMAGES_DIR = data_dir / "cache" / "posters" / "images"
+        poster_download.DEFAULT_POSTER_IMAGES_DIR = posters_dir / "images"
         poster_download.PREVIEW_POSTER_DIR = poster_download.DEFAULT_POSTER_IMAGES_DIR / "preview"
 
     poster_jobs = sys.modules.get("posters.download_job")
     if poster_jobs is not None:
-        poster_jobs.DEFAULT_JOBS_DIR = data_dir / "cache" / "posters" / "jobs"
+        poster_jobs.DEFAULT_JOBS_DIR = posters_dir / "jobs"
 
     tmdb_overrides = sys.modules.get("posters.tmdb_overrides")
     if tmdb_overrides is not None:
-        tmdb_overrides.DEFAULT_TMDB_CACHE_DIR = data_dir / "cache" / "tmdb"
+        tmdb_overrides.DEFAULT_TMDB_CACHE_DIR = cache_dir / "tmdb"
         tmdb_overrides.DEFAULT_WATCHED_TMDB_OVERRIDES_JSON = (
             tmdb_overrides.DEFAULT_TMDB_CACHE_DIR / "watched_tmdb_overrides.json"
         )
 
     tmdb_api = sys.modules.get("apis.tmdb_api")
     if tmdb_api is not None:
-        tmdb_api.TMDB_CACHE_DIR = data_dir / "cache" / "tmdb"
+        tmdb_api.TMDB_CACHE_DIR = cache_dir / "tmdb"
         tmdb_api.DISCOVER_CACHE_DIR = tmdb_api.TMDB_CACHE_DIR / "discover"
         tmdb_api.DETAILS_CACHE_DIR = tmdb_api.TMDB_CACHE_DIR / "details"
         tmdb_api.GENRE_CACHE_DIR = tmdb_api.TMDB_CACHE_DIR / "genre"
+
+    gui_event_log = sys.modules.get("diagnostics.gui_event_log")
+    if gui_event_log is not None:
+        gui_event_log.DEFAULT_GUI_LOG_DIR = logs_dir / "reports"
 
 
 def apply_profile_to_constants(name: str) -> None:
     """Apply profile paths to legacy constant-based storage modules."""
     profile = _clean_profile_name(name)
     data_dir = get_profile_data_dir(profile)
+    installed_paths = get_app_paths()
+    if profile == MAIN_PROFILE and data_dir.resolve() == installed_paths.data_dir.resolve():
+        cache_dir = installed_paths.cache_dir
+        posters_dir = installed_paths.posters_dir
+        exports_dir = installed_paths.exports_dir
+        logs_dir = installed_paths.logs_dir
+        backups_dir = installed_paths.backups_dir
+        config_dir = installed_paths.config_dir
+    else:
+        cache_dir = data_dir / "cache"
+        posters_dir = cache_dir / "posters"
+        exports_dir = data_dir / "exports"
+        logs_dir = data_dir / "logs"
+        backups_dir = data_dir / "backups"
+        config_dir = data_dir / "config"
 
     constant.APP_DATA_DIR = str(data_dir)
     constant.WATCHED_DIR = str(data_dir / "watched")
     constant.CANDIDATES_DIR = str(data_dir / "candidates")
-    constant.CACHE_DIR = str(data_dir / "cache")
-    constant.EXPORTS_DIR = str(data_dir / "exports")
-    constant.LOGS_DIR = str(data_dir / "logs")
-    constant.BACKUP_DIR = _with_sep(data_dir / "backups")
+    constant.CACHE_DIR = str(cache_dir)
+    constant.POSTERS_DIR = str(posters_dir)
+    constant.EXPORTS_DIR = str(exports_dir)
+    constant.LOGS_DIR = str(logs_dir)
+    constant.CONFIG_DIR = str(config_dir)
+    constant.BACKUP_DIR = _with_sep(backups_dir)
 
     constant.DATA_DIR = constant.WATCHED_DIR
-    constant.API_LOG_FILE = str(data_dir / "logs" / "api_requests.log")
+    constant.API_LOG_FILE = str(logs_dir / "api_requests.log")
     constant.DIR_META = constant.WATCHED_DIR
     constant.DIR_TXT = constant.EXPORTS_DIR
-    _apply_module_level_path_caches(data_dir)
+    _apply_module_level_path_caches(cache_dir=cache_dir, posters_dir=posters_dir, logs_dir=logs_dir)
 
 
 def apply_active_profile_to_constants() -> None:

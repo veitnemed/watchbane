@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 
 from config import constant
+from config.app_paths import data_dir_override_active, get_app_paths, migrate_legacy_database
 from storage import profiles
 
 
@@ -22,8 +23,10 @@ def _runtime_directories() -> tuple[str, ...]:
         constant.WATCHED_DIR,
         constant.CANDIDATES_DIR,
         constant.CACHE_DIR,
+        constant.POSTERS_DIR,
         constant.EXPORTS_DIR,
         constant.LOGS_DIR,
+        constant.CONFIG_DIR,
         constant.BACKUP_DIR,
     )
 
@@ -44,6 +47,20 @@ def ensure_runtime_data_layout(*, create_initial_backup: bool = False) -> dict:
     from candidates.repositories.criteria_repository import init_candidate_criteria
     from candidates.repositories.pool_repository import init_candidate_pool
     from storage.data import init_dataset, init_meta
+
+    installed_paths = get_app_paths()
+    if (
+        data_dir_override_active() is False
+        and Path(constant.APP_DATA_DIR).resolve() == installed_paths.data_dir.resolve()
+    ):
+        legacy_database_migration = migrate_legacy_database(paths=installed_paths)
+    else:
+        legacy_database_migration = {
+            "status": "custom_runtime",
+            "migrated": False,
+            "db_path": str(Path(constant.APP_DATA_DIR) / "watchbane.sqlite3"),
+            "backup_path": None,
+        }
 
     directories = ensure_runtime_directories()
     init_meta()
@@ -75,11 +92,16 @@ def ensure_runtime_data_layout(*, create_initial_backup: bool = False) -> dict:
         "sqlite_db_path": sqlite_db_path,
         "sqlite_schema_version": sqlite_schema_version,
         "sqlite_startup_migration": sqlite_startup_migration,
+        "legacy_database_migration": legacy_database_migration,
     }
 
 
 DEV_EMPTY_PROFILE_ENV = "WATCHBANE_DEV_EMPTY_PROFILE"
 DEV_CLEAR_CANDIDATES_ENV = "WATCHBANE_DEV_CLEAR_CANDIDATES_ON_START"
+
+
+class DevStartupResetSafetyError(RuntimeError):
+    """Raised when a destructive dev reset targets the main installed runtime."""
 
 
 def _env_enabled(name: str) -> bool:
@@ -151,6 +173,12 @@ def apply_dev_startup_reset_from_env() -> dict:
     clear_candidates = _env_enabled(DEV_CLEAR_CANDIDATES_ENV)
     if not empty_profile and not clear_candidates:
         return {"applied": False, "backup_path": None, "empty_profile": False, "clear_candidates": False}
+
+    if data_dir_override_active() is False and profiles.get_active_profile() == profiles.MAIN_PROFILE:
+        raise DevStartupResetSafetyError(
+            f"{DEV_EMPTY_PROFILE_ENV} and {DEV_CLEAR_CANDIDATES_ENV} require WATCHBANE_DATA_DIR "
+            "or an active sandbox profile."
+        )
 
     reasons = []
     if empty_profile:

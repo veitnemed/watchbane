@@ -14,7 +14,7 @@ from storage.data import get_meta_obj
 from storage import posters as poster_storage
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_POSTER_CACHE_DIR = Path(constant.CACHE_DIR) / "posters"
+DEFAULT_POSTER_CACHE_DIR = Path(constant.POSTERS_DIR)
 DEFAULT_POSTER_CACHE_JSON = DEFAULT_POSTER_CACHE_DIR / "posters.json"
 DEFAULT_POSTER_IMAGES_DIR = DEFAULT_POSTER_CACHE_DIR / "images"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p"
