@@ -45,6 +45,59 @@ QListWidget#watchedList QScrollBar::sub-line:horizontal {{
 QWidget#watchedSidebar {{
     background: transparent;
 }}
+QTabBar#librarySectionTabs {{
+    background: transparent;
+    border: none;
+}}
+QTabBar#librarySectionTabs::tab {{
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER_WEAK};
+    color: {FILM_TEXT_SUBTLE};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 600;
+    min-height: {px(32)}px;
+    padding: {px(5)}px {px(6)}px;
+}}
+QTabBar#librarySectionTabs::tab:first {{
+    border-top-left-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    border-bottom-left-radius: {px(RADIUS_BUTTON_SMALL)}px;
+}}
+QTabBar#librarySectionTabs::tab:last {{
+    border-top-right-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    border-bottom-right-radius: {px(RADIUS_BUTTON_SMALL)}px;
+}}
+QTabBar#librarySectionTabs::tab:selected {{
+    background-color: {FILM_ACCENT_DIM};
+    border-color: {FILM_ACCENT};
+    color: {FILM_TEXT};
+}}
+QFrame#libraryStateActionPanel {{
+    background-color: {FILM_SURFACE_0};
+    border: 1px solid {FILM_BORDER_WEAK};
+    border-radius: {px(RADIUS_CARD)}px;
+}}
+QPushButton#libraryPrimaryActionButton,
+QPushButton#librarySecondaryActionButton,
+QPushButton#libraryTertiaryActionButton {{
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER_WEAK};
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    color: {FILM_TEXT};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 700;
+    min-height: {px(34)}px;
+    padding: {px(5)}px {px(9)}px;
+}}
+QPushButton#libraryPrimaryActionButton {{
+    background-color: {FILM_ACCENT_DIM};
+    border-color: {FILM_ACCENT};
+}}
+QPushButton#libraryPrimaryActionButton:hover,
+QPushButton#librarySecondaryActionButton:hover,
+QPushButton#libraryTertiaryActionButton:hover {{
+    border-color: {FILM_ACCENT_HOVER};
+    background-color: {FILM_SURFACE_2};
+}}
 QLineEdit#watchedSearch {{
     background-color: {FILM_SURFACE_1};
     border: 1px solid {FILM_BORDER_WEAK};

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QTabBar, QVBoxLayout, QWidget
 
 from desktop.i18n import tr
 from desktop.shared.detail import WatchedListItemDelegate
@@ -40,6 +40,7 @@ def build_watched_sidebar(
     on_filters_changed,
     on_selection_changed,
     on_context_menu,
+    on_section_changed,
 ) -> tuple[QWidget, dict]:
     """Build left sidebar widgets; returns panel and named widget handles."""
     panel = QWidget()
@@ -49,6 +50,16 @@ def build_watched_sidebar(
     layout = QVBoxLayout(panel)
     layout.setContentsMargins(0, LEFT_PANEL_TOP_COMPENSATION_PX, 0, 0)
     layout.setSpacing(layout_px(14))
+
+    section_tabs = QTabBar()
+    section_tabs.setObjectName("librarySectionTabs")
+    section_tabs.setExpanding(True)
+    section_tabs.setDrawBase(False)
+    section_tabs.addTab(tr("library.section.watched"))
+    section_tabs.addTab(tr("library.section.saved"))
+    section_tabs.addTab(tr("library.section.hidden"))
+    section_tabs.currentChanged.connect(on_section_changed)
+    layout.addWidget(section_tabs)
 
     add_title_button = QPushButton(tr("watched.add_title.button"))
     add_title_button.setObjectName("watchedAddTitle")
@@ -106,6 +117,7 @@ def build_watched_sidebar(
     layout.addWidget(list_widget, stretch=1)
 
     handles = {
+        "section_tabs": section_tabs,
         "add_title_button": add_title_button,
         "search_input": search_input,
         "debounced_search": debounced_search,

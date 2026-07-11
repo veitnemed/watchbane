@@ -21,13 +21,27 @@ from storage.sqlite.json_codec import loads_json
 from storage.sqlite.migrations import apply_migrations
 from storage.sqlite.watched_meta import save_meta_dict
 from storage.sqlite.watched_read import load_dataset_dict
-from storage.sqlite.watched_write import save_dataset_dict, upsert_watched_row
+from storage.sqlite.watched_write import delete_watched, save_dataset_dict, upsert_watched_row
 
 
 STATE_AVAILABLE = "available"
 STATE_WATCHLIST = "watchlist"
 STATE_WATCHED = "watched"
 STATE_HIDDEN = "hidden"
+
+
+def load_action_candidates(
+    action: str,
+    *,
+    path: str | Path | None = None,
+) -> list[dict]:
+    """Load normalized candidate payloads currently assigned to one action state."""
+    stored = action_repository.load_candidate_actions_dict(action, path=path)
+    return [
+        entry["candidate"]
+        for entry in stored.values()
+        if isinstance(entry, dict) and isinstance(entry.get("candidate"), dict)
+    ]
 
 
 def _candidate_year(candidate: dict) -> int | None:
@@ -49,7 +63,7 @@ def _find_watched_row(conn: sqlite3.Connection, candidate: dict):
     tmdb_id = _candidate_tmdb_id(candidate)
     if tmdb_id is not None:
         row = conn.execute(
-            "SELECT * FROM watched_records WHERE media_type = ? AND tmdb_id = ? LIMIT 1",
+            "SELECT * FROM watched_records WHERE media_type = ? AND tmdb_id = ? AND payload_json != '{}' LIMIT 1",
             (media_type, tmdb_id),
         ).fetchone()
         if row is not None:
@@ -61,7 +75,7 @@ def _find_watched_row(conn: sqlite3.Connection, candidate: dict):
         return conn.execute(
             """
             SELECT * FROM watched_records
-            WHERE title_normalized = ? AND media_type = ? AND year IS NULL
+            WHERE title_normalized = ? AND media_type = ? AND year IS NULL AND payload_json != '{}'
             LIMIT 1
             """,
             (normalize_title_key(title), media_type),
@@ -69,7 +83,7 @@ def _find_watched_row(conn: sqlite3.Connection, candidate: dict):
     return conn.execute(
         """
         SELECT * FROM watched_records
-        WHERE title_normalized = ? AND media_type = ? AND year = ?
+        WHERE title_normalized = ? AND media_type = ? AND year = ? AND payload_json != '{}'
         LIMIT 1
         """,
         (normalize_title_key(title), media_type, year),
@@ -160,6 +174,23 @@ def remove_from_watchlist(candidate: dict, *, path: str | Path | None = None) ->
                 (action_repository.ACTION_WATCHLIST,),
                 conn=conn,
             )
+            state = _state_in_connection(conn, normalized)
+        return {"ok": True, "identity": candidate_state_identity_key(normalized), "state": state}
+    finally:
+        conn.close()
+
+
+def remove_from_watched(candidate: dict, *, path: str | Path | None = None) -> dict:
+    """Remove a watched payload so the title becomes recommendation-eligible again."""
+    normalized = normalize_candidate_record(candidate)
+    conn = connect(path)
+    try:
+        apply_migrations(conn)
+        with conn:
+            row = _find_watched_row(conn, normalized)
+            if row is not None:
+                delete_watched(str(row["dataset_key"]), conn=conn)
+            _clear_candidate_actions(conn, normalized)
             state = _state_in_connection(conn, normalized)
         return {"ok": True, "identity": candidate_state_identity_key(normalized), "state": state}
     finally:

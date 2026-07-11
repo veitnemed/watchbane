@@ -44,6 +44,8 @@ class WatchedTabActionsMixin:
         self._show_status(result.message or tr("watched.status.new_entry_added"), 5000)
 
     def _open_list_context_menu(self, position) -> None:
+        if getattr(self, "_library_section", "watched") != "watched":
+            return
         item = self._list_widget.itemAt(position)
         entry = self._entry_from_item(item)
         is_valid, _message = validate_score_edit_entry(entry)
@@ -85,7 +87,12 @@ class WatchedTabActionsMixin:
 
     def _refresh_after_delete(self, result: dict) -> None:
         previous_key = self._current_entry_key()
-        self._entries = self._load_entries_for_actions()
+        loaded_entries = self._load_entries_for_actions()
+        setter = getattr(self, "_set_watched_entries", None)
+        if callable(setter):
+            setter(loaded_entries)
+        else:
+            self._entries = loaded_entries
         self._reload_watched_search_index()
         self._filters.reload_genre_options(self._entries)
         self._refresh_list()
@@ -133,7 +140,12 @@ class WatchedTabActionsMixin:
         return dialog.score_value()
 
     def _refresh_after_user_score_save(self, current_key: str, result) -> None:
-        self._entries = self._load_entries_for_actions()
+        loaded_entries = self._load_entries_for_actions()
+        setter = getattr(self, "_set_watched_entries", None)
+        if callable(setter):
+            setter(loaded_entries)
+        else:
+            self._entries = loaded_entries
         self._reload_watched_search_index()
         self._refresh_list()
         self._notify_entries_changed()

@@ -169,3 +169,15 @@ def test_remove_from_watchlist_returns_available(tmp_path) -> None:
 
     assert result["state"] == states.STATE_AVAILABLE
     assert _actions(candidate, db_path) == set()
+
+
+def test_remove_from_watched_returns_available(tmp_path) -> None:
+    db_path = tmp_path / "state.sqlite3"
+    candidate = _candidate()
+    states.mark_watched(candidate, optional_user_score=8.0, path=db_path)
+
+    result = states.remove_from_watched(candidate, path=db_path)
+
+    assert result["state"] == states.STATE_AVAILABLE
+    assert states.get_title_state(candidate, path=db_path) == states.STATE_AVAILABLE
+    assert _watched_rows(db_path)[0]["payload_json"] == "{}"
