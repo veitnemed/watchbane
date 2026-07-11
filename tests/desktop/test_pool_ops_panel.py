@@ -120,10 +120,15 @@ def _build_panel(qtbot, monkeypatch, service: FakeCandidateService | None = None
     return panel, service, workers, status_messages, pool_changed_calls
 
 
-def test_refresh_stats_shows_summary_and_duplicate_warning(qtbot, monkeypatch) -> None:
-    panel, _service, _workers, _status, _changed = _build_panel(qtbot, monkeypatch)
+def test_refresh_stats_shows_each_detail_once_and_duplicate_warning(qtbot, monkeypatch) -> None:
+    panel, service, _workers, _status, _changed = _build_panel(qtbot, monkeypatch)
 
-    assert "3" in panel._summary_label.text()
+    panel.refresh_stats()
+
+    assert panel._summary_label.isHidden() is True
+    assert len(panel._stats_line_labels) == 1
+    assert "3" in panel._stats_line_labels[0].text()
+    assert panel._stats_layout.count() == 1
     assert panel._warning_label.isHidden() is False
 
 

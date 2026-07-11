@@ -159,6 +159,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self._detail_card = DetailCard()
         scroll.setWidget(self._detail_card.widget)

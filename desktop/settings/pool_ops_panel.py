@@ -146,7 +146,31 @@ class PoolOpsPanel(QWidget):
     def refresh_stats(self) -> None:
         stats_view = candidate_service.get_pool_stats_view()
         stats = stats_view.get("stats") or {}
-        self._summary_label.setText(stats_view.get("summary") or tr("settings.pool.ops.stats.empty"))
+        has_count_stats = any(
+            key in stats
+            for key in ("unique_total", "storage_total", "ready_total", "incomplete_total")
+        )
+        unique_total = int(stats.get("unique_total") or stats.get("storage_total") or 0)
+        if has_count_stats and unique_total > 0:
+            lines = [
+                tr(
+                    "settings.pool.ops.stats.overview",
+                    unique=unique_total,
+                    ready=int(stats.get("ready_total") or 0),
+                    incomplete=int(stats.get("incomplete_total") or 0),
+                )
+            ]
+        elif has_count_stats:
+            lines = []
+        else:
+            lines = [str(line) for line in stats_view.get("lines") or []]
+        if lines:
+            self._summary_label.clear()
+            self._summary_label.hide()
+        else:
+            summary = tr("settings.pool.ops.stats.empty") if has_count_stats else stats_view.get("summary")
+            self._summary_label.setText(summary or tr("settings.pool.ops.stats.empty"))
+            self._summary_label.show()
 
         duplicate_entries = int(stats.get("duplicate_entries") or 0)
         similar_duplicate_total = int(stats.get("similar_duplicate_total") or 0)
@@ -158,11 +182,13 @@ class PoolOpsPanel(QWidget):
             self._warning_label.hide()
 
         for label in self._stats_line_labels:
+            self._stats_layout.removeWidget(label)
+            label.hide()
             label.deleteLater()
         self._stats_line_labels.clear()
 
-        for line in stats_view.get("lines") or []:
-            label = QLabel(str(line))
+        for line in lines:
+            label = QLabel(line)
             label.setObjectName("poolOpsStatsLine")
             label.setWordWrap(True)
             self._stats_layout.addWidget(label)

@@ -3752,7 +3752,8 @@ def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
     assert content is not None
     assert toggle is not None
     assert toggle.isHidden() is False
-    assert content.width() == DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width
+    assert content.width() <= DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width
+    assert content.width() >= content.minimumSizeHint().width()
 
     def right_edge(widget: QWidget) -> int:
         top_right = widget.mapTo(hero, QPoint(widget.width(), 0))
@@ -3837,7 +3838,10 @@ def test_detail_card_poster_shell_exists(qapp) -> None:
 
     assert shell is not None
     assert poster is not None
-    assert shell.parent() is detail._poster_column_widget
+    current = shell.parent()
+    while current is not None and current is not detail._poster_column_widget:
+        current = current.parent()
+    assert current is detail._poster_column_widget
     assert shell.width() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
     assert shell.height() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_height
     assert poster.width() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_content_width
@@ -3962,7 +3966,7 @@ def test_candidate_detail_actions_are_icon_only_under_poster() -> None:
     assert 'make_detail_action_icon("eye"' in layout_source
     assert 'make_detail_action_icon("hide"' in layout_source
     assert "owner._poster_actions_layout.addWidget" in layout_source
-    assert "poster_column.addWidget(owner._poster_actions_widget)" in layout_source
+    assert "poster_primary_layout.addWidget(owner._poster_actions_widget)" in layout_source
     assert "title_row.addWidget(owner._poster_actions_widget" not in layout_source
     assert "owner._metrics_row.addWidget(owner._mark_watched_button" not in layout_source
     assert "owner._metrics_row.addWidget(owner._hide_button" not in layout_source
@@ -3982,22 +3986,38 @@ def test_candidate_detail_actions_are_poster_descendants(qapp) -> None:
         return False
 
     detail = WatchedDetailCard(profile=CANDIDATE_DETAIL_CARD_PROFILE)
-    detail.show_entry(("Candidate", {}, {"title": "Candidate", "tmdb_score": 7.2, "final_score": 0.62}))
+    detail.show_entry(
+        (
+            "Candidate",
+            {},
+            {
+                "title": "Candidate",
+                "tmdb_score": 7.2,
+                "final_score": 0.62,
+                "overview": "A long enough overview to exercise the poster-column layout below the action row.",
+            },
+        )
+    )
     qapp.processEvents()
 
     poster_actions = detail.widget.findChild(QWidget, "detailPosterActions")
     title_actions = detail.widget.findChild(QWidget, "detailTitleActions")
     mark_button = detail.widget.findChild(QPushButton, "candidateMarkWatchedButton")
     hide_button = detail.widget.findChild(QPushButton, "candidateHideButton")
+    overview_header = detail.widget.findChild(QWidget, "detailOverviewHeader")
 
     assert poster_actions is not None
-    assert poster_actions.parent() is detail._poster_column_widget
+    assert is_descendant(poster_actions, detail._poster_column_widget)
     assert mark_button is not None
     assert hide_button is not None
     assert is_descendant(mark_button, poster_actions)
     assert is_descendant(hide_button, poster_actions)
     assert is_descendant(mark_button, detail._poster_column_widget)
     assert is_descendant(hide_button, detail._poster_column_widget)
+    assert overview_header is not None
+    action_bottom = poster_actions.mapTo(detail._poster_column_widget, poster_actions.rect().bottomLeft()).y()
+    overview_top = overview_header.mapTo(detail._poster_column_widget, overview_header.rect().topLeft()).y()
+    assert action_bottom < overview_top
     if title_actions is not None:
         assert not is_descendant(mark_button, title_actions)
         assert not is_descendant(hide_button, title_actions)
@@ -5723,6 +5743,29 @@ def test_candidate_filter_section_icons_are_centered(qapp, icon_name: str) -> No
     assert abs(((min(ys) + max(ys)) / 2) - ((image.height() - 1) / 2)) <= 3.0
 
 
+@pytest.mark.parametrize(
+    "icon_name",
+    ("document", "globe", "media", "calendar", "heart", "vibe", "clock", "target", "refresh", "search"),
+)
+def test_candidate_filter_runtime_icons_have_clean_bounds(qapp, icon_name: str) -> None:
+    from desktop.candidates.filter_icon_assets import filter_icon_pixmap
+
+    pixmap = filter_icon_pixmap(icon_name, 24, "#8FA2B7")
+    image = pixmap.toImage()
+    painted = [
+        (x, y)
+        for y in range(image.height())
+        for x in range(image.width())
+        if image.pixelColor(x, y).alpha() > 0
+    ]
+
+    assert painted
+    xs = [point[0] for point in painted]
+    ys = [point[1] for point in painted]
+    assert min(xs) >= 2 and max(xs) <= image.width() - 3
+    assert min(ys) >= 2 and max(ys) <= image.height() - 3
+
+
 def test_candidate_list_search_matches_watched_search_scale() -> None:
     from desktop.theme.layout import INPUT_PADDING_X, INPUT_PADDING_Y
     from desktop.theme.scaling import font_px, layout_px
@@ -6603,6 +6646,19 @@ def test_watched_tab_reload_entries_rereads_data_language(monkeypatch, qapp) -> 
     view.reload_entries()
 
     assert calls[-1] == "en"
+
+
+def test_watched_tab_disables_horizontal_scrolling(monkeypatch, qapp) -> None:
+    from PyQt6.QtCore import Qt
+
+    from desktop.watched.tab import WatchedTabView
+
+    monkeypatch.setattr("desktop.watched.tab.load_watched_entries", lambda **_kwargs: [])
+
+    view = WatchedTabView(on_status_message=lambda _message, _timeout_ms=0: None)
+
+    assert view._list_widget.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert view._detail_scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
 
 
 def test_watched_tab_selection_resets_detail_scroll() -> None:

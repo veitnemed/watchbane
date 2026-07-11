@@ -98,6 +98,7 @@ def build_watched_sidebar(
     list_widget.setObjectName("watchedList")
     list_widget.setSpacing(list_px(2))
     list_widget.setUniformItemSizes(True)
+    list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
     list_widget.setItemDelegate(WatchedListItemDelegate(list_widget))
     list_widget.currentRowChanged.connect(on_selection_changed)
     list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)

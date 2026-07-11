@@ -162,6 +162,15 @@ from desktop.theme.layout import (
     list_px,
     poster_px,
 )
+from desktop.theme.scaling import get_ui_scale
+
+
+def detail_poster_px(value: int | float) -> int:
+    """Scale full detail posters without letting high UI scales overflow the viewport."""
+    scaled = poster_px(value)
+    if get_ui_scale() < 1.25:
+        return scaled
+    return max(1, int(round(scaled / get_ui_scale())))
 
 POSTER_BASE_WIDTH = 220
 POSTER_BASE_HEIGHT = 330
@@ -218,8 +227,8 @@ class DetailCardLayoutProfile:
     detail_hero_min_width: int = detail_px(DETAIL_HERO_MIN_WIDTH)
     detail_hero_preferred_min_width: int = detail_px(DETAIL_HERO_PREFERRED_MIN_WIDTH)
     detail_content_max_width: int = detail_px(DETAIL_CONTENT_MAX_WIDTH)
-    detail_poster_width: int = poster_px(DETAIL_POSTER_WIDTH)
-    detail_poster_height: int = poster_px(DETAIL_POSTER_HEIGHT)
+    detail_poster_width: int = detail_poster_px(DETAIL_POSTER_WIDTH)
+    detail_poster_height: int = detail_poster_px(DETAIL_POSTER_HEIGHT)
     detail_poster_border_width: int = poster_px(DETAIL_POSTER_BORDER_WIDTH)
     detail_poster_radius: int = poster_px(DETAIL_POSTER_RADIUS)
     detail_poster_right_gap: int = detail_px(DETAIL_POSTER_RIGHT_GAP)

@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QListView, QPushButton, QCheckBox, QComboBox, QLineEdit
+from PyQt6.QtWidgets import QLabel, QListView, QPushButton, QCheckBox, QComboBox, QLineEdit, QScrollArea
 
 from desktop.candidates.list_model import CandidateListModel, CandidateListRoles
 from desktop.candidates.filters_view import CandidateFiltersView
@@ -463,6 +463,24 @@ def test_fts_search_uses_async_worker_not_substring_filter(qtbot) -> None:
     assert _listed_titles(list_widget) == ["Searchable Only"]
 
 
+def test_fts_refresh_selects_first_candidate_and_updates_pool_count(qtbot) -> None:
+    service = FakeCandidateService()
+    service.set_fts_enabled(True)
+    _service, session, _filters_view, list_view = _build_views(qtbot, service=service)
+
+    session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": False})
+    list_widget = _candidate_list(list_view)
+    qtbot.waitUntil(lambda: _listed_count(list_widget) == 2)
+
+    detail_scroll = list_view.widget.findChild(QScrollArea, "candidateSearchDetailScroll")
+    counter = list_view.widget.findChild(QLabel, "candidateListCounter")
+
+    assert list_widget.currentIndex().row() == 0
+    assert detail_scroll is not None and detail_scroll.isHidden() is False
+    assert counter is not None and "2" in counter.text()
+    assert "pool: 0" not in counter.text()
+
+
 def test_detail_card_shows_search_reasons_when_fts_context_present(qtbot) -> None:
     from desktop.candidates.presenters import build_candidate_readonly_detail_entry
 
@@ -491,7 +509,8 @@ def test_detail_card_shows_search_reasons_when_fts_context_present(qtbot) -> Non
         "filters": dict(DEFAULT_BROWSE_FILTERS),
         "sort_mode": session.sort_mode,
     }
-    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+    list_view._detail_entries.clear()
+    list_view._on_result_selected(list_widget.model().index(0, 0))
 
     title_meta = list_view.widget.findChild(QLabel, "detailTitleMeta")
     assert title_meta is not None

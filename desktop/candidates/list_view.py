@@ -154,6 +154,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._results_list.setObjectName("candidateListWidget")
         self._results_list.setSpacing(CANDIDATE_LIST_ITEM_SPACING)
         self._results_list.setUniformItemSizes(True)
+        self._results_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._results_list.setModel(self._model)
         self._delegate = build_candidate_list_item_delegate(
             self._results_list,
@@ -305,6 +306,12 @@ class CandidateListView(CandidateListActionsMixin):
         if len(self._candidates) == 0:
             return
 
+        self._restore_result_selection(previous_identity)
+
+    def _restore_result_selection(self, previous_identity: str | None) -> None:
+        if len(self._candidates) == 0:
+            return
+
         row = resolve_selection_row(
             previous_identity,
             self._candidates,
@@ -395,24 +402,34 @@ class CandidateListView(CandidateListActionsMixin):
             return
 
         self._all_candidates = self._session.sorted_candidates()
-        if self._fts_search_enabled():
-            self._detail_entries = {}
-            self._candidates = list(self._all_candidates)
-            self._results_list.blockSignals(True)
-            self._model.set_candidates(self._candidates)
-            self._update_counter_label(self._search_input.text())
-            self._results_list.blockSignals(False)
-            self._log_search_query(self._search_input.text())
-        else:
-            self._search_index = build_candidate_search_index(self._all_candidates)
-            self._debounced_search.flush()
-
         pool_stats = self._session.pool_stats()
         if not pool_stats:
             pool_stats = self._service.get_pool_stats_view()["stats"]
         self._pool_unique_total = int(
             pool_stats.get("unique_total", pool_stats.get("storage_total", 0)) or 0
         )
+
+        if self._fts_search_enabled():
+            previous_identity = self._selected_identity
+            self._detail_entries = {}
+            self._selected_candidate = None
+            self._selected_identity = None
+            self._candidates = list(self._all_candidates)
+            self._results_list.blockSignals(True)
+            self._model.set_candidates(self._candidates)
+            self._update_counter_label(self._search_input.text())
+            self._results_list.blockSignals(False)
+            self._log_search_query(self._search_input.text())
+            if self._candidates:
+                self._restore_result_selection(previous_identity)
+            else:
+                self._clear_detail(
+                    show_filters_hint=False,
+                    search_active=bool(self._search_input.text().strip()),
+                )
+        else:
+            self._search_index = build_candidate_search_index(self._all_candidates)
+            self._debounced_search.flush()
 
     def _on_result_selected(self, current: QModelIndex, _previous: QModelIndex = QModelIndex()) -> None:
         started = perf_counter()

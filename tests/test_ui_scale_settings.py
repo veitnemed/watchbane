@@ -280,7 +280,7 @@ def test_pool_ops_dynamic_stats_text_surfaces_are_transparent(monkeypatch, qapp)
 
     summary = panel.findChild(QLabel, "poolOpsStatsSummary")
     assert summary is not None
-    assert summary.text() == "Pool summary"
+    assert summary.isHidden() is True
     stats_lines = container.findChildren(QLabel, "poolOpsStatsLine")
     assert [label.text() for label in stats_lines] == ["Unique: 10", "Ready: 8"]
 
@@ -789,8 +789,8 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
     watched_profile = profiles.DETAIL_CARD_LAYOUT_PROFILE
     candidate_profile = profiles.CANDIDATE_DETAIL_CARD_PROFILE
     preview_profile = profiles.ADD_TITLE_PREVIEW_CARD_PROFILE
-    assert watched_profile.detail_poster_width == scaling.poster_px(layout.DETAIL_POSTER_WIDTH)
-    assert watched_profile.detail_poster_height == scaling.poster_px(layout.DETAIL_POSTER_HEIGHT)
+    assert watched_profile.detail_poster_width == profiles.detail_poster_px(layout.DETAIL_POSTER_WIDTH)
+    assert watched_profile.detail_poster_height == profiles.detail_poster_px(layout.DETAIL_POSTER_HEIGHT)
     assert watched_profile.detail_info_min_width == scaling.detail_px(layout.DETAIL_INFO_MIN_WIDTH)
     assert watched_profile.detail_poster_width >= 240
     assert watched_profile.detail_poster_height >= 360
@@ -810,7 +810,18 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
 
 @pytest.mark.parametrize("ui_scale", SCALE_ANCHORS)
 def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
-    from PyQt6.QtWidgets import QLabel, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLineEdit, QPushButton, QWidget
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import (
+        QLabel,
+        QComboBox,
+        QFrame,
+        QHBoxLayout,
+        QLineEdit,
+        QPushButton,
+        QSizePolicy,
+        QVBoxLayout,
+        QWidget,
+    )
 
     _set_anchor_ui_scale(ui_scale)
 
@@ -894,21 +905,7 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
     assert filters_view._tmdb_votes_slider.minimumHeight() >= 34
     for row in filters_view.widget.findChildren(QFrame, "candidateFiltersSummaryRow"):
         row_layout = row.layout()
-        if ui_scale >= 1.25:
-            assert isinstance(row_layout, QGridLayout)
-            label = row.findChild(QLabel, "candidateFiltersSummaryRowLabel")
-            value = row.findChild(QLabel, "candidateFiltersSummaryRowValue")
-            assert label is not None
-            assert value is not None
-            label_row, _label_column, _label_row_span, _label_column_span = row_layout.getItemPosition(
-                row_layout.indexOf(label)
-            )
-            value_row, _value_column, _value_row_span, _value_column_span = row_layout.getItemPosition(
-                row_layout.indexOf(value)
-            )
-            assert value_row > label_row
-        else:
-            assert isinstance(row_layout, QHBoxLayout)
+        assert isinstance(row_layout, QHBoxLayout)
 
     list_session = CandidateSearchSession(service=service)
     list_view = CandidateListView(list_session)
@@ -923,6 +920,7 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
     assert detail_placeholder.isHidden() is False
     assert search_input is not None
     assert search_input.sizeHint().height() >= 20
+    assert list_view._results_list.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
 
     for profile in (
         detail_profiles.DETAIL_CARD_LAYOUT_PROFILE,
@@ -936,6 +934,9 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
         overview = hero.findChild(QLabel, "detailOverviewText")
         main_info = hero.findChild(QWidget, "detailMainInfoSection")
         toggle = hero.findChild(QPushButton, "detailMainInfoToggleButton")
+        content = hero.findChild(QWidget, "detailContentContainer")
+        top_row = hero.findChild(QWidget, "detailTopRow")
+        score_content = hero.findChild(QWidget, "detailScoreSummaryContent")
         assert hero.objectName() == "detailHeroCard"
         assert poster is not None
         assert poster.minimumWidth() == profile.detail_poster_width
@@ -947,6 +948,17 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
         assert main_info is not None
         assert main_info.maximumWidth() == profile.detail_section_max_width
         assert toggle is not None and toggle.isHidden() is True
+        assert content is not None
+        assert content.maximumWidth() == profile.detail_content_max_width
+        assert content.sizePolicy().horizontalPolicy() == QSizePolicy.Policy.Expanding
+        assert top_row is not None
+        assert score_content is not None
+        if ui_scale >= 1.25 and profile.include_bottom_stretch:
+            assert isinstance(top_row.layout(), QVBoxLayout)
+            assert isinstance(score_content.layout(), QVBoxLayout)
+        else:
+            assert isinstance(top_row.layout(), QHBoxLayout)
+            assert isinstance(score_content.layout(), QHBoxLayout)
 
 
 @pytest.mark.parametrize("ui_scale", SCALE_ANCHORS)

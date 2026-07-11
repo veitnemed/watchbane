@@ -118,8 +118,8 @@ def build_filters_form(
     form_host.setObjectName("candidateSearchFiltersHost")
     form = QVBoxLayout(form_host)
     form.setContentsMargins(0, 0, layout_px(10), 0)
-    form.setSpacing(layout_px(10))
-    compact_combo_max_width = layout_px(420)
+    form.setSpacing(layout_px(8))
+    compact_combo_max_width = layout_px(480)
     section_index = 0
 
     def add_section(
@@ -137,11 +137,11 @@ def build_filters_form(
         section_layout = QVBoxLayout(section)
         section_layout.setContentsMargins(
             layout_px(14),
-            layout_px(12),
+            layout_px(10),
             layout_px(14),
-            layout_px(12),
+            layout_px(10),
         )
-        section_layout.setSpacing(layout_px(10))
+        section_layout.setSpacing(layout_px(8))
 
         title_row = QHBoxLayout()
         title_row.setContentsMargins(0, 0, 0, 0)
@@ -275,7 +275,7 @@ def build_filters_form(
     action_layout_cls = QVBoxLayout if get_ui_scale() >= 1.25 else QHBoxLayout
     replenish_action_layout = action_layout_cls(replenish_action_row)
     replenish_action_layout.setContentsMargins(0, 0, 0, 0)
-    replenish_action_layout.setSpacing(layout_px(10))
+    replenish_action_layout.setSpacing(layout_px(8))
     replenish_action_layout.addWidget(replenish_enabled_check)
     replenish_action_layout.addWidget(replenish_advanced_override_check)
     if isinstance(replenish_action_layout, QHBoxLayout):
@@ -286,9 +286,14 @@ def build_filters_form(
 
     replenish_grid = QGridLayout()
     replenish_grid.setContentsMargins(0, 0, 0, 0)
-    replenish_grid.setHorizontalSpacing(layout_px(16))
-    replenish_grid.setVerticalSpacing(layout_px(12))
-    replenish_column_count = 1 if get_ui_scale() >= 1.25 else 2
+    replenish_grid.setHorizontalSpacing(layout_px(12))
+    replenish_grid.setVerticalSpacing(layout_px(10))
+    if get_ui_scale() >= 1.25:
+        replenish_column_count = 1
+    elif get_ui_scale() > 1.0:
+        replenish_column_count = 2
+    else:
+        replenish_column_count = 3
     for column in range(replenish_column_count):
         replenish_grid.setColumnStretch(column, 1)
 
@@ -308,7 +313,7 @@ def build_filters_form(
         cell.setStyleSheet(TRANSPARENT_STYLE)
         cell_layout = QVBoxLayout(cell)
         cell_layout.setContentsMargins(0, 0, 0, 0)
-        cell_layout.setSpacing(layout_px(6))
+        cell_layout.setSpacing(layout_px(5))
         cell_layout.addWidget(field_label(label_text))
         cell_layout.addWidget(combo)
         if hint_text:

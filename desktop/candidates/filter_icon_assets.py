@@ -32,6 +32,21 @@ _ICON_CELLS = {
     "search": (3, 2),
     "replenish": (4, 2),
 }
+_CLEAN_ICON_NAMES = {
+    "calendar",
+    "document",
+    "filter",
+    "globe",
+    "heart",
+    "media",
+    "refresh",
+    "replenish",
+    "search",
+    "sliders",
+    "target",
+    "vibe",
+    "clock",
+}
 _pixmap_cache: dict[tuple[str, int, str], QPixmap] = {}
 _section_pixmap_cache: dict[tuple[str, int, str], QPixmap] = {}
 
@@ -110,21 +125,28 @@ def _trim_transparent(image: QImage) -> QImage:
 
 
 def filter_icon_pixmap(name: str, size: int, color: str) -> QPixmap:
-    """Return a processed sprite icon as a square pixmap."""
+    """Return a crisp reference-style icon as a square pixmap."""
     key = (name, int(size), color)
     cached = _pixmap_cache.get(key)
     if cached is not None:
         return cached
-    image = _processed_icon_image(name, color)
-    if image.isNull():
+    if name in _CLEAN_ICON_NAMES:
         pixmap = QPixmap(size, size)
         pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        _draw_section_icon(painter, name, size, color)
+        painter.end()
     else:
-        pixmap = QPixmap.fromImage(image).scaled(
-            QSize(size, size),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
+        image = _processed_icon_image(name, color)
+        if image.isNull():
+            pixmap = QPixmap(size, size)
+            pixmap.fill(Qt.GlobalColor.transparent)
+        else:
+            pixmap = QPixmap.fromImage(image).scaled(
+                QSize(size, size),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
     _pixmap_cache[key] = pixmap
     return pixmap
 
@@ -199,6 +221,83 @@ def _draw_section_icon(painter: QPainter, name: str, size: int, color: str) -> N
             painter.setBrush(QColor(color))
             painter.drawEllipse(QRectF(knob_x - size * 0.042, y - size * 0.042, size * 0.084, size * 0.084))
             painter.setBrush(Qt.BrushStyle.NoBrush)
+        return
+
+    if name == "globe":
+        painter.drawEllipse(rect)
+        painter.drawEllipse(QRectF(size * 0.39, size * 0.24, size * 0.22, size * 0.52))
+        painter.drawLine(QPointF(size * 0.25, size * 0.50), QPointF(size * 0.75, size * 0.50))
+        return
+
+    if name == "media":
+        body = QRectF(size * 0.27, size * 0.40, size * 0.48, size * 0.34)
+        painter.drawRoundedRect(body, size * 0.05, size * 0.05)
+        clap = QPainterPath()
+        clap.moveTo(size * 0.25, size * 0.31)
+        clap.lineTo(size * 0.70, size * 0.24)
+        clap.lineTo(size * 0.75, size * 0.36)
+        clap.lineTo(size * 0.28, size * 0.43)
+        clap.closeSubpath()
+        painter.drawPath(clap)
+        painter.drawLine(QPointF(size * 0.39, size * 0.29), QPointF(size * 0.44, size * 0.40))
+        painter.drawLine(QPointF(size * 0.55, size * 0.27), QPointF(size * 0.60, size * 0.37))
+        return
+
+    if name == "calendar":
+        calendar = QRectF(size * 0.25, size * 0.30, size * 0.50, size * 0.46)
+        painter.drawRoundedRect(calendar, size * 0.05, size * 0.05)
+        painter.drawLine(QPointF(size * 0.26, size * 0.43), QPointF(size * 0.74, size * 0.43))
+        painter.drawLine(QPointF(size * 0.38, size * 0.24), QPointF(size * 0.38, size * 0.35))
+        painter.drawLine(QPointF(size * 0.62, size * 0.24), QPointF(size * 0.62, size * 0.35))
+        dot_radius = size * 0.025
+        painter.setBrush(QColor(color))
+        for x in (size * 0.39, size * 0.58):
+            for y in (size * 0.54, size * 0.65):
+                painter.drawEllipse(QRectF(x - dot_radius, y - dot_radius, dot_radius * 2, dot_radius * 2))
+        return
+
+    if name == "vibe":
+        painter.drawEllipse(rect)
+        painter.setBrush(QColor(color))
+        eye_radius = size * 0.035
+        for x in (size * 0.41, size * 0.59):
+            painter.drawEllipse(
+                QRectF(x - eye_radius, size * 0.42 - eye_radius, eye_radius * 2, eye_radius * 2)
+            )
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        smile = QPainterPath()
+        smile.moveTo(size * 0.36, size * 0.56)
+        smile.cubicTo(size * 0.42, size * 0.68, size * 0.58, size * 0.68, size * 0.64, size * 0.56)
+        painter.drawPath(smile)
+        return
+
+    if name == "clock":
+        painter.drawEllipse(rect)
+        painter.drawLine(QPointF(size * 0.50, size * 0.50), QPointF(size * 0.50, size * 0.34))
+        painter.drawLine(QPointF(size * 0.50, size * 0.50), QPointF(size * 0.62, size * 0.58))
+        return
+
+    if name == "target":
+        painter.drawEllipse(rect)
+        painter.drawEllipse(QRectF(size * 0.41, size * 0.41, size * 0.18, size * 0.18))
+        painter.drawLine(QPointF(size * 0.50, size * 0.18), QPointF(size * 0.50, size * 0.30))
+        painter.drawLine(QPointF(size * 0.50, size * 0.70), QPointF(size * 0.50, size * 0.82))
+        painter.drawLine(QPointF(size * 0.18, size * 0.50), QPointF(size * 0.30, size * 0.50))
+        painter.drawLine(QPointF(size * 0.70, size * 0.50), QPointF(size * 0.82, size * 0.50))
+        return
+
+    if name in {"refresh", "replenish"}:
+        arc_rect = QRectF(size * 0.27, size * 0.27, size * 0.46, size * 0.46)
+        painter.drawArc(arc_rect, 35 * 16, 245 * 16)
+        painter.drawLine(QPointF(size * 0.69, size * 0.27), QPointF(size * 0.73, size * 0.39))
+        painter.drawLine(QPointF(size * 0.69, size * 0.27), QPointF(size * 0.57, size * 0.30))
+        painter.drawLine(QPointF(size * 0.31, size * 0.73), QPointF(size * 0.27, size * 0.61))
+        painter.drawLine(QPointF(size * 0.31, size * 0.73), QPointF(size * 0.43, size * 0.70))
+        return
+
+    if name == "search":
+        painter.drawEllipse(QRectF(size * 0.27, size * 0.25, size * 0.36, size * 0.36))
+        painter.drawLine(QPointF(size * 0.59, size * 0.57), QPointF(size * 0.74, size * 0.72))
         return
 
     if name == "document":

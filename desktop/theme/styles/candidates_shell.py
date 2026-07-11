@@ -31,7 +31,7 @@ QLabel#candidateSearchSubtitle {{
 QFrame#candidateFiltersIntro {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {px(RADIUS_CARD)}px;
+    border-radius: {px(10)}px;
 }}
 QLabel#candidateFiltersSummaryTitle {{
     background: transparent;
@@ -102,7 +102,11 @@ QFrame#candidateFiltersSummaryDivider {{
     min-height: {px(1)}px;
     max-height: {px(1)}px;
 }}
-QLabel#candidateSearchHint,
+QLabel#candidateSearchHint {{
+    background: transparent;
+    color: {COLOR_TEXT_MUTED};
+    font-size: {font_px(FONT_TINY)}px;
+}}
 QLabel#candidateSearchResultsSummary,
 QLabel#candidateSearchDetailPlaceholder,
 QLabel#candidateSearchExplanation {{
@@ -226,7 +230,7 @@ QWidget#candidateSearchFiltersHost {{
 QFrame#candidateFilterSection {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
-    border-radius: {px(RADIUS_CARD)}px;
+    border-radius: {px(10)}px;
 }}
 QFrame#candidateFilterSection:hover {{
     border-color: {COLOR_BORDER_HOVER};

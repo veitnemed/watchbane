@@ -32,6 +32,7 @@ MEDIA_THEME_OBJECT_NAMES = {
     "detailMainInfoIcon",
     "detailMainInfoRowDivider",
 }
+UNCONSTRAINED_MINIMUM_HEIGHT = 0
 
 
 class DetailCard(DetailCardPosterMixin):
@@ -101,6 +102,31 @@ class DetailCard(DetailCardPosterMixin):
 
         QTimer.singleShot(0, self._refresh_detail_chips)
 
+    def _schedule_poster_column_height_sync(self) -> None:
+        from PyQt6.QtCore import QTimer
+
+        QTimer.singleShot(0, self._sync_poster_column_minimum_height)
+
+    def _sync_poster_column_minimum_height(self) -> None:
+        overview_layout = self._overview_frame.layout()
+        if self._overview_frame.isVisible() and overview_layout is not None:
+            overview_height = overview_layout.heightForWidth(self._profile.detail_poster_width)
+            if overview_height < 0:
+                overview_height = overview_layout.sizeHint().height()
+            self._overview_frame.setMinimumHeight(max(0, overview_height))
+        else:
+            self._overview_frame.setMinimumHeight(UNCONSTRAINED_MINIMUM_HEIGHT)
+
+        layout = self._poster_column_widget.layout()
+        if layout is None:
+            return
+        self._poster_column_widget.setMinimumHeight(UNCONSTRAINED_MINIMUM_HEIGHT)
+        layout.invalidate()
+        layout.activate()
+        self._poster_column_widget.setMinimumHeight(
+            max(self._profile.detail_poster_height, layout.sizeHint().height())
+        )
+
     def _refresh_detail_chips(self) -> None:
         if len(self._detail_chip_labels) == 0:
             clear_layout(self._genre_pills_layout)
@@ -151,6 +177,7 @@ class DetailCard(DetailCardPosterMixin):
         if self._hide_button is not None:
             self._hide_button.setEnabled(self._hide_handler is not None)
         self._schedule_poster_height_sync()
+        self._schedule_poster_column_height_sync()
 
     def show_entry(self, entry: DetailEntry) -> None:
         from desktop.shared.detail.presenters import get_overview_display, has_overview_text
@@ -196,6 +223,7 @@ class DetailCard(DetailCardPosterMixin):
             self._set_poster_placeholder()
         self._set_local_poster_path(poster_path)
         self._schedule_poster_height_sync()
+        self._schedule_poster_column_height_sync()
 
     def _resolve_entry_media_type(self, movie: dict, card: dict) -> str:
         media_candidates = [
@@ -325,14 +353,16 @@ class DetailCard(DetailCardPosterMixin):
         value_object_name: str,
     ) -> None:
         from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
+        from PyQt6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
         from desktop.theme import FILM_TEXT_MUTED, TRANSPARENT_STYLE
+        from desktop.theme.scaling import get_ui_scale
 
         clear_layout(grid)
         compact_row_height = min(
             self._profile.detail_main_info_row_height,
             self._profile.detail_main_info_compact_row_height,
         )
+        stacked_info_rows = get_ui_scale() >= 1.25 and self._profile.include_bottom_stretch
         icon_size = max(16, min(22, compact_row_height // 2))
         for row, item in enumerate(items):
             row_widget = QWidget()
@@ -344,9 +374,16 @@ class DetailCard(DetailCardPosterMixin):
 
             content_widget = QWidget()
             content_widget.setStyleSheet(TRANSPARENT_STYLE)
-            content_layout = QHBoxLayout(content_widget)
+            content_layout_class = QGridLayout if stacked_info_rows else QHBoxLayout
+            content_layout = content_layout_class(content_widget)
             content_layout.setContentsMargins(0, 0, 0, 0)
-            content_layout.setSpacing(self._profile.detail_small_spacing)
+            if stacked_info_rows:
+                content_layout.setHorizontalSpacing(self._profile.detail_small_spacing)
+                content_layout.setVerticalSpacing(max(1, self._profile.detail_small_spacing // 3))
+                content_layout.setColumnStretch(0, 0)
+                content_layout.setColumnStretch(1, 1)
+            else:
+                content_layout.setSpacing(self._profile.detail_small_spacing)
 
             icon = QLabel()
             icon.setObjectName("detailMainInfoIcon")
@@ -362,7 +399,10 @@ class DetailCard(DetailCardPosterMixin):
 
             label = QLabel(str(item.get("label", "")))
             label.setObjectName(label_object_name)
-            label.setFixedWidth(self._profile.detail_main_info_label_width)
+            if stacked_info_rows:
+                label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            else:
+                label.setFixedWidth(self._profile.detail_main_info_label_width)
             label.setFixedHeight(compact_row_height)
             label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
@@ -371,22 +411,31 @@ class DetailCard(DetailCardPosterMixin):
             value.setObjectName(value_object_name)
             value.setWordWrap(False)
             value.setFixedHeight(compact_row_height)
-            value_max_width = max(
-                80,
-                self._profile.detail_info_column_max_width
-                - self._profile.detail_main_info_label_width
-                - icon.width()
-                - (2 * self._profile.detail_main_info_panel_padding_x)
-                - (2 * self._profile.detail_small_spacing),
-            )
+            if stacked_info_rows:
+                value_max_width = self._profile.detail_info_column_max_width
+            else:
+                value_max_width = max(
+                    80,
+                    self._profile.detail_info_column_max_width
+                    - self._profile.detail_main_info_label_width
+                    - icon.width()
+                    - (2 * self._profile.detail_main_info_panel_padding_x)
+                    - (2 * self._profile.detail_small_spacing),
+                )
             value.setMaximumWidth(value_max_width)
             value.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             value.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
             value.setToolTip(str(item.get("tooltip") or value_text))
 
-            content_layout.addWidget(icon)
-            content_layout.addWidget(label)
-            content_layout.addWidget(value, stretch=1)
+            if stacked_info_rows:
+                icon.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+                content_layout.addWidget(icon, 0, 0, 2, 1)
+                content_layout.addWidget(label, 0, 1)
+                content_layout.addWidget(value, 1, 1)
+            else:
+                content_layout.addWidget(icon)
+                content_layout.addWidget(label)
+                content_layout.addWidget(value, stretch=1)
             row_layout.addWidget(content_widget)
 
             if row < len(items) - 1:

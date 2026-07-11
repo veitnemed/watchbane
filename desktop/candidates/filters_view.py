@@ -7,7 +7,6 @@ from typing import Callable
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QProgressBar,
@@ -42,7 +41,7 @@ from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FI
 from desktop.candidates.workers.filter_replenish_worker import FilterReplenishWorker
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language, get_persisted_interface_language
-from desktop.theme.scaling import control_px, get_ui_scale, layout_px
+from desktop.theme.scaling import control_px, layout_px
 from desktop.theme.shell_layout import (
     CANDIDATE_ROOT_MARGIN_PX,
     CANDIDATE_ROOT_SPACING_PX,
@@ -50,7 +49,7 @@ from desktop.theme.shell_layout import (
 )
 
 APPLY_BUTTON_HEIGHT = control_px(40)
-SUMMARY_CARD_WIDTH = layout_px(392 if get_ui_scale() >= 1.25 else 324)
+SUMMARY_CARD_WIDTH = layout_px(348)
 FILTER_REPLENISH_DEFAULT_BATCH_SIZE = 30
 FILTER_REPLENISH_MAX_BATCH_SIZE = 30
 
@@ -164,10 +163,10 @@ class CandidateFiltersView:
         self._intro_card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.MinimumExpanding)
         intro_layout = QVBoxLayout(self._intro_card)
         intro_layout.setContentsMargins(
-            layout_px(18),
             layout_px(16),
-            layout_px(18),
+            layout_px(14),
             layout_px(16),
+            layout_px(14),
         )
         intro_layout.setSpacing(layout_px(8))
 
@@ -212,18 +211,9 @@ class CandidateFiltersView:
         def add_summary_row(key: str, icon_name: str, label_key: str) -> None:
             row = QFrame()
             row.setObjectName("candidateFiltersSummaryRow")
-            stacked_summary = get_ui_scale() >= 1.25
-            if stacked_summary:
-                row_layout = QGridLayout(row)
-                row_layout.setContentsMargins(0, 0, 0, 0)
-                row_layout.setHorizontalSpacing(layout_px(7))
-                row_layout.setVerticalSpacing(layout_px(2))
-                row_layout.setColumnStretch(0, 0)
-                row_layout.setColumnStretch(1, 1)
-            else:
-                row_layout = QHBoxLayout(row)
-                row_layout.setContentsMargins(0, 0, 0, 0)
-                row_layout.setSpacing(layout_px(7))
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(layout_px(7))
 
             icon_label = filter_icon_label(
                 icon_name,
@@ -238,18 +228,11 @@ class CandidateFiltersView:
             value = QLabel("")
             value.setObjectName("candidateFiltersSummaryRowValue")
             value.setWordWrap(True)
-            if stacked_summary:
-                icon_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
-                label.setWordWrap(True)
-                value.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-                row_layout.addWidget(icon_label, 0, 0, 2, 1)
-                row_layout.addWidget(label, 0, 1)
-                row_layout.addWidget(value, 1, 1)
-            else:
-                value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                row_layout.addWidget(icon_label)
-                row_layout.addWidget(label, stretch=1)
-                row_layout.addWidget(value, stretch=1)
+            label.setWordWrap(True)
+            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            row_layout.addWidget(icon_label)
+            row_layout.addWidget(label, stretch=1)
+            row_layout.addWidget(value, stretch=1)
             self._summary_value_labels[key] = value
 
             intro_layout.addWidget(row)

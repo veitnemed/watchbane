@@ -9,6 +9,7 @@ from desktop.i18n import tr
 from desktop.shared.detail.action_icons import make_detail_action_icon
 from desktop.shared.detail.profiles import DetailCardLayoutProfile
 from desktop.shared.detail.rating_indicator import StarRatingIndicator
+from desktop.theme.scaling import get_ui_scale
 from desktop.theme import (
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
@@ -158,8 +159,8 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._content_container = QWidget()
     owner._content_container.setObjectName("detailContentContainer")
     owner._content_container.setStyleSheet(TRANSPARENT_STYLE)
-    owner._content_container.setFixedWidth(profile.detail_content_max_width)
-    owner._content_container.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+    owner._content_container.setMaximumWidth(profile.detail_content_max_width)
+    owner._content_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
     content_layout = QVBoxLayout(owner._content_container)
     content_layout.setContentsMargins(0, 0, 0, 0)
     content_layout.setSpacing(0)
@@ -168,7 +169,9 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._top_row_widget.setObjectName("detailTopRow")
     owner._top_row_widget.setStyleSheet(TRANSPARENT_STYLE)
     owner._top_row_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-    top_row = QHBoxLayout(owner._top_row_widget)
+    stacked_top_row = get_ui_scale() >= 1.25 and profile.include_bottom_stretch
+    top_row_layout_class = QVBoxLayout if stacked_top_row else QHBoxLayout
+    top_row = top_row_layout_class(owner._top_row_widget)
     top_row.setContentsMargins(0, 0, 0, 0)
     top_row.setSpacing(profile.detail_poster_right_gap)
 
@@ -272,15 +275,25 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     poster_column = QVBoxLayout(owner._poster_column_widget)
     poster_column.setContentsMargins(0, 0, 0, 0)
     poster_column.setSpacing(profile.detail_poster_actions_top_gap)
-    poster_column.addWidget(owner._poster_shell, alignment=Qt.AlignmentFlag.AlignTop)
+
+    poster_primary_widget = QWidget()
+    poster_primary_widget.setObjectName("detailPosterPrimary")
+    poster_primary_widget.setStyleSheet(TRANSPARENT_STYLE)
+    poster_primary_widget.setFixedWidth(profile.detail_poster_width)
+    poster_primary_widget.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    poster_primary_layout = QVBoxLayout(poster_primary_widget)
+    poster_primary_layout.setContentsMargins(0, 0, 0, 0)
+    poster_primary_layout.setSpacing(profile.detail_poster_actions_top_gap)
+    poster_primary_layout.addWidget(owner._poster_shell, alignment=Qt.AlignmentFlag.AlignTop)
+    poster_column.addWidget(poster_primary_widget, alignment=Qt.AlignmentFlag.AlignTop)
 
     owner._info_column_widget = QWidget()
     owner._info_column_widget.setObjectName("detailInfoColumn")
     owner._info_column_widget.setStyleSheet(TRANSPARENT_STYLE)
-    owner._info_column_widget.setMinimumWidth(profile.detail_info_min_width)
+    owner._info_column_widget.setMinimumWidth(0 if stacked_top_row else profile.detail_info_min_width)
     owner._info_column_widget.setMaximumWidth(profile.detail_info_column_max_width)
     owner._info_column_widget.setSizePolicy(
-        QSizePolicy.Policy.Preferred,
+        QSizePolicy.Policy.Expanding,
         QSizePolicy.Policy.Minimum,
     )
     info_column = QVBoxLayout(owner._info_column_widget)
@@ -347,7 +360,8 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._score_summary_content = QWidget()
     owner._score_summary_content.setObjectName("detailScoreSummaryContent")
     owner._score_summary_content.setStyleSheet(TRANSPARENT_STYLE)
-    owner._score_summary_row = QHBoxLayout(owner._score_summary_content)
+    score_row_layout_class = QVBoxLayout if stacked_top_row else QHBoxLayout
+    owner._score_summary_row = score_row_layout_class(owner._score_summary_content)
     owner._score_summary_row.setContentsMargins(0, 0, 0, 0)
     owner._score_summary_row.setSpacing(profile.detail_stars_left_gap)
 
@@ -427,15 +441,25 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     )
     owner._final_score_stars_lane_layout.addStretch(1)
 
-    owner._score_summary_row.addWidget(
-        owner._tmdb_ring_slot,
-        alignment=Qt.AlignmentFlag.AlignVCenter,
-    )
-    owner._score_summary_row.addWidget(
-        owner._final_score_stars_lane,
-        stretch=1,
-        alignment=Qt.AlignmentFlag.AlignVCenter,
-    )
+    if stacked_top_row:
+        owner._score_summary_row.addWidget(
+            owner._tmdb_ring_slot,
+            alignment=Qt.AlignmentFlag.AlignHCenter,
+        )
+        owner._score_summary_row.addWidget(
+            owner._final_score_stars_lane,
+            alignment=Qt.AlignmentFlag.AlignHCenter,
+        )
+    else:
+        owner._score_summary_row.addWidget(
+            owner._tmdb_ring_slot,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
+        )
+        owner._score_summary_row.addWidget(
+            owner._final_score_stars_lane,
+            stretch=1,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
+        )
     if profile.show_mark_watched_button:
         mark_watched_button = QPushButton()
         owner._mark_watched_button = mark_watched_button
@@ -485,11 +509,15 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
             alignment=Qt.AlignmentFlag.AlignLeft,
         )
     owner._poster_actions_layout.addStretch(1)
-    owner._poster_actions_widget.setVisible(
-        profile.show_mark_watched_button or profile.show_hide_candidate_button
-    )
+    show_poster_actions = profile.show_mark_watched_button or profile.show_hide_candidate_button
+    owner._poster_actions_widget.setVisible(show_poster_actions)
     title_row.addWidget(owner._title_label, stretch=1)
-    poster_column.addWidget(owner._poster_actions_widget)
+    poster_primary_layout.addWidget(owner._poster_actions_widget)
+    poster_primary_height = profile.detail_poster_height
+    if show_poster_actions:
+        owner._poster_actions_widget.setFixedHeight(profile.detail_candidate_action_button_size)
+        poster_primary_height += profile.detail_poster_actions_top_gap + profile.detail_candidate_action_button_size
+    poster_primary_widget.setFixedHeight(poster_primary_height)
 
     owner._genre_section = QWidget()
     owner._genre_section.setObjectName("detailChipsContainer")
@@ -620,7 +648,10 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     info_column.addSpacing(profile.detail_section_spacing)
     info_column.addWidget(owner._main_info_section)
 
-    top_row.addWidget(owner._poster_column_widget, alignment=Qt.AlignmentFlag.AlignTop)
+    poster_alignment = Qt.AlignmentFlag.AlignTop
+    if stacked_top_row:
+        poster_alignment |= Qt.AlignmentFlag.AlignHCenter
+    top_row.addWidget(owner._poster_column_widget, alignment=poster_alignment)
     top_row.addWidget(owner._info_column_widget, stretch=1, alignment=Qt.AlignmentFlag.AlignTop)
     content_layout.addWidget(owner._top_row_widget)
     if profile.include_bottom_stretch:
@@ -634,7 +665,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     content_center_layout.setContentsMargins(0, 0, 0, 0)
     content_center_layout.setSpacing(0)
     content_center_layout.addStretch(1)
-    content_center_layout.addWidget(owner._content_container)
+    content_center_layout.addWidget(owner._content_container, stretch=100)
     content_center_layout.addStretch(1)
 
     root.addWidget(
