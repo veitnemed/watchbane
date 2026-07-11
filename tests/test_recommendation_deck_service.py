@@ -62,7 +62,7 @@ def _identities(items: list[dict]) -> list[str]:
 def test_deck_caps_active_and_reserve(tmp_path) -> None:
     deck = _service(_pool(150), tmp_path / "deck.sqlite3").build_deck({}, NOW)
 
-    assert len(deck["active"]) == 30
+    assert len(deck["active"]) == 25
     assert len(deck["reserve"]) == 70
     assert deck["refill_needed"] is False
     assert deck["underfilled_reason"] is None

@@ -5,7 +5,7 @@ def _valid_add_payload(title: str = "New Title") -> dict:
     return {
         "main_info": {
             "title": title,
-            "user_score": 8.0,
+            "user_score": 3,
             "year": 2020,
             "country": "Россия",
         },
@@ -68,7 +68,7 @@ def test_add_dataset_record_allows_same_title_with_different_media_type(monkeypa
         "Watchmen": {
             "main_info": {
                 "title": "Watchmen",
-                "user_score": 8.0,
+                "user_score": 3,
                 "year": 2019,
                 "country": "US",
                 "media_type": "tv",

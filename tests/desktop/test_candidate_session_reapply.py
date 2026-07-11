@@ -144,8 +144,8 @@ def test_replenish_gui_reloads_pool_and_reapplies_without_loop(qtbot) -> None:
     qtbot.waitUntil(lambda: len(service.replenish_calls) == 1)
     qtbot.waitUntil(lambda: view._last_replenish_result is not None and view._is_replenishing is False)
 
-    assert service.search_calls == 2
+    assert service.search_calls == 3
     assert session.filtered_count == 2
-    assert "Before: 1" in stats.text()
-    assert "Added 1 of 30" in stats.text()
-    assert "Visible now: 2" in stats.text()
+    assert "До обновления: 1" in stats.text()
+    assert "Добавлено 1 из 30" in stats.text()
+    assert "Сейчас доступно: 2" in stats.text()

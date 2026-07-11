@@ -111,9 +111,9 @@ def test_console_public_flow_import_and_copy_are_tmdb_only(monkeypatch, capsys) 
     assert "KP" not in output
     assert "IMDb" not in output
 
-    monkeypatch.setattr(request, "loop_input_with_default", lambda *args, **kwargs: "8.0")
+    monkeypatch.setattr(request, "loop_input_with_default", lambda *args, **kwargs: "3")
     monkeypatch.setattr(request.service, "build_movie_record_from_defaults", lambda defaults, score: {"score": score})
-    request.request_user_score({scheme.MAIN_INFO: {"title": "Show", "year": 2020, "user_score": 8.0}})
+    request.request_user_score({scheme.MAIN_INFO: {"title": "Show", "year": 2020, "user_score": 3}})
     output = capsys.readouterr().out
     assert "TMDb-метаданные" in output
     assert "рейтинги" not in output

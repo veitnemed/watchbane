@@ -81,12 +81,12 @@ def test_repeated_mark_watched_keeps_one_record_and_existing_score(tmp_path) -> 
     db_path = tmp_path / "state.sqlite3"
     candidate = _candidate()
 
-    states.mark_watched(candidate, optional_user_score=8.5, path=db_path)
+    states.mark_watched(candidate, optional_user_score=3, path=db_path)
     states.mark_watched(candidate, path=db_path)
 
     rows = _watched_rows(db_path)
     assert len(rows) == 1
-    assert rows[0]["user_score"] == 8.5
+    assert rows[0]["user_score"] == 3
 
 
 def test_restore_returns_candidate_to_available_without_deleting_metadata(tmp_path) -> None:
@@ -153,7 +153,7 @@ def test_mark_watched_rollback_preserves_previous_state(tmp_path, monkeypatch) -
     monkeypatch.setattr(states, "upsert_watched_row", fail_upsert)
 
     with pytest.raises(RuntimeError, match="forced watched write failure"):
-        states.mark_watched(candidate, optional_user_score=8.0, path=db_path)
+        states.mark_watched(candidate, optional_user_score=3, path=db_path)
 
     assert states.get_title_state(candidate, path=db_path) == states.STATE_WATCHLIST
     assert _actions(candidate, db_path) == {ACTION_WATCHLIST}
@@ -174,7 +174,7 @@ def test_remove_from_watchlist_returns_available(tmp_path) -> None:
 def test_remove_from_watched_returns_available(tmp_path) -> None:
     db_path = tmp_path / "state.sqlite3"
     candidate = _candidate()
-    states.mark_watched(candidate, optional_user_score=8.0, path=db_path)
+    states.mark_watched(candidate, optional_user_score=3, path=db_path)
 
     result = states.remove_from_watched(candidate, path=db_path)
 

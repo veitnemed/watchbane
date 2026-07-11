@@ -12,7 +12,7 @@ def test_extract_watched_record_defaults_legacy_tv_record() -> None:
             "main_info": {
                 "title": "Метод",
                 "year": "2015",
-                "user_score": "8.5",
+                "user_score": 3,
                 "country": "Россия",
             },
             "raw_scores": {"tmdb_score": 7.4},
@@ -24,7 +24,7 @@ def test_extract_watched_record_defaults_legacy_tv_record() -> None:
     assert row.title_normalized == "метод"
     assert row.media_type == "tv"
     assert row.year == 2015
-    assert row.user_score == 8.5
+    assert row.user_score == 3
     assert row.country == "Россия"
     assert loads_json(row.payload_json)["main_info"]["title"] == "Метод"
     assert row.meta_json is None

@@ -8,6 +8,7 @@ from candidates import service as candidate_service
 from candidates.models.country_schema import candidate_country_for_display
 from candidates.models.genre_schema import normalize_genre_display_labels
 from candidates.scoring.rating_confidence import candidate_rating_confidence, has_unknown_rating
+from candidates.scoring.recommendation_strength import candidate_recommendation_strength
 from dataset import service
 from dataset.language import (
     choose_display_overview,
@@ -85,10 +86,8 @@ def format_candidate_metric_value(candidate: dict, sort_mode: str) -> str:
     if value is None:
         return f"{prefix} —" if prefix else "—"
     if field_name == "final_score":
-        try:
-            return f"{prefix} {_format_final_score_metric_number(float(value))}"
-        except (TypeError, ValueError):
-            return f"{prefix} {value}"
+        strength = candidate_recommendation_strength(candidate)
+        return tr(f"recommendation.strength.{strength}")
     if field_name.endswith("_votes"):
         try:
             return f"{prefix} {int(value):,}".replace(",", " ")

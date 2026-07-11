@@ -380,7 +380,7 @@ class WatchedTabView(WatchedTabActionsMixin):
 
         query = self._search_input.text()
         if self._library_section == SECTION_WATCHED:
-            min_score, max_score = self._filters.score_filter_range()
+            selected_ratings = self._filters.selected_user_ratings()
             year_from, year_to = self._filters.year_filter_range()
             genre = self._filters.selected_genre()
             media_type = self._filters.selected_media_type()
@@ -388,13 +388,14 @@ class WatchedTabView(WatchedTabActionsMixin):
                 self._entries,
                 query,
                 self._sort_key,
-                min_score,
-                max_score,
+                None,
+                None,
                 year_from,
                 year_to,
                 genre,
                 media_type,
                 title_index=self._watched_search_index,
+                user_ratings=selected_ratings,
             )
         else:
             self._visible_entries = apply_view(

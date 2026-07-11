@@ -34,28 +34,6 @@ QLabel#scoreEditFieldLabel {{
     color: {COLOR_TEXT_SECONDARY};
     font-size: {font_px(FONT_TINY)}px;
 }}
-QDoubleSpinBox#scoreEditSpin {{
-    background-color: {COLOR_SURFACE};
-    border: 1px solid {COLOR_BORDER};
-    border-radius: {px(RADIUS_BUTTON)}px;
-    color: {COLOR_TEXT};
-    font-size: {font_px(FONT_DIALOG_TITLE)}px;
-    font-weight: 600;
-    padding: {px(7)}px {px(SPACING_MEDIUM)}px;
-}}
-QDoubleSpinBox#scoreEditSpin:focus {{
-    border: 1px solid {COLOR_FOCUS_BORDER};
-}}
-QDoubleSpinBox#scoreEditSpin::up-button,
-QDoubleSpinBox#scoreEditSpin::down-button {{
-    background-color: {COLOR_CARD_ALT};
-    border: none;
-    width: {px(22)}px;
-}}
-QDoubleSpinBox#scoreEditSpin::up-button:hover,
-QDoubleSpinBox#scoreEditSpin::down-button:hover {{
-    background-color: {COLOR_CONTROL_HOVER};
-}}
 QDialogButtonBox {{
     background: transparent;
 }}
@@ -286,7 +264,7 @@ QLabel#addTitleFieldLabel {{
     color: {COLOR_TEXT_SECONDARY};
     font-size: {font_px(FONT_SMALL)}px;
 }}
-QSpinBox#addTitleYearSpin, QDoubleSpinBox#addTitleScoreSpin {{
+QSpinBox#addTitleYearSpin {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_BUTTON)}px;

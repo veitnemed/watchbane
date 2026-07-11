@@ -12,7 +12,7 @@ def _valid_add_payload(title: str = "New Title") -> dict:
     return {
         "main_info": {
             "title": title,
-            "user_score": 8.0,
+            "user_score": 3,
             "year": 2020,
             "country": "Россия",
         },

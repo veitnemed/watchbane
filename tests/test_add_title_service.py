@@ -54,10 +54,10 @@ def test_build_movie_record_from_defaults_sets_score_from_defaults() -> None:
         "genres_tmdb": ["Drama"],
     }
 
-    movie = build_movie_record_from_defaults(defaults, 9.2)
+    movie = build_movie_record_from_defaults(defaults, 3)
 
     assert movie["main_info"]["title"] == "Test Show"
-    assert movie["main_info"]["user_score"] == 9.2
+    assert movie["main_info"]["user_score"] == 3
     assert movie["main_info"]["year"] == 2020
     assert movie["raw_scores"]["imdb_score"] == 8.0
 
@@ -228,7 +228,7 @@ def test_save_add_title_record_passes_pool_candidate(monkeypatch) -> None:
     }
     pool_candidate = {"title": "From Pool", "year": 2020}
 
-    save_add_title_record(defaults, 8.0, pool_candidate=pool_candidate)
+    save_add_title_record(defaults, 3, pool_candidate=pool_candidate)
 
     assert captured["kwargs"]["pool_candidate"] == pool_candidate
 
@@ -259,7 +259,7 @@ def test_save_add_title_record_accepts_friends_1994(monkeypatch) -> None:
         scheme.RAW_SCORES: {"tmdb_score": 8.4, "tmdb_votes": 8000},
     }
 
-    result = save_add_title_record(defaults, 9.0, pool_candidate={"title": "Friends", "year": 1994})
+    result = save_add_title_record(defaults, 3, pool_candidate={"title": "Friends", "year": 1994})
 
     assert result.ok is True
     assert saved["Friends"]["main_info"]["year"] == 1994
@@ -286,7 +286,7 @@ def test_save_add_title_record_keeps_tmdb_scores_without_kp_imdb(monkeypatch) ->
         scheme.RAW_SCORES: {"tmdb_score": 8.1, "tmdb_votes": 1200, "tmdb_popularity": 44.0},
     }
 
-    save_add_title_record(defaults, 8.0, pool_candidate={"title": "TMDb Pool"})
+    save_add_title_record(defaults, 3, pool_candidate={"title": "TMDb Pool"})
 
     assert captured["movie"]["raw_scores"] == {
         "tmdb_score": 8.1,
@@ -323,7 +323,7 @@ def test_save_add_title_record_preserves_movie_media_type(monkeypatch) -> None:
         scheme.RAW_SCORES: {"tmdb_score": 7.3, "tmdb_votes": 9000},
     }
 
-    save_add_title_record(defaults, 8.0)
+    save_add_title_record(defaults, 3)
 
     assert captured["movie"]["main_info"]["media_type"] == "movie"
 
@@ -332,18 +332,18 @@ def test_request_user_score_builds_payload_without_other_edits(monkeypatch) -> N
     from ui.console import request as request_module
 
     defaults = {
-        scheme.MAIN_INFO: {"title": "Console Show", "year": 2019, "country": "RU", "user_score": 7.0},
+        scheme.MAIN_INFO: {"title": "Console Show", "year": 2019, "country": "RU", "user_score": 2},
         scheme.RAW_SCORES: {"imdb_score": 8.1, "imdb_votes": 100},
         "genres_tmdb": ["Drama"],
     }
 
-    monkeypatch.setattr(request_module, "loop_input_with_default", lambda **kwargs: "8.5")
+    monkeypatch.setattr(request_module, "loop_input_with_default", lambda **kwargs: "3")
 
     movie = request_module.request_user_score(defaults)
 
     assert movie["main_info"]["title"] == "Console Show"
     assert movie["main_info"]["year"] == 2019
     assert movie["main_info"]["country"] == "RU"
-    assert movie["main_info"]["user_score"] == 8.5
+    assert movie["main_info"]["user_score"] == 3
     assert movie["raw_scores"]["imdb_score"] == 8.1
     assert movie.get("genres_tmdb") == ["Drama"]

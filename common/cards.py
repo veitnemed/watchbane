@@ -15,6 +15,7 @@ from dataset.language import (
     normalize_data_language,
 )
 from dataset.models.media_type import normalize_media_type
+from dataset.models.user_rating import normalize_user_rating
 from posters.cache import lookup_poster_cache_entry
 
 
@@ -522,7 +523,7 @@ def build_watched_movie_card(
     return {
         "title": title,
         "year": year,
-        "user_score": _to_float(main_info.get("user_score", movie.get("user_score"))),
+        "user_score": normalize_user_rating(main_info.get("user_score", movie.get("user_score"))),
         "tmdb_score": _first_number("tmdb_score", tmdb_sections, _to_float),
         "tmdb_votes": _first_number("tmdb_votes", tmdb_sections, _to_int),
         "tmdb_popularity": _first_number("tmdb_popularity", tmdb_sections, _to_float),

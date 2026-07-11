@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QLocale, Qt
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
-    QDoubleSpinBox,
     QFormLayout,
     QFrame,
     QHBoxLayout,
@@ -23,7 +22,7 @@ from dataset import service
 from dataset.models.media_type import MEDIA_TYPE_MOVIE, normalize_media_type
 from diagnostics.gui_event_log import log_event
 from desktop.i18n import tr
-from desktop.settings.app_settings import get_persisted_interface_language
+from desktop.shared.widgets.user_rating_selector import UserRatingSelector
 from desktop.watched.add_title.constants import (
     ADD_TITLE_DIALOG_STYLE,
     PREVIEW_DIALOG_HEIGHT,
@@ -31,20 +30,8 @@ from desktop.watched.add_title.constants import (
 )
 from desktop.watched.add_title.compact_preview_card import AddTitleCompactPreviewCard
 from desktop.watched.add_title.status_i18n import format_resolve_status_lines_for_ui
-from desktop.watched.model import (
-    USER_SCORE_MAX,
-    USER_SCORE_MIN,
-    USER_SCORE_STEP,
-    normalize_user_score_value,
-)
+from dataset.models.user_rating import normalize_user_rating
 from desktop.theme.scaling import layout_px
-
-
-def _score_input_locale() -> QLocale:
-    language = get_persisted_interface_language()
-    if language == "en":
-        return QLocale(QLocale.Language.English, QLocale.Country.UnitedStates)
-    return QLocale(QLocale.Language.Russian, QLocale.Country.Russia)
 
 
 class AddTitlePreviewDialog(QDialog):
@@ -128,16 +115,11 @@ class AddTitlePreviewDialog(QDialog):
         self._year_label = QLabel(self._format_resolved_year(bundle))
         self._year_label.setObjectName("addTitleYearValue")
 
-        self._score_input = QDoubleSpinBox()
-        self._score_input.setObjectName("addTitleScoreSpin")
-        self._score_input.setRange(USER_SCORE_MIN, USER_SCORE_MAX)
-        self._score_input.setSingleStep(USER_SCORE_STEP)
-        self._score_input.setDecimals(1)
-        self._score_input.setLocale(_score_input_locale())
-        self._score_input.setValue(USER_SCORE_MIN)
+        self._score_input = UserRatingSelector()
+        self._score_input.setObjectName("addTitleUserRatingSelector")
         self._score_input.valueChanged.connect(self._update_confirm_state)
 
-        score_label = QLabel(tr("add_title.field.score"))
+        score_label = QLabel(tr("user_rating.prompt"))
         score_label.setObjectName("addTitleFieldLabel")
         form.addRow(year_label, self._year_label)
         form.addRow(score_label, self._score_input)
@@ -221,7 +203,7 @@ class AddTitlePreviewDialog(QDialog):
             self._warning_label.hide()
 
     def _update_confirm_state(self) -> None:
-        score_ok = valid.is_correct_score(str(self._score_input.value()))
+        score_ok = self._score_input.value() is not None
         year = self._resolved_year(self._bundle)
         year_ok = year is not None and valid.is_correct_year(str(year))
         self._confirm_button.setEnabled(score_ok and year_ok)
@@ -232,7 +214,7 @@ class AddTitlePreviewDialog(QDialog):
         self.reject()
 
     def _confirm_add(self) -> None:
-        user_score = normalize_user_score_value(self._score_input.value())
+        user_score = normalize_user_rating(self._score_input.value())
         year = self._resolved_year(self._bundle)
         log_event(
             "add_title.preview.confirm_clicked",
@@ -243,7 +225,7 @@ class AddTitlePreviewDialog(QDialog):
                 "transfer_mode": self._transfer_mode,
             },
         )
-        if valid.is_correct_score(str(user_score)) is False:
+        if user_score is None:
             log_event("add_title.preview.invalid_score", score=user_score)
             QMessageBox.warning(self, tr("add_title.header"), tr("add_title.error.invalid_score"))
             return

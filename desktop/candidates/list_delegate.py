@@ -6,6 +6,7 @@ from PyQt6.QtCore import QRect, QSize, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from PyQt6.QtWidgets import QStyledItemDelegate, QStyle
 
+from desktop.candidates.filter_icon_assets import filter_icon_pixmap
 from desktop.candidates.list_model import CandidateListRoles
 from desktop.candidates.presenters import format_candidate_metric_value, format_candidate_title_line
 from desktop.shared.detail import (
@@ -103,16 +104,23 @@ def build_candidate_list_item_delegate(parent, sort_mode: str, data_language: st
                 painter.drawPixmap(clip, thumb)
             else:
                 painter.setPen(QPen(QColor(COLOR_BORDER), 1))
-                painter.setBrush(QColor(COLOR_CARD))
+                painter.setBrush(QColor(COLOR_CARD_ALT))
                 painter.drawRoundedRect(
                     thumb_rect,
                     detail_profiles.LIST_THUMB_CORNER_RADIUS,
                     detail_profiles.LIST_THUMB_CORNER_RADIUS,
                 )
-                placeholder_font = QFont(FONT_FAMILY, detail_profiles.LIST_PLACEHOLDER_FONT_POINT)
-                painter.setFont(placeholder_font)
-                painter.setPen(QPen(QColor(COLOR_TEXT_SECONDARY)))
-                painter.drawText(thumb_rect, Qt.AlignmentFlag.AlignCenter, "—")
+                icon_size = max(1, min(thumb_rect.width(), thumb_rect.height()) // 2)
+                placeholder_icon = filter_icon_pixmap(
+                    "media",
+                    icon_size,
+                    COLOR_TEXT_SECONDARY,
+                )
+                painter.drawPixmap(
+                    thumb_rect.center().x() - placeholder_icon.width() // 2,
+                    thumb_rect.center().y() - placeholder_icon.height() // 2,
+                    placeholder_icon,
+                )
 
             text_left = thumb_rect.right() + detail_profiles.LIST_TEXT_GAP
             text_right = rect.right() - detail_profiles.LIST_ITEM_H_PADDING

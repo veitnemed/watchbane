@@ -6,6 +6,9 @@ from candidates import title_state_service
 from candidates.pool.storage import candidate_tmdb_identity
 from candidates.preferences import SimpleRecommendationPreferences
 from candidates.recommendation_deck_service import (
+    ACTIVE_DECK_SIZE,
+    DEFAULT_RESERVE_SIZE,
+    DEFAULT_UNKNOWN_RATING_LIMIT,
     RecommendationDeckService,
     RelevanceTier,
     _relevance_tier,
@@ -237,7 +240,9 @@ def test_top_up_after_pool_mutation_fills_empty_slots_without_state_or_identity_
     service = _service(pool, db_path)
     deck = service.build_deck(preferences, NOW, limit_active=3, reserve_size=4)
     removed = deck["active"][0]
-    after_action = service.apply_action_and_refill(deck["deck_id"], removed, "watched")
+    after_action = service.apply_action_and_refill(
+        deck["deck_id"], removed, "watched", user_score=2
+    )
     retained_ids = set(_tmdb_identities(after_action["active"]))
     assert len(after_action["active"]) == 2
 
@@ -323,7 +328,7 @@ def test_underfilled_active_requests_refill_even_with_large_unpromotable_reserve
     preferences = _dark_preferences()
     known = [
         _candidate(index, genres=("crime",), final_score=0.90 - index / 1000)
-        for index in range(1, 25)
+        for index in range(1, ACTIVE_DECK_SIZE - DEFAULT_UNKNOWN_RATING_LIMIT + 1)
     ]
     unknown = [
         {
@@ -333,7 +338,7 @@ def test_underfilled_active_requests_refill_even_with_large_unpromotable_reserve
             "tmdb_votes": 0,
             "tmdb_popularity": 25,
         }
-        for index in range(76)
+        for index in range(DEFAULT_RESERVE_SIZE + DEFAULT_UNKNOWN_RATING_LIMIT)
     ]
     pool = {item["title"]: item for item in (*known, *unknown)}
     service = _service(pool, tmp_path / "unpromotable-reserve.sqlite3")
@@ -342,8 +347,8 @@ def test_underfilled_active_requests_refill_even_with_large_unpromotable_reserve
 
     updated = service.apply_action_and_refill(deck["deck_id"], removed, "hidden")
 
-    assert len(updated["active"]) == 29
-    assert len(updated["reserve"]) == 70
+    assert len(updated["active"]) == ACTIVE_DECK_SIZE - 1
+    assert len(updated["reserve"]) == DEFAULT_RESERVE_SIZE
     assert updated["refill_needed"] is True
     assert updated["underfilled_reason"] == "active_underfilled"
 

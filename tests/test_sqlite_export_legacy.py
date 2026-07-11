@@ -24,7 +24,7 @@ def test_export_sqlite_to_legacy_json_preserves_file_names(tmp_path) -> None:
     from storage.sqlite import watched_repository
 
     watched_repository.save_dataset_dict(
-        {"Метод": {"main_info": {"title": "Метод", "year": 2015, "user_score": 8, "country": "Россия"}}},
+        {"Метод": {"main_info": {"title": "Метод", "year": 2015, "user_score": 3, "country": "Россия"}}},
         path=db_path,
     )
 
@@ -92,9 +92,9 @@ def test_import_then_export_matches_canonicalized_legacy_data(tmp_path) -> None:
     import_legacy_json_to_sqlite(base_dir=base, db_path=db_path, create_backup=False)
     export_sqlite_to_legacy_json(output_dir=output_dir, db_path=db_path)
 
-    assert _read_json(output_dir / "watched" / "titles.json") == {
-        key: normalize_movie_tags(value) for key, value in watched.items()
-    }
+    expected_watched = {key: normalize_movie_tags(value) for key, value in watched.items()}
+    expected_watched["Метод"]["main_info"]["user_score"] = 3
+    assert _read_json(output_dir / "watched" / "titles.json") == expected_watched
     assert _read_json(output_dir / "watched" / "meta.json") == payloads[base / "watched" / "meta.json"]
     assert _read_json(output_dir / "candidates" / "pool.json") == normalize_storage_pool(pool)
     assert _read_json(output_dir / "candidates" / "criteria.json") == {"pool": {"count": 50}}

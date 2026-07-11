@@ -15,7 +15,7 @@ def _make_movie(title: str, user_score: float, year: int, poster_url: str | None
     }
     main_info = {
         "title": title,
-        "user_score": user_score,
+        "user_score": 3,
         "year": year,
     }
     movie = {

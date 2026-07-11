@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from PyQt6.QtCore import Qt
+
 from desktop.i18n import tr
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.detail.action_icons import make_detail_metadata_pixmap
@@ -314,7 +316,10 @@ class DetailCard(DetailCardPosterMixin):
 
         has_final_stars = star_item is not None
         if has_final_stars:
-            self._rating_stars_widget.set_stars(star_item.get("stars"), star_item.get("tooltip") or "")
+            self._final_score_stars_label.setText(str(star_item.get("label") or ""))
+            self._final_score_stars_label.setToolTip(str(star_item.get("tooltip") or ""))
+            self._rating_stars_widget.set_stars(None)
+            self._rating_stars_widget.hide()
         else:
             self._rating_stars_widget.set_stars(None)
         self._final_score_stars_block.setVisible(has_final_stars)
@@ -326,7 +331,19 @@ class DetailCard(DetailCardPosterMixin):
             self._user_score_badge.setText("")
             self._user_score_badge.hide()
             return
-        self._user_score_badge.setText(str(badge.get("text", "")))
+        from html import escape
+        from pathlib import Path
+
+        icon_name = str(badge.get("icon_name") or "")
+        text = escape(str(badge.get("text", "")))
+        if icon_name:
+            icon_path = Path(__file__).resolve().parents[2] / "images" / icon_name
+            self._user_score_badge.setTextFormat(Qt.TextFormat.RichText)
+            self._user_score_badge.setText(
+                f'<img src="{icon_path.as_uri()}" width="18" height="18" />&nbsp;{text}'
+            )
+        else:
+            self._user_score_badge.setText(text)
         self._resize_user_score_badge()
         self._user_score_badge.show()
         self._user_score_badge.raise_()
@@ -480,6 +497,14 @@ class DetailCard(DetailCardPosterMixin):
         if has_hidden_rows:
             self._main_info_toggle_button.setText(
                 tr("detail.show_less") if self._main_info_expanded else tr("detail.show_more")
+            )
+            metrics = self._main_info_toggle_button.fontMetrics()
+            text_width = max(
+                metrics.horizontalAdvance(tr("detail.show_more")),
+                metrics.horizontalAdvance(tr("detail.show_less")),
+            )
+            self._main_info_toggle_button.setMinimumWidth(
+                text_width + (4 * self._profile.detail_small_spacing)
             )
 
     def _render_main_info_items(self) -> None:

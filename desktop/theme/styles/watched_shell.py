@@ -203,6 +203,7 @@ QComboBox#watchedSort::down-arrow {{
 }}
 QFrame#watchedScoreFilter,
 QFrame#watchedYearFilter,
+QFrame#watchedMediaTypeFilter,
 QFrame#watchedGenreFilter {{
     background-color: {FILM_SURFACE_1};
     border: 1px solid {FILM_BORDER_WEAK};
@@ -210,6 +211,7 @@ QFrame#watchedGenreFilter {{
 }}
 QLabel#watchedScoreFilterTitle,
 QLabel#watchedYearFilterTitle,
+QLabel#watchedMediaTypeFilterTitle,
 QLabel#watchedGenreFilterTitle {{
     background: transparent;
     color: {FILM_TEXT};
@@ -239,5 +241,24 @@ QLabel#watchedFilterValue {{
     color: {FILM_TEXT};
     font-size: {font_px(FONT_SECTION)}px;
     font-weight: 600;
+}}
+QPushButton#watchedUserRatingFilterChip {{
+    background-color: {FILM_SURFACE_0};
+    border: 1px solid {FILM_BORDER_WEAK};
+    border-radius: {px(6)}px;
+    color: {FILM_TEXT_SUBTLE};
+    font-size: {font_px(FONT_BASE)}px;
+    padding: {px(6)}px {px(8)}px;
+    min-height: {px(32)}px;
+}}
+QPushButton#watchedUserRatingFilterChip:hover {{
+    border-color: {FILM_BORDER};
+    color: {FILM_TEXT};
+}}
+QPushButton#watchedUserRatingFilterChip:checked {{
+    background-color: {FILM_ACCENT_DIM};
+    border-color: {FILM_ACCENT};
+    color: {FILM_TEXT};
+    font-weight: 700;
 }}
 """

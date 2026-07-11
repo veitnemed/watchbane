@@ -11,9 +11,6 @@ from desktop.shared.widgets.range_slider import RangeSlider
 from desktop.theme.scaling import layout_px
 from desktop.watched.model import (
     MEDIA_FILTER_OPTIONS,
-    USER_SCORE_MAX,
-    USER_SCORE_MIN,
-    USER_SCORE_STEP,
     YEAR_FILTER_DEFAULT_FROM,
     YEAR_FILTER_DEFAULT_TO,
     YEAR_FILTER_MAX,
@@ -74,12 +71,10 @@ class WatchedFiltersPanel:
         self.toggle.style().polish(self.toggle)
 
     def reset_all(self) -> None:
-        self._score_slider.blockSignals(True)
-        self._score_slider.setValues(
-            self._score_to_slider_value(USER_SCORE_MIN),
-            self._score_to_slider_value(USER_SCORE_MAX),
-        )
-        self._score_slider.blockSignals(False)
+        for button in self._score_buttons.values():
+            button.blockSignals(True)
+            button.setChecked(False)
+            button.blockSignals(False)
 
         self._year_slider.blockSignals(True)
         self._year_slider.setValues(YEAR_FILTER_DEFAULT_FROM, YEAR_FILTER_DEFAULT_TO)
@@ -93,7 +88,6 @@ class WatchedFiltersPanel:
         self._media_type_combo.setCurrentIndex(0)
         self._media_type_combo.blockSignals(False)
 
-        self._update_score_range_label()
         self._update_year_range_label()
         self._on_filters_changed()
 
@@ -112,9 +106,12 @@ class WatchedFiltersPanel:
             self._genre_combo.setCurrentIndex(0)
         self._genre_combo.blockSignals(False)
 
-    def score_filter_range(self) -> tuple[float, float]:
-        lower, upper = self._score_slider.values()
-        return (self._score_from_slider_value(lower), self._score_from_slider_value(upper))
+    def selected_user_ratings(self) -> set[int]:
+        return {value for value, button in self._score_buttons.items() if button.isChecked()}
+
+    def score_filter_range(self) -> tuple[int, int]:
+        selected = sorted(self.selected_user_ratings())
+        return (selected[0], selected[-1]) if selected else (1, 3)
 
     def year_filter_range(self) -> tuple[int, int]:
         return self._year_slider.values()
@@ -128,8 +125,7 @@ class WatchedFiltersPanel:
         return media_type if isinstance(media_type, str) else None
 
     def score_filter_active(self) -> bool:
-        min_score, max_score = self.score_filter_range()
-        return score_filter_is_active(min_score, max_score)
+        return score_filter_is_active(self.selected_user_ratings())
 
     def year_filter_active(self) -> bool:
         year_from, year_to = self.year_filter_range()
@@ -176,29 +172,21 @@ class WatchedFiltersPanel:
         )
         layout.setSpacing(layout_px(10))
 
-        header_row = QHBoxLayout()
-        header_row.setContentsMargins(0, 0, 0, 0)
-        header_row.setSpacing(layout_px(8))
         title = QLabel(tr("watched.filters.score"))
         title.setObjectName("watchedScoreFilterTitle")
-        header_row.addWidget(title)
-        header_row.addStretch()
-
-        self._score_range_label = QLabel()
-        self._score_range_label.setObjectName("watchedFilterValue")
-        header_row.addWidget(self._score_range_label)
-        layout.addLayout(header_row)
-
-        self._score_slider = RangeSlider(
-            self._score_to_slider_value(USER_SCORE_MIN),
-            self._score_to_slider_value(USER_SCORE_MAX),
-            self._score_to_slider_value(USER_SCORE_MIN),
-            self._score_to_slider_value(USER_SCORE_MAX),
-        )
-        self._score_slider.setObjectName("watchedScoreRange")
-        self._score_slider.rangeChanged.connect(self._on_score_range_changed)
-        layout.addWidget(self._score_slider)
-        self._update_score_range_label()
+        layout.addWidget(title)
+        chips = QHBoxLayout()
+        chips.setContentsMargins(0, 0, 0, 0)
+        chips.setSpacing(layout_px(6))
+        self._score_buttons: dict[int, QPushButton] = {}
+        for value, key in ((1, "user_rating.not_for_me"), (2, "user_rating.ok"), (3, "user_rating.top")):
+            button = QPushButton(tr(key))
+            button.setObjectName("watchedUserRatingFilterChip")
+            button.setCheckable(True)
+            button.toggled.connect(self._on_filters_changed)
+            self._score_buttons[value] = button
+            chips.addWidget(button, 1)
+        layout.addLayout(chips)
         return frame
 
     def _build_year_filter_panel(self) -> QWidget:
@@ -286,20 +274,6 @@ class WatchedFiltersPanel:
         self._genre_combo.currentIndexChanged.connect(self._on_filters_changed)
         layout.addWidget(self._genre_combo)
         return frame
-
-    def _score_to_slider_value(self, score: float) -> int:
-        return int(round(float(score) / USER_SCORE_STEP))
-
-    def _score_from_slider_value(self, value: int) -> float:
-        return round(value * USER_SCORE_STEP, 1)
-
-    def _update_score_range_label(self) -> None:
-        min_score, max_score = self.score_filter_range()
-        self._score_range_label.setText(f"{min_score:.1f}-{max_score:.1f}")
-
-    def _on_score_range_changed(self, _lower: int, _upper: int) -> None:
-        self._update_score_range_label()
-        self._on_filters_changed()
 
     def _update_year_range_label(self) -> None:
         year_from, year_to = self.year_filter_range()

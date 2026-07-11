@@ -48,7 +48,7 @@ def _watched_payload(title: str, year: int) -> dict:
         "main_info": {
             "title": title,
             "year": year,
-            "user_score": 8.0,
+            "user_score": 3,
             "country": "US",
             "media_type": "tv",
         },
@@ -75,9 +75,9 @@ def test_sqlite_end_to_end_runtime_smoke(tmp_path, monkeypatch) -> None:
 
     add_result = add_dataset_record(_watched_payload("Alpha", 2021))
     assert add_result.ok is True
-    update_result = update_dataset_record("Alpha", {"main_info": {"user_score": 9.0}})
+    update_result = update_dataset_record("Alpha", {"main_info": {"user_score": 2}})
     assert update_result.ok is True
-    assert storage_data.load_dataset()["Alpha"]["main_info"]["user_score"] == 9.0
+    assert storage_data.load_dataset()["Alpha"]["main_info"]["user_score"] == 2
 
     pool_repository.save_candidate_pool(
         {"candidate": {"title": "Candidate", "year": 2022, "tmdb_score": 8.5, "final_score": 8.5}}

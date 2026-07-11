@@ -6,7 +6,6 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
-    QDoubleSpinBox,
     QFormLayout,
     QFrame,
     QLabel,
@@ -17,10 +16,8 @@ from desktop.i18n import tr
 from desktop.theme import build_score_edit_dialog_style
 from desktop.theme.scaling import layout_px
 from desktop.shared.detail.presenters import format_user_score_display
+from desktop.shared.widgets.user_rating_selector import UserRatingSelector
 from desktop.watched.model import (
-    USER_SCORE_MAX,
-    USER_SCORE_MIN,
-    USER_SCORE_STEP,
     WatchedEntry,
     get_user_score_spin_value,
 )
@@ -41,7 +38,7 @@ class ScoreEditDialog(QDialog):
         self.setObjectName("scoreEditDialog")
         self.setWindowTitle(tr("watched.score.dialog.title"))
         self.setModal(True)
-        self.setFixedWidth(layout_px(390))
+        self.setFixedWidth(layout_px(500))
         self.setStyleSheet(SCORE_EDIT_DIALOG_STYLE)
 
         root_layout = QVBoxLayout(self)
@@ -86,13 +83,9 @@ class ScoreEditDialog(QDialog):
         form.setSpacing(layout_px(8))
         field_label = QLabel(tr("watched.score.dialog.field"))
         field_label.setObjectName("scoreEditFieldLabel")
-        self._score_input = QDoubleSpinBox()
-        self._score_input.setObjectName("scoreEditSpin")
-        self._score_input.setRange(USER_SCORE_MIN, USER_SCORE_MAX)
-        self._score_input.setSingleStep(USER_SCORE_STEP)
-        self._score_input.setDecimals(1)
+        self._score_input = UserRatingSelector()
+        self._score_input.setObjectName("scoreEditUserRatingSelector")
         self._score_input.setValue(get_user_score_spin_value(card))
-        self._score_input.selectAll()
         form.addRow(field_label, self._score_input)
         card_layout.addLayout(form)
 
@@ -106,6 +99,10 @@ class ScoreEditDialog(QDialog):
             save_button.setText(tr("settings.save"))
             save_button.setDefault(True)
             save_button.setAutoDefault(True)
+            save_button.setEnabled(self._score_input.value() is not None)
+            self._score_input.valueChanged.connect(
+                lambda value: save_button.setEnabled(value is not None)
+            )
         if cancel_button is not None:
             cancel_button.setText(tr("common.cancel"))
             cancel_button.setAutoDefault(False)
@@ -115,11 +112,12 @@ class ScoreEditDialog(QDialog):
 
         self._score_input.setFocus(Qt.FocusReason.OtherFocusReason)
 
-    def score_value(self) -> float:
+    def score_value(self) -> int:
         return self._score_input.value()
 
     def keyPressEvent(self, event) -> None:
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            self.accept()
+            if self._score_input.value() is not None:
+                self.accept()
             return
         super().keyPressEvent(event)

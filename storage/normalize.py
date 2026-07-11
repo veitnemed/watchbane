@@ -2,6 +2,7 @@
 
 from common import valid
 from dataset.models.media_type import normalize_media_type
+from dataset.models.user_rating import normalize_user_rating
 
 LEGACY_PAYLOAD_SECTIONS = ("tags_vibe", "genre")
 
@@ -41,6 +42,12 @@ def normalize_main_info(main_info: dict) -> dict:
             normalized[feature] = int(main_info[feature])
         elif feature == "country":
             normalized[feature] = str(main_info.get(feature, "") or "").strip()
+        elif feature == "user_score":
+            value = main_info.get(feature)
+            rating = normalize_user_rating(value)
+            if value is not None and rating is None:
+                raise ValueError("user_score must be an integer from 1 to 3")
+            normalized[feature] = rating
         else:
             normalized[feature] = valid.parse_float(main_info[feature])
     normalized["media_type"] = normalize_media_type(main_info.get("media_type"))

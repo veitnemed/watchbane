@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QPushButton
+from PyQt6.QtWidgets import QPushButton, QStackedWidget
 
 from candidates import service as candidate_service
 from candidates.preferences import SimpleRecommendationPreferences
@@ -248,9 +248,10 @@ def test_simple_apply_refills_when_total_pool_is_large_but_matching_slice_is_sma
     ]
     workers = _install_blocking_replenish_worker(monkeypatch)
     _service, session, view = _build_filters_view(qtbot, monkeypatch, candidates)
-    _set_combo_data(view._form.simple_media_combo, "tv")
-    _set_combo_data(view._form.simple_origin_combo, "russia")
-    _set_combo_data(view._form.simple_mood_combo, "dark")
+    direction_values = view._form.direction_control.property("directionValues")
+    view._form.direction_control.setValue(direction_values.index("russian_mainstream"))
+    view._form.discovery_media_control.setValue("tv")
+    view._form.vector_mood_control.setValue("dark")
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
     assert apply_button is not None
 
@@ -259,9 +260,9 @@ def test_simple_apply_refills_when_total_pool_is_large_but_matching_slice_is_sma
     qtbot.waitUntil(lambda: len(workers) == 1)
 
     assert len(candidates) > 30
-    assert session.filtered_count == 2
+    assert session.filtered_count == 1
     assert _intent_countries(workers[0].intent) == {"RU"}
-    assert workers[0].intent.get("vibe") == "dark"
+    assert workers[0].intent.get("vibe") == "mixed"
 
 
 def test_repeated_identical_refill_request_starts_only_one_worker(qtbot, monkeypatch) -> None:
@@ -344,13 +345,31 @@ class FakePosterPrefetchController:
     def __init__(self, **_kwargs) -> None:
         self.poster_ready = _Signal()
         self.busy_changed = _Signal()
+        self.network_cycle_finished = _Signal()
+        self.batch_started = _Signal()
+        self.candidate_settled = _Signal()
+        self.batch_progress = _Signal()
         self.batch_finished = _Signal()
+        self._batch_id = 0
 
     def allow_failed_retries(self, **_kwargs) -> None:
         return None
 
     def enqueue_candidates(self, _candidates: list[dict], **_kwargs) -> None:
         return None
+
+    def start_batch(self, candidates: list[dict], **_kwargs) -> int:
+        self._batch_id += 1
+        batch_id = self._batch_id
+        total = len(candidates)
+        self.batch_started.emit(batch_id, total)
+        self.batch_progress.emit(batch_id, 0, 0, 0, total, 0)
+        for settled, candidate in enumerate(candidates, start=1):
+            identity = candidate_detail_identity(candidate)
+            self.candidate_settled.emit(batch_id, identity, "", False, False)
+            self.batch_progress.emit(batch_id, 0, 0, settled, total, 0)
+        self.batch_finished.emit(batch_id, 0, 0, total, 0)
+        return batch_id
 
     def enqueue(self, *_args, **_kwargs) -> None:
         return None
@@ -368,7 +387,7 @@ def _deck_payload(
         "preferences": deepcopy(preferences),
         "active": deepcopy([candidate] if active is None else active),
         "reserve": [],
-        "active_limit": 30,
+        "active_limit": 25,
         "reserve_size": 70,
         "unknown_rating_limit": 6,
         "refill_needed": refill_needed,
@@ -416,6 +435,10 @@ def _build_list_view(
     view.widget.show()
     view.on_tab_activated()
     qtbot.waitUntil(lambda: view._deck is not None)
+    qtbot.waitUntil(
+        lambda: view.widget.findChild(QStackedWidget, "recommendationsDeckStack").currentWidget()
+        is view._deck_content_page
+    )
     return view
 
 

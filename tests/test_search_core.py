@@ -437,12 +437,12 @@ def test_download_preview_posters_for_urls(monkeypatch) -> None:
         ]
 
 
-def test_normalize_tmdb_poster_download_url_uses_w500() -> None:
+def test_normalize_tmdb_poster_download_url_uses_w342() -> None:
     from posters.download_images import normalize_tmdb_poster_download_url
 
     original = "https://image.tmdb.org/t/p/original/feVQc6vtTdOsrt8W4XXNBviRs71.jpg"
     assert normalize_tmdb_poster_download_url(original) == (
-        "https://image.tmdb.org/t/p/w500/feVQc6vtTdOsrt8W4XXNBviRs71.jpg"
+        "https://image.tmdb.org/t/p/w342/feVQc6vtTdOsrt8W4XXNBviRs71.jpg"
     )
     assert normalize_tmdb_poster_download_url("https://example.com/x.jpg") == "https://example.com/x.jpg"
 

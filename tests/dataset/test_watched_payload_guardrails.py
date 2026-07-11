@@ -23,7 +23,7 @@ def test_add_dataset_record_does_not_persist_legacy_payload_fields(monkeypatch) 
         {
             "main_info": {
                 "title": "Guardrail Show",
-                "user_score": 8.0,
+                "user_score": 3,
                 "year": 2020,
                 "country": "США",
             },
@@ -49,7 +49,7 @@ def test_update_dataset_record_does_not_persist_legacy_payload_fields(monkeypatc
         "Guardrail Show": {
             "main_info": {
                 "title": "Guardrail Show",
-                "user_score": 8.0,
+                "user_score": 3,
                 "year": 2020,
                 "country": "США",
             },

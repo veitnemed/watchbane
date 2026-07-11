@@ -402,17 +402,18 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._final_score_stars_block = QWidget()
     owner._final_score_stars_block.setObjectName("detailFinalScoreStars")
     owner._final_score_stars_block.setStyleSheet(TRANSPARENT_STYLE)
-    owner._final_score_stars_block.setFixedWidth(final_stars_width)
+    owner._final_score_stars_block.setMinimumWidth(final_stars_width)
     owner._final_score_stars_block.setMinimumHeight(
         profile.detail_star_size + (2 * profile.detail_small_spacing)
     )
-    owner._final_score_stars_block.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+    owner._final_score_stars_block.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
     owner._final_score_stars_layout = QVBoxLayout(owner._final_score_stars_block)
     owner._final_score_stars_layout.setContentsMargins(0, 0, 0, 0)
     owner._final_score_stars_layout.setSpacing(profile.detail_small_spacing)
 
     owner._final_score_stars_label = QLabel("WatchBane")
     owner._final_score_stars_label.setObjectName("detailFinalScoreStarsLabel")
+    owner._final_score_stars_label.setWordWrap(True)
     owner._final_score_stars_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
     owner._final_score_stars_label.setSizePolicy(
         QSizePolicy.Policy.Expanding,

@@ -123,7 +123,15 @@ def build_main_tabs(
     registry.register(ShellTabSpec("settings", languages.tr("tabs.settings"), settings_tab_view))
 
     tabs.currentChanged.connect(registry.on_current_changed)
-    QTimer.singleShot(0, lambda: registry.on_current_changed(tabs.currentIndex()))
+
+    def activate_initial_tab() -> None:
+        try:
+            current_index = tabs.currentIndex()
+        except RuntimeError:
+            return
+        registry.on_current_changed(current_index)
+
+    QTimer.singleShot(0, activate_initial_tab)
 
     context = AppTabsContext(
         watched_tab_view=watched_tab_view,

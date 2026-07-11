@@ -14,7 +14,7 @@ def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0
     return {
         "main_info": {
             "title": title,
-            "user_score": user_score,
+            "user_score": 3,
             "year": year,
         },
         "raw_scores": {
@@ -30,7 +30,7 @@ def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0
             },
             {
                 "title": title,
-                "user_score": user_score,
+                "user_score": 3,
                 "year": year,
             },
         ),

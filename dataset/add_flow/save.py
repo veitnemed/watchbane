@@ -5,12 +5,16 @@ from copy import deepcopy
 from config import scheme
 from dataset.add_flow.preview import build_preview_movie_from_defaults
 from dataset.storage_movie import add_movie
+from dataset.models.user_rating import normalize_user_rating
 
 
-def build_movie_record_from_defaults(defaults: dict, user_score: float | None) -> dict:
+def build_movie_record_from_defaults(defaults: dict, user_score: int | None) -> dict:
     """Build add_dataset_record payload from resolved defaults."""
     movie = build_preview_movie_from_defaults(defaults)
-    movie["main_info"]["user_score"] = None if user_score is None else float(user_score)
+    normalized_rating = normalize_user_rating(user_score)
+    if user_score is not None and normalized_rating is None:
+        raise ValueError("user_score must be an integer from 1 to 3")
+    movie["main_info"]["user_score"] = normalized_rating
     localized = defaults.get("localized")
     if isinstance(localized, dict):
         movie["localized"] = deepcopy(localized)
@@ -22,7 +26,7 @@ def build_movie_record_from_defaults(defaults: dict, user_score: float | None) -
 
 def save_add_title_record(
     defaults: dict,
-    user_score: float,
+    user_score: int,
     *,
     meta_payload=None,
     poster_hints=None,

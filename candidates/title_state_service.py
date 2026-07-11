@@ -14,6 +14,7 @@ from dataset.models.identity import (
     normalize_title_key,
 )
 from dataset.models.media_type import normalize_media_type
+from dataset.models.user_rating import normalize_user_rating
 from dataset.transfer.candidate import build_candidate_transfer_payload
 from storage.sqlite import action_repository
 from storage.sqlite.connection import connect
@@ -199,13 +200,16 @@ def remove_from_watched(candidate: dict, *, path: str | Path | None = None) -> d
 
 def mark_watched(
     candidate: dict,
-    optional_user_score: float | None = None,
+    optional_user_score: int | None = None,
     *,
     path: str | Path | None = None,
 ) -> dict:
+    normalized_score = normalize_user_rating(optional_user_score)
+    if optional_user_score is not None and normalized_score is None:
+        raise ValueError("user_score must be an integer from 1 to 3")
     normalized = normalize_candidate_record(candidate)
     transfer = build_candidate_transfer_payload(normalized)
-    payload = build_movie_record_from_defaults(transfer["defaults"], optional_user_score)
+    payload = build_movie_record_from_defaults(transfer["defaults"], normalized_score)
     meta_payload = transfer.get("meta_payload")
     conn = connect(path)
     try:

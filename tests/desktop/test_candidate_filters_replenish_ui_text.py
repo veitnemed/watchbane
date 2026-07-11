@@ -108,7 +108,12 @@ def test_replenish_form_explains_origin_animation_and_advanced_override(qtbot) -
 
 
 def test_apply_without_replenish_reports_local_filter_applied(qtbot) -> None:
-    _service, _session, view = _build_view(qtbot)
+    service = UiTextService()
+    service.candidates = [
+        {**service.candidates[0], "pool_entry_key": f"alpha-{index}|2024|movie", "title": f"Alpha {index}"}
+        for index in range(50)
+    ]
+    _service, _session, view = _build_view(qtbot, service)
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
     lead = view.widget.findChild(QLabel, "candidateFiltersIntroLead")
     checkbox = view.widget.findChild(QCheckBox, "candidateReplenishEnabled")
@@ -119,7 +124,7 @@ def test_apply_without_replenish_reports_local_filter_applied(qtbot) -> None:
     checkbox.setChecked(False)
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
 
-    qtbot.waitUntil(lambda: lead.text() == "Local filter applied")
+    qtbot.waitUntil(lambda: lead.text() == tr("recommendations.discovery.status.local_applied"))
 
 
 def test_blocked_replenish_reports_no_tmdb_call_status(qtbot) -> None:
@@ -146,7 +151,7 @@ def test_blocked_replenish_reports_no_tmdb_call_status(qtbot) -> None:
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(lambda: len(service.replenish_calls) == 1)
-    qtbot.waitUntil(lambda: lead.text() == "Conflict: no TMDb call")
+    qtbot.waitUntil(lambda: lead.text() == tr("recommendations.discovery.status.conflict"))
 
 
 def test_underfilled_replenish_reports_added_count(qtbot) -> None:
@@ -162,4 +167,4 @@ def test_underfilled_replenish_reports_added_count(qtbot) -> None:
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(lambda: len(service.replenish_calls) == 1)
-    qtbot.waitUntil(lambda: "Added 1 of 30" in stats.text())
+    qtbot.waitUntil(lambda: "Добавлено 1 из 30" in stats.text())

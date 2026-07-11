@@ -5,9 +5,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import datetime, timezone
+from math import ceil
 from time import perf_counter
 
-from PyQt6.QtCore import QModelIndex, QTimer, Qt
+from PyQt6.QtCore import QModelIndex, QTimer, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -16,15 +17,17 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListView,
+    QProgressBar,
     QPushButton,
     QScrollArea,
     QSplitter,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from candidates.pool.localized_posters import candidate_needs_tmdb_detail_enrichment
-from candidates.recommendation_deck_service import RecommendationDeckService
+from candidates.recommendation_deck_service import ACTIVE_DECK_SIZE, RecommendationDeckService
 from candidates.scoring.rating_confidence import has_unknown_rating
 from desktop.candidates.list_actions import CandidateListActionsMixin
 from desktop.candidates.list_delegate import build_candidate_list_item_delegate
@@ -43,6 +46,7 @@ from desktop.settings.app_settings import get_persisted_data_language
 from desktop.shared.detail import DetailCard
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.widgets.list_search import DebouncedLineEditSearch, resolve_selection_row
+from desktop.shared.widgets.user_rating_selector import UserRatingSelector
 from desktop.theme.shell_layout import (
     CANDIDATE_LIST_MAX_WIDTH_PX,
     CANDIDATE_LIST_MIN_WIDTH_PX,
@@ -62,6 +66,18 @@ logger = logging.getLogger(__name__)
 CANDIDATE_LIST_STRETCH = 0
 CANDIDATE_DETAIL_STRETCH = 1
 CANDIDATE_LIST_ITEM_SPACING = list_px(2)
+POSTER_PRIORITY_COUNT = 8
+POSTER_READY_TARGET = 20
+POSTER_REVEAL_DEADLINE_MS = 2_500
+POSTER_MIN_LOADER_MS = 180
+
+
+class _CandidateListRoot(QWidget):
+    hidden = pyqtSignal()
+
+    def hideEvent(self, event) -> None:
+        self.hidden.emit()
+        super().hideEvent(event)
 
 
 class CandidateListView(CandidateListActionsMixin):
@@ -105,12 +121,42 @@ class CandidateListView(CandidateListActionsMixin):
         self._poster_prefetch_busy = False
         self._poster_prefetch_failed = 0
         self._refill_requested_deck_ids: set[str] = set()
+        self._deck_prepare_active = False
+        self._deck_prepare_batch_id: int | None = None
+        self._deck_prepare_started_at = 0.0
+        self._deck_loader_shown_at = 0.0
+        self._pending_reveal_batch_id: int | None = None
+        self._pending_reveal_reason = ""
+        self._deck_prepare_priority_identities: set[str] = set()
+        self._deck_prepare_settled_identities: set[str] = set()
+        self._deck_prepare_total = 0
+        self._deck_prepare_ready = 0
+        self._deck_prepare_failed = 0
+        self._deck_prepare_settled = 0
+        self._deck_prepare_cache_hits = 0
+        self._deck_build_ms = 0.0
 
-        self._widget = QWidget()
+        self._widget = _CandidateListRoot()
         self._widget.setObjectName("candidateListRoot")
+        self._deck_load_timer = QTimer(self._widget)
+        self._deck_load_timer.setSingleShot(True)
+        self._deck_load_timer.timeout.connect(self._run_scheduled_deck_load)
+        self._deck_deadline_timer = QTimer(self._widget)
+        self._deck_deadline_timer.setSingleShot(True)
+        self._deck_deadline_timer.timeout.connect(self._on_deck_deadline)
+        self._deck_minimum_timer = QTimer(self._widget)
+        self._deck_minimum_timer.setSingleShot(True)
+        self._deck_minimum_timer.timeout.connect(self._on_deck_minimum_elapsed)
+        self._widget.hidden.connect(self._on_root_hidden)
         self._poster_prefetch = CandidatePosterPrefetchController(parent=self._widget)
         self._poster_prefetch.poster_ready.connect(self._on_poster_prefetch_ready)
         self._poster_prefetch.busy_changed.connect(self._on_poster_prefetch_busy_changed)
+        self._poster_prefetch.network_cycle_finished.connect(
+            self._on_poster_prefetch_network_cycle_finished
+        )
+        self._poster_prefetch.batch_started.connect(self._on_poster_batch_started)
+        self._poster_prefetch.candidate_settled.connect(self._on_poster_candidate_settled)
+        self._poster_prefetch.batch_progress.connect(self._on_poster_batch_progress)
         self._poster_prefetch.batch_finished.connect(self._on_poster_prefetch_batch_finished)
         root_layout = QVBoxLayout(self._widget)
         root_layout.setContentsMargins(
@@ -124,8 +170,57 @@ class CandidateListView(CandidateListActionsMixin):
         self._counter_label = QLabel("", self._widget)
         self._counter_label.setObjectName("candidateListCounter")
 
-        splitter = QSplitter(Qt.Orientation.Horizontal)
-        root_layout.addWidget(splitter, stretch=1)
+        self._deck_stack = QStackedWidget(self._widget)
+        self._deck_stack.setObjectName("recommendationsDeckStack")
+        root_layout.addWidget(self._deck_stack, stretch=1)
+
+        self._deck_loading_page = QWidget(self._deck_stack)
+        self._deck_loading_page.setObjectName("recommendationsDeckLoadingPage")
+        loading_layout = QVBoxLayout(self._deck_loading_page)
+        loading_layout.setContentsMargins(
+            list_px(24),
+            list_px(24),
+            list_px(24),
+            list_px(24),
+        )
+        loading_layout.setSpacing(list_px(12))
+        loading_layout.addStretch(1)
+        self._deck_loading_title = QLabel(tr("recommendations.preparing.title"))
+        self._deck_loading_title.setObjectName("recommendationsDeckLoadingTitle")
+        self._deck_loading_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._deck_loading_title.setWordWrap(True)
+        loading_layout.addWidget(self._deck_loading_title)
+        self._deck_loading_detail = QLabel(tr("recommendations.preparing.detail"))
+        self._deck_loading_detail.setObjectName("recommendationsDeckLoadingDetail")
+        self._deck_loading_detail.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._deck_loading_detail.setWordWrap(True)
+        loading_layout.addWidget(self._deck_loading_detail)
+        self._deck_loading_progress = QProgressBar(self._deck_loading_page)
+        self._deck_loading_progress.setObjectName("recommendationsDeckLoadingProgress")
+        self._deck_loading_progress.setRange(0, ACTIVE_DECK_SIZE)
+        self._deck_loading_progress.setValue(0)
+        self._deck_loading_progress.setTextVisible(True)
+        self._deck_loading_progress.setFormat(
+            tr("recommendations.preparing.progress", settled=0, total=ACTIVE_DECK_SIZE)
+        )
+        self._deck_loading_progress.setMinimumWidth(list_px(320))
+        self._deck_loading_progress.setMaximumWidth(list_px(420))
+        loading_layout.addWidget(
+            self._deck_loading_progress,
+            alignment=Qt.AlignmentFlag.AlignHCenter,
+        )
+        loading_layout.addStretch(1)
+        self._deck_stack.addWidget(self._deck_loading_page)
+
+        self._deck_content_page = QWidget(self._deck_stack)
+        self._deck_content_page.setObjectName("recommendationsDeckContentPage")
+        content_layout = QVBoxLayout(self._deck_content_page)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        splitter = QSplitter(Qt.Orientation.Horizontal, self._deck_content_page)
+        content_layout.addWidget(splitter)
+        self._deck_stack.addWidget(self._deck_content_page)
+        self._deck_stack.setCurrentWidget(self._deck_content_page)
 
         list_panel = QWidget()
         list_panel.setObjectName("candidateSearchResultsPanel")
@@ -237,29 +332,33 @@ class CandidateListView(CandidateListActionsMixin):
         action_buttons_layout.setVerticalSpacing(list_px(6))
         self._watched_action_button = QPushButton(tr("recommendations.action.watched"))
         self._watched_action_button.setObjectName("recommendationWatchedButton")
+        self._watched_action_button.hide()
         self._watchlist_action_button = QPushButton(tr("recommendations.action.watchlist"))
         self._watchlist_action_button.setObjectName("recommendationWatchlistButton")
         self._hidden_action_button = QPushButton(tr("recommendations.action.hidden"))
         self._hidden_action_button.setObjectName("recommendationHiddenButton")
-        self._watched_action_button.clicked.connect(
-            lambda: self._apply_recommendation_action("watched")
+        rating_prompt = QLabel(tr("user_rating.candidate_prompt"))
+        rating_prompt.setObjectName("recommendationUserRatingPrompt")
+        action_layout.addWidget(rating_prompt)
+        self._candidate_rating_selector = UserRatingSelector()
+        self._candidate_rating_selector.setObjectName("recommendationUserRatingSelector")
+        self._candidate_rating_selector.valueChanged.connect(
+            lambda value: self._apply_recommendation_action("watched", user_score=value)
+            if value is not None
+            else None
         )
+        action_layout.addWidget(self._candidate_rating_selector)
         self._watchlist_action_button.clicked.connect(
             lambda: self._apply_recommendation_action("watchlist")
         )
         self._hidden_action_button.clicked.connect(
             lambda: self._apply_recommendation_action("hidden")
         )
-        action_buttons = (
-            self._watched_action_button,
-            self._watchlist_action_button,
-            self._hidden_action_button,
-        )
+        action_buttons = (self._watchlist_action_button, self._hidden_action_button)
         if detail_profiles.use_compact_detail_content():
-            for index, button in enumerate(action_buttons[:2]):
+            for index, button in enumerate(action_buttons):
                 action_buttons_layout.addWidget(button, 0, index)
                 action_buttons_layout.setColumnStretch(index, 1)
-            action_buttons_layout.addWidget(action_buttons[2], 1, 0, 1, 2)
         else:
             for column, button in enumerate(action_buttons):
                 action_buttons_layout.addWidget(button, 0, column)
@@ -282,15 +381,24 @@ class CandidateListView(CandidateListActionsMixin):
         self._recommendations_active = True
         if self._deck_load_scheduled:
             return
+        if self._deck is None and not self._deck_prepare_active:
+            self._begin_deck_preparation()
         self._deck_load_scheduled = True
         self._deck_status_label.setText(tr("recommendations.state.loading"))
         self._deck_status_label.show()
-        QTimer.singleShot(25, self._run_scheduled_deck_load)
+        self._deck_load_timer.start(25)
 
     def _run_scheduled_deck_load(self) -> None:
         self._deck_load_scheduled = False
         if self._recommendations_active:
             self._load_recommendation_deck(force_new=False)
+
+    def _on_root_hidden(self) -> None:
+        if not self._deck_load_timer.isActive():
+            return
+        self._deck_load_timer.stop()
+        self._deck_load_scheduled = False
+        self._deck_dirty = True
 
     @property
     def widget(self) -> QWidget:
@@ -308,6 +416,9 @@ class CandidateListView(CandidateListActionsMixin):
     def _deck_preferences(self) -> dict:
         return dict(self._session.filters or DEFAULT_BROWSE_FILTERS)
 
+    def _deck_vector(self) -> dict:
+        return dict(self._session.recommendation_vector)
+
     def _set_action_panel_enabled(self, enabled: bool) -> None:
         self._action_panel.setVisible(enabled)
         for button in (
@@ -316,6 +427,7 @@ class CandidateListView(CandidateListActionsMixin):
             self._hidden_action_button,
         ):
             button.setEnabled(enabled)
+        self._candidate_rating_selector.setEnabled(enabled)
         if not enabled:
             self._reason_label.clear()
 
@@ -403,25 +515,221 @@ class CandidateListView(CandidateListActionsMixin):
         if self._deck is not None:
             self._update_deck_status()
 
-    def _on_poster_prefetch_batch_finished(self, _succeeded: int, failed: int) -> None:
+    def _on_poster_prefetch_network_cycle_finished(self, _succeeded: int, failed: int) -> None:
         self._poster_prefetch_failed = max(0, int(failed))
         if self._deck is not None:
             self._update_deck_status()
 
-    def _present_recommendation_deck(self, deck: dict) -> None:
+    def _begin_deck_preparation(self) -> None:
+        self._deck_deadline_timer.stop()
+        self._deck_minimum_timer.stop()
+        self._deck_prepare_active = True
+        self._deck_prepare_batch_id = None
+        self._deck_prepare_started_at = 0.0
+        self._deck_loader_shown_at = perf_counter()
+        self._pending_reveal_batch_id = None
+        self._pending_reveal_reason = ""
+        self._deck_prepare_priority_identities = set()
+        self._deck_prepare_settled_identities = set()
+        self._deck_prepare_total = 0
+        self._deck_prepare_ready = 0
+        self._deck_prepare_failed = 0
+        self._deck_prepare_settled = 0
+        self._deck_prepare_cache_hits = 0
+        self._deck_loading_progress.setRange(0, ACTIVE_DECK_SIZE)
+        self._deck_loading_progress.setValue(0)
+        self._deck_loading_progress.setFormat(
+            tr("recommendations.preparing.progress", settled=0, total=ACTIVE_DECK_SIZE)
+        )
+        self._deck_stack.setCurrentWidget(self._deck_loading_page)
+
+    def _show_deck_content(self) -> None:
+        self._deck_deadline_timer.stop()
+        self._deck_minimum_timer.stop()
+        self._deck_prepare_active = False
+        self._deck_stack.setCurrentWidget(self._deck_content_page)
+
+    def _on_poster_batch_started(self, batch_id: int, total: int) -> None:
+        if not self._deck_prepare_active:
+            return
+        self._deck_deadline_timer.stop()
+        self._deck_minimum_timer.stop()
+        self._deck_prepare_batch_id = int(batch_id)
+        self._deck_prepare_started_at = perf_counter()
+        self._pending_reveal_batch_id = None
+        self._pending_reveal_reason = ""
+        self._deck_prepare_settled_identities = set()
+        self._deck_prepare_total = max(0, int(total))
+        self._deck_prepare_ready = 0
+        self._deck_prepare_failed = 0
+        self._deck_prepare_settled = 0
+        self._deck_prepare_cache_hits = 0
+        progress_maximum = max(1, self._deck_prepare_total)
+        self._deck_loading_progress.setRange(0, progress_maximum)
+        self._deck_loading_progress.setValue(0)
+        self._deck_loading_progress.setFormat(
+            tr(
+                "recommendations.preparing.progress",
+                settled=0,
+                total=self._deck_prepare_total,
+            )
+        )
+        self._deck_deadline_timer.start(POSTER_REVEAL_DEADLINE_MS)
+
+    def _on_deck_deadline(self) -> None:
+        batch_id = self._deck_prepare_batch_id
+        if batch_id is not None:
+            self._request_deck_reveal(batch_id, "deadline")
+
+    def _on_deck_minimum_elapsed(self) -> None:
+        batch_id = self._pending_reveal_batch_id
+        reason = self._pending_reveal_reason
+        if batch_id is not None:
+            self._request_deck_reveal(batch_id, reason)
+
+    def _on_poster_candidate_settled(
+        self,
+        batch_id: int,
+        identity: str,
+        _local_path: str,
+        _failed: bool,
+        _cache_hit: bool,
+    ) -> None:
+        if batch_id != self._deck_prepare_batch_id:
+            return
+        self._deck_prepare_settled_identities.add(str(identity))
+
+    def _on_poster_batch_progress(
+        self,
+        batch_id: int,
+        ready: int,
+        failed: int,
+        settled: int,
+        total: int,
+        cache_hits: int,
+    ) -> None:
+        if batch_id != self._deck_prepare_batch_id:
+            return
+        self._deck_prepare_ready = max(0, int(ready))
+        self._deck_prepare_failed = max(0, int(failed))
+        self._deck_prepare_settled = max(0, int(settled))
+        self._deck_prepare_total = max(0, int(total))
+        self._deck_prepare_cache_hits = max(0, int(cache_hits))
+        self._deck_loading_progress.setRange(0, max(1, self._deck_prepare_total))
+        self._deck_loading_progress.setValue(
+            min(self._deck_prepare_settled, max(1, self._deck_prepare_total))
+        )
+        self._deck_loading_progress.setFormat(
+            tr(
+                "recommendations.preparing.progress",
+                settled=self._deck_prepare_settled,
+                total=self._deck_prepare_total,
+            )
+        )
+        all_settled = self._deck_prepare_settled >= self._deck_prepare_total
+        priority_settled = self._deck_prepare_priority_identities.issubset(
+            self._deck_prepare_settled_identities
+        )
+        target_settled = self._deck_prepare_settled >= POSTER_READY_TARGET
+        if all_settled or (priority_settled and target_settled):
+            reason = "all_settled" if all_settled else "priority_target"
+            self._request_deck_reveal(batch_id, reason)
+
+    def _request_deck_reveal(self, batch_id: int, reason: str) -> None:
+        if (
+            not self._deck_prepare_active
+            or batch_id != self._deck_prepare_batch_id
+        ):
+            return
+        loader_elapsed_ms = (perf_counter() - self._deck_loader_shown_at) * 1000.0
+        if self._deck_prepare_total > 0 and loader_elapsed_ms < POSTER_MIN_LOADER_MS:
+            self._pending_reveal_batch_id = batch_id
+            self._pending_reveal_reason = reason
+            self._deck_minimum_timer.start(
+                max(1, ceil(POSTER_MIN_LOADER_MS - loader_elapsed_ms))
+            )
+            return
+        reveal_ms = (
+            (perf_counter() - self._deck_prepare_started_at) * 1000.0
+            if self._deck_prepare_started_at > 0.0
+            else 0.0
+        )
+        self._show_deck_content()
+        logger.info(
+            "recommendation deck revealed deck_id=%s deck_build_ms=%.1f "
+            "poster_total=%d poster_cache_hits=%d poster_ready_at_reveal=%d "
+            "poster_failed=%d reveal_ms=%.1f reason=%s",
+            str((self._deck or {}).get("deck_id") or ""),
+            self._deck_build_ms,
+            self._deck_prepare_total,
+            self._deck_prepare_cache_hits,
+            self._deck_prepare_ready,
+            self._deck_prepare_failed,
+            reveal_ms,
+            reason,
+        )
+
+    def _on_poster_prefetch_batch_finished(
+        self,
+        batch_id: int,
+        ready: int,
+        failed: int,
+        total: int,
+        cache_hits: int,
+    ) -> None:
+        if batch_id != self._deck_prepare_batch_id:
+            return
+        self._poster_prefetch_failed = max(0, int(failed))
+        all_settled_ms = (
+            (perf_counter() - self._deck_prepare_started_at) * 1000.0
+            if self._deck_prepare_started_at > 0.0
+            else 0.0
+        )
+        logger.info(
+            "recommendation posters settled deck_id=%s poster_total=%d "
+            "poster_cache_hits=%d poster_ready=%d poster_failed=%d "
+            "all_posters_settled_ms=%.1f",
+            str((self._deck or {}).get("deck_id") or ""),
+            max(0, int(total)),
+            max(0, int(cache_hits)),
+            max(0, int(ready)),
+            self._poster_prefetch_failed,
+            all_settled_ms,
+        )
+        if self._deck is not None:
+            self._update_deck_status()
+
+    def _present_recommendation_deck(
+        self,
+        deck: dict,
+        *,
+        prepare_posters: bool = False,
+    ) -> None:
         self._deck = deck
         self._deck_dirty = False
-        self._all_candidates = list(deck.get("active") or [])[:30]
+        active_limit = max(0, int(deck.get("active_limit") or ACTIVE_DECK_SIZE))
+        self._all_candidates = list(deck.get("active") or [])[:active_limit]
         self._pool_unique_total = len(self._all_candidates)
         self._detail_entries = {}
         self._search_index = build_candidate_search_index(self._all_candidates)
         self._update_deck_status()
-        self._apply_visible_candidates()
         self._poster_prefetch.allow_failed_retries()
-        self._poster_prefetch.enqueue_candidates(
-            self._all_candidates,
-            data_language=self._data_language,
-        )
+        if prepare_posters:
+            self._deck_prepare_priority_identities = {
+                candidate_detail_identity(candidate)
+                for candidate in self._all_candidates[:POSTER_PRIORITY_COUNT]
+            }
+            self._poster_prefetch.start_batch(
+                self._all_candidates,
+                data_language=self._data_language,
+                priority_count=POSTER_PRIORITY_COUNT,
+            )
+        else:
+            self._poster_prefetch.enqueue_candidates(
+                self._all_candidates,
+                data_language=self._data_language,
+            )
+        self._apply_visible_candidates()
         if not self._all_candidates:
             self._clear_detail(show_filters_hint=False)
 
@@ -446,15 +754,31 @@ class CandidateListView(CandidateListActionsMixin):
         if not self._recommendations_active:
             self._deck_dirty = True
             return
+        previous_deck = self._deck
+        previous_deck_id = str((previous_deck or {}).get("deck_id") or "")
+        previous_preferences = dict((previous_deck or {}).get("candidate_filters") or (previous_deck or {}).get("preferences") or {})
+        previous_vector = dict((previous_deck or {}).get("recommendation_vector") or {})
         self._new_deck_button.setEnabled(False)
         self._deck_status_label.setText(tr("recommendations.state.loading"))
         self._deck_status_label.show()
+        build_started = perf_counter()
         try:
-            deck = self._deck_service.refresh_deck(
-                self._deck_preferences(),
-                datetime.now(timezone.utc),
-                force_new=force_new,
-            )
+            try:
+                deck = self._deck_service.refresh_deck(
+                    self._deck_preferences(),
+                    datetime.now(timezone.utc),
+                    vector=self._deck_vector(),
+                    variation_seed=self._session.variation_seed,
+                    force_new=force_new,
+                )
+            except TypeError as error:
+                if "unexpected keyword argument" not in str(error):
+                    raise
+                deck = self._deck_service.refresh_deck(
+                    self._deck_preferences(),
+                    datetime.now(timezone.utc),
+                    force_new=force_new,
+                )
         except Exception:
             logger.exception("recommendation deck build failed")
             self._deck = None
@@ -463,27 +787,65 @@ class CandidateListView(CandidateListActionsMixin):
             self._model.set_candidates([])
             self._deck_status_label.setText(tr("recommendations.state.local_error"))
             self._clear_detail(show_filters_hint=False)
+            self._show_deck_content()
             return
         finally:
             self._new_deck_button.setEnabled(True)
 
-        self._present_recommendation_deck(deck)
+        self._deck_build_ms = (perf_counter() - build_started) * 1000.0
+        current_deck_id = str(deck.get("deck_id") or "")
+        current_preferences = dict(deck.get("candidate_filters") or deck.get("preferences") or self._deck_preferences())
+        current_vector = dict(deck.get("recommendation_vector") or self._deck_vector())
+        vector_only_remix = (
+            not force_new
+            and previous_deck is not None
+            and current_preferences == previous_preferences
+            and (
+                current_vector != previous_vector
+                or int(deck.get("variation_seed") or 0)
+                != int(previous_deck.get("variation_seed") or 0)
+            )
+        )
+        replacement = (
+            force_new
+            or previous_deck is None
+            or current_deck_id != previous_deck_id
+            or current_preferences != previous_preferences
+            or current_vector != previous_vector
+        )
+        if replacement:
+            self._begin_deck_preparation()
+        logger.info(
+            "recommendation deck built deck_id=%s deck_build_ms=%.1f active=%d reserve=%d replacement=%s",
+            current_deck_id,
+            self._deck_build_ms,
+            len(deck.get("active") or []),
+            len(deck.get("reserve") or []),
+            replacement,
+        )
+        self._present_recommendation_deck(
+            deck,
+            prepare_posters=replacement and not vector_only_remix,
+        )
         self._maybe_request_recommendation_refill()
 
     def _on_new_deck_clicked(self) -> None:
+        self._session.variation_seed += 1
         self._load_recommendation_deck(force_new=True)
 
-    def _apply_recommendation_action(self, action: str) -> None:
+    def _apply_recommendation_action(self, action: str, *, user_score: int | None = None) -> None:
         candidate = self._selected_candidate
         deck = self._deck
         if not isinstance(candidate, dict) or not isinstance(deck, dict):
             return
         current_row = self._results_list.currentIndex().row()
         try:
+            action_kwargs = {"user_score": user_score} if user_score is not None else {}
             updated = self._deck_service.apply_action_and_refill(
                 str(deck["deck_id"]),
                 candidate,
                 action,
+                **action_kwargs,
             )
         except Exception:
             logger.exception("recommendation action failed: %s", action)
@@ -502,6 +864,7 @@ class CandidateListView(CandidateListActionsMixin):
                 logger.exception("local recommendation deck top-up failed")
         self._selected_candidate = None
         self._selected_identity = None
+        self._candidate_rating_selector.clear()
         self._present_recommendation_deck(updated)
         if self._candidates:
             row = min(max(0, current_row), len(self._candidates) - 1)
@@ -656,7 +1019,8 @@ class CandidateListView(CandidateListActionsMixin):
             deck = self._deck
             if (
                 isinstance(deck, dict)
-                and dict(deck.get("preferences") or {}) == self._deck_preferences()
+                and dict(deck.get("candidate_filters") or deck.get("preferences") or {}) == self._deck_preferences()
+                and dict(deck.get("recommendation_vector") or {}) == self._deck_vector()
                 and callable(top_up)
             ):
                 try:

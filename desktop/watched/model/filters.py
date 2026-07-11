@@ -22,9 +22,9 @@ SORT_OPTIONS: tuple[tuple[str, str], ...] = (
     ("title", "Название"),
 )
 
-USER_SCORE_MIN = 0.0
-USER_SCORE_MAX = 10.0
-USER_SCORE_STEP = 0.1
+USER_SCORE_MIN = 1
+USER_SCORE_MAX = 3
+USER_SCORE_STEP = 1
 YEAR_FILTER_MIN = 1980
 YEAR_FILTER_MAX = date.today().year
 YEAR_FILTER_DEFAULT_FROM = 2000
@@ -55,24 +55,23 @@ def filter_by_title(entries: list[WatchedEntry], query: str) -> list[WatchedEntr
     return result
 
 
-def _coerce_filter_score(value) -> float | None:
-    if value is None:
-        return None
-    try:
-        score = float(value)
-    except (TypeError, ValueError):
-        return None
-    if score < USER_SCORE_MIN or score > USER_SCORE_MAX:
-        return None
-    return score
+def _coerce_filter_score(value) -> int | None:
+    from dataset.models.user_rating import normalize_user_rating
+
+    return normalize_user_rating(value)
 
 
 def filter_entries_by_user_score(
     entries: list[WatchedEntry],
-    min_score: float | None = None,
+    min_score: float | set[int] | tuple[int, ...] | list[int] | None = None,
     max_score: float | None = None,
 ) -> list[WatchedEntry]:
     """Return entries whose user_score is inside the inclusive range."""
+    if isinstance(min_score, (set, tuple, list)):
+        selected = {score for score in min_score if _coerce_filter_score(score) is not None}
+        if not selected:
+            return list(entries)
+        return [entry for entry in entries if _coerce_filter_score(entry[2].get("user_score")) in selected]
     lower = USER_SCORE_MIN if min_score is None else float(min_score)
     upper = USER_SCORE_MAX if max_score is None else float(max_score)
     if lower > upper:
@@ -243,22 +242,31 @@ def apply_view(
     genre: str | None = None,
     media_type: str | None = None,
     title_index=None,
+    user_ratings: set[int] | tuple[int, ...] | list[int] | None = None,
 ) -> list[WatchedEntry]:
     """Filter and sort entries for display."""
     if title_index is not None:
         filtered = title_index.filter_by_query(query)
     else:
         filtered = filter_by_title(entries, query)
-    filtered = filter_entries_by_user_score(filtered, min_score, max_score)
+    filtered = filter_entries_by_user_score(
+        filtered,
+        user_ratings if user_ratings is not None else min_score,
+        max_score,
+    )
     filtered = filter_entries_by_year(filtered, year_from, year_to)
     filtered = filter_entries_by_genre(filtered, genre)
     filtered = filter_entries_by_media_type(filtered, media_type)
     return sort_entries(filtered, sort_key)
 
 
-def score_filter_is_active(min_score: float, max_score: float) -> bool:
-    """Return True when user score range differs from the default 0.0–10.0."""
-    return float(min_score) > USER_SCORE_MIN or float(max_score) < USER_SCORE_MAX
+def score_filter_is_active(min_score, max_score: float | None = None) -> bool:
+    """Return True when at least one user reaction filter is selected."""
+    if isinstance(min_score, (set, tuple, list)):
+        return bool(min_score)
+    upper = USER_SCORE_MAX if max_score is None else max_score
+    lower = USER_SCORE_MIN if min_score is None else min_score
+    return float(lower) > USER_SCORE_MIN or float(upper) < USER_SCORE_MAX
 
 
 def year_filter_is_active(year_from: int, year_to: int) -> bool:

@@ -6,6 +6,7 @@ from common import format_score as format
 from common import valid
 from dataset.records.add import add_dataset_record
 from dataset.records.side_effects import apply_add_record_side_effects
+from dataset.models.user_rating import normalize_user_rating
 from storage.data import load_dataset, save_dataset
 from storage.normalize import (
     normalize_csv_row,
@@ -79,7 +80,7 @@ def add_movies(title: str, user_score: str, raw_scores: dict) -> bool:
     """Добавляет фильм через старый формат аргументов."""
     main_info = {}
     main_info["title"] = title
-    main_info["user_score"] = user_score
+    main_info["user_score"] = normalize_user_rating(int(user_score)) if str(user_score).isdigit() else None
     main_info["year"] = raw_scores.get("year", constant.NOW_YEAR)
     main_info["country"] = raw_scores.get("country", "")
     raw_scores.pop("year", None)
@@ -104,7 +105,8 @@ def build_movie_from_row(row: dict, row_number: int) -> dict:
         print(f'Строка {row_number}: некорректное название')
         return None
 
-    if valid.is_correct_score(user_score) is False:
+    parsed_user_score = normalize_user_rating(int(user_score)) if user_score.isdigit() else None
+    if parsed_user_score is None:
         print(f'Строка {row_number}: некорректное значение user_score')
         return None
 
@@ -143,7 +145,7 @@ def build_movie_from_row(row: dict, row_number: int) -> dict:
 
     main_info = {}
     main_info["title"] = title
-    main_info["user_score"] = valid.parse_float(user_score)
+    main_info["user_score"] = parsed_user_score
     main_info["year"] = int(year)
     main_info["country"] = country
 

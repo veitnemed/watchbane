@@ -118,6 +118,14 @@ def _build_view(qtbot, service: FakeReplenishService | None = None):
     return service, session, view
 
 
+def test_summary_sidebar_yields_width_to_filters_on_narrow_window(qtbot) -> None:
+    _service, _session, view = _build_view(qtbot)
+    view.widget.resize(1100, 800)
+    qtbot.waitUntil(lambda: view._intro_card.width() < 400)
+
+    assert view._intro_card.width() <= int(view.widget.width() * 0.35)
+
+
 def test_apply_with_replenish_unchecked_keeps_old_behavior(qtbot) -> None:
     service, _session, view = _build_view(qtbot)
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
@@ -146,8 +154,7 @@ def test_apply_with_replenish_checked_calls_worker_service_seam(qtbot) -> None:
     assert media_combo is not None
     assert progress is not None
 
-    checkbox.setChecked(True)
-    media_combo.setCurrentIndex(media_combo.findData("movie"))
+    view._form.discovery_media_control.setValue("movie")
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(lambda: len(service.replenish_calls) == 1)
@@ -171,11 +178,12 @@ def test_preset_country_filters_even_when_country_chip_is_absent(qtbot) -> None:
         FakeReplenishService(country_options=[{"code": "US", "label": "United States"}]),
     )
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
-    preset_combo = view.widget.findChild(QComboBox, "candidateReplenishPreset")
+    direction = view._form.direction_control
     assert apply_button is not None
-    assert preset_combo is not None
+    assert direction is not None
 
-    preset_combo.setCurrentIndex(preset_combo.findData("russian_mainstream"))
+    values = direction.property("directionValues")
+    direction.setValue(values.index("russian_mainstream"))
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(lambda: len(service.search_calls) == 1)

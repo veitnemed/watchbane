@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from common import valid
 from dataset.models.identity import duplicate_title_exists
 from dataset.models.media_type import normalize_media_type
+from dataset.models.user_rating import normalize_user_rating
 from dataset.models.results import AddRecordResult, UpdateRecordResult
 from storage.normalize import normalize_main_info, normalize_raw_scores
 
@@ -70,7 +71,7 @@ def validate_add_record_payload(record_payload: dict, *, data: dict) -> AddRecor
             reason="duplicate_title",
         )
 
-    if valid.is_correct_score(str(user_score)) is False:
+    if user_score is not None and normalize_user_rating(user_score) is None:
         return AddRecordResult(
             ok=False,
             title=title,
@@ -172,7 +173,7 @@ def validate_normalized_update_values(
     new_main_info: dict,
     new_raw_scores: dict,
 ) -> UpdateRecordResult | None:
-    if valid.is_correct_score(str(new_main_info["user_score"])) is False:
+    if new_main_info["user_score"] is not None and normalize_user_rating(new_main_info["user_score"]) is None:
         return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректное значение user_score", "invalid_patch", [])
     if valid.is_correct_year(str(new_main_info["year"])) is False:
         return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректный год", "invalid_patch", [])

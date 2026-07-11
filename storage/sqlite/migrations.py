@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import sqlite3
 
 from storage.sqlite.connection import connect
-from storage.sqlite.schema import apply_v1, apply_v2, apply_v3, apply_v4
+from storage.sqlite.schema import apply_v1, apply_v2, apply_v3, apply_v4, apply_v5
 
 
 MigrationFunc = Callable[[sqlite3.Connection], None]
@@ -19,6 +19,7 @@ class Migration:
     version: int
     name: str
     apply: MigrationFunc
+    backup_before: bool = False
 
 
 MIGRATIONS: tuple[Migration, ...] = (
@@ -26,6 +27,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(2, "onboarding_candidate_autofill_v2", apply_v2),
     Migration(3, "candidate_fts_v3", apply_v3),
     Migration(4, "candidate_impressions_v4", apply_v4),
+    Migration(5, "user_rating_scale_v5", apply_v5, backup_before=True),
 )
 
 
@@ -99,6 +101,22 @@ def apply_migrations(
                         f"code defines {migration.name!r}"
                     )
                 continue
+            if migration.backup_before:
+                database_row = active_conn.execute("PRAGMA database_list").fetchone()
+                database_path = str(database_row["file"] or "") if database_row is not None else ""
+                watched_count = int(
+                    active_conn.execute("SELECT COUNT(*) AS count FROM watched_records").fetchone()["count"]
+                )
+                if database_path and watched_count > 0:
+                    from pathlib import Path
+                    from storage.sqlite.backup import backup_sqlite_database
+
+                    active_conn.commit()
+                    target = Path(database_path)
+                    backup_sqlite_database(
+                        db_path=target,
+                        backup_dir=target.parent / "backups" / "migrations",
+                    )
             with active_conn:
                 migration.apply(active_conn)
                 active_conn.execute(

@@ -5,7 +5,10 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal
 
 from desktop.theme import COLOR_ACCENT, COLOR_ACCENT_HOVER
-from candidates.scoring.rating_confidence import has_unknown_rating
+from candidates.scoring.rating_confidence import candidate_rating_confidence, has_unknown_rating
+from candidates.scoring.recommendation_strength import resolve_recommendation_strength
+from dataset.models.user_rating import UserRating, normalize_user_rating
+from desktop.i18n import tr
 
 
 def _round_one_decimal(value) -> str:
@@ -15,13 +18,14 @@ def _round_one_decimal(value) -> str:
 
 
 def format_user_score_display(user_score) -> str:
-    """Format user score for detail card display."""
-    if user_score is None:
-        return "—"
-    try:
-        return _round_one_decimal(user_score)
-    except (TypeError, ValueError):
-        return "—"
+    """Format user reaction as a localized label."""
+    rating = normalize_user_rating(user_score)
+    keys = {
+        int(UserRating.NOT_FOR_ME): "user_rating.not_for_me",
+        int(UserRating.OK): "user_rating.ok",
+        int(UserRating.TOP): "user_rating.top",
+    }
+    return tr(keys[rating]) if rating in keys else "—"
 
 
 def format_rating_score_display(score) -> str | None:
@@ -61,27 +65,13 @@ def normalize_tmdb_score(value) -> float:
 
 
 def format_final_score(value) -> str:
-    """Format final score as a compact 0..100 UI label."""
-    if value in (None, ""):
-        return "Итог —"
-    try:
-        normalized = normalize_final_score(value)
-    except (TypeError, ValueError):
-        return "Итог —"
-    rounded = Decimal(str(normalized * 100)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
-    return f"Итог {int(rounded)}"
+    key = resolve_recommendation_strength(value)
+    return f"{tr('recommendation.strength.label')}: {tr(f'recommendation.strength.{key}')}"
 
 
-def format_final_score_quality_label(value) -> str | None:
-    """Format final score as a qualitative detail-card label, not as a raw number."""
-    if value in (None, ""):
-        return None
-    normalized = normalize_final_score(value)
-    if normalized >= 0.75:
-        return "Отличный рейтинг"
-    if normalized >= 0.5:
-        return "Хороший рейтинг"
-    return "Слабый рейтинг"
+def format_final_score_quality_label(value, rating_confidence: str = "known") -> str:
+    key = resolve_recommendation_strength(value, rating_confidence=rating_confidence)
+    return tr(f"recommendation.strength.{key}")
 
 
 def final_score_to_stars(value) -> float | None:
@@ -174,16 +164,15 @@ def build_score_ring_item(card: dict) -> dict | None:
 
 
 def build_final_score_star_item(card: dict) -> dict | None:
-    """Build separate final-score stars for the detail card."""
-    stars = final_score_to_stars(card.get("final_score"))
-    if stars is None:
+    """Build qualitative recommendation strength for the detail card."""
+    if card.get("final_score") in (None, ""):
         return None
-    quality_label = format_final_score_quality_label(card.get("final_score"))
+    confidence = card.get("rating_confidence") or candidate_rating_confidence(card)
+    quality_label = format_final_score_quality_label(card.get("final_score"), confidence)
     return {
-        "kind": "final_stars",
-        "stars": stars,
-        "label": quality_label,
-        "tooltip": quality_label or "",
+        "kind": "recommendation_strength",
+        "label": f"{tr('recommendation.strength.label')}: {quality_label}",
+        "tooltip": quality_label,
     }
 
 
@@ -194,10 +183,17 @@ def build_user_score_badge_item(card: dict) -> dict | None:
     display_value = format_user_score_display(card.get("user_score"))
     if display_value == "—":
         return None
+    rating = normalize_user_rating(card.get("user_score"))
+    icon_names = {
+        int(UserRating.NOT_FOR_ME): "user_rating_not_for_me.svg",
+        int(UserRating.OK): "user_rating_ok.svg",
+        int(UserRating.TOP): "user_rating_top.svg",
+    }
     return {
         "kind": "user_score_badge",
         "value": display_value,
-        "text": f"★ {display_value}",
+        "text": display_value,
+        "icon_name": icon_names.get(rating),
     }
 
 

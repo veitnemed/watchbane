@@ -7,6 +7,7 @@ from time import perf_counter
 from typing import Callable
 
 from candidates import service as candidate_service
+from candidates.preferences import RecommendationVector
 from desktop.candidates.workers.search_worker import CandidateSearchWorker
 from diagnostics.gui_event_log import log_event
 
@@ -39,6 +40,8 @@ class CandidateSearchSession:
         self.filtered_count: int = 0
         self.hidden_duplicates: int = 0
         self.sort_mode: str = DEFAULT_SORT_MODE
+        self.recommendation_vector: dict = RecommendationVector().to_dict()
+        self.variation_seed: int = 0
         self.is_loading: bool = False
         self.last_error: str | None = None
         self._overview_cache: dict | None = None
@@ -327,6 +330,22 @@ class CandidateSearchSession:
                     "latency_ms": None,
                 }
             self._notify_listeners()
+
+    def set_recommendation_vector(self, vector: RecommendationVector | dict) -> bool:
+        normalized = (
+            vector.normalized() if isinstance(vector, RecommendationVector)
+            else RecommendationVector.from_dict(vector)
+        ).to_dict()
+        if normalized == self.recommendation_vector:
+            return False
+        self.recommendation_vector = normalized
+        self._notify_listeners()
+        return True
+
+    def next_recommendation_variation(self) -> int:
+        self.variation_seed += 1
+        self._notify_listeners()
+        return self.variation_seed
 
     def maybe_auto_sort_for_text_query(self, text_query: str | None) -> bool:
         """Switch to relevance while typing; restore when query is cleared."""

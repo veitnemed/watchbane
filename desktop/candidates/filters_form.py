@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QBoxLayout,
     QCheckBox,
     QComboBox,
     QFrame,
@@ -15,6 +16,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QScrollArea,
     QSizePolicy,
+    QPushButton,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -36,6 +38,8 @@ from desktop.i18n import tr
 from desktop.shared.widgets.country_chip_selector import CountryChipSelector
 from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
 from desktop.shared.widgets.range_slider import RangeSlider
+from desktop.shared.widgets.segmented_control import SegmentedControl
+from desktop.shared.widgets.stepped_rotary_control import SteppedRotaryControl
 from desktop.theme import TRANSPARENT_STYLE
 from desktop.theme.scaling import get_ui_scale, layout_px
 
@@ -108,6 +112,15 @@ class FiltersFormWidgets:
     simple_collection_combo: QComboBox
     simple_origin_combo: QComboBox
     simple_mood_combo: QComboBox
+    direction_control: SteppedRotaryControl
+    discovery_media_control: SegmentedControl
+    discovery_animation_control: SegmentedControl
+    discovery_release_control: SegmentedControl
+    vector_openness_control: SteppedRotaryControl
+    vector_rarity_control: SteppedRotaryControl
+    vector_diversity_control: SteppedRotaryControl
+    vector_mood_control: SegmentedControl
+    variation_button: QPushButton
     advanced_mode_toggle: QToolButton
     country_selector: CountryChipSelector
     media_type_combo: QComboBox
@@ -274,6 +287,158 @@ def build_filters_form(
     add_simple_field(2, "preferences.origin.label", simple_origin_combo)
     add_simple_field(3, "preferences.mood.label", simple_mood_combo)
     simple_layout.addLayout(simple_grid)
+    simple_section.setVisible(False)
+
+    direction_options = (
+        ("recommendations.discovery.direction.world", "manual"),
+        ("recommendations.discovery.direction.hollywood", "hollywood_mainstream"),
+        ("recommendations.discovery.direction.russia", "russian_mainstream"),
+        ("recommendations.discovery.direction.anime", "anime"),
+        ("recommendations.discovery.direction.k_drama", "k_drama"),
+        ("recommendations.discovery.direction.turkish", "turkish_dramas"),
+        ("recommendations.discovery.direction.europe", "british_european_detective"),
+        ("recommendations.discovery.direction.family_animation", "family_animation"),
+        ("recommendations.discovery.direction.dark_crime", "dark_thriller_crime"),
+        ("recommendations.discovery.direction.manual", "manual"),
+    )
+
+    panels_host = QWidget()
+    panels_host.setObjectName("recommendationPreferencePanels")
+    panels_layout = QBoxLayout(QBoxLayout.Direction.LeftToRight, panels_host)
+    panels_layout.setContentsMargins(0, 0, 0, 0)
+    panels_layout.setSpacing(layout_px(12))
+
+    class ResponsivePanels(QWidget):
+        def resizeEvent(self, event) -> None:
+            super().resizeEvent(event)
+            direction = (
+                QBoxLayout.Direction.TopToBottom
+                if self.width() < layout_px(980) or get_ui_scale() >= 1.5
+                else QBoxLayout.Direction.LeftToRight
+            )
+            panels_layout.setDirection(direction)
+
+    responsive_host = ResponsivePanels()
+    responsive_host.setObjectName("recommendationResponsivePanels")
+    responsive_layout = QVBoxLayout(responsive_host)
+    responsive_layout.setContentsMargins(0, 0, 0, 0)
+    responsive_layout.addWidget(panels_host)
+
+    def panel_header(layout: QVBoxLayout, module_key: str, title_key: str) -> None:
+        module = QLabel(tr(module_key))
+        module.setObjectName("recommendationModuleLabel")
+        layout.addWidget(module)
+        title = QLabel(tr(title_key))
+        title.setObjectName("recommendationPanelTitle")
+        title.setWordWrap(True)
+        layout.addWidget(title)
+
+    discovery_panel = QFrame()
+    discovery_panel.setObjectName("recommendationDiscoveryPanel")
+    discovery_layout = QVBoxLayout(discovery_panel)
+    discovery_layout.setContentsMargins(layout_px(16), layout_px(14), layout_px(16), layout_px(14))
+    discovery_layout.setSpacing(layout_px(9))
+    panel_header(discovery_layout, "recommendations.discovery.module", "recommendations.discovery.title")
+    discovery_layout.addWidget(field_label(tr("recommendations.discovery.direction.label")))
+    direction_control = SteppedRotaryControl(
+        [tr(label_key) for label_key, _value in direction_options],
+        value=0,
+    )
+    direction_control.setObjectName("recommendationDirectionControl")
+    direction_control.setProperty("directionValues", [value for _label, value in direction_options])
+    direction_control.setAccessibleName(tr("recommendations.discovery.direction.label"))
+    direction_control.setAccessibleDescription(tr("recommendations.discovery.direction.tooltip"))
+    direction_control.setToolTip(tr("recommendations.discovery.direction.tooltip"))
+    discovery_layout.addWidget(direction_control, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+    discovery_media_control = SegmentedControl((
+        (tr("recommendations.discovery.media.movie"), "movie"),
+        (tr("recommendations.discovery.media.both"), "both"),
+        (tr("recommendations.discovery.media.tv"), "tv"),
+    ))
+    discovery_media_control.setObjectName("recommendationDiscoveryMedia")
+    discovery_animation_control = SegmentedControl((
+        (tr("recommendations.discovery.animation.live"), "live_action_only"),
+        (tr("recommendations.discovery.animation.any"), "any"),
+        (tr("recommendations.discovery.animation.animation"), "animation_only"),
+    ))
+    discovery_animation_control.setObjectName("recommendationDiscoveryAnimation")
+    discovery_release_control = SegmentedControl((
+        (tr("recommendations.discovery.release.classic"), "classic"),
+        (tr("recommendations.discovery.release.mixed"), "mixed"),
+        (tr("recommendations.discovery.release.new"), "new"),
+    ))
+    discovery_release_control.setObjectName("recommendationDiscoveryRelease")
+    for label_key, control in (
+        ("recommendations.discovery.media.label", discovery_media_control),
+        ("recommendations.discovery.animation.label", discovery_animation_control),
+        ("recommendations.discovery.release.label", discovery_release_control),
+    ):
+        discovery_layout.addWidget(field_label(tr(label_key)))
+        discovery_layout.addWidget(control)
+    discovery_layout.addStretch(1)
+
+    vector_panel = QFrame()
+    vector_panel.setObjectName("recommendationVectorPanel")
+    vector_layout = QVBoxLayout(vector_panel)
+    vector_layout.setContentsMargins(layout_px(16), layout_px(14), layout_px(16), layout_px(14))
+    vector_layout.setSpacing(layout_px(9))
+    panel_header(vector_layout, "recommendations.vector.module", "recommendations.vector.title")
+    dials_row = QHBoxLayout()
+    dials_row.setContentsMargins(0, 0, 0, 0)
+    dials_row.setSpacing(layout_px(6))
+
+    def add_vector_dial(label_key: str, value_keys: tuple[str, ...], object_name: str) -> SteppedRotaryControl:
+        host = QWidget()
+        host.setObjectName("recommendationVectorDialHost")
+        host_layout = QVBoxLayout(host)
+        host_layout.setContentsMargins(0, 0, 0, 0)
+        host_layout.setSpacing(layout_px(2))
+        label = field_label(tr(label_key))
+        label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        host_layout.addWidget(label)
+        dial = SteppedRotaryControl([tr(key) for key in value_keys], value=2)
+        dial.setObjectName(object_name)
+        dial.setAccessibleName(tr(label_key))
+        dial.setAccessibleDescription(tr(f"{label_key}.tooltip"))
+        dial.setToolTip(tr(f"{label_key}.tooltip"))
+        host_layout.addWidget(dial, alignment=Qt.AlignmentFlag.AlignHCenter)
+        dials_row.addWidget(host, 1)
+        return dial
+
+    vector_openness_control = add_vector_dial(
+        "recommendations.vector.openness.label",
+        tuple(f"recommendations.vector.openness.{index}" for index in range(5)),
+        "recommendationVectorOpenness",
+    )
+    vector_rarity_control = add_vector_dial(
+        "recommendations.vector.rarity.label",
+        tuple(f"recommendations.vector.rarity.{index}" for index in range(5)),
+        "recommendationVectorRarity",
+    )
+    vector_diversity_control = add_vector_dial(
+        "recommendations.vector.diversity.label",
+        tuple(f"recommendations.vector.diversity.{index}" for index in range(5)),
+        "recommendationVectorDiversity",
+    )
+    vector_layout.addLayout(dials_row)
+    vector_layout.addWidget(field_label(tr("recommendations.vector.mood.label")))
+    vector_mood_control = SegmentedControl((
+        (tr("recommendations.vector.mood.any"), "any"),
+        (tr("recommendations.vector.mood.light"), "light"),
+        (tr("recommendations.vector.mood.dynamic"), "dynamic"),
+        (tr("recommendations.vector.mood.drama"), "drama"),
+        (tr("recommendations.vector.mood.dark"), "dark"),
+    ))
+    vector_mood_control.setObjectName("recommendationVectorMood")
+    vector_layout.addWidget(vector_mood_control)
+    variation_button = QPushButton(tr("recommendations.variation.action"))
+    variation_button.setObjectName("recommendationVariationButton")
+    vector_layout.addWidget(variation_button)
+
+    panels_layout.addWidget(discovery_panel, 1)
+    panels_layout.addWidget(vector_panel, 1)
+    form.insertWidget(form.indexOf(simple_section), responsive_host)
 
     advanced_mode_toggle = QToolButton()
     advanced_mode_toggle.setObjectName("candidateRecommendationAdvancedModeToggle")
@@ -281,6 +446,7 @@ def build_filters_form(
     advanced_mode_toggle.setChecked(False)
     advanced_mode_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     advanced_mode_toggle.setArrowType(Qt.ArrowType.RightArrow)
+    advanced_mode_toggle.setText(tr("recommendations.discovery.exact_settings"))
     form.addWidget(advanced_mode_toggle)
 
     _replenish_section, replenish_layout = add_section(
@@ -583,14 +749,17 @@ def build_filters_form(
     visibility_layout.addWidget(only_unwatched_check)
     visibility_layout.addWidget(hide_hidden_check)
 
-    advanced_sections = (_replenish_section, _basic_section, _advanced_section)
+    _replenish_section.setVisible(False)
+    advanced_sections = (_basic_section, _advanced_section)
 
     def set_advanced_mode(checked: bool) -> None:
         for section in advanced_sections:
             section.setVisible(bool(checked))
         advanced_mode_toggle.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
         advanced_mode_toggle.setText(
-            tr("preferences.advanced.hide") if checked else tr("preferences.advanced.show")
+            tr("recommendations.discovery.exact_settings.hide")
+            if checked
+            else tr("recommendations.discovery.exact_settings")
         )
 
     advanced_mode_toggle.toggled.connect(set_advanced_mode)
@@ -606,6 +775,15 @@ def build_filters_form(
         simple_collection_combo=simple_collection_combo,
         simple_origin_combo=simple_origin_combo,
         simple_mood_combo=simple_mood_combo,
+        direction_control=direction_control,
+        discovery_media_control=discovery_media_control,
+        discovery_animation_control=discovery_animation_control,
+        discovery_release_control=discovery_release_control,
+        vector_openness_control=vector_openness_control,
+        vector_rarity_control=vector_rarity_control,
+        vector_diversity_control=vector_diversity_control,
+        vector_mood_control=vector_mood_control,
+        variation_button=variation_button,
         advanced_mode_toggle=advanced_mode_toggle,
         country_selector=country_selector,
         media_type_combo=media_type_combo,

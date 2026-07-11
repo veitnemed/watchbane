@@ -354,7 +354,7 @@ def request_user_score(defaults: dict | None = None) -> dict:
 
     defaults = defaults or {}
     main_info = defaults.get(scheme.MAIN_INFO, {})
-    default_score = main_info.get("user_score")
+    default_score = main_info.get("user_score") if main_info.get("user_score") in (1, 2, 3) else 2
 
     print("\n--- Подтверждение ---")
     print("Название, год, TMDb-метаданные и жанры берутся из найденных данных без изменений.")
@@ -362,12 +362,11 @@ def request_user_score(defaults: dict | None = None) -> dict:
     year = main_info.get("year") or "?"
     print(f"Тайтл: {title} ({year})")
 
-    field_settings = get_request_schema()[scheme.MAIN_INFO]["user_score"]
-    field_validators = get_validators(field_settings["tag"])
+    print("Реакция: 1 — Не зашло, 2 — Норм, 3 — Топ")
     answer = loop_input_with_default(
         text=f'>> {get_label("user_score")} [{default_score}]: ',
-        funcs_list=field_validators,
+        funcs_list=[lambda value: str(value).strip() in {"1", "2", "3"}],
         default_value=default_score,
     )
-    user_score = valid.parse_float(answer)
+    user_score = int(answer)
     return service.build_movie_record_from_defaults(defaults, user_score)

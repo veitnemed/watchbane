@@ -67,6 +67,19 @@ def _matches_media_type(candidate: dict, media_type_filter) -> bool:
     return normalize_media_type(candidate.get("media_type")) == normalize_media_type(media_type_filter)
 
 
+def _matches_animation_mode(candidate: dict, animation_mode) -> bool:
+    mode = str(animation_mode or "any").strip().casefold()
+    if mode == "any":
+        return True
+    genres = set(genre_schema.normalize_genre_filter_list(_list_values(candidate, "genre_keys")))
+    is_animation = "animation" in genres or "anime" in genres
+    if mode == "animation_only":
+        return is_animation
+    if mode == "live_action_only":
+        return not is_animation
+    return True
+
+
 def _matches_genres(candidate: dict, include_genres, exclude_genres) -> bool:
     candidate_keys = _list_values(candidate, "genre_keys")
     excluded = genre_schema.normalize_genre_filter_list(exclude_genres or [])
@@ -109,6 +122,8 @@ def candidate_matches(candidate: dict, criteria: dict | None = None) -> bool:
     if _matches_country(candidate, _criteria_value(criteria, "country", "countries")) is False:
         return False
     if _matches_media_type(candidate, _criteria_value(criteria, "media_type", "type")) is False:
+        return False
+    if _matches_animation_mode(candidate, _criteria_value(criteria, "animation_mode")) is False:
         return False
     if _matches_min(candidate, "year", _criteria_value(criteria, "year_from", "min_year", "year_min")) is False:
         return False

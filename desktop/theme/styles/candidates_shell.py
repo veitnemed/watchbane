@@ -212,6 +212,36 @@ QLabel#recommendationsDeckStatus {{
     font-size: {font_px(FONT_SMALL)}px;
     padding: 0 {px(4)}px;
 }}
+QWidget#recommendationsDeckLoadingPage {{
+    background: transparent;
+}}
+QLabel#recommendationsDeckLoadingTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_TITLE)}px;
+    font-weight: 700;
+}}
+QLabel#recommendationsDeckLoadingDetail {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_BASE)}px;
+}}
+QProgressBar#recommendationsDeckLoadingProgress {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER_ACTIVE};
+    border-radius: {px(8)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 600;
+    min-height: {px(20)}px;
+    max-height: {px(20)}px;
+    text-align: center;
+}}
+QProgressBar#recommendationsDeckLoadingProgress::chunk {{
+    background-color: {COLOR_ADD_BUTTON_TOP};
+    border-radius: {px(7)}px;
+    margin: {px(2)}px;
+}}
 QWidget#recommendationsFeedHeader {{
     background: transparent;
 }}
@@ -315,6 +345,78 @@ QWidget#candidateFiltersRoot {{
 QScrollArea#candidateSearchFiltersScroll,
 QWidget#candidateSearchFiltersHost {{
     background: transparent;
+}}
+QWidget#recommendationPreferencePanels,
+QWidget#recommendationResponsivePanels,
+QWidget#recommendationVectorDialHost {{
+    background: transparent;
+}}
+QFrame#recommendationDiscoveryPanel,
+QFrame#recommendationVectorPanel {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(8)}px;
+}}
+QFrame#recommendationVectorPanel {{
+    background-color: {COLOR_CARD_ALT};
+}}
+QLabel#recommendationModuleLabel {{
+    background: transparent;
+    color: {COLOR_ACCENT_HOVER};
+    font-size: {font_px(FONT_TINY)}px;
+    font-weight: 700;
+}}
+QLabel#recommendationPanelTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SECTION + 2)}px;
+    font-weight: 700;
+}}
+QWidget#segmentedControl {{
+    background: transparent;
+}}
+QPushButton#segmentedControlButton {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 0;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+    padding: {px(6)}px {px(8)}px;
+}}
+QPushButton#segmentedControlButton[segmentPosition="first"] {{
+    border-top-left-radius: {px(6)}px;
+    border-bottom-left-radius: {px(6)}px;
+}}
+QPushButton#segmentedControlButton[segmentPosition="last"] {{
+    border-top-right-radius: {px(6)}px;
+    border-bottom-right-radius: {px(6)}px;
+}}
+QPushButton#segmentedControlButton:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    color: {COLOR_TEXT};
+}}
+QPushButton#segmentedControlButton:checked {{
+    background-color: {COLOR_ACCENT_SOFT};
+    border-color: {COLOR_ACCENT};
+    color: {COLOR_TEXT};
+    font-weight: 700;
+}}
+QPushButton#segmentedControlButton:focus {{
+    border-color: {COLOR_FOCUS_BORDER};
+}}
+QPushButton#recommendationVariationButton {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER_HOVER};
+    border-radius: {px(6)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_BASE)}px;
+    font-weight: 600;
+    padding: {px(7)}px {px(12)}px;
+    min-height: {px(34)}px;
+}}
+QPushButton#recommendationVariationButton:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_ACCENT};
 }}
 QFrame#candidateFilterSection {{
     background-color: {COLOR_CARD};

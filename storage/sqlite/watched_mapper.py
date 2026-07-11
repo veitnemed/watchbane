@@ -8,6 +8,7 @@ from typing import Any
 from candidates.models.schema import coerce_candidate_number
 from dataset.models.identity import normalize_title_key
 from dataset.models.media_type import normalize_media_type
+from dataset.models.user_rating import normalize_user_rating
 from storage.sqlite.json_codec import dumps_json
 
 
@@ -80,7 +81,7 @@ class WatchedRecordRow:
     title_normalized: str
     media_type: str
     year: int | None
-    user_score: float | None
+    user_score: int | None
     country: str | None
     tmdb_id: int | None
     imdb_id: str | None
@@ -125,7 +126,7 @@ def extract_watched_record(
         title_normalized=normalize_title_key(title),
         media_type=media_type,
         year=year,
-        user_score=_float_or_none(_first_value(main_info.get("user_score"), movie.get("user_score"))),
+        user_score=normalize_user_rating(_first_value(main_info.get("user_score"), movie.get("user_score"))),
         country=_clean_text(_first_value(main_info.get("country"), movie.get("country"))),
         tmdb_id=tmdb_id,
         imdb_id=imdb_id,

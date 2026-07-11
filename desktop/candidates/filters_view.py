@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Callable
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QSize, QTimer, Qt
 from PyQt6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -18,7 +18,11 @@ from PyQt6.QtWidgets import (
 )
 
 from candidates import service as candidate_service
-from candidates.preferences import SimpleRecommendationPreferences
+from candidates.preferences import (
+    CandidateDiscoveryPreferences,
+    RecommendationVector,
+    SimpleRecommendationPreferences,
+)
 from candidates.models import country_schema, genre_schema
 from candidates.onboarding.taste_presets import get_taste_preset
 from candidates.recommendation_deck_service import (
@@ -49,7 +53,10 @@ from desktop.candidates.workers.filter_replenish_worker import FilterReplenishWo
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language, get_persisted_interface_language
 from desktop.settings.recommendation_preferences import (
+    load_recommendation_preferences,
     load_simple_recommendation_preferences,
+    save_discovery_preferences,
+    save_recommendation_vector,
     save_simple_recommendation_preferences,
 )
 from desktop.theme.scaling import control_px, layout_px
@@ -125,12 +132,17 @@ class CandidateFiltersView:
         self._replenish_generation = 0
         self._active_replenish_generation: int | None = None
         self._active_replenish_signature: str | None = None
+        self._vector_debounce = QTimer()
+        self._vector_debounce.setSingleShot(True)
+        self._vector_debounce.setInterval(300)
+        self._vector_debounce.timeout.connect(self._apply_vector_locally)
 
         view = self
 
         class CandidateFiltersRootWidget(QWidget):
             def resizeEvent(self, event) -> None:
                 super().resizeEvent(event)
+                view._update_summary_card_width()
                 view._update_apply_button_width()
 
         self._widget = CandidateFiltersRootWidget()
@@ -253,8 +265,8 @@ class CandidateFiltersView:
             label.setWordWrap(True)
             value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             row_layout.addWidget(icon_label)
-            row_layout.addWidget(label, stretch=1)
-            row_layout.addWidget(value, stretch=1)
+            row_layout.addWidget(label, stretch=3)
+            row_layout.addWidget(value, stretch=2)
             self._summary_value_labels[key] = value
             self._summary_name_labels[key] = label
             self._summary_rows[key] = row
@@ -286,6 +298,7 @@ class CandidateFiltersView:
         )
         self._form.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._set_simple_preferences_controls(load_simple_recommendation_preferences())
+        self._discovery_preferences, self._recommendation_vector = load_recommendation_preferences()
 
         content_layout = QHBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
@@ -298,7 +311,11 @@ class CandidateFiltersView:
         self._update_year_range_label()
         self._refresh_threshold_labels()
         self._apply_filter_defaults()
+        self._set_discovery_controls(self._discovery_preferences)
+        self._set_vector_controls(self._recommendation_vector)
+        self._session.recommendation_vector = self._recommendation_vector.to_dict()
         self._connect_summary_updates()
+        self._connect_recommendation_controls()
         session.add_listener(self._on_session_updated)
         session.add_loading_listener(self._on_loading_changed)
         self._update_intro()
@@ -420,6 +437,98 @@ class CandidateFiltersView:
         self._form.simple_mood_combo.currentIndexChanged.connect(update)
         self._advanced_mode_toggle.toggled.connect(update)
 
+    def _connect_recommendation_controls(self) -> None:
+        update = self._summary_update_callback
+        self._form.direction_control.valueChanged.connect(self._on_direction_changed)
+        for control in (
+            self._form.discovery_media_control,
+            self._form.discovery_animation_control,
+            self._form.discovery_release_control,
+        ):
+            control.valueChanged.connect(update)
+        for control in (
+            self._form.vector_openness_control,
+            self._form.vector_rarity_control,
+            self._form.vector_diversity_control,
+        ):
+            control.sliderReleased.connect(self._schedule_vector_apply)
+            control.valueChanged.connect(lambda _value: self._vector_debounce.start())
+        self._form.vector_mood_control.valueChanged.connect(self._schedule_vector_apply)
+        self._form.variation_button.clicked.connect(self._on_variation_requested)
+
+    def _direction_values(self) -> list[str]:
+        values = self._form.direction_control.property("directionValues")
+        return [str(value) for value in values] if isinstance(values, list) else ["manual"]
+
+    def _selected_direction_id(self) -> str:
+        values = self._direction_values()
+        index = max(0, min(len(values) - 1, self._form.direction_control.value()))
+        return values[index]
+
+    def _set_discovery_controls(self, preferences: CandidateDiscoveryPreferences) -> None:
+        current = preferences.normalized()
+        values = self._direction_values()
+        self._form.direction_control.setValue(values.index(current.preset_id) if current.preset_id in values else 0)
+        self._form.discovery_media_control.setValue(current.media_type)
+        self._form.discovery_animation_control.setValue(current.animation_mode)
+        self._form.discovery_release_control.setValue(current.release_preference)
+        self._country_selector.set_selected_codes(list(current.countries))
+        self._include_genre_selector.set_options(
+            self._genre_options,
+            _genre_labels_for_language(current.include_genres, self._data_language),
+        )
+        self._exclude_genre_selector.set_options(
+            self._genre_options,
+            _genre_labels_for_language(current.exclude_genres, self._data_language),
+        )
+        self._set_year_slider_from_defaults(current.year_min, current.year_max)
+        set_score_slider_from_default(self._tmdb_score_slider, current.min_tmdb_score)
+        set_votes_slider_from_default(self._tmdb_votes_slider, current.min_tmdb_votes)
+        self._only_complete_check.setChecked(current.only_complete)
+        self._only_unwatched_check.setChecked(current.only_unwatched)
+        self._hide_hidden_check.setChecked(current.hide_hidden)
+
+    def _set_vector_controls(self, vector: RecommendationVector) -> None:
+        current = vector.normalized()
+        self._form.vector_openness_control.setValue(current.openness_level)
+        self._form.vector_rarity_control.setValue(current.rarity_level)
+        self._form.vector_diversity_control.setValue(current.diversity_level)
+        self._form.vector_mood_control.setValue(current.mood)
+
+    def _collect_vector(self) -> RecommendationVector:
+        return RecommendationVector(
+            openness_level=self._form.vector_openness_control.value(),
+            rarity_level=self._form.vector_rarity_control.value(),
+            diversity_level=self._form.vector_diversity_control.value(),
+            mood=self._form.vector_mood_control.value(),
+        ).normalized()
+
+    def _schedule_vector_apply(self, *_args) -> None:
+        self._vector_debounce.start()
+
+    def _apply_vector_locally(self) -> None:
+        vector = self._collect_vector()
+        self._recommendation_vector = vector
+        save_recommendation_vector(vector)
+        self._session.set_recommendation_vector(vector)
+
+    def _on_variation_requested(self) -> None:
+        self._session.next_recommendation_variation()
+
+    def _on_direction_changed(self, _value: int) -> None:
+        preset_id = self._selected_direction_id()
+        if preset_id != "manual":
+            preset = CandidateDiscoveryPreferences.from_preset(preset_id)
+            self._form.discovery_media_control.setValue(preset.media_type)
+            self._form.discovery_animation_control.setValue(preset.animation_mode)
+            self._form.discovery_release_control.setValue(preset.release_preference)
+            self._country_selector.set_selected_codes(list(preset.countries))
+            self._include_genre_selector.set_options(
+                self._genre_options,
+                _genre_labels_for_language(preset.include_genres, self._data_language),
+            )
+        self._update_summary_rows()
+
     def _summary_countries_text(self) -> str:
         country_codes = self._effective_country_codes()
         if not country_codes:
@@ -453,11 +562,21 @@ class CandidateFiltersView:
         if not hasattr(self, "_summary_value_labels"):
             return
         if self._advanced_mode_toggle.isChecked() is False:
+            media_labels = {
+                "movie": tr("recommendations.discovery.media.movie"),
+                "both": tr("recommendations.discovery.media.both"),
+                "tv": tr("recommendations.discovery.media.tv"),
+            }
+            release_labels = {
+                "classic": tr("recommendations.discovery.release.classic"),
+                "mixed": tr("recommendations.discovery.release.mixed"),
+                "new": tr("recommendations.discovery.release.new"),
+            }
             simple_values = {
-                "countries": ("preferences.origin.label", self._form.simple_origin_combo.currentText()),
-                "media_type": ("preferences.media.label", self._form.simple_media_combo.currentText()),
-                "year": ("preferences.collection.label", self._form.simple_collection_combo.currentText()),
-                "preset": ("preferences.mood.label", self._form.simple_mood_combo.currentText()),
+                "countries": ("candidates.filters.summary.countries", self._summary_countries_text()),
+                "media_type": ("recommendations.discovery.media.label", media_labels[self._form.discovery_media_control.value()]),
+                "year": ("recommendations.discovery.release.label", release_labels[self._form.discovery_release_control.value()]),
+                "preset": ("recommendations.discovery.direction.label", self._form.direction_control.canonical_text()),
             }
             for key, row in self._summary_rows.items():
                 visible = key in simple_values
@@ -539,6 +658,30 @@ class CandidateFiltersView:
         )
         return eligible_count < DEFAULT_ACTIVE_LIMIT + DEFAULT_REFILL_THRESHOLD
 
+    def _discovery_pool_needs_replenish(
+        self,
+        preferences: CandidateDiscoveryPreferences,
+    ) -> bool:
+        filters = preferences.to_candidate_filters(DEFAULT_BROWSE_FILTERS)
+        filters["only_unwatched"] = True
+        filters["hide_hidden"] = True
+        candidates = list(self._session.overview().get("candidates") or [])
+        try:
+            search_view = self._service.search_candidate_pool(candidates, filters)
+            matching = list(
+                search_view.get("filtered_candidates")
+                or search_view.get("candidates")
+                or []
+            )
+        except Exception:
+            matching = candidates
+        eligible_count = count_automatic_recommendation_candidates(
+            matching,
+            self._collect_vector(),
+            capacity=DEFAULT_ACTIVE_LIMIT + DEFAULT_REFILL_THRESHOLD,
+        )
+        return eligible_count < DEFAULT_ACTIVE_LIMIT + DEFAULT_REFILL_THRESHOLD
+
     def _selected_replenish_preset(self):
         preset_id = self._replenish_preset_combo.currentData()
         if preset_id in (None, "", "manual"):
@@ -549,7 +692,7 @@ class CandidateFiltersView:
         selected = self._country_selector.selected_country_codes()
         if selected:
             return selected
-        preset = self._selected_replenish_preset()
+        preset = get_taste_preset(self._selected_direction_id())
         if preset is None:
             return []
         return [
@@ -609,7 +752,7 @@ class CandidateFiltersView:
                 and self._pending_replenish_intent is None
                 and self._is_replenishing is False
             ):
-                self._intro_lead.setText("Local filter applied")
+                self._intro_lead.setText(tr("recommendations.discovery.status.local_applied"))
         if self._pending_replenish_intent is not None and self._replenish_worker is None:
             intent = self._pending_replenish_intent
             generation = self._pending_replenish_generation
@@ -634,6 +777,20 @@ class CandidateFiltersView:
         self._reset_button.setFixedWidth(target)
         self._apply_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
         self._reset_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
+
+    def _update_summary_card_width(self) -> None:
+        if not hasattr(self, "_intro_card"):
+            return
+        available_width = max(
+            0,
+            self._widget.width() - (2 * CANDIDATE_ROOT_MARGIN_PX) - layout_px(16),
+        )
+        proportional_width = int(available_width * 0.32)
+        target_width = min(
+            SUMMARY_CARD_WIDTH,
+            max(layout_px(240), proportional_width),
+        )
+        self._intro_card.setFixedWidth(target_width)
 
     def _on_year_range_changed(self, _lower: int, _upper: int) -> None:
         self._update_year_range_label()
@@ -793,11 +950,9 @@ class CandidateFiltersView:
         self._hide_hidden_check.setChecked(False)
 
     def _reset_filters(self) -> None:
-        if self._advanced_mode_toggle.isChecked() is False:
-            self._set_simple_preferences_controls(SimpleRecommendationPreferences())
-            self._apply_filters()
-            return
-        self._clear_filter_controls()
+        self._set_discovery_controls(CandidateDiscoveryPreferences())
+        self._set_vector_controls(RecommendationVector())
+        self._apply_vector_locally()
         self._apply_filters()
 
     def on_before_apply(self, filters: dict) -> dict:
@@ -810,37 +965,25 @@ class CandidateFiltersView:
         self._replenish_generation += 1
         if self._replenish_worker is not None:
             self._replenish_worker.cancel()
-        if self._advanced_mode_toggle.isChecked():
-            filters = self.on_before_apply(self._collect_filters())
-            self._pending_replenish_intent = (
-                self._collect_replenish_intent(filters)
-                if self._replenish_enabled_check.isChecked()
-                else None
+        preferences = self._collect_discovery_preferences()
+        self._discovery_preferences = preferences
+        save_discovery_preferences(preferences)
+        filters = self.on_before_apply(
+            preferences.to_candidate_filters(DEFAULT_BROWSE_FILTERS)
+        )
+        self._pending_replenish_intent = (
+            preferences.to_replenish_intent(
+                data_language=self._data_language,
+                target_add_count=FILTER_REPLENISH_DEFAULT_BATCH_SIZE,
             )
-            self._pending_replenish_generation = (
-                self._replenish_generation
-                if self._pending_replenish_intent is not None
-                else None
-            )
-        else:
-            preferences = self._simple_preferences_from_controls()
-            save_simple_recommendation_preferences(preferences)
-            filters = self.on_before_apply(
-                preferences.to_candidate_filters(DEFAULT_BROWSE_FILTERS)
-            )
-            self._pending_replenish_intent = (
-                preferences.to_replenish_intent(
-                    data_language=self._data_language,
-                    target_add_count=FILTER_REPLENISH_DEFAULT_BATCH_SIZE,
-                )
-                if self._simple_pool_needs_replenish(preferences)
-                else None
-            )
-            self._pending_replenish_generation = (
-                self._replenish_generation
-                if self._pending_replenish_intent is not None
-                else None
-            )
+            if self._discovery_pool_needs_replenish(preferences)
+            else None
+        )
+        self._pending_replenish_generation = (
+            self._replenish_generation
+            if self._pending_replenish_intent is not None
+            else None
+        )
         if self._pending_replenish_intent is None:
             self._hide_replenish_progress()
         self._replenish_local_count_before = None
@@ -871,32 +1014,12 @@ class CandidateFiltersView:
 
     def request_recommendation_refill(self, preferences: dict) -> bool:
         """Queue one async refill for the currently active recommendation intent."""
-        current = dict(preferences or {})
-        mood = str(
-            current.get("_recommendation_mood")
-            or current.get("mood")
-            or current.get("vibe")
-            or "mixed"
-        ).strip().casefold()
-        vibe = mood if mood in {"light", "dark"} else "mixed"
-        collection = str(
-            current.get("_recommendation_collection")
-            or current.get("release_preference")
-            or "mixed"
-        ).strip().casefold()
-        release_preference = collection if collection in {"new", "classic"} else "mixed"
-        is_simple_intent = "_recommendation_mood" in current
+        discovery = getattr(self, "_discovery_preferences", CandidateDiscoveryPreferences())
         intent = FilterReplenishIntent.from_filters(
-            current,
-            preset_id="manual" if is_simple_intent else None,
-            vibe=vibe,
-            release_preference=release_preference,
-            origin_preference="any" if is_simple_intent else None,
-            genre_groups=(
-                current.get("_recommendation_genre_groups")
-                or current.get("genre_groups")
-                or []
-            ),
+            dict(preferences or {}),
+            preset_id=discovery.preset_id,
+            animation_mode=discovery.animation_mode,
+            release_preference=discovery.release_preference,
             target_add_count=FILTER_REPLENISH_DEFAULT_BATCH_SIZE,
             data_language=self._data_language,
         ).to_dict()
@@ -910,6 +1033,25 @@ class CandidateFiltersView:
             self._pending_replenish_generation = self._replenish_generation
             return True
         return self._start_filter_replenish(intent, generation=self._replenish_generation)
+
+    def _collect_discovery_preferences(self) -> CandidateDiscoveryPreferences:
+        year_min, year_max = self._year_filter_bounds()
+        return CandidateDiscoveryPreferences(
+            preset_id=self._selected_direction_id(),
+            media_type=self._form.discovery_media_control.value(),
+            animation_mode=self._form.discovery_animation_control.value(),
+            release_preference=self._form.discovery_release_control.value(),
+            countries=tuple(self._effective_country_codes()),
+            include_genres=tuple(self._include_genre_selector.selected_genres()),
+            exclude_genres=tuple(self._exclude_genre_selector.selected_genres()),
+            year_min=year_min,
+            year_max=year_max,
+            min_tmdb_score=min_score_from_slider(self._tmdb_score_slider),
+            min_tmdb_votes=min_votes_from_slider(self._tmdb_votes_slider),
+            only_complete=self._only_complete_check.isChecked(),
+            only_unwatched=self._only_unwatched_check.isChecked(),
+            hide_hidden=self._hide_hidden_check.isChecked(),
+        ).normalized()
 
     def _start_filter_replenish(
         self,
@@ -979,14 +1121,14 @@ class CandidateFiltersView:
         self._set_replenish_running(False)
         if payload.get("blocked"):
             self._hide_replenish_progress()
-            self._intro_lead.setText("Conflict: no TMDb call")
-            self._intro_stats.setText("Selected replenish options have a compatibility conflict.")
+            self._intro_lead.setText(tr("recommendations.discovery.status.conflict"))
+            self._intro_stats.setText(tr("recommendations.discovery.status.conflict_detail"))
             self._intro_stats.setVisible(True)
             return
         if payload.get("ok") is not True:
             self._hide_replenish_progress()
-            self._intro_lead.setText("Replenish failed")
-            self._intro_stats.setText(str(payload.get("error") or payload.get("message") or "Unknown error"))
+            self._intro_lead.setText(tr("recommendations.discovery.status.failed"))
+            self._intro_stats.setText(str(payload.get("error") or payload.get("message") or tr("common.unknown_error")))
             self._intro_stats.setVisible(True)
             return
         added = int(payload.get("saved_count") or payload.get("created_count") or 0)
@@ -996,11 +1138,11 @@ class CandidateFiltersView:
         self.reload_filter_options()
         reapplied = self._session.reload_from_pool(force=True)
         visible_after = int(reapplied.get("visible_count") or reapplied.get("filtered_count") or 0)
-        self._intro_lead.setText("Replenish complete")
+        self._intro_lead.setText(tr("recommendations.discovery.status.complete"))
         self._intro_stats.setText(
-            f"Before: {local_before}. Added {added} of {requested}. Visible now: {visible_after}."
+            tr("recommendations.discovery.status.complete_partial", before=local_before, added=added, requested=requested, visible=visible_after)
             if added < requested
-            else f"Before: {local_before}. Added {added}. Visible now: {visible_after}."
+            else tr("recommendations.discovery.status.complete_full", before=local_before, added=added, visible=visible_after)
         )
         self._intro_stats.setVisible(True)
 
@@ -1011,8 +1153,8 @@ class CandidateFiltersView:
         self._last_replenish_result = {"ok": False, "error": str(message)}
         self._set_replenish_running(False)
         self._hide_replenish_progress()
-        self._intro_lead.setText("Replenish failed")
-        self._intro_stats.setText(str(message or "Unknown error"))
+        self._intro_lead.setText(tr("recommendations.discovery.status.failed"))
+        self._intro_stats.setText(str(message or tr("common.unknown_error")))
         self._intro_stats.setVisible(True)
 
     def _remove_replenish_worker(self, worker: FilterReplenishWorker) -> None:

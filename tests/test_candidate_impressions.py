@@ -106,8 +106,8 @@ def test_v4_migration_upgrades_nonempty_v3_database(tmp_path) -> None:
         conn.execute("INSERT INTO preserved_marker(value) VALUES('kept')")
         conn.commit()
 
-        assert apply_migrations(conn) == 4
-        assert get_current_schema_version(conn) == 4
+        assert apply_migrations(conn) == 5
+        assert get_current_schema_version(conn) == 5
         assert conn.execute("SELECT value FROM preserved_marker").fetchone()["value"] == "kept"
         tables = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         assert "candidate_impressions" in tables

@@ -919,7 +919,8 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
     assert watched_filters.panel.isHidden() is True
     watched_filters.toggle_panel()
     assert watched_filters.panel.isHidden() is False
-    assert watched_filters._score_slider.minimumHeight() >= 34
+    assert set(watched_filters._score_buttons) == {1, 2, 3}
+    assert all(button.sizeHint().height() >= 20 for button in watched_filters._score_buttons.values())
     assert watched_filters._year_slider.minimumHeight() >= 34
 
     filters_session = CandidateSearchSession(service=service)

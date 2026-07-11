@@ -7,6 +7,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from enum import IntEnum
 import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
@@ -20,18 +21,26 @@ from candidates.models.keys import (
 )
 from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
 from candidates.pool.storage import candidate_tmdb_identity
+from candidates.preferences import (
+    RecommendationVector,
+    resolve_diversity_window,
+    resolve_exploration_ratio,
+    resolve_rarity_weights,
+)
 from candidates.repositories.pool_repository import load_candidate_pool
 from candidates.scoring.rating_confidence import has_unknown_rating, is_viable_unrated_candidate
 from candidates.sources.tmdb.scoring import compute_tmdb_quality_score
 from candidates import title_state_service
 from dataset.models.media_type import normalize_media_type
+from dataset.models.user_rating import normalize_user_rating
 from storage.sqlite import action_repository, impression_repository
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
 
 
 PoolLoader = Callable[[], dict]
-DEFAULT_ACTIVE_LIMIT = 30
+ACTIVE_DECK_SIZE = 25
+DEFAULT_ACTIVE_LIMIT = ACTIVE_DECK_SIZE
 DEFAULT_RESERVE_SIZE = 70
 DEFAULT_RECENT_DAYS = 30
 DEFAULT_REFILL_THRESHOLD = 20
@@ -157,46 +166,46 @@ def _preference_values(preferences: dict, *field_names: str) -> list[str]:
     return []
 
 
-def _recommendation_profile(
-    preferences: dict | None,
-) -> tuple[frozenset[str], frozenset[str], frozenset[str], bool]:
-    current = dict(preferences or {})
+def _coerce_vector(
+    vector: RecommendationVector | dict | None,
+    legacy_preferences: dict | None = None,
+) -> RecommendationVector:
+    if isinstance(vector, RecommendationVector):
+        return vector.normalized()
+    if isinstance(vector, dict):
+        if {"openness_level", "rarity_level", "diversity_level", "mood"} & set(vector):
+            return RecommendationVector.from_dict(vector)
+        legacy_preferences = vector
+    legacy = dict(legacy_preferences or {})
     mood = str(
-        current.get("_recommendation_mood")
-        or current.get("mood")
-        or current.get("vibe")
-        or ""
+        legacy.get("_recommendation_mood")
+        or legacy.get("mood")
+        or legacy.get("vibe")
+        or "any"
     ).strip().casefold()
-    if mood in {"any", "mixed"}:
+    return RecommendationVector(mood="any" if mood == "mixed" else mood).normalized()
+
+
+def _recommendation_profile(
+    vector: RecommendationVector | dict | None,
+) -> tuple[frozenset[str], frozenset[str], frozenset[str], bool]:
+    mood = _coerce_vector(vector).mood
+    if mood == "any":
         mood = ""
     mood_profile = _MOOD_RELEVANCE_PROFILES.get(mood, {})
-    configured = genre_schema.normalize_genre_filter_list(
-        _preference_values(
-            current,
-            "_recommendation_genre_groups",
-            "genre_groups",
-            "include_genres",
-            "genres",
-        )
-    )
     exact = set(mood_profile.get("exact") or ())
-    exact.update(configured)
-    include_genres = genre_schema.normalize_genre_filter_list(
-        _preference_values(current, "include_genres", "genres")
-    )
-    exact.update(include_genres)
     adjacent = set(mood_profile.get("adjacent") or ()) - exact
     incompatible = set(mood_profile.get("incompatible") or ()) - exact
     explicit = bool(exact or mood_profile)
     return frozenset(exact), frozenset(adjacent), frozenset(incompatible), explicit
 
 
-def _has_relevance_intent(preferences: dict | None) -> bool:
-    return _recommendation_profile(preferences)[3]
+def _has_relevance_intent(vector: RecommendationVector | dict | None) -> bool:
+    return _recommendation_profile(vector)[3]
 
 
-def _relevance_tier(candidate: dict, preferences: dict | None) -> RelevanceTier:
-    exact, adjacent, incompatible, explicit = _recommendation_profile(preferences)
+def _relevance_tier(candidate: dict, vector: RecommendationVector | dict | None) -> RelevanceTier:
+    exact, adjacent, incompatible, explicit = _recommendation_profile(vector)
     if explicit is False:
         return RelevanceTier.A
     normalized = normalize_candidate_record(candidate)
@@ -210,53 +219,60 @@ def _relevance_tier(candidate: dict, preferences: dict | None) -> RelevanceTier:
     return RelevanceTier.C
 
 
-def _exploration_allowance(ab_count: int, capacity: int) -> int:
+def _exploration_allowance(ab_count: int, capacity: int, ratio: float = DEFAULT_EXPLORATION_RATIO) -> int:
     if ab_count <= 0 or capacity <= 0:
         return 0
-    capacity_limit = int(capacity * DEFAULT_EXPLORATION_RATIO)
-    balance_limit = int(ab_count * DEFAULT_EXPLORATION_RATIO / (1.0 - DEFAULT_EXPLORATION_RATIO))
+    ratio = max(0.0, min(0.95, float(ratio)))
+    if ratio <= 0:
+        return 0
+    capacity_limit = int(capacity * ratio)
+    balance_limit = int(ab_count * ratio / (1.0 - ratio))
     return max(0, min(capacity_limit, balance_limit))
 
 
 def _automatic_ranked_candidates(
     ranked: list[dict],
-    preferences: dict | None,
+    vector: RecommendationVector | dict | None,
     *,
     capacity: int,
 ) -> list[dict]:
-    if _has_relevance_intent(preferences) is False:
+    current_vector = _coerce_vector(vector)
+    if _has_relevance_intent(current_vector) is False:
         return list(ranked)
     close = [
         candidate
         for candidate in ranked
-        if _relevance_tier(candidate, preferences) <= RelevanceTier.B
+        if _relevance_tier(candidate, current_vector) <= RelevanceTier.B
     ]
     exploratory = [
         candidate
         for candidate in ranked
-        if _relevance_tier(candidate, preferences) == RelevanceTier.C
+        if _relevance_tier(candidate, current_vector) == RelevanceTier.C
     ]
-    return close + exploratory[: _exploration_allowance(len(close), capacity)]
+    ratio = resolve_exploration_ratio(current_vector.openness_level)
+    return close + exploratory[: _exploration_allowance(len(close), capacity, ratio)]
 
 
 def count_automatic_recommendation_candidates(
     candidates: list[dict],
-    preferences: dict | None,
+    vector: RecommendationVector | dict | None,
     *,
     capacity: int = DEFAULT_ACTIVE_LIMIT + DEFAULT_RESERVE_SIZE,
 ) -> int:
     """Count the local A/B slice plus its bounded exploratory allowance."""
-    if _has_relevance_intent(preferences) is False:
+    current_vector = _coerce_vector(vector)
+    if _has_relevance_intent(current_vector) is False:
         return len(candidates)
     close_count = sum(
-        _relevance_tier(candidate, preferences) <= RelevanceTier.B
+        _relevance_tier(candidate, current_vector) <= RelevanceTier.B
         for candidate in candidates
     )
     exploratory_count = sum(
-        _relevance_tier(candidate, preferences) == RelevanceTier.C
+        _relevance_tier(candidate, current_vector) == RelevanceTier.C
         for candidate in candidates
     )
-    return close_count + min(exploratory_count, _exploration_allowance(close_count, capacity))
+    ratio = resolve_exploration_ratio(current_vector.openness_level)
+    return close_count + min(exploratory_count, _exploration_allowance(close_count, capacity, ratio))
 
 
 def _stable_hash(day_seed: str, candidate: dict) -> str:
@@ -290,7 +306,12 @@ def _decade(candidate: dict) -> int | None:
     return None if year is None else int(year) // 10 * 10
 
 
-def _diversify_quality_group(candidates: list[dict], day_seed: str) -> list[dict]:
+def _diversify_quality_group(
+    candidates: list[dict],
+    day_seed: str,
+    *,
+    window_size: int = 12,
+) -> list[dict]:
     remaining = sorted(candidates, key=lambda item: _stable_hash(day_seed, item))
     result: list[dict] = []
     media_counts: dict[str, int] = {}
@@ -298,7 +319,7 @@ def _diversify_quality_group(candidates: list[dict], day_seed: str) -> list[dict
     country_counts: dict[str, int] = {}
     decade_counts: dict[int | None, int] = {}
     while remaining:
-        window = remaining[: min(12, len(remaining))]
+        window = remaining[: min(max(1, int(window_size)), len(remaining))]
 
         def diversity_key(item: dict) -> tuple[int, str]:
             media_type = normalize_media_type(item.get("media_type"))
@@ -327,17 +348,60 @@ def _diversify_quality_group(candidates: list[dict], day_seed: str) -> list[dict
     return result
 
 
+def _popularity_score(candidate: dict) -> float:
+    popularity = _number(candidate.get("tmdb_popularity"))
+    if popularity is None or popularity <= 0:
+        return 0.0
+    return min(100.0, 100.0 * math.log1p(popularity) / math.log1p(500.0))
+
+
+def _hidden_gem_score(candidate: dict) -> float:
+    if has_unknown_rating(candidate):
+        return 0.0
+    value = _number(candidate.get("hidden_gem_score"))
+    if value is None:
+        return 0.0
+    return _score_percent("hidden_gem_score", value)
+
+
+def _vector_score(candidate: dict, vector: RecommendationVector | dict | None) -> float:
+    base_weight, hidden_weight, popularity_weight = resolve_rarity_weights(
+        _coerce_vector(vector).rarity_level
+    )
+    return (
+        base_weight * _base_score(candidate)
+        + hidden_weight * _hidden_gem_score(candidate)
+        + popularity_weight * _popularity_score(candidate)
+    )
+
+
 def _rank_candidates(
     candidates: list[dict],
     day_seed: str,
-    preferences: dict | None = None,
+    vector: RecommendationVector | dict | None = None,
 ) -> list[dict]:
+    current_vector = _coerce_vector(vector)
+    if current_vector.diversity_level != 2:
+        ordered = sorted(
+            candidates,
+            key=lambda candidate: (
+                int(_relevance_tier(candidate, current_vector)),
+                -_personal_fit_score(candidate),
+                -_vector_score(candidate, current_vector),
+                _stable_hash(day_seed, candidate),
+            ),
+        )
+        return _diversify_quality_group(
+            ordered,
+            day_seed,
+            window_size=resolve_diversity_window(current_vector.diversity_level),
+        )
     quality_groups: dict[tuple[int, float, float], list[dict]] = {}
     for candidate in candidates:
         group_key = (
-            int(_relevance_tier(candidate, preferences)),
+            int(_relevance_tier(candidate, current_vector)),
             round(_personal_fit_score(candidate), 6),
-            round(_base_score(candidate), 6),
+            round(_vector_score(candidate, current_vector), 6),
         )
         quality_groups.setdefault(group_key, []).append(candidate)
     ranked: list[dict] = []
@@ -372,22 +436,22 @@ def _select_active_with_unknown_quota(
     *,
     active_limit: int,
     unknown_limit: int,
-    preferences: dict | None = None,
+    vector: RecommendationVector | dict | None = None,
     initial_active: list[dict] | None = None,
 ) -> tuple[list[dict], list[dict]]:
     active: list[dict] = list(initial_active or [])[:active_limit]
     remaining: list[dict] = []
     unknown_count = sum(has_unknown_rating(candidate) for candidate in active)
     exploratory_count = sum(
-        _relevance_tier(candidate, preferences) == RelevanceTier.C
+        _relevance_tier(candidate, vector) == RelevanceTier.C
         for candidate in active
     )
-    explicit_relevance = _has_relevance_intent(preferences)
+    explicit_relevance = _has_relevance_intent(vector)
     for candidate in ranked:
         unknown = has_unknown_rating(candidate)
         exploratory = (
             explicit_relevance
-            and _relevance_tier(candidate, preferences) == RelevanceTier.C
+            and _relevance_tier(candidate, vector) == RelevanceTier.C
         )
         exploration_allowed = (
             not exploratory
@@ -543,28 +607,33 @@ class RecommendationDeckService:
 
     def build_deck(
         self,
-        preferences: dict | None,
+        candidate_filters: dict | None,
         now: datetime | date,
         *,
+        vector: RecommendationVector | dict | None = None,
+        variation_seed: int = 0,
         limit_active: int = DEFAULT_ACTIVE_LIMIT,
         reserve_size: int = DEFAULT_RESERVE_SIZE,
     ) -> dict:
         current = _as_utc(now)
         active_limit = max(0, int(limit_active))
         reserve_limit = max(0, int(reserve_size))
-        current_preferences = dict(preferences or {})
+        current_filters = dict(candidate_filters or {})
+        current_vector = _coerce_vector(vector, current_filters)
+        variation = max(0, int(variation_seed or 0))
+        rank_seed = f"{current.date().isoformat()}|{variation}"
         eligible, recent_fallback, excluded = self._eligible_candidates(
-            current_preferences,
+            current_filters,
             current,
         )
         selection_pool = eligible
         ranked = _automatic_ranked_candidates(
             _rank_candidates(
                 selection_pool,
-                current.date().isoformat(),
-                current_preferences,
+                rank_seed,
+                current_vector,
             ),
-            current_preferences,
+            current_vector,
             capacity=active_limit + reserve_limit,
         )
         reused_recent = len(ranked) == 0 and len(recent_fallback) > 0
@@ -573,15 +642,15 @@ class RecommendationDeckService:
             ranked = _automatic_ranked_candidates(
                 _rank_candidates(
                     selection_pool,
-                    current.date().isoformat(),
-                    current_preferences,
+                    rank_seed,
+                    current_vector,
                 ),
-                current_preferences,
+                current_vector,
                 capacity=active_limit + reserve_limit,
             )
         relevance_counts = {
             tier.name: sum(
-                _relevance_tier(candidate, current_preferences) == tier
+                _relevance_tier(candidate, current_vector) == tier
                 for candidate in selection_pool
             )
             for tier in RelevanceTier
@@ -591,16 +660,16 @@ class RecommendationDeckService:
             0,
             relevance_counts[RelevanceTier.C.name]
             - sum(
-                _relevance_tier(candidate, current_preferences) == RelevanceTier.C
+                _relevance_tier(candidate, current_vector) == RelevanceTier.C
                 for candidate in ranked
             ),
         )
-        unknown_limit = _unknown_rating_limit(current_preferences, active_limit)
+        unknown_limit = _unknown_rating_limit(current_filters, active_limit)
         active, remaining = _select_active_with_unknown_quota(
             ranked,
             active_limit=active_limit,
             unknown_limit=unknown_limit,
-            preferences=current_preferences,
+            vector=current_vector,
         )
         reserve = remaining[:reserve_limit]
         if not active:
@@ -615,7 +684,10 @@ class RecommendationDeckService:
         deck = {
             "deck_id": deck_id,
             "generated_at": current.isoformat(timespec="seconds"),
-            "preferences": deepcopy(current_preferences),
+            "candidate_filters": deepcopy(current_filters),
+            "recommendation_vector": current_vector.to_dict(),
+            "variation_seed": variation,
+            "preferences": deepcopy(current_filters),
             "active": active,
             "reserve": reserve,
             "active_limit": active_limit,
@@ -632,7 +704,9 @@ class RecommendationDeckService:
             "catalog_eligible_count": len(selection_pool),
             "eligible_reserve_count": len(reserve),
             "relevance_counts": relevance_counts,
-            "exploration_limit": int(active_limit * DEFAULT_EXPLORATION_RATIO),
+            "exploration_limit": int(
+                active_limit * resolve_exploration_ratio(current_vector.openness_level)
+            ),
             "recently_seen_reused": len(active) + len(reserve) if reused_recent else 0,
             "excluded": excluded,
         }
@@ -647,14 +721,23 @@ class RecommendationDeckService:
 
     def refresh_deck(
         self,
-        preferences: dict | None,
+        candidate_filters: dict | None,
         now: datetime | date,
         *,
+        vector: RecommendationVector | dict | None = None,
+        variation_seed: int = 0,
         force_new: bool = False,
     ) -> dict:
         current = _as_utc(now)
+        current_filters = dict(candidate_filters or {})
+        current_vector = _coerce_vector(vector, current_filters)
         cache_key = json.dumps(
-            {"day": current.date().isoformat(), "preferences": preferences or {}},
+            {
+                "day": current.date().isoformat(),
+                "candidate_filters": current_filters,
+                "recommendation_vector": current_vector.to_dict(),
+                "variation_seed": max(0, int(variation_seed or 0)),
+            },
             ensure_ascii=False,
             sort_keys=True,
             default=str,
@@ -665,7 +748,12 @@ class RecommendationDeckService:
             and self._latest_deck_id in self._decks
         ):
             return deepcopy(self._decks[self._latest_deck_id])
-        deck = self.build_deck(preferences, current)
+        deck = self.build_deck(
+            current_filters,
+            current,
+            vector=current_vector,
+            variation_seed=variation_seed,
+        )
         self._latest_cache_key = cache_key
         self._latest_deck_id = deck["deck_id"]
         return deck
@@ -676,8 +764,11 @@ class RecommendationDeckService:
             raise KeyError(f"Unknown recommendation deck: {deck_id}")
         current = _as_utc(now)
         deck = self._decks[deck_id]
-        preferences = dict(deck.get("preferences") or {})
-        eligible, recent_fallback, excluded = self._eligible_candidates(preferences, current)
+        candidate_filters = dict(deck.get("candidate_filters") or deck.get("preferences") or {})
+        vector = _coerce_vector(deck.get("recommendation_vector"), candidate_filters)
+        variation_seed = max(0, int(deck.get("variation_seed") or 0))
+        rank_seed = f"{current.date().isoformat()}|{variation_seed}"
+        eligible, recent_fallback, excluded = self._eligible_candidates(candidate_filters, current)
         valid_candidates = list(eligible) + list(recent_fallback)
         valid_identities = {_stable_identity(candidate) for candidate in valid_candidates}
 
@@ -700,19 +791,19 @@ class RecommendationDeckService:
         policy_candidates = active + list(available_by_identity.values())
         relevance_counts = {
             tier.name: sum(
-                _relevance_tier(candidate, preferences) == tier
+                _relevance_tier(candidate, vector) == tier
                 for candidate in policy_candidates
             )
             for tier in RelevanceTier
         }
         ranked_policy = _rank_candidates(
             policy_candidates,
-            current.date().isoformat(),
-            preferences,
+            rank_seed,
+            vector,
         )
         automatic_policy = _automatic_ranked_candidates(
             ranked_policy,
-            preferences,
+            vector,
             capacity=int(deck["active_limit"]) + int(deck["reserve_size"]),
         )
         ranked_available = [
@@ -725,7 +816,7 @@ class RecommendationDeckService:
             ranked_available,
             active_limit=int(deck["active_limit"]),
             unknown_limit=int(deck["unknown_rating_limit"]),
-            preferences=preferences,
+            vector=vector,
             initial_active=active,
         )
         reserve = remaining[: int(deck["reserve_size"])]
@@ -749,7 +840,7 @@ class RecommendationDeckService:
             0,
             relevance_counts[RelevanceTier.C.name]
             - sum(
-                _relevance_tier(candidate, preferences) == RelevanceTier.C
+                _relevance_tier(candidate, vector) == RelevanceTier.C
                 for candidate in automatic_policy
             ),
         )
@@ -779,16 +870,33 @@ class RecommendationDeckService:
             )
         return deepcopy(deck)
 
-    def apply_action_and_refill(self, deck_id: str, candidate: dict, action: str) -> dict:
+    def apply_action_and_refill(
+        self,
+        deck_id: str,
+        candidate: dict,
+        action: str,
+        *,
+        user_score: int | None = None,
+    ) -> dict:
         if deck_id not in self._decks:
             raise KeyError(f"Unknown recommendation deck: {deck_id}")
         normalized_action = str(action or "").strip().casefold()
+        normalized_score = normalize_user_rating(user_score)
+        if normalized_action == "watched":
+            if normalized_score is None:
+                raise ValueError("watched action requires user_score from 1 to 3")
+        elif user_score is not None:
+            raise ValueError("user_score is only supported for watched action")
         if normalized_action in {"watchlist", "deferred"}:
             transition = title_state_service.add_to_watchlist(candidate, path=self._db_path)
         elif normalized_action == "hidden":
             transition = title_state_service.hide_candidate(candidate, path=self._db_path)
         elif normalized_action == "watched":
-            transition = title_state_service.mark_watched(candidate, path=self._db_path)
+            transition = title_state_service.mark_watched(
+                candidate,
+                normalized_score,
+                path=self._db_path,
+            )
         else:
             raise ValueError(f"Unsupported recommendation action: {action}")
 
@@ -810,11 +918,13 @@ class RecommendationDeckService:
         ]
         promoted = None
         if len(deck["active"]) < deck["active_limit"] and deck["reserve"]:
-            preferences = dict(deck.get("preferences") or {})
-            explicit_relevance = _has_relevance_intent(preferences)
+            candidate_filters = dict(deck.get("candidate_filters") or deck.get("preferences") or {})
+            vector = _coerce_vector(deck.get("recommendation_vector"), candidate_filters)
+            explicit_relevance = _has_relevance_intent(vector)
+            exploration_ratio = resolve_exploration_ratio(vector.openness_level)
             unknown_count = sum(has_unknown_rating(item) for item in deck["active"])
             exploratory_count = sum(
-                _relevance_tier(item, preferences) == RelevanceTier.C
+                _relevance_tier(item, vector) == RelevanceTier.C
                 for item in deck["active"]
             )
             promotable_indexes = [
@@ -823,13 +933,17 @@ class RecommendationDeckService:
                 if not has_unknown_rating(item) or unknown_count < deck["unknown_rating_limit"]
                 if (
                     not explicit_relevance
-                    or _relevance_tier(item, preferences) != RelevanceTier.C
-                    or (exploratory_count + 1) * 5 <= len(deck["active"]) + 1
+                    or _relevance_tier(item, vector) != RelevanceTier.C
+                    or (
+                        exploration_ratio > 0
+                        and exploratory_count + 1
+                        <= int((len(deck["active"]) + 1) * exploration_ratio)
+                    )
                 )
             ]
             if promotable_indexes:
                 if explicit_relevance:
-                    removed_tier = _relevance_tier(candidate, preferences)
+                    removed_tier = _relevance_tier(candidate, vector)
                     tier_order = [removed_tier]
                     tier_order.extend(
                         tier
@@ -846,14 +960,14 @@ class RecommendationDeckService:
                         comparable = [
                             index
                             for index in promotable_indexes
-                            if _relevance_tier(deck["reserve"][index], preferences) == tier
+                            if _relevance_tier(deck["reserve"][index], vector) == tier
                         ]
                         if comparable:
                             promotion_index = min(
                                 comparable,
                                 key=lambda index: (
                                     -_personal_fit_score(deck["reserve"][index]),
-                                    -_base_score(deck["reserve"][index]),
+                                    -_vector_score(deck["reserve"][index], vector),
                                     index,
                                 ),
                             )
@@ -891,7 +1005,7 @@ class RecommendationDeckService:
         if isinstance(relevance_counts, dict):
             removed_tier_name = _relevance_tier(
                 candidate,
-                dict(deck.get("preferences") or {}),
+                deck.get("recommendation_vector"),
             ).name
             relevance_counts[removed_tier_name] = max(
                 0,

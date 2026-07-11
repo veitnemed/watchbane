@@ -32,7 +32,7 @@ def test_watched_card_uses_candidate_pool_tmdb_scores_and_final_score() -> None:
     from web.export import build_export_lookup_cache, build_watched_movie_card
 
     movie = {
-        "main_info": {"title": "Alpha", "year": 2024, "user_score": 8.0},
+        "main_info": {"title": "Alpha", "year": 2024, "user_score": 3},
         "raw_scores": {"kp_score": 9.9, "imdb_score": 9.1},
     }
     candidate = {
@@ -64,7 +64,11 @@ def test_watched_card_uses_candidate_pool_tmdb_scores_and_final_score() -> None:
     assert ring["ring_progress"] == 0.81
     assert "footer_label" not in ring
     assert "footer_stars" not in ring
-    assert build_final_score_star_item(card)["stars"] == 3.5
+    assert build_final_score_star_item(card) == {
+        "kind": "recommendation_strength",
+        "label": "Рекомендация: Сильный выбор",
+        "tooltip": "Сильный выбор",
+    }
 
 
 def test_delete_preview_lines_are_tmdb_only() -> None:

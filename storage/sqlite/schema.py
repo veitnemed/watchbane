@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+import json
+
+from dataset.models.user_rating import legacy_score_to_user_rating
 
 
 def apply_v1(conn: sqlite3.Connection) -> None:
@@ -204,6 +207,70 @@ def apply_v4(conn: sqlite3.Connection) -> None:
 
         CREATE INDEX IF NOT EXISTS idx_candidate_impressions_last_shown
           ON candidate_impressions(last_shown_at);
+        """
+    )
+
+
+def apply_v5(conn: sqlite3.Connection) -> None:
+    """Migrate watched user_score from legacy 0..10 values to reactions 1..3."""
+    rows = conn.execute(
+        "SELECT dataset_key, user_score, payload_json FROM watched_records"
+    ).fetchall()
+    for row in rows:
+        rating = legacy_score_to_user_rating(row["user_score"])
+        try:
+            payload = json.loads(row["payload_json"] or "{}")
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = {}
+        if isinstance(payload, dict) and payload:
+            main_info = payload.get("main_info")
+            if not isinstance(main_info, dict):
+                main_info = {}
+                payload["main_info"] = main_info
+            source_score = main_info.get("user_score", row["user_score"])
+            rating = legacy_score_to_user_rating(source_score)
+            main_info["user_score"] = rating
+            payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        else:
+            payload_json = row["payload_json"]
+        conn.execute(
+            "UPDATE watched_records SET user_score = ?, payload_json = ? WHERE dataset_key = ?",
+            (rating, payload_json, row["dataset_key"]),
+        )
+    conn.executescript(
+        """
+        CREATE TABLE watched_records_v5 (
+          dataset_key TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          title_normalized TEXT NOT NULL,
+          media_type TEXT NOT NULL DEFAULT 'tv',
+          year INTEGER,
+          user_score INTEGER,
+          country TEXT,
+          tmdb_id INTEGER,
+          imdb_id TEXT,
+          payload_json TEXT NOT NULL,
+          meta_json TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+
+        INSERT INTO watched_records_v5(
+          dataset_key, title, title_normalized, media_type, year, user_score,
+          country, tmdb_id, imdb_id, payload_json, meta_json, created_at, updated_at
+        )
+        SELECT
+          dataset_key, title, title_normalized, media_type, year, CAST(user_score AS INTEGER),
+          country, tmdb_id, imdb_id, payload_json, meta_json, created_at, updated_at
+        FROM watched_records;
+
+        DROP TABLE watched_records;
+        ALTER TABLE watched_records_v5 RENAME TO watched_records;
+
+        CREATE INDEX idx_watched_title_norm ON watched_records(title_normalized);
+        CREATE INDEX idx_watched_media_year ON watched_records(media_type, year);
+        CREATE INDEX idx_watched_tmdb ON watched_records(media_type, tmdb_id);
+        CREATE INDEX idx_watched_imdb ON watched_records(imdb_id);
         """
     )
 

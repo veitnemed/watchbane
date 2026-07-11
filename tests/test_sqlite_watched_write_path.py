@@ -15,7 +15,7 @@ def _use_sqlite(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.WATCHED_DIR", str(watched_dir))
 
 
-def _movie(title: str = "Метод", *, user_score: float = 8.0, year: int = 2015) -> dict:
+def _movie(title: str = "Метод", *, user_score: int = 3, year: int = 2015) -> dict:
     main_info = {
         "title": title,
         "year": year,
@@ -137,9 +137,9 @@ def test_sqlite_runtime_add_update_delete_watched_record(tmp_path, monkeypatch) 
     assert "Alpha" in storage_data.load_dataset()
     assert "Alpha" in storage_data.load_meta()
 
-    update_result = update_dataset_record("Alpha", {"main_info": {"user_score": 9.0}})
+    update_result = update_dataset_record("Alpha", {"main_info": {"user_score": 2}})
     assert update_result.ok is True
-    assert storage_data.load_dataset()["Alpha"]["main_info"]["user_score"] == 9.0
+    assert storage_data.load_dataset()["Alpha"]["main_info"]["user_score"] == 2
 
     delete_result = delete_watched_record("Alpha", timestamp="sqlite-test")
     assert delete_result.ok is True

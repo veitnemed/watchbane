@@ -7,6 +7,9 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import shutil
+from copy import deepcopy
+
+from dataset.models.user_rating import legacy_score_to_user_rating
 
 from storage.sqlite import action_repository
 from storage.sqlite import candidate_repository
@@ -103,6 +106,14 @@ def import_legacy_json_to_sqlite(
         "settings": load_legacy_json_mapping(paths.settings),
         "poster_cache": load_legacy_json_mapping(paths.poster_cache),
     }
+    migrated_watched = deepcopy(payloads["watched"])
+    for record in migrated_watched.values():
+        if not isinstance(record, dict):
+            continue
+        main_info = record.get("main_info")
+        if isinstance(main_info, dict):
+            main_info["user_score"] = legacy_score_to_user_rating(main_info.get("user_score"))
+    payloads["watched"] = migrated_watched
     report = {
         "ok": True,
         "dry_run": dry_run,

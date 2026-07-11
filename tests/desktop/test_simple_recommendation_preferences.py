@@ -101,40 +101,39 @@ def test_simple_preferences_map_to_internal_filters_and_pool_plan() -> None:
 def test_simple_preferences_are_default_and_advanced_filters_remain_available(qtbot) -> None:
     _session, view = _build_view(qtbot, SimplePreferenceService(30))
     toggle = view.widget.findChild(QToolButton, "candidateRecommendationAdvancedModeToggle")
-    advanced_section = view.widget.findChild(QWidget, "candidateFilterSection")
+    advanced_sections = view.widget.findChildren(QWidget, "candidateFilterSection")
 
     assert toggle is not None and toggle.isChecked() is False
-    assert advanced_section is not None and advanced_section.isHidden()
+    assert advanced_sections and all(section.isHidden() for section in advanced_sections)
     assert view.widget.findChild(QComboBox, "candidateSearchMediaType") is not None
-    simple_fields = view.widget.findChildren(QWidget, "candidateSimplePreferenceField")
-    assert len(simple_fields) == 4
-    assert all("background: transparent" in field.styleSheet() for field in simple_fields)
+    assert view.widget.findChild(QWidget, "recommendationDiscoveryPanel") is not None
+    assert view.widget.findChild(QWidget, "recommendationVectorPanel") is not None
     toggle.setChecked(True)
-    assert advanced_section.isHidden() is False
+    assert any(section.isHidden() is False for section in advanced_sections)
 
 
 def test_simple_preferences_save_and_start_one_auto_refill(qtbot) -> None:
-    from desktop.settings.recommendation_preferences import load_simple_recommendation_preferences
+    from desktop.settings.recommendation_preferences import load_recommendation_preferences
 
     service = SimplePreferenceService(1)
     _session, view = _build_view(qtbot, service)
-    _set_combo(view, "simplePreferenceMedia", "movie")
-    _set_combo(view, "simplePreferenceCollection", "classic")
-    _set_combo(view, "simplePreferenceOrigin", "russia")
-    _set_combo(view, "simplePreferenceMood", "dark")
+    direction_values = view._form.direction_control.property("directionValues")
+    view._form.direction_control.setValue(direction_values.index("russian_mainstream"))
+    view._form.discovery_media_control.setValue("movie")
+    view._form.discovery_release_control.setValue("classic")
+    view._form.vector_mood_control.setValue("dark")
+    view._apply_vector_locally()
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
 
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: len(service.replenish_calls) == 1)
     qtbot.waitUntil(lambda: view._replenish_worker is None)
 
-    saved = load_simple_recommendation_preferences()
-    assert saved.to_dict() == {
-        "media": "movie",
-        "collection": "classic",
-        "origin": "russia",
-        "mood": "dark",
-    }
+    discovery, vector = load_recommendation_preferences()
+    assert discovery.media_type == "movie"
+    assert discovery.release_preference == "classic"
+    assert discovery.countries == ("RU",)
+    assert vector.mood == "dark"
     assert service.replenish_calls[0]["countries"] == ["RU"]
 
 
@@ -197,25 +196,26 @@ def test_second_refill_does_not_start_while_worker_is_active(qtbot, monkeypatch)
 
 def test_simple_summary_uses_human_readable_values(qtbot) -> None:
     _session, view = _build_view(qtbot, SimplePreferenceService(30))
-    _set_combo(view, "simplePreferenceMedia", "tv")
-    _set_combo(view, "simplePreferenceCollection", "unusual")
-    _set_combo(view, "simplePreferenceOrigin", "asia")
-    _set_combo(view, "simplePreferenceMood", "light")
+    direction_values = view._form.direction_control.property("directionValues")
+    view._form.direction_control.setValue(direction_values.index("anime"))
+    view._form.discovery_media_control.setValue("tv")
+    view._form.discovery_release_control.setValue("new")
+    view._update_summary_rows()
 
     values = {key: label.text() for key, label in view._summary_value_labels.items() if label.isVisible()}
-    assert set(values.values()) == {"Сериалы", "Необычное", "Азия", "Лёгкое"}
+    assert set(values.values()) == {"Сериалы", "Новое", "Япония", "Аниме"}
 
 
 def test_simple_preference_copy_exists_in_ru_and_en() -> None:
     from desktop.i18n import translate
 
     keys = (
-        "preferences.title",
-        "preferences.media.label",
-        "preferences.collection.unusual",
-        "preferences.origin.asia",
-        "preferences.mood.dynamic",
-        "preferences.advanced.show",
+        "recommendations.discovery.title",
+        "recommendations.discovery.media.label",
+        "recommendations.discovery.direction.anime",
+        "recommendations.vector.title",
+        "recommendations.vector.mood.dynamic",
+        "recommendations.discovery.exact_settings",
     )
     for language in ("ru", "en"):
         assert all(translate(key, interface_language=language) != key for key in keys)

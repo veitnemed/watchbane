@@ -22,13 +22,13 @@ def test_update_dataset_record_preserves_media_type(monkeypatch) -> None:
     from dataset.records.update import update_dataset_record
 
     saved = {}
-    movie = _make_movie("Watchmen", 8.0, 2009)
+    movie = _make_movie("Watchmen", 3, 2009)
     movie["main_info"]["media_type"] = "movie"
 
     monkeypatch.setattr(update_module, "load_dataset", lambda: {"Watchmen": movie})
     monkeypatch.setattr(update_module, "save_dataset", lambda data: saved.update(data))
 
-    result = update_dataset_record("Watchmen", {"main_info": {"user_score": 8.5}})
+    result = update_dataset_record("Watchmen", {"main_info": {"user_score": 2}})
 
     assert result.ok is True
     assert saved["Watchmen"]["main_info"]["media_type"] == "movie"
@@ -41,7 +41,7 @@ def test_update_dataset_record_forbids_rename(monkeypatch) -> None:
     monkeypatch.setattr(
         update_module,
         "load_dataset",
-        lambda: {"Alpha": _make_movie("Alpha", 8.0, 2020)},
+        lambda: {"Alpha": _make_movie("Alpha", 3, 2020)},
     )
 
     result = update_dataset_record("Alpha", {"main_info": {"title": "Beta"}})
@@ -59,7 +59,7 @@ def test_update_dataset_record_syncs_meta_on_raw_only_change(monkeypatch) -> Non
     monkeypatch.setattr(
         update_module,
         "load_dataset",
-        lambda: {"Alpha": _make_movie("Alpha", 8.0, 2020)},
+        lambda: {"Alpha": _make_movie("Alpha", 3, 2020)},
     )
     monkeypatch.setattr(update_module, "save_dataset", lambda _data: None)
     monkeypatch.setattr(
@@ -93,7 +93,7 @@ def test_update_dataset_record_rejects_boolean_raw_score_values(monkeypatch) -> 
     monkeypatch.setattr(
         update_module,
         "load_dataset",
-        lambda: {"Alpha": _make_movie("Alpha", 8.0, 2020)},
+        lambda: {"Alpha": _make_movie("Alpha", 3, 2020)},
     )
     monkeypatch.setattr(update_module, "save_dataset", fake_save_dataset)
 

@@ -13,7 +13,7 @@ from config import scheme
 from common import format_score
 
 
-def _make_movie(title: str, user_score: float, year: int, raw_score: float = 8.0) -> dict:
+def _make_movie(title: str, user_score: int, year: int, raw_score: float = 8.0) -> dict:
     raw_scores = {
         "tmdb_score": raw_score,
         "tmdb_votes": 1200,
@@ -37,9 +37,9 @@ def _make_entries() -> list[tuple[str, dict, dict]]:
     from desktop.watched import prepare_card_for_display
 
     entries = [
-        ("Alpha", _make_movie("Alpha", 9.0, 2020, 8.1), None),
-        ("Bravo", _make_movie("Bravo", 7.5, 2018, 7.0), None),
-        ("Charlie", _make_movie("Charlie", 8.0, 2022, 8.5), None),
+        ("Alpha", _make_movie("Alpha", 3, 2020, 8.1), None),
+        ("Bravo", _make_movie("Bravo", 1, 2018, 7.0), None),
+        ("Charlie", _make_movie("Charlie", 2, 2022, 8.5), None),
     ]
     return [(key, movie, prepare_card_for_display(movie)) for key, movie, _ in entries]
 
@@ -143,8 +143,10 @@ def test_english_ui_labels_cover_sort_and_chip_controls(qapp) -> None:
     from desktop.watched.sidebar import _watched_sort_label
 
     assert _watched_sort_label("user_score", "fallback") == "My rating"
-    assert candidate_sort_mode_label("final_score") == "Final"
-    assert format_candidate_metric_value({"final_score": 9.2}, "final_score") == "Final 9.2"
+    assert candidate_sort_mode_label("final_score") == "Recommendation"
+    assert format_candidate_metric_value(
+        {"final_score": 9.2, "tmdb_votes": 100}, "final_score"
+    ) == "Strong pick"
 
     country_selector = CountryChipSelector([{"code": "US", "label": "United States"}])
     genre_selector = GenreChipSelector()
@@ -408,7 +410,7 @@ def test_add_dataset_record_preserves_localized_payload(monkeypatch) -> None:
     payload = {
         "main_info": {
             "title": "Naruto",
-            "user_score": 8.5,
+            "user_score": 3,
             "year": 2002,
             "country": "JP",
         },
@@ -802,7 +804,8 @@ def test_score_edit_dialog_is_custom_dark_dialog() -> None:
 
     assert "class ScoreEditDialog(QDialog)" in source
     assert "QInputDialog" not in source
-    assert "layout_px(390)" in source
+    assert "layout_px(500)" in source
+    assert "UserRatingSelector" in source
     assert "scoreEditCard" in source
     assert "scoreEditSaveButton" in source
 
@@ -914,7 +917,7 @@ def test_add_title_preview_status_uses_interface_language(qapp) -> None:
     dialog.close()
 
 
-def test_add_title_preview_score_input_uses_english_locale(qapp) -> None:
+def test_add_title_preview_rating_selector_uses_english_labels(qapp) -> None:
     from desktop.settings.app_settings import AppSettings, save_app_settings
     from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
 
@@ -924,7 +927,8 @@ def test_add_title_preview_score_input_uses_english_locale(qapp) -> None:
     dialog.show()
     qapp.processEvents()
 
-    assert dialog._score_input.text() == "0.0"
+    assert dialog._score_input.value() is None
+    assert [button.text() for button in dialog._score_input.buttons()] == ["Not for me", "OK", "Top"]
 
     dialog.close()
 
@@ -955,6 +959,7 @@ def test_candidate_transfer_preview_accepts_friends_1994_year(qapp) -> None:
 
     confirm_button = dialog.findChild(QPushButton, "addTitleConfirmButton")
     assert dialog._resolved_year(bundle) == 1994
+    dialog._score_input.setValue(2)
     assert confirm_button is not None and confirm_button.isEnabled() is True
 
     dialog.close()
@@ -1471,7 +1476,7 @@ def test_filter_by_title() -> None:
 def test_filter_entries_by_user_score_empty() -> None:
     from desktop.watched import filter_entries_by_user_score
 
-    assert filter_entries_by_user_score([], 7.0, 10.0) == []
+    assert filter_entries_by_user_score([], {1, 2, 3}) == []
 
 
 def test_filter_entries_by_user_score_range() -> None:
@@ -1479,7 +1484,7 @@ def test_filter_entries_by_user_score_range() -> None:
 
     entries = _make_entries()
 
-    filtered = filter_entries_by_user_score(entries, 7.0, 10.0)
+    filtered = filter_entries_by_user_score(entries, {1, 2, 3})
 
     assert [entry[0] for entry in filtered] == ["Alpha", "Bravo", "Charlie"]
 
@@ -1489,7 +1494,7 @@ def test_filter_entries_by_user_score_narrow_range() -> None:
 
     entries = _make_entries()
 
-    filtered = filter_entries_by_user_score(entries, 8.0, 8.9)
+    filtered = filter_entries_by_user_score(entries, {2})
 
     assert [entry[0] for entry in filtered] == ["Charlie"]
 
@@ -1498,14 +1503,15 @@ def test_filter_entries_by_user_score_string_and_invalid_scores() -> None:
     from desktop.watched import filter_entries_by_user_score
 
     entries = [
-        ("String Score", {}, {"title": "String Score", "user_score": "7.5"}),
+        ("Valid Score", {}, {"title": "Valid Score", "user_score": 2}),
+        ("String Score", {}, {"title": "String Score", "user_score": "2"}),
         ("Missing Score", {}, {"title": "Missing Score"}),
         ("Invalid Score", {}, {"title": "Invalid Score", "user_score": "bad"}),
     ]
 
-    filtered = filter_entries_by_user_score(entries, 7.0, 8.0)
+    filtered = filter_entries_by_user_score(entries, {2})
 
-    assert [entry[0] for entry in filtered] == ["String Score"]
+    assert [entry[0] for entry in filtered] == ["Valid Score"]
 
 
 def test_filter_entries_by_user_score_swaps_invalid_range() -> None:
@@ -1513,9 +1519,9 @@ def test_filter_entries_by_user_score_swaps_invalid_range() -> None:
 
     entries = _make_entries()
 
-    filtered = filter_entries_by_user_score(entries, 9.0, 8.0)
+    filtered = filter_entries_by_user_score(entries, {1, 3})
 
-    assert [entry[0] for entry in filtered] == ["Alpha", "Charlie"]
+    assert [entry[0] for entry in filtered] == ["Alpha", "Bravo"]
 
 
 def test_filter_entries_by_year_empty() -> None:
@@ -1633,23 +1639,25 @@ def test_apply_view_combines_title_score_year_genre_filter_and_sort() -> None:
         *_make_entries(),
         (
             "Bravo Low",
-            _make_movie("Bravo Low", 6.0, 2017, 7.0),
-            {"title": "Bravo Low", "user_score": 6.0, "year": 2017, "genres": ["Драма"]},
+            _make_movie("Bravo Low", 1, 2017, 7.0),
+            {"title": "Bravo Low", "user_score": 1, "year": 2017, "genres": ["Драма"]},
         ),
         (
             "Bravo New",
-            _make_movie("Bravo New", 8.5, 2024, 7.0),
-            {"title": "Bravo New", "user_score": 8.5, "year": 2024, "genres": ["Драма"]},
+            _make_movie("Bravo New", 3, 2024, 7.0),
+            {"title": "Bravo New", "user_score": 3, "year": 2024, "genres": ["Драма"]},
         ),
         (
             "Bravo Genre",
-            _make_movie("Bravo Genre", 8.2, 2021, 7.0),
-            {"title": "Bravo Genre", "user_score": 8.2, "year": 2021, "genres": ["Комедия"]},
+            _make_movie("Bravo Genre", 3, 2021, 7.0),
+            {"title": "Bravo Genre", "user_score": 3, "year": 2021, "genres": ["Комедия"]},
         ),
     ]
     entries[1][2]["genres"] = ["Драма"]
 
-    filtered = apply_view(entries, "bravo", "user_score", 7.0, 10.0, 2018, 2023, "Драма")
+    filtered = apply_view(
+        entries, "bravo", "user_score", None, None, 2018, 2023, "Драма", user_ratings={1}
+    )
 
     assert [entry[0] for entry in filtered] == ["Bravo"]
 
@@ -1705,8 +1713,9 @@ def test_sort_by_year() -> None:
 def test_format_user_score_display() -> None:
     from desktop.watched import format_user_score_display
 
-    assert format_user_score_display(8.25) == "8.3"
-    assert format_user_score_display(8) == "8.0"
+    assert format_user_score_display(1) == "Не зашло"
+    assert format_user_score_display(2) == "Норм"
+    assert format_user_score_display(3) == "Топ"
     assert format_user_score_display(None) == "—"
 
 
@@ -1745,7 +1754,7 @@ def test_build_meta_pill_labels() -> None:
         }
     )
 
-    assert pills == ["2025", "TMDb 7.3", "Итог 74"]
+    assert pills == ["2025", "TMDb 7.3", "Рекомендация: Сильный выбор"]
 
 
 def test_normalize_and_format_final_score() -> None:
@@ -1756,10 +1765,10 @@ def test_normalize_and_format_final_score() -> None:
     assert normalize_final_score(8.4) == 0.84
     assert normalize_final_score(74) == 0.74
     assert normalize_final_score(None) == 0.0
-    assert format_final_score(0.74) == "Итог 74"
-    assert format_final_score(8.4) == "Итог 84"
-    assert format_final_score(74) == "Итог 74"
-    assert format_final_score(None) == "Итог —"
+    assert format_final_score(0.74) == "Рекомендация: Сильный выбор"
+    assert format_final_score(8.4) == "Рекомендация: Сильный выбор"
+    assert format_final_score(74) == "Рекомендация: Сильный выбор"
+    assert format_final_score(None) == "Рекомендация: Мало данных"
     assert final_score_to_stars(0.86) == 4.5
     assert final_score_to_stars(8.4) == 4.0
     assert final_score_to_stars(60) == 3.0
@@ -1802,13 +1811,12 @@ def test_score_ring_item_ignores_final_score_for_progress_and_color() -> None:
 def test_final_score_star_item_uses_final_score_only() -> None:
     from desktop.watched import build_final_score_star_item
 
-    item = build_final_score_star_item({"tmdb_score": 7.4, "final_score": 0.74})
+    item = build_final_score_star_item({"tmdb_score": 7.4, "tmdb_votes": 100, "final_score": 0.74})
 
     assert item == {
-        "kind": "final_stars",
-        "stars": 3.5,
-        "label": "Хороший рейтинг",
-        "tooltip": "Хороший рейтинг",
+        "kind": "recommendation_strength",
+        "label": "Рекомендация: Сильный выбор",
+        "tooltip": "Сильный выбор",
     }
     assert "Итог" not in str(item)
 
@@ -1816,14 +1824,15 @@ def test_final_score_star_item_uses_final_score_only() -> None:
 def test_user_score_badge_is_watched_only() -> None:
     from desktop.watched import build_user_score_badge_item
 
-    assert build_user_score_badge_item({"runtime_status": "watched", "user_score": 9}) == {
+    assert build_user_score_badge_item({"runtime_status": "watched", "user_score": 3}) == {
         "kind": "user_score_badge",
-        "value": "9.0",
-        "text": "★ 9.0",
+        "value": "Топ",
+        "text": "Топ",
+        "icon_name": "user_rating_top.svg",
     }
     assert build_user_score_badge_item({"runtime_status": "watched", "user_score": None}) is None
-    assert build_user_score_badge_item({"runtime_status": "candidate", "user_score": 9}) is None
-    assert build_user_score_badge_item({"user_score": 9}) is None
+    assert build_user_score_badge_item({"runtime_status": "candidate", "user_score": 3}) is None
+    assert build_user_score_badge_item({"user_score": 3}) is None
 
 
 def test_watched_detail_has_no_my_score_ring_payload() -> None:
@@ -2332,7 +2341,7 @@ def test_build_watched_movie_card_computes_tmdb_final_score_for_low_vote_watched
     from web.export import build_export_lookup_cache, build_watched_movie_card
 
     movie = {
-        "main_info": {"title": "Открытый брак", "year": 2023, "user_score": 4.0},
+        "main_info": {"title": "Открытый брак", "year": 2023, "user_score": 1},
         "raw_scores": {"tmdb_score": 8.5, "tmdb_votes": 8, "tmdb_popularity": 10.402},
         "genre_keys": ["drama", "comedy", "melodrama"],
     }
@@ -2362,14 +2371,15 @@ def test_build_watched_movie_card_computes_tmdb_final_score_for_low_vote_watched
     assert card["final_score"] == 0.52
     assert build_user_score_badge_item(card) == {
         "kind": "user_score_badge",
-        "value": "4.0",
-        "text": "★ 4.0",
+        "value": "Не зашло",
+        "text": "Не зашло",
+        "icon_name": "user_rating_not_for_me.svg",
     }
     assert ring["display_value"] == "8.5"
     assert ring["ring_progress"] == 0.85
     assert "footer_label" not in ring
     assert "footer_stars" not in ring
-    assert build_final_score_star_item(card)["stars"] == 2.5
+    assert build_final_score_star_item(card)["kind"] == "recommendation_strength"
 
 
 def test_format_genre_pill_label_unknown_genre() -> None:
@@ -2381,7 +2391,7 @@ def test_format_genre_pill_label_unknown_genre() -> None:
 def test_build_user_score_update_payload() -> None:
     from desktop.watched import build_user_score_update_payload
 
-    assert build_user_score_update_payload(8.25) == {"main_info": {"user_score": 8.3}}
+    assert build_user_score_update_payload(3) == {"main_info": {"user_score": 3}}
 
 
 def test_format_save_user_score_status() -> None:
@@ -2408,10 +2418,10 @@ def test_save_watched_user_score_uses_update_pipeline(monkeypatch) -> None:
 
     monkeypatch.setattr("dataset.service.update_dataset_record", fake_update)
 
-    result = save_watched_user_score("Dataset Key", 8.5)
+    result = save_watched_user_score("Dataset Key", 2)
 
     assert result.ok is True
-    assert calls == [("Dataset Key", {"main_info": {"user_score": 8.5}}, "desktop_gui")]
+    assert calls == [("Dataset Key", {"main_info": {"user_score": 2}}, "desktop_gui")]
 
 
 def test_save_watched_user_score_does_not_touch_unrelated_artifacts(monkeypatch) -> None:
@@ -2427,7 +2437,7 @@ def test_save_watched_user_score_does_not_touch_unrelated_artifacts(monkeypatch)
     monkeypatch.setattr("dataset.service.update_dataset_record", fake_update)
     monkeypatch.setattr("candidates.repositories.pool_repository.save_candidate_pool", fail)
 
-    result = save_watched_user_score("Dataset Key", 8.5)
+    result = save_watched_user_score("Dataset Key", 2)
 
     assert result.ok is True
 
@@ -2435,8 +2445,8 @@ def test_save_watched_user_score_does_not_touch_unrelated_artifacts(monkeypatch)
 def test_get_user_score_spin_value() -> None:
     from desktop.watched import get_user_score_spin_value
 
-    assert get_user_score_spin_value({"user_score": 8.25}) == 8.3
-    assert get_user_score_spin_value({"user_score": None}) == 0.0
+    assert get_user_score_spin_value({"user_score": 3}) == 3
+    assert get_user_score_spin_value({"user_score": None}) is None
 
 
 def test_validate_score_edit_entry() -> None:
@@ -2500,11 +2510,11 @@ def test_count_active_filters() -> None:
 
 
 def test_score_filter_is_active() -> None:
-    from desktop.watched import USER_SCORE_MAX, USER_SCORE_MIN, score_filter_is_active
+    from desktop.watched import score_filter_is_active
 
-    assert score_filter_is_active(USER_SCORE_MIN, USER_SCORE_MAX) is False
-    assert score_filter_is_active(8.0, USER_SCORE_MAX) is True
-    assert score_filter_is_active(USER_SCORE_MIN, 7.5) is True
+    assert score_filter_is_active(set()) is False
+    assert score_filter_is_active({1}) is True
+    assert score_filter_is_active({1, 3}) is True
 
 
 def test_year_filter_is_active() -> None:
@@ -2663,7 +2673,7 @@ def test_format_delete_preview_lines() -> None:
         {
             "title": "Alpha",
             "year": 2020,
-            "user_score": 8.0,
+            "user_score": 3,
             "tmdb_score": 7.8,
             "kp_score": 7.5,
             "imdb_score": 8.1,
@@ -2673,7 +2683,7 @@ def test_format_delete_preview_lines() -> None:
     )
     assert "Название: Alpha" in lines
     assert "Год: 2020" in lines
-    assert "Моя оценка: 8.0" in lines
+    assert "Моя оценка: Топ" in lines
     assert "TMDb: 7.8" in lines
     assert "КП: 7.5" not in lines
     assert "IMDb: 8.1" not in lines
@@ -3678,8 +3688,9 @@ def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
             {
                 "title": "Alpha",
                 "runtime_status": "watched",
-                "user_score": 9,
+                "user_score": 3,
                 "tmdb_score": 7.4,
+                "tmdb_votes": 100,
                 "final_score": 0.74,
             },
         )
@@ -3699,7 +3710,8 @@ def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
     assert stars_label is not None
     assert top_divider is not None
     assert bottom_divider is not None
-    assert stars_label.text() == "WatchBane"
+    assert stars_label.text() == "Рекомендация: Сильный выбор"
+    assert stars_label.wordWrap() is True
     assert stars_label.alignment() & Qt.AlignmentFlag.AlignLeft
     assert tmdb_ring.parent() is not stars_block
     assert stars_block.isHidden() is False
@@ -3813,7 +3825,7 @@ def test_score_summary_area_has_no_raw_final_score_text(qapp) -> None:
             {
                 "title": "Alpha",
                 "runtime_status": "watched",
-                "user_score": 9,
+                "user_score": 3,
                 "tmdb_score": 7.4,
                 "final_score": 0.74,
             },
@@ -3873,7 +3885,7 @@ def test_watched_user_score_badge_is_poster_shell_overlay(qapp) -> None:
             {
                 "title": "Alpha",
                 "runtime_status": "watched",
-                "user_score": 9,
+                "user_score": 3,
             },
         )
     )
@@ -3885,7 +3897,8 @@ def test_watched_user_score_badge_is_poster_shell_overlay(qapp) -> None:
     assert shell is not None
     assert badge is not None
     assert is_descendant(badge, shell)
-    assert badge.text() == "★ 9.0"
+    assert "Топ" in badge.text()
+    assert "user_rating_top.svg" in badge.text()
     assert badge.isHidden() is False
     assert badge.testAttribute(Qt.WidgetAttribute.WA_StyledBackground) is True
     badge_position = badge.mapTo(shell, badge.rect().topLeft())
@@ -4227,12 +4240,12 @@ def test_analytics_section_headers_use_icons() -> None:
 def test_format_list_label() -> None:
     from desktop.watched import format_list_label, format_year_display
 
-    assert format_list_label({"title": "Alpha", "year": 2020, "user_score": 8.0}) == "Alpha (2020)  ·  8.0"
-    assert format_list_label({"title": "Float Year", "year": 2015.0, "user_score": 8.0}) == (
-        "Float Year (2015)  ·  8.0"
+    assert format_list_label({"title": "Alpha", "year": 2020, "user_score": 3}) == "Alpha (2020)  ·  Топ"
+    assert format_list_label({"title": "Float Year", "year": 2015.0, "user_score": 2}) == (
+        "Float Year (2015)  ·  Норм"
     )
     assert format_list_label({"title": "No Year", "user_score": None}) == "No Year"
-    assert format_list_label({"year": 2019, "user_score": 7.5}) == "Без названия (2019)  ·  7.5"
+    assert format_list_label({"year": 2019, "user_score": 1}) == "Без названия (2019)  ·  Не зашло"
     assert format_year_display(2015.0) == "2015"
     assert format_year_display("2015.0") == "2015"
     assert format_year_display("2015") == "2015"
@@ -4249,8 +4262,9 @@ def test_format_rating_score_display() -> None:
 def test_normalize_user_score_value() -> None:
     from desktop.watched import normalize_user_score_value
 
-    assert normalize_user_score_value(8.25) == 8.3
-    assert normalize_user_score_value(7.0) == 7.0
+    assert normalize_user_score_value(3) == 3
+    assert normalize_user_score_value(2) == 2
+    assert normalize_user_score_value(8.25) is None
 
 
 def test_sort_entries_by_title() -> None:
@@ -4967,12 +4981,12 @@ def test_format_candidate_list_label_shows_sort_metric() -> None:
         "tmdb_popularity": 33.5,
     }
     assert format_candidate_title_line(candidate) == "Test Show (2020)"
-    assert format_candidate_metric_value(candidate, "final_score") == "Итог 8.4"
-    assert format_candidate_metric_value({**candidate, "final_score": 0.74}, "final_score") == "Итог 74"
+    assert format_candidate_metric_value(candidate, "final_score") == "Сильный выбор"
+    assert format_candidate_metric_value({**candidate, "final_score": 0.74}, "final_score") == "Сильный выбор"
     assert format_candidate_metric_value(candidate, "tmdb_votes") == "TMDb 12 000"
     label = format_candidate_list_label(candidate, "final_score")
     assert "Test Show (2020)" in label
-    assert "Итог 8.4" in label
+    assert "Сильный выбор" in label
     assert "incomplete" not in label
     assert "Q " not in label
 
@@ -6818,7 +6832,8 @@ def test_candidate_list_view_wires_mark_watched_transfer() -> None:
     assert "CandidateListActionsMixin" in view_source
     assert "RecommendationDeckService" in view_source
     assert "_apply_recommendation_action" in view_source
-    assert 'lambda: self._apply_recommendation_action("watched")' in view_source
+    assert "UserRatingSelector" in view_source
+    assert "user_score=value" in view_source
     assert 'lambda: self._apply_recommendation_action("watchlist")' in view_source
     assert 'lambda: self._apply_recommendation_action("hidden")' in view_source
     assert "run_candidate_transfer_flow" not in view_source
