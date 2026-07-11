@@ -129,7 +129,12 @@ def add_dataset_record(
 
     data[dataset_key] = new_movie
     try:
-        save_dataset_and_meta(data, meta)
+        if isinstance(pool_candidate, dict):
+            from candidates.title_state_service import save_watched_dataset_transition
+
+            save_watched_dataset_transition(data, meta, pool_candidate)
+        else:
+            save_dataset_and_meta(data, meta)
     except Exception as error:
         return AddRecordResult(
             ok=False,

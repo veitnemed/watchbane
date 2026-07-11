@@ -7,10 +7,10 @@ from dataset.add_flow.preview import build_preview_movie_from_defaults
 from dataset.storage_movie import add_movie
 
 
-def build_movie_record_from_defaults(defaults: dict, user_score: float) -> dict:
+def build_movie_record_from_defaults(defaults: dict, user_score: float | None) -> dict:
     """Build add_dataset_record payload from resolved defaults."""
     movie = build_preview_movie_from_defaults(defaults)
-    movie["main_info"]["user_score"] = float(user_score)
+    movie["main_info"]["user_score"] = None if user_score is None else float(user_score)
     localized = defaults.get("localized")
     if isinstance(localized, dict):
         movie["localized"] = deepcopy(localized)

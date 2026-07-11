@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from candidates.models import country_schema, genre_schema
-from candidates.models.keys import title_identity_key
+from candidates.models.keys import candidate_state_identity_keys, title_identity_key
 from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
 from candidates.pool.watched_cleanup import is_watched_candidate
 from dataset.models.media_type import normalize_media_type
@@ -140,7 +140,10 @@ def candidate_matches(candidate: dict, criteria: dict | None = None) -> bool:
         ):
             return False
     if _criteria_value(criteria, "hide_hidden", default=True):
-        if identity in _identity_set(_criteria_value(criteria, "hidden_identities", "hidden", default=set())):
+        hidden_identities = _identity_set(
+            _criteria_value(criteria, "hidden_identities", "hidden", default=set())
+        )
+        if any(key in hidden_identities for key in candidate_state_identity_keys(candidate)):
             return False
 
     return True

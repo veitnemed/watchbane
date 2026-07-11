@@ -14,7 +14,12 @@ from typing import Any, Callable, Protocol
 from apis import tmdb_api
 from candidates.models import country_schema
 from candidates.models.genre_schema import build_genre_keys
-from candidates.models.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key, title_identity_key
+from candidates.models.keys import (
+    COMMON_POOL_CRITERIA_NAME,
+    candidate_state_identity_keys,
+    pool_entry_key,
+    title_identity_key,
+)
 from candidates.models.schema import compute_completeness, normalize_candidate_record
 from candidates.onboarding.compatibility import resolve_preference_compatibility
 from candidates.onboarding.details_enrichment import DEFAULT_DETAILS_LIMIT_PER_TEMPLATE, DetailsEnrichmentConfig
@@ -1466,7 +1471,7 @@ def candidate_rejection_reason(
         dataset_title_keys=dataset_title_keys,
     ):
         return "watched"
-    if title_identity_key(candidate_stub) in hidden_or_rejected_identities:
+    if any(key in hidden_or_rejected_identities for key in candidate_state_identity_keys(candidate_stub)):
         return "hidden_or_rejected"
     return None
 

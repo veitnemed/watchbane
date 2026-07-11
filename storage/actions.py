@@ -12,16 +12,16 @@ def init_search_lists() -> None:
 
 def add_to_watchlist(candidate: dict) -> dict:
     """Add a candidate to the local watchlist."""
-    from storage.sqlite.action_repository import ACTION_WATCHLIST, add_candidate_action
+    from candidates.title_state_service import add_to_watchlist as transition_to_watchlist
 
-    return add_candidate_action(ACTION_WATCHLIST, candidate)
+    return transition_to_watchlist(candidate)
 
 
 def add_to_hidden(candidate: dict) -> dict:
     """Add a candidate to the local hidden list."""
-    from storage.sqlite.action_repository import ACTION_HIDDEN, add_candidate_action
+    from candidates.title_state_service import hide_candidate
 
-    return add_candidate_action(ACTION_HIDDEN, candidate)
+    return hide_candidate(candidate)
 
 
 def load_hidden_identities() -> set[str]:

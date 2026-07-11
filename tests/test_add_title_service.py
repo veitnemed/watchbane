@@ -235,6 +235,7 @@ def test_save_add_title_record_passes_pool_candidate(monkeypatch) -> None:
 
 def test_save_add_title_record_accepts_friends_1994(monkeypatch) -> None:
     from dataset.records import add as records_add
+    from candidates import title_state_service
 
     saved = {}
     meta = {}
@@ -245,6 +246,11 @@ def test_save_add_title_record_accepts_friends_1994(monkeypatch) -> None:
         records_add,
         "save_dataset_and_meta",
         lambda data, updated_meta: saved.update(data) or meta.update(updated_meta),
+    )
+    monkeypatch.setattr(
+        title_state_service,
+        "save_watched_dataset_transition",
+        lambda data, updated_meta, _candidate: saved.update(data) or meta.update(updated_meta),
     )
     monkeypatch.setattr(records_add, "run_after_add_side_effects", lambda **_kwargs: [])
 

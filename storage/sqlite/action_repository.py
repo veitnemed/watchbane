@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sqlite3
 
-from candidates.models.keys import title_identity_key
+from candidates.models.keys import candidate_state_identity_keys, title_identity_key
 from candidates.models.schema import normalize_candidate_record
 from storage.sqlite.json_codec import dumps_json, loads_json
 from storage.sqlite.session import connection, transaction, utc_now
@@ -98,9 +98,10 @@ def add_candidate_action(
     *,
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
+    identity_key: str | None = None,
 ) -> dict:
     active, owned = connection(conn, path)
-    identity = title_identity_key(candidate)
+    identity = str(identity_key or title_identity_key(candidate))
     entry = build_action_entry(candidate, action)
     try:
         with transaction(active, owned):
@@ -121,6 +122,60 @@ def add_candidate_action(
                 (action,),
             ).fetchone()["count"]
         return {"ok": True, "identity": identity, "count": int(count)}
+    finally:
+        if owned:
+            active.close()
+
+
+def remove_candidate_actions(
+    candidate: dict,
+    actions: tuple[str, ...] | list[str] | set[str],
+    *,
+    conn: sqlite3.Connection | None = None,
+    path: str | Path | None = None,
+) -> int:
+    """Remove current and legacy action rows for one candidate identity."""
+    active, owned = connection(conn, path)
+    action_values = tuple(dict.fromkeys(str(action) for action in actions if str(action)))
+    identities = candidate_state_identity_keys(candidate)
+    if not action_values:
+        if owned:
+            active.close()
+        return 0
+    action_placeholders = ", ".join("?" for _ in action_values)
+    identity_placeholders = ", ".join("?" for _ in identities)
+    try:
+        with transaction(active, owned):
+            cursor = active.execute(
+                f"""
+                DELETE FROM candidate_actions
+                WHERE action IN ({action_placeholders})
+                  AND identity_key IN ({identity_placeholders})
+                """,
+                (*action_values, *identities),
+            )
+        return max(0, int(cursor.rowcount))
+    finally:
+        if owned:
+            active.close()
+
+
+def load_candidate_state_actions(
+    candidate: dict,
+    *,
+    conn: sqlite3.Connection | None = None,
+    path: str | Path | None = None,
+) -> set[str]:
+    """Load active actions across current and legacy candidate identities."""
+    active, owned = connection(conn, path)
+    identities = candidate_state_identity_keys(candidate)
+    placeholders = ", ".join("?" for _ in identities)
+    try:
+        rows = active.execute(
+            f"SELECT DISTINCT action FROM candidate_actions WHERE identity_key IN ({placeholders})",
+            identities,
+        )
+        return {str(row["action"]) for row in rows}
     finally:
         if owned:
             active.close()

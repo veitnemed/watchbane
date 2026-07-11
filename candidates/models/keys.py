@@ -57,6 +57,18 @@ def title_identity_key(candidate: dict) -> str:
     return f"{title}|{year}"
 
 
+def candidate_state_identity_key(candidate: dict) -> str:
+    """Build a media-aware identity for user state transitions."""
+    return f"{title_identity_key(candidate)}|{normalize_media_type(candidate.get('media_type'))}"
+
+
+def candidate_state_identity_keys(candidate: dict) -> tuple[str, ...]:
+    """Return current and legacy identities used by candidate actions."""
+    current = candidate_state_identity_key(candidate)
+    legacy = title_identity_key(candidate)
+    return (current,) if current == legacy else (current, legacy)
+
+
 def pool_entry_key(candidate: dict) -> str:
     """Builds a storage key for the single shared candidate pool."""
     key = title_identity_key(candidate)

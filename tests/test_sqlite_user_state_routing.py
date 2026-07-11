@@ -18,11 +18,11 @@ def test_sqlite_runtime_routes_hidden_and_watchlist_actions(tmp_path, monkeypatc
     watchlist = service.add_candidate_to_watchlist(candidate)
     hidden = service.hide_candidate(candidate)
 
-    assert watchlist["identity"] == "метод|2015"
-    assert hidden["identity"] == "метод|2015"
-    assert search_storage.load_watchlist_identities() == {"метод|2015"}
-    assert search_storage.load_hidden_identities() == {"метод|2015"}
-    assert action_repository.load_action_identities(action_repository.ACTION_HIDDEN) == {"метод|2015"}
+    assert watchlist["identity"] == "метод|2015|tv"
+    assert hidden["identity"] == "метод|2015|tv"
+    assert search_storage.load_watchlist_identities() == set()
+    assert search_storage.load_hidden_identities() == {"метод|2015|tv"}
+    assert action_repository.load_action_identities(action_repository.ACTION_HIDDEN) == {"метод|2015|tv"}
 
 
 def test_sqlite_runtime_routes_app_settings(tmp_path, monkeypatch) -> None:

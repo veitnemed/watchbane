@@ -86,8 +86,8 @@ def test_sqlite_end_to_end_runtime_smoke(tmp_path, monkeypatch) -> None:
 
     assert action_storage.add_to_watchlist({"title": "Candidate", "year": 2022})["ok"] is True
     assert action_storage.add_to_hidden({"title": "Candidate", "year": 2022})["ok"] is True
-    assert action_storage.load_watchlist_identities() == {"candidate|2022"}
-    assert action_storage.load_hidden_identities() == {"candidate|2022"}
+    assert action_storage.load_watchlist_identities() == set()
+    assert action_storage.load_hidden_identities() == {"candidate|2022|tv"}
 
     upsert_poster_cache_entry(
         "Candidate",
