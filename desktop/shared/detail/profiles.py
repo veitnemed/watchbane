@@ -335,6 +335,6 @@ ADD_TITLE_PREVIEW_CARD_PROFILE = DetailCardLayoutProfile(
 CANDIDATE_DETAIL_CARD_PROFILE = replace(
     DETAIL_CARD_LAYOUT_PROFILE,
     show_user_score=False,
-    show_mark_watched_button=True,
-    show_hide_candidate_button=True,
+    show_mark_watched_button=False,
+    show_hide_candidate_button=False,
 )

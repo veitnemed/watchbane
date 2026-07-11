@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+import pytest
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QListView, QPushButton, QCheckBox, QComboBox, QLineEdit, QScrollArea
+from PyQt6.QtWidgets import QCheckBox, QComboBox, QFrame, QLabel, QLineEdit, QListView, QPushButton, QScrollArea
 
 from desktop.candidates.list_model import CandidateListModel, CandidateListRoles
 from desktop.candidates.filters_view import CandidateFiltersView
@@ -153,11 +154,55 @@ class FakeCandidateService:
         return {"ok": True, "hidden": True}
 
 
-def _build_views(qtbot, service: FakeCandidateService | None = None):
+class FakeRecommendationDeckService:
+    def __init__(self, service: FakeCandidateService) -> None:
+        self.service = service
+        self.deck_id = "test-deck"
+        self.action_calls: list[tuple[str, str]] = []
+        self._deck: dict = {}
+
+    def refresh_deck(self, preferences: dict, _now, *, force_new: bool = False) -> dict:
+        view = self.service.search_candidate_pool(deepcopy(self.service.candidates), preferences)
+        candidates = self.service.sort_search_candidates(view["candidates"], "final_score")["candidates"]
+        self._deck = {
+            "deck_id": self.deck_id,
+            "active": candidates[:30],
+            "reserve": candidates[30:100],
+            "active_limit": 30,
+            "reserve_size": 70,
+            "underfilled_reason": "active_underfilled" if len(candidates) < 30 else None,
+        }
+        return deepcopy(self._deck)
+
+    def apply_action_and_refill(self, deck_id: str, candidate: dict, action: str) -> dict:
+        assert deck_id == self.deck_id
+        identity = candidate_detail_identity(candidate)
+        self.action_calls.append((action, identity))
+        if action == "hidden":
+            self.service.hide_candidate(candidate)
+        self._deck["active"] = [
+            item for item in self._deck["active"] if candidate_detail_identity(item) != identity
+        ]
+        promoted = self._deck["reserve"].pop(0) if self._deck["reserve"] else None
+        if promoted is not None:
+            self._deck["active"].append(promoted)
+        self._deck["last_action"] = {
+            "action": action,
+            "transition": {"ok": True, "state": action},
+        }
+        return deepcopy(self._deck)
+
+
+def _build_views(
+    qtbot,
+    service: FakeCandidateService | None = None,
+    deck_service: FakeRecommendationDeckService | None = None,
+):
     service = service or FakeCandidateService()
+    deck_service = deck_service or FakeRecommendationDeckService(service)
     session = CandidateSearchSession(service=service)
     filters_view = CandidateFiltersView(session, service=service)
-    list_view = CandidateListView(session, service=service)
+    list_view = CandidateListView(session, service=service, deck_service=deck_service)
     list_widget = list_view.widget.findChild(QListView, "candidateListWidget")
     assert list_widget is not None
     list_widget.setUpdatesEnabled(False)
@@ -165,6 +210,7 @@ def _build_views(qtbot, service: FakeCandidateService | None = None):
     qtbot.addWidget(list_view.widget)
     filters_view.widget.show()
     list_view.widget.show()
+    list_view.on_tab_activated()
     return service, session, filters_view, list_view
 
 
@@ -185,6 +231,113 @@ def _listed_titles(list_widget: QListView) -> list[str]:
 
 def _listed_count(list_widget: QListView) -> int:
     return list_widget.model().rowCount()
+
+
+def _candidate_set(count: int, *, long_overview: bool = False) -> list[dict]:
+    return [
+        {
+            **_predict_ready_candidate(),
+            "pool_entry_key": f"recommendation-{index}|2024|movie",
+            "title": f"Recommendation {index:03d}",
+            "overview": ("A detailed recommendation overview. " * 120) if long_overview else "Overview.",
+        }
+        for index in range(count)
+    ]
+
+
+def test_recommendations_screen_displays_at_most_thirty_items(qtbot) -> None:
+    service = FakeCandidateService(_candidate_set(45))
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service)
+
+    assert _listed_count(_candidate_list(list_view)) == 30
+
+
+@pytest.mark.parametrize(
+    ("button_name", "expected_action"),
+    [
+        ("recommendationWatchedButton", "watched"),
+        ("recommendationWatchlistButton", "watchlist"),
+        ("recommendationHiddenButton", "hidden"),
+    ],
+)
+def test_recommendation_actions_use_deck_state_transition(
+    qtbot,
+    button_name: str,
+    expected_action: str,
+) -> None:
+    service = FakeCandidateService(_candidate_set(2))
+    deck_service = FakeRecommendationDeckService(service)
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service, deck_service)
+    list_widget = _candidate_list(list_view)
+    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+    button = list_view.widget.findChild(QPushButton, button_name)
+
+    assert button is not None
+    assert button.isEnabled()
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+
+    assert deck_service.action_calls[0][0] == expected_action
+    assert _listed_count(list_widget) == 1
+
+
+def test_recommendation_action_promotes_reserve_item(qtbot) -> None:
+    service = FakeCandidateService(_candidate_set(31))
+    deck_service = FakeRecommendationDeckService(service)
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service, deck_service)
+    list_widget = _candidate_list(list_view)
+    initial_titles = set(_listed_titles(list_widget))
+    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+    button = list_view.widget.findChild(QPushButton, "recommendationHiddenButton")
+
+    assert button is not None
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+
+    updated_titles = set(_listed_titles(list_widget))
+    assert _listed_count(list_widget) == 30
+    assert updated_titles - initial_titles == {"Recommendation 030"}
+
+
+def test_empty_recommendation_deck_shows_stable_empty_state(qtbot) -> None:
+    service = FakeCandidateService([])
+    service.candidates = []
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service)
+    status = list_view.widget.findChild(QLabel, "recommendationsDeckStatus")
+
+    assert _listed_count(_candidate_list(list_view)) == 0
+    assert status is not None and status.text()
+    assert list_view.widget.findChild(QFrame, "recommendationActionPanel").isHidden()
+
+
+def test_recommendation_copy_is_available_in_ru_and_en() -> None:
+    from desktop.i18n import translate
+
+    keys = (
+        "tabs.candidates",
+        "recommendations.new_deck",
+        "recommendations.reasons.title",
+        "recommendations.action.watched",
+        "recommendations.action.watchlist",
+        "recommendations.action.hidden",
+        "recommendations.state.empty",
+    )
+    for language in ("ru", "en"):
+        assert all(translate(key, interface_language=language) != key for key in keys)
+
+
+def test_long_overview_keeps_recommendation_action_panel_visible(qtbot) -> None:
+    service = FakeCandidateService(_candidate_set(1, long_overview=True))
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service)
+    list_view.widget.resize(1280, 720)
+    list_widget = _candidate_list(list_view)
+    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+    qtbot.wait(10)
+    panel = list_view.widget.findChild(QFrame, "recommendationActionPanel")
+    detail_scroll = list_view.widget.findChild(QScrollArea, "candidateSearchDetailScroll")
+
+    assert panel is not None and panel.isVisible()
+    assert detail_scroll is not None
+    assert panel.parentWidget() is detail_scroll.parentWidget()
+    assert panel.geometry().bottom() <= panel.parentWidget().contentsRect().bottom()
 
 
 def test_filters_view_reload_filter_options_uses_new_pool_genres(qtbot) -> None:
@@ -277,14 +430,14 @@ def test_selecting_candidate_row_updates_detail_card_and_missing_poster_placehol
     assert poster_label.text() == "Нет постера"
 
 
-def test_hide_button_calls_service_and_removes_candidate_row(qtbot) -> None:
+def test_hide_button_calls_deck_service_and_removes_candidate_row(qtbot) -> None:
     service, session, _filters_view, list_view = _build_views(qtbot)
     session.apply_filters({**DEFAULT_BROWSE_FILTERS, "only_complete": False})
     list_widget = _candidate_list(list_view)
     qtbot.waitUntil(lambda: _listed_count(list_widget) == 2)
     list_widget.setCurrentIndex(list_widget.model().index(_listed_titles(list_widget).index("Searchable Only"), 0))
 
-    hide_button = list_view.widget.findChild(QPushButton, "candidateHideButton")
+    hide_button = list_view.widget.findChild(QPushButton, "recommendationHiddenButton")
     assert hide_button is not None
     qtbot.waitUntil(lambda: hide_button.isEnabled())
     qtbot.mouseClick(hide_button, Qt.MouseButton.LeftButton)
@@ -295,7 +448,7 @@ def test_hide_button_calls_service_and_removes_candidate_row(qtbot) -> None:
 
 
 def test_filter_change_updates_candidate_list(qtbot) -> None:
-    _service, _session, filters_view, list_view = _build_views(qtbot)
+    _service, session, filters_view, list_view = _build_views(qtbot)
     list_widget = _candidate_list(list_view)
     apply_button = filters_view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
     only_complete = filters_view.widget.findChild(QCheckBox, "candidateSearchOnlyComplete")
@@ -303,7 +456,7 @@ def test_filter_change_updates_candidate_list(qtbot) -> None:
     assert only_complete is not None
 
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
-    qtbot.waitUntil(lambda: _listed_count(list_widget) == 2)
+    qtbot.waitUntil(lambda: not session.is_loading)
     assert _listed_titles(list_widget) == ["Predict Ready", "Searchable Only"]
 
     only_complete.setChecked(True)
@@ -446,7 +599,7 @@ def test_fts_disabled_falls_back_to_substring_filter(qtbot) -> None:
     assert _listed_titles(list_widget) == ["Searchable Only"]
 
 
-def test_fts_search_uses_async_worker_not_substring_filter(qtbot) -> None:
+def test_recommendation_search_remains_local_when_fts_is_enabled(qtbot) -> None:
     service = FakeCandidateService()
     service.set_fts_enabled(True)
     _service, session, _filters_view, list_view = _build_views(qtbot, service=service)
@@ -457,9 +610,9 @@ def test_fts_search_uses_async_worker_not_substring_filter(qtbot) -> None:
     search_input = list_view.widget.findChild(QLineEdit, "candidateListSearch")
     assert search_input is not None
     search_input.setText("Searchable")
-    qtbot.waitUntil(lambda: "Searchable" in service.applied_text_queries)
     qtbot.waitUntil(lambda: _listed_count(list_widget) == 1)
 
+    assert service.applied_text_queries == []
     assert _listed_titles(list_widget) == ["Searchable Only"]
 
 

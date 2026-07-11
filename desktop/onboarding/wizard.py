@@ -1307,7 +1307,7 @@ class OnboardingAutofillDialog(QDialog):
         self._skip_button.setObjectName("onboardingSkip")
         self._skip_button.clicked.connect(self._skip)
         actions.addWidget(self._skip_button)
-        self._open_button = QPushButton(self._text("Открыть кандидаты", "Open Candidates"))
+        self._open_button = QPushButton(self._text("Открыть рекомендации", "Open Recommendations"))
         self._open_button.setObjectName("onboardingOpen")
         self._open_button.setVisible(False)
         self._open_button.clicked.connect(self._finish)
@@ -1345,7 +1345,7 @@ class OnboardingAutofillDialog(QDialog):
         self._retry_button.clicked.connect(self._start_autofill)
         self._retry_button.setVisible(False)
         actions.addWidget(self._retry_button)
-        self._final_open_button = QPushButton(self._text("Открыть кандидаты", "Open Candidates"))
+        self._final_open_button = QPushButton(self._text("Открыть рекомендации", "Open Recommendations"))
         self._final_open_button.setObjectName("onboardingOpen")
         self._final_open_button.clicked.connect(self._finish)
         actions.addWidget(self._final_open_button)
@@ -1491,7 +1491,7 @@ class OnboardingAutofillDialog(QDialog):
             lines = [
                 self._text(
                     f"Добавлено кандидатов: {created}. Следующий шаг — открыть вкладку кандидатов.",
-                    f"Candidates added: {created}. Next step: open the Candidates tab.",
+                    f"Candidates added: {created}. Next step: open the Recommendations tab.",
                 )
             ]
         if planned or actual:

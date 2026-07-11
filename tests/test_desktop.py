@@ -4008,45 +4008,17 @@ def test_candidate_detail_actions_are_poster_descendants(qapp) -> None:
 
     assert poster_actions is not None
     assert is_descendant(poster_actions, detail._poster_column_widget)
-    assert mark_button is not None
-    assert hide_button is not None
-    assert is_descendant(mark_button, poster_actions)
-    assert is_descendant(hide_button, poster_actions)
-    assert is_descendant(mark_button, detail._poster_column_widget)
-    assert is_descendant(hide_button, detail._poster_column_widget)
+    assert mark_button is None
+    assert hide_button is None
     assert overview_header is not None
-    action_bottom = poster_actions.mapTo(detail._poster_column_widget, poster_actions.rect().bottomLeft()).y()
-    overview_top = overview_header.mapTo(detail._poster_column_widget, overview_header.rect().topLeft()).y()
-    assert action_bottom < overview_top
-    if title_actions is not None:
-        assert not is_descendant(mark_button, title_actions)
-        assert not is_descendant(hide_button, title_actions)
+    assert title_actions is None or title_actions.isHidden()
 
 
 def test_candidate_detail_action_click_handlers_still_work(qapp) -> None:
-    from PyQt6.QtWidgets import QPushButton
+    from desktop.shared.detail import CANDIDATE_DETAIL_CARD_PROFILE
 
-    from desktop.shared.detail import CANDIDATE_DETAIL_CARD_PROFILE, WatchedDetailCard
-
-    calls: list[str] = []
-    detail = WatchedDetailCard(profile=CANDIDATE_DETAIL_CARD_PROFILE)
-    detail.set_mark_watched_handler(lambda: calls.append("watched"))
-    detail.set_hide_handler(lambda: calls.append("hide"))
-    detail.show_entry(("Candidate", {}, {"title": "Candidate", "tmdb_score": 7.2, "final_score": 0.62}))
-    qapp.processEvents()
-
-    mark_button = detail.widget.findChild(QPushButton, "candidateMarkWatchedButton")
-    hide_button = detail.widget.findChild(QPushButton, "candidateHideButton")
-
-    assert mark_button is not None
-    assert hide_button is not None
-    assert mark_button.isEnabled()
-    assert hide_button.isEnabled()
-
-    mark_button.click()
-    hide_button.click()
-
-    assert calls == ["watched", "hide"]
+    assert CANDIDATE_DETAIL_CARD_PROFILE.show_mark_watched_button is False
+    assert CANDIDATE_DETAIL_CARD_PROFILE.show_hide_candidate_button is False
 
 
 def test_build_score_count_html_smoke() -> None:
@@ -6155,7 +6127,7 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     assert [tabs.tabText(index) for index in range(tabs.count())] == [
         "Моё",
         "Фильтры",
-        "Кандидаты",
+        "Рекомендации",
         "Настройки",
     ]
     assert hasattr(context, "analytics_tab_view") is False
@@ -6313,7 +6285,7 @@ def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> N
     assert [tabs.tabText(index) for index in range(tabs.count())] == [
         "My library",
         "Filters",
-        "Candidates",
+        "Recommendations",
         "Settings",
     ]
     assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
@@ -6863,7 +6835,8 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
     assert CANDIDATE_DETAIL_CARD_PROFILE.detail_info_min_width == DETAIL_CARD_LAYOUT_PROFILE.detail_info_min_width
     assert CANDIDATE_DETAIL_CARD_PROFILE.detail_section_max_width == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_user_score is False
-    assert CANDIDATE_DETAIL_CARD_PROFILE.show_mark_watched_button is True
+    assert CANDIDATE_DETAIL_CARD_PROFILE.show_mark_watched_button is False
+    assert CANDIDATE_DETAIL_CARD_PROFILE.show_hide_candidate_button is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.include_bottom_stretch == DETAIL_CARD_LAYOUT_PROFILE.include_bottom_stretch
     assert module.CANDIDATE_LIST_STRETCH == 0
     assert module.CANDIDATE_DETAIL_STRETCH == 1
@@ -6878,7 +6851,11 @@ def test_candidate_list_view_wires_mark_watched_transfer() -> None:
     view_source = inspect.getsource(module.CandidateListView)
     actions_source = inspect.getsource(actions_module.CandidateListActionsMixin)
     assert "CandidateListActionsMixin" in view_source
-    assert "set_mark_watched_handler" in view_source
+    assert "RecommendationDeckService" in view_source
+    assert "_apply_recommendation_action" in view_source
+    assert 'lambda: self._apply_recommendation_action("watched")' in view_source
+    assert 'lambda: self._apply_recommendation_action("watchlist")' in view_source
+    assert 'lambda: self._apply_recommendation_action("hidden")' in view_source
     assert "run_candidate_transfer_flow" not in view_source
     assert "run_candidate_transfer_flow" in actions_source
     assert "on_watched_added" in actions_source

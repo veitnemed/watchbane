@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import datetime, timezone
 from time import perf_counter
 
 from PyQt6.QtCore import QModelIndex, Qt
@@ -11,10 +12,12 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QListView,
+    QPushButton,
     QScrollArea,
     QSplitter,
     QVBoxLayout,
@@ -22,6 +25,7 @@ from PyQt6.QtWidgets import (
 )
 
 from candidates.pool.localized_posters import candidate_needs_tmdb_detail_enrichment
+from candidates.recommendation_deck_service import RecommendationDeckService
 from desktop.candidates.list_actions import CandidateListActionsMixin
 from desktop.candidates.list_delegate import build_candidate_list_item_delegate
 from desktop.candidates.list_model import CandidateListModel
@@ -34,7 +38,7 @@ from desktop.candidates.presenters import (
 )
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 from desktop.candidates.workers.poster_worker import CandidateLocalizedPosterWorker
-from desktop.i18n import tr
+from desktop.i18n import get_interface_language, tr
 from desktop.settings.app_settings import get_persisted_data_language
 from desktop.shared.detail import DetailCard
 from desktop.shared.detail import profiles as detail_profiles
@@ -63,17 +67,21 @@ CANDIDATE_LIST_ITEM_SPACING = list_px(2)
 
 
 class CandidateListView(CandidateListActionsMixin):
-    """Candidates tab: sort controls, card list, read-only detail card."""
+    """Recommendations tab backed by a bounded, refillable candidate deck."""
 
     def __init__(
         self,
         session: CandidateSearchSession,
         *,
         service=None,
+        deck_service: RecommendationDeckService | None = None,
         on_watched_added: Callable[[object], None] | None = None,
     ) -> None:
         self._session = session
         self._service = service or session.service
+        self._deck_service = deck_service or RecommendationDeckService(
+            pool_loader=self._load_pool_for_deck,
+        )
         self._on_watched_added = on_watched_added
         self._data_language = get_persisted_data_language()
         self._all_candidates: list[dict] = []
@@ -90,6 +98,9 @@ class CandidateListView(CandidateListActionsMixin):
         self._model = CandidateListModel(parent=None, data_language=self._data_language)
         self._delegate = None
         self._last_logged_search_signature: tuple | None = None
+        self._deck: dict | None = None
+        self._recommendations_active = False
+        self._deck_dirty = True
 
         self._widget = QWidget()
         self._widget.setObjectName("candidateListRoot")
@@ -140,6 +151,11 @@ class CandidateListView(CandidateListActionsMixin):
         )
         list_layout.addWidget(self._search_input)
 
+        self._deck_status_label = QLabel("")
+        self._deck_status_label.setObjectName("recommendationsDeckStatus")
+        self._deck_status_label.setWordWrap(True)
+        self._deck_status_label.hide()
+
         sort_row = QWidget()
         sort_row.setObjectName("candidateSortRow")
         sort_row_layout = QHBoxLayout(sort_row)
@@ -147,7 +163,13 @@ class CandidateListView(CandidateListActionsMixin):
         sort_row_layout.setSpacing(CANDIDATE_SORT_ROW_SPACING_PX)
         sort_row_layout.addWidget(sort_label)
         sort_row_layout.addWidget(self._sort_combo)
-        sort_row_layout.addStretch(1)
+        sort_row_layout.addWidget(self._deck_status_label, stretch=1)
+        self._new_deck_button = QPushButton(tr("recommendations.new_deck"))
+        self._new_deck_button.setObjectName("recommendationsNewDeckButton")
+        self._new_deck_button.clicked.connect(self._on_new_deck_clicked)
+        sort_row_layout.addWidget(self._new_deck_button)
+        sort_label.hide()
+        self._sort_combo.hide()
         list_layout.addWidget(sort_row)
 
         self._results_list = QListView()
@@ -191,12 +213,59 @@ class CandidateListView(CandidateListActionsMixin):
         scroll.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         self._detail_card = DetailCard(profile=detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE)
-        self._detail_card.set_mark_watched_handler(self._transfer_selected_to_watched)
-        self._detail_card.set_hide_handler(self._hide_selected_candidate)
         scroll.setWidget(self._detail_card.widget)
         scroll.hide()
         self._detail_scroll = scroll
         detail_layout.addWidget(scroll, stretch=1)
+
+        self._action_panel = QFrame()
+        self._action_panel.setObjectName("recommendationActionPanel")
+        action_layout = QVBoxLayout(self._action_panel)
+        action_layout.setContentsMargins(
+            list_px(14),
+            list_px(10),
+            list_px(14),
+            list_px(12),
+        )
+        action_layout.setSpacing(list_px(8))
+        self._reason_title = QLabel(tr("recommendations.reasons.title"))
+        self._reason_title.setObjectName("recommendationReasonsTitle")
+        action_layout.addWidget(self._reason_title)
+        self._reason_label = QLabel("")
+        self._reason_label.setObjectName("recommendationReasonsText")
+        self._reason_label.setWordWrap(True)
+        action_layout.addWidget(self._reason_label)
+
+        action_buttons_layout = QGridLayout()
+        action_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        action_buttons_layout.setHorizontalSpacing(list_px(8))
+        action_buttons_layout.setVerticalSpacing(list_px(6))
+        self._watched_action_button = QPushButton(tr("recommendations.action.watched"))
+        self._watched_action_button.setObjectName("recommendationWatchedButton")
+        self._watchlist_action_button = QPushButton(tr("recommendations.action.watchlist"))
+        self._watchlist_action_button.setObjectName("recommendationWatchlistButton")
+        self._hidden_action_button = QPushButton(tr("recommendations.action.hidden"))
+        self._hidden_action_button.setObjectName("recommendationHiddenButton")
+        self._watched_action_button.clicked.connect(
+            lambda: self._apply_recommendation_action("watched")
+        )
+        self._watchlist_action_button.clicked.connect(
+            lambda: self._apply_recommendation_action("watchlist")
+        )
+        self._hidden_action_button.clicked.connect(
+            lambda: self._apply_recommendation_action("hidden")
+        )
+        action_buttons = (
+            self._watched_action_button,
+            self._watchlist_action_button,
+            self._hidden_action_button,
+        )
+        for column, button in enumerate(action_buttons):
+            action_buttons_layout.addWidget(button, 0, column)
+            action_buttons_layout.setColumnStretch(column, 1)
+        action_layout.addLayout(action_buttons_layout)
+        detail_layout.addWidget(self._action_panel)
+        self._set_action_panel_enabled(False)
 
         splitter.addWidget(detail_panel)
         splitter.setStretchFactor(0, CANDIDATE_LIST_STRETCH)
@@ -205,18 +274,194 @@ class CandidateListView(CandidateListActionsMixin):
 
         session.add_listener(self.refresh)
         session.add_loading_listener(self._on_loading_changed)
-        self.refresh()
+        self._clear_detail(show_filters_hint=True)
 
     def on_tab_activated(self) -> None:
         self._refresh_data_language()
-        if self._session.has_results or self._session.is_loading:
-            return
-        self._clear_detail(show_filters_hint=False, loading=True)
-        self._session.apply_filters_async(dict(DEFAULT_BROWSE_FILTERS), parent=self._widget)
+        self._recommendations_active = True
+        self._load_recommendation_deck(force_new=False)
 
     @property
     def widget(self) -> QWidget:
         return self._widget
+
+    def _load_pool_for_deck(self) -> dict:
+        view = self._service.get_search_overview_view()
+        candidates = (view.get("candidates") or []) if isinstance(view, dict) else []
+        return {
+            candidate_detail_identity(candidate): candidate
+            for candidate in candidates
+            if isinstance(candidate, dict)
+        }
+
+    def _deck_preferences(self) -> dict:
+        return dict(self._session.filters or DEFAULT_BROWSE_FILTERS)
+
+    def _set_action_panel_enabled(self, enabled: bool) -> None:
+        self._action_panel.setVisible(enabled)
+        for button in (
+            self._watched_action_button,
+            self._watchlist_action_button,
+            self._hidden_action_button,
+        ):
+            button.setEnabled(enabled)
+        if not enabled:
+            self._reason_label.clear()
+
+    def _country_reason_value(self, candidate: dict) -> str:
+        from candidates.models.country_reference import (
+            COUNTRY_NAME_BY_ISO2,
+            ENGLISH_COUNTRY_NAME_BY_ISO2,
+            country_value_to_iso2,
+        )
+
+        value = candidate.get("country") or candidate.get("origin_country") or ""
+        if isinstance(value, (list, tuple)):
+            value = value[0] if value else ""
+        text = str(value or "").strip()
+        iso2 = country_value_to_iso2(text) or text.upper()
+        names = ENGLISH_COUNTRY_NAME_BY_ISO2 if get_interface_language() == "en" else COUNTRY_NAME_BY_ISO2
+        return names.get(iso2, text)
+
+    def _recommendation_reasons(self, candidate: dict) -> list[str]:
+        reasons: list[str] = []
+        country = self._country_reason_value(candidate)
+        try:
+            year = int(candidate.get("year"))
+        except (TypeError, ValueError):
+            year = None
+        if year is not None and year >= datetime.now().year - 2:
+            if country:
+                reasons.append(tr("recommendations.reason.recent_country", country=country))
+            else:
+                reasons.append(tr("recommendations.reason.recent"))
+        preferences = self._deck_preferences()
+        vibe = (
+            preferences.get("vibe")
+            or preferences.get("tone")
+            or preferences.get("atmosphere")
+        )
+        if vibe not in (None, "", "any", "mixed"):
+            reasons.append(tr("recommendations.reason.vibe", vibe=vibe))
+        try:
+            tmdb_score = float(candidate.get("tmdb_score"))
+        except (TypeError, ValueError):
+            tmdb_score = 0.0
+        if tmdb_score >= 7.5:
+            reasons.append(tr("recommendations.reason.tmdb_interest"))
+        if not reasons:
+            reasons.append(tr("recommendations.reason.preferences"))
+        return reasons[:3]
+
+    def _update_recommendation_reasons(self, candidate: dict) -> None:
+        self._reason_label.setText("\n".join(f"• {reason}" for reason in self._recommendation_reasons(candidate)))
+
+    def _update_deck_status(self) -> None:
+        deck = self._deck or {}
+        active_count = len(deck.get("active") or [])
+        reserve_count = len(deck.get("reserve") or [])
+        reason = deck.get("underfilled_reason")
+        if active_count == 0:
+            excluded = deck.get("excluded") if isinstance(deck.get("excluded"), dict) else {}
+            processed_count = int(excluded.get("watched") or 0) + int(excluded.get("actioned") or 0)
+            pool_total = int(excluded.get("pool_total") or 0)
+            if deck.get("last_action") or (pool_total > 0 and processed_count >= pool_total):
+                text = tr("recommendations.state.processed")
+            else:
+                text = tr("recommendations.state.empty")
+        elif self._session.last_error:
+            text = tr("recommendations.state.local_available", active=active_count)
+        elif reason:
+            text = tr(
+                "recommendations.state.underfilled",
+                active=active_count,
+                reserve=reserve_count,
+            )
+        else:
+            text = tr(
+                "recommendations.state.ready",
+                active=active_count,
+                reserve=reserve_count,
+            )
+        self._deck_status_label.setText(text)
+        self._deck_status_label.show()
+
+    def _load_recommendation_deck(self, *, force_new: bool) -> None:
+        if not self._recommendations_active:
+            self._deck_dirty = True
+            return
+        self._new_deck_button.setEnabled(False)
+        self._deck_status_label.setText(tr("recommendations.state.loading"))
+        self._deck_status_label.show()
+        try:
+            deck = self._deck_service.refresh_deck(
+                self._deck_preferences(),
+                datetime.now(timezone.utc),
+                force_new=force_new,
+            )
+        except Exception:
+            logger.exception("recommendation deck build failed")
+            self._deck = None
+            self._all_candidates = []
+            self._candidates = []
+            self._model.set_candidates([])
+            self._deck_status_label.setText(tr("recommendations.state.local_error"))
+            self._clear_detail(show_filters_hint=False)
+            return
+        finally:
+            self._new_deck_button.setEnabled(True)
+
+        self._deck = deck
+        self._deck_dirty = False
+        self._all_candidates = list(deck.get("active") or [])[:30]
+        self._pool_unique_total = len(self._all_candidates)
+        self._detail_entries = {}
+        self._search_index = build_candidate_search_index(self._all_candidates)
+        self._update_deck_status()
+        self._apply_visible_candidates()
+        if not self._all_candidates:
+            self._clear_detail(show_filters_hint=False)
+
+    def _on_new_deck_clicked(self) -> None:
+        self._load_recommendation_deck(force_new=True)
+
+    def _apply_recommendation_action(self, action: str) -> None:
+        candidate = self._selected_candidate
+        deck = self._deck
+        if not isinstance(candidate, dict) or not isinstance(deck, dict):
+            return
+        current_row = self._results_list.currentIndex().row()
+        try:
+            updated = self._deck_service.apply_action_and_refill(
+                str(deck["deck_id"]),
+                candidate,
+                action,
+            )
+        except Exception:
+            logger.exception("recommendation action failed: %s", action)
+            self._deck_status_label.setText(tr("recommendations.action.failed"))
+            self._deck_status_label.show()
+            return
+
+        self._deck = updated
+        self._all_candidates = list(updated.get("active") or [])[:30]
+        self._pool_unique_total = len(self._all_candidates)
+        self._detail_entries.pop(candidate_detail_identity(candidate), None)
+        self._selected_candidate = None
+        self._selected_identity = None
+        self._search_index = build_candidate_search_index(self._all_candidates)
+        self._apply_visible_candidates()
+        if self._candidates:
+            row = min(max(0, current_row), len(self._candidates) - 1)
+            self._results_list.setCurrentIndex(self._model.index(row, 0))
+        else:
+            self._clear_detail(show_filters_hint=False)
+        self._update_deck_status()
+        if self._candidates:
+            self._deck_status_label.setText(tr(f"recommendations.action.done.{action}"))
+        # TODO: add transactional undo when the shell supports actionable toast notifications.
+        if action == "watched" and self._on_watched_added is not None:
+            self._on_watched_added(updated.get("last_action", {}).get("transition"))
 
     def _on_sort_changed(self, _index: int) -> None:
         mode = self._sort_combo.currentData()
@@ -273,16 +518,6 @@ class CandidateListView(CandidateListActionsMixin):
         )
 
     def _on_search_query_changed(self) -> None:
-        query = self._search_input.text()
-        if self._fts_search_enabled():
-            if not self._session.has_results:
-                return
-            if self._session.maybe_auto_sort_for_text_query(query):
-                self._sync_sort_combo_from_session()
-                self._rebuild_list_delegate()
-            filters = dict(self._session.filters or DEFAULT_BROWSE_FILTERS)
-            self._session.apply_filters_async(filters, text_query=query, parent=self._widget)
-            return
         self._apply_visible_candidates()
 
     def _apply_visible_candidates(self) -> None:
@@ -356,92 +591,42 @@ class CandidateListView(CandidateListActionsMixin):
             logger.debug("search query logging skipped", exc_info=True)
 
     def _update_counter_label(self, query: str) -> None:
-        dup_note = ""
-        if self._session.hidden_duplicates > 0:
-            dup_note = tr(
-                "candidates.counter.hidden_duplicates",
-                count=self._session.hidden_duplicates,
-            )
         visible = len(self._candidates)
         total = len(self._all_candidates)
-        unique_total = self._pool_unique_total
         if query.strip():
             self._counter_label.setText(
                 tr(
-                    "candidates.counter.found",
+                    "recommendations.counter.found",
                     visible=visible,
                     total=total,
-                    unique_total=unique_total,
-                    dup_note=dup_note,
                 )
             )
         else:
             self._counter_label.setText(
                 tr(
-                    "candidates.counter.shown",
+                    "recommendations.counter.shown",
                     visible=visible,
-                    unique_total=unique_total,
-                    dup_note=dup_note,
                 )
             )
 
     def refresh(self) -> None:
         self._refresh_data_language()
         self._poster_request_seq += 1
-        if not self._session.has_results:
-            self._all_candidates = []
-            self._candidates = []
-            self._selected_candidate = None
-            self._selected_identity = None
-            self._search_index = build_candidate_search_index([])
-            self._pool_unique_total = 0
-            self._detail_entries = {}
-            self._model.set_candidates([])
-            self._counter_label.setText("")
-            self._clear_detail(show_filters_hint=True)
-            return
-
-        self._all_candidates = self._session.sorted_candidates()
-        pool_stats = self._session.pool_stats()
-        if not pool_stats:
-            pool_stats = self._service.get_pool_stats_view()["stats"]
-        self._pool_unique_total = int(
-            pool_stats.get("unique_total", pool_stats.get("storage_total", 0)) or 0
-        )
-
-        if self._fts_search_enabled():
-            previous_identity = self._selected_identity
-            self._detail_entries = {}
-            self._selected_candidate = None
-            self._selected_identity = None
-            self._candidates = list(self._all_candidates)
-            self._results_list.blockSignals(True)
-            self._model.set_candidates(self._candidates)
-            self._update_counter_label(self._search_input.text())
-            self._results_list.blockSignals(False)
-            self._log_search_query(self._search_input.text())
-            if self._candidates:
-                self._restore_result_selection(previous_identity)
-            else:
-                self._clear_detail(
-                    show_filters_hint=False,
-                    search_active=bool(self._search_input.text().strip()),
-                )
-        else:
-            self._search_index = build_candidate_search_index(self._all_candidates)
-            self._debounced_search.flush()
+        self._deck_dirty = True
+        if self._recommendations_active and not self._session.is_loading:
+            self._load_recommendation_deck(force_new=False)
 
     def _on_result_selected(self, current: QModelIndex, _previous: QModelIndex = QModelIndex()) -> None:
         started = perf_counter()
         row = current.row() if current.isValid() else -1
         if row < 0 or row >= len(self._candidates):
-            if self._session.has_results and len(self._candidates) == 0:
+            if self._deck is not None and len(self._candidates) == 0:
                 self._clear_detail(
                     show_filters_hint=False,
                     search_active=bool(self._search_input.text().strip()),
                 )
             else:
-                self._clear_detail(show_filters_hint=not self._session.has_results)
+                self._clear_detail(show_filters_hint=self._deck is None)
             return
 
         candidate = self._candidates[row]
@@ -462,6 +647,8 @@ class CandidateListView(CandidateListActionsMixin):
         self._detail_placeholder.hide()
         self._detail_scroll.show()
         self._show_detail_entry(entry)
+        self._set_action_panel_enabled(True)
+        self._update_recommendation_reasons(candidate)
         render_done = perf_counter()
 
         poster_url = candidate_poster_url_for_download(
@@ -573,8 +760,10 @@ class CandidateListView(CandidateListActionsMixin):
 
     def _on_loading_changed(self) -> None:
         if self._session.is_loading:
-            self._counter_label.setText(tr("candidates.detail.loading"))
+            self._counter_label.setText(tr("recommendations.state.replenishing"))
             self._clear_detail(show_filters_hint=False, loading=True)
+        elif self._recommendations_active and self._deck_dirty:
+            self._load_recommendation_deck(force_new=False)
 
     def _reset_detail_scroll(self) -> None:
         bar = self._detail_scroll.verticalScrollBar()
@@ -594,17 +783,18 @@ class CandidateListView(CandidateListActionsMixin):
         self._poster_request_seq += 1
         self._detail_scroll.hide()
         self._reset_detail_scroll()
+        self._set_action_panel_enabled(False)
         if loading:
-            self._detail_placeholder.setText(tr("candidates.detail.loading"))
+            self._detail_placeholder.setText(tr("recommendations.state.replenishing"))
             self._detail_placeholder.show()
         elif show_filters_hint:
-            self._detail_placeholder.setText(tr("candidates.detail.apply_filters_hint"))
+            self._detail_placeholder.setText(tr("recommendations.state.open_hint"))
             self._detail_placeholder.show()
         elif search_active:
             self._detail_placeholder.setText(tr("candidates.detail.no_results_query"))
             self._detail_placeholder.show()
-        elif self._session.has_results and len(self._candidates) == 0:
-            self._detail_placeholder.setText(tr("candidates.detail.no_results"))
+        elif len(self._candidates) == 0:
+            self._detail_placeholder.setText(tr("recommendations.state.empty"))
             self._detail_placeholder.show()
         else:
             self._detail_placeholder.setText(tr("candidates.detail.select_candidate"))

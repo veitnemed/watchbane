@@ -161,7 +161,7 @@ QComboBox#candidateReplenishOriginPreference::down-arrow {{
     width: {px(10)}px;
     height: {px(10)}px;
 }}
-QListWidget#candidateListWidget {{
+QListView#candidateListWidget {{
     background-color: {COLOR_CARD};
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_CARD)}px;
@@ -170,17 +170,17 @@ QListWidget#candidateListWidget {{
     padding: {px(8)}px;
     outline: none;
 }}
-QListWidget#candidateListWidget::item {{
+QListView#candidateListWidget::item {{
     padding: 0;
     border: none;
     margin: {px(1)}px 0;
     background: transparent;
 }}
-QListWidget#candidateListWidget::item:selected {{
+QListView#candidateListWidget::item:selected {{
     background: transparent;
     color: {COLOR_TEXT};
 }}
-QListWidget#candidateListWidget::item:hover {{
+QListView#candidateListWidget::item:hover {{
     background: transparent;
 }}
 QLabel#candidateListCounter {{
@@ -189,6 +189,71 @@ QLabel#candidateListCounter {{
     font-size: {font_px(FONT_SMALL)}px;
     font-weight: 600;
     padding: 0 {px(4)}px;
+}}
+QLabel#recommendationsDeckStatus {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+    padding: 0 {px(4)}px;
+}}
+QPushButton#recommendationsNewDeckButton {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER_HOVER};
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 600;
+    min-height: {px(30)}px;
+    padding: {px(4)}px {px(12)}px;
+}}
+QPushButton#recommendationsNewDeckButton:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_FOCUS_BORDER};
+}}
+QFrame#recommendationActionPanel {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER_HOVER};
+    border-radius: {px(8)}px;
+}}
+QLabel#recommendationReasonsTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_BASE)}px;
+    font-weight: 700;
+}}
+QLabel#recommendationReasonsText {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+}}
+QPushButton#recommendationWatchedButton,
+QPushButton#recommendationWatchlistButton,
+QPushButton#recommendationHiddenButton {{
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 700;
+    min-height: {px(34)}px;
+    padding: {px(5)}px {px(10)}px;
+}}
+QPushButton#recommendationWatchedButton {{
+    background-color: {COLOR_ADD_BUTTON_TOP};
+    border: 1px solid {COLOR_FOCUS_BORDER};
+    color: {COLOR_TEXT};
+}}
+QPushButton#recommendationWatchlistButton {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER_HOVER};
+    color: {COLOR_TEXT};
+}}
+QPushButton#recommendationHiddenButton {{
+    background-color: transparent;
+    border: 1px solid {COLOR_BORDER};
+    color: {COLOR_TEXT_SECONDARY};
+}}
+QPushButton#recommendationWatchedButton:hover,
+QPushButton#recommendationWatchlistButton:hover,
+QPushButton#recommendationHiddenButton:hover {{
+    border-color: {COLOR_FOCUS_BORDER};
 }}
 QWidget#candidateSortRow {{
     background: transparent;
