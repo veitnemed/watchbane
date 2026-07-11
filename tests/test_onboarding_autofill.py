@@ -2570,6 +2570,56 @@ def test_quality_gate_no_external_id_alone_does_not_make_strong_candidate_weak()
     assert "no_external_id" not in decision.quality_reasons
 
 
+def test_quality_gate_accepts_complete_new_unrated_ru_series() -> None:
+    bucket = build_fetch_buckets(
+        _profile(
+            media_preference="tv",
+            country_selection={"selected_countries": ["RU"], "home_country": "RU"},
+        )
+    )[0]
+    result = {
+        "id": 1401,
+        "name": "Новый сериал",
+        "first_air_date": "2026-05-01",
+        "poster_path": "/new-series.jpg",
+        "overview": "Полное описание нового сериала.",
+        "genre_ids": [18],
+        "origin_country": ["RU"],
+        "vote_average": 0,
+        "vote_count": 0,
+        "popularity": 18,
+    }
+
+    decision = autofill.classify_candidate_quality(result, bucket, current_year=2026)
+
+    assert decision.quality_class != "garbage"
+    assert "rating_unknown" in decision.quality_reasons
+    assert "rating_0" not in decision.quality_reasons
+
+
+def test_quality_gate_rejects_old_sparse_unrated_title() -> None:
+    bucket = build_fetch_buckets(_profile(media_preference="movie"))[0]
+    result = {
+        "id": 1402,
+        "title": "Old Empty Title",
+        "release_date": "2004-01-01",
+        "poster_path": "/old.jpg",
+        "overview": "",
+        "genre_ids": [18],
+        "origin_country": [bucket.target_country],
+        "vote_average": 0,
+        "vote_count": 0,
+        "popularity": 20,
+        "metadata_missing_overview": True,
+        "overview_source": "missing",
+    }
+
+    decision = autofill.classify_candidate_quality(result, bucket, current_year=2026)
+
+    assert decision.quality_class == "garbage"
+    assert "unrated_insufficient_metadata" in decision.quality_reasons
+
+
 def test_quality_gate_blocks_garbage_candidates_from_normal_pool(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
     client = LowConfidenceMissingOverviewTmdbClient()

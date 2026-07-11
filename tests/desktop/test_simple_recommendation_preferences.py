@@ -90,6 +90,8 @@ def test_simple_preferences_map_to_internal_filters_and_pool_plan() -> None:
     assert filters["country"] == ["JP", "KR"]
     assert filters["min_tmdb_score"] is None
     assert filters["min_tmdb_votes"] is None
+    assert filters["_recommendation_collection"] == "new"
+    assert filters["_recommendation_origin"] == "asia"
     assert intent["media_type"] == "tv"
     assert intent["countries"] == ["JP", "KR"]
     assert intent["release_preference"] == "new"
@@ -215,3 +217,14 @@ def test_simple_preference_copy_exists_in_ru_and_en() -> None:
     )
     for language in ("ru", "en"):
         assert all(translate(key, interface_language=language) != key for key in keys)
+
+
+def test_unrated_candidate_formatter_uses_localized_unknown_label(monkeypatch) -> None:
+    import desktop.candidates.presenters as presenters
+    from desktop.i18n import translate
+
+    candidate = {"tmdb_score": 0, "tmdb_votes": 0}
+    monkeypatch.setattr(presenters, "tr", lambda key: translate(key, interface_language="ru"))
+    assert presenters.format_candidate_metric_value(candidate, "tmdb_score") == "Оценок пока нет"
+    monkeypatch.setattr(presenters, "tr", lambda key: translate(key, interface_language="en"))
+    assert presenters.format_candidate_metric_value(candidate, "tmdb_votes") == "No ratings yet"

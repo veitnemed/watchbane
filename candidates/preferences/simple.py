@@ -67,6 +67,8 @@ class SimpleRecommendationPreferences:
             "exclude_genres": [],
             "min_tmdb_score": None,
             "min_tmdb_votes": None,
+            "_recommendation_collection": preferences.collection,
+            "_recommendation_origin": preferences.origin,
         }
 
     def to_replenish_intent(

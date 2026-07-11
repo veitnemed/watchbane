@@ -3,7 +3,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from candidates.models.keys import candidate_state_identity_key
-from candidates.recommendation_deck_service import RecommendationDeckService
+from candidates.recommendation_deck_service import (
+    DEFAULT_UNKNOWN_RATING_LIMIT,
+    EXPANDED_UNKNOWN_RATING_LIMIT,
+    RecommendationDeckService,
+    _rank_candidates,
+)
+from candidates.scoring.rating_confidence import has_unknown_rating
 from candidates import title_state_service
 from storage.sqlite.impression_repository import get_impression, record_impressions
 
@@ -26,6 +32,22 @@ def _candidate(index: int, *, title: str | None = None, media_type: str | None =
 
 def _pool(count: int) -> dict[str, dict]:
     return {f"candidate-{index}": _candidate(index) for index in range(count)}
+
+
+def _unrated(index: int) -> dict:
+    return {
+        **_candidate(500 + index, title=f"Unrated {index:02d}"),
+        "year": 2026,
+        "tmdb_score": 0,
+        "tmdb_votes": 0,
+        "tmdb_popularity": 25,
+        "country": "RU",
+        "country_codes": ["RU"],
+        "description": "Complete overview",
+        "poster_path": f"/unrated-{index}.jpg",
+        "genres": ["Drama"],
+        "final_score": 99,
+    }
 
 
 def _service(pool: dict, db_path) -> RecommendationDeckService:
@@ -190,3 +212,30 @@ def test_refresh_reuses_same_daily_deck_until_forced(tmp_path) -> None:
     impression_key = candidate_state_identity_key(first_candidate).rsplit("|", 1)[0]
     assert get_impression(impression_key, first_candidate["media_type"], path=db_path)["shown_count"] == 1
     assert forced["deck_id"] != first["deck_id"]
+
+
+def test_known_rating_candidate_continues_to_rank_by_rating() -> None:
+    lower = {"title": "Lower", "year": 2024, "media_type": "movie", "tmdb_score": 6.5, "tmdb_votes": 100}
+    higher = {"title": "Higher", "year": 2024, "media_type": "movie", "tmdb_score": 8.4, "tmdb_votes": 100}
+
+    assert _rank_candidates([lower, higher], "2026-07-11")[0]["title"] == "Higher"
+
+
+def test_default_deck_caps_unknown_ratings(tmp_path) -> None:
+    pool = {**_pool(40), **{f"unrated-{index}": _unrated(index) for index in range(20)}}
+
+    deck = _service(pool, tmp_path / "default.sqlite3").build_deck({}, NOW)
+
+    assert deck["unknown_rating_limit"] == DEFAULT_UNKNOWN_RATING_LIMIT
+    assert sum(has_unknown_rating(item) for item in deck["active"]) <= DEFAULT_UNKNOWN_RATING_LIMIT
+
+
+def test_new_releases_in_an_explicit_market_expand_unknown_rating_quota(tmp_path) -> None:
+    pool = {**_pool(40), **{f"unrated-{index}": _unrated(index) for index in range(20)}}
+    preferences = {"country": ["RU"], "_recommendation_collection": "new"}
+
+    deck = _service(pool, tmp_path / "expanded.sqlite3").build_deck(preferences, NOW)
+    unknown_count = sum(has_unknown_rating(item) for item in deck["active"])
+
+    assert deck["unknown_rating_limit"] == EXPANDED_UNKNOWN_RATING_LIMIT
+    assert DEFAULT_UNKNOWN_RATING_LIMIT < unknown_count <= EXPANDED_UNKNOWN_RATING_LIMIT

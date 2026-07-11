@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 
 from candidates.pool.localized_posters import candidate_needs_tmdb_detail_enrichment
 from candidates.recommendation_deck_service import RecommendationDeckService
+from candidates.scoring.rating_confidence import has_unknown_rating
 from desktop.candidates.list_actions import CandidateListActionsMixin
 from desktop.candidates.list_delegate import build_candidate_list_item_delegate
 from desktop.candidates.list_model import CandidateListModel
@@ -335,6 +336,8 @@ class CandidateListView(CandidateListActionsMixin):
                 reasons.append(tr("recommendations.reason.recent_country", country=country))
             else:
                 reasons.append(tr("recommendations.reason.recent"))
+            if has_unknown_rating(candidate):
+                reasons.append(tr("recommendations.reason.unrated_new"))
         preferences = self._deck_preferences()
         vibe = (
             preferences.get("vibe")
@@ -347,7 +350,7 @@ class CandidateListView(CandidateListActionsMixin):
             tmdb_score = float(candidate.get("tmdb_score"))
         except (TypeError, ValueError):
             tmdb_score = 0.0
-        if tmdb_score >= 7.5:
+        if not has_unknown_rating(candidate) and tmdb_score >= 7.5:
             reasons.append(tr("recommendations.reason.tmdb_interest"))
         if not reasons:
             reasons.append(tr("recommendations.reason.preferences"))

@@ -7,6 +7,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from candidates import service as candidate_service
 from candidates.models.country_schema import candidate_country_for_display
 from candidates.models.genre_schema import normalize_genre_display_labels
+from candidates.scoring.rating_confidence import candidate_rating_confidence, has_unknown_rating
 from dataset import service
 from dataset.language import (
     choose_display_overview,
@@ -73,6 +74,8 @@ def format_candidate_metric_value(candidate: dict, sort_mode: str) -> str:
     field_name = sort_mode if sort_mode in candidate_service.SEARCH_SORT_MODES else candidate_service.DEFAULT_SEARCH_SORT_MODE
     prefix_key = SORT_MODE_METRIC_PREFIX.get(field_name, "")
     prefix = tr(prefix_key) if prefix_key.startswith("candidates.") else prefix_key
+    if field_name in {"tmdb_score", "tmdb_votes"} and has_unknown_rating(candidate):
+        return tr("rating.no_votes")
     if field_name == "text_relevance":
         value = coerce_candidate_number(candidate.get("text_relevance_score"))
     elif field_name == "relevance":
@@ -234,7 +237,10 @@ def build_candidate_readonly_card(candidate: dict, data_language: str = "ru") ->
     if overview_text:
         card["overview"] = overview_text
 
-    for field in ("tmdb_score", "tmdb_votes", "final_score"):
+    rating_confidence = candidate_rating_confidence(candidate)
+    card["rating_confidence"] = rating_confidence
+    rating_fields = ("final_score",) if rating_confidence == "unknown" else ("tmdb_score", "tmdb_votes", "final_score")
+    for field in rating_fields:
         value = coerce_candidate_number(candidate.get(field))
         if value is not None:
             card[field] = value

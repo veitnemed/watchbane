@@ -7,6 +7,7 @@ from typing import Any
 
 from candidates.models.keys import pool_entry_key, title_identity_key
 from candidates.models.schema import normalize_candidate_for_storage
+from candidates.scoring.rating_confidence import is_viable_unrated_candidate
 from candidates.replenish.compatibility import resolve_filter_replenish_compatibility
 from candidates.replenish.filter_discover import build_filter_discover_params
 from candidates.replenish.filter_intent import FilterReplenishIntent
@@ -130,6 +131,7 @@ def _candidate_from_discover(raw: dict[str, Any], *, media_type: str, bucket: di
         "tmdb_score": raw.get("vote_average"),
         "tmdb_votes": raw.get("vote_count"),
         "tmdb_popularity": raw.get("popularity"),
+        "poster_path": raw.get("poster_path"),
         "original_language": raw.get("original_language"),
     }
     if media_type == "tv":
@@ -146,6 +148,12 @@ def _candidate_reject_reason(candidate: dict[str, Any]) -> str | None:
         return "missing_title"
     if candidate.get("year") is None:
         return "missing_year"
+    return None
+
+
+def _candidate_quality_reject_reason(candidate: dict[str, Any]) -> str | None:
+    if not is_viable_unrated_candidate(candidate):
+        return "unrated_insufficient_metadata"
     return None
 
 
@@ -373,6 +381,10 @@ def replenish_candidates_for_filters(
                 if detailed_candidate is not None:
                     counters["details_requests"] += 1
                     candidate = detailed_candidate
+                if _candidate_quality_reject_reason(candidate) is not None:
+                    counters["rejected_count"] += 1
+                    bucket_counter["rejected_count"] += 1
+                    continue
                 seen_tmdb_keys.add(tmdb_key)
                 seen_title_keys.add(title_key)
                 selected.append(candidate)

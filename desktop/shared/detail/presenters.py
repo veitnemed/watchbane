@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal
 
 from desktop.theme import COLOR_ACCENT, COLOR_ACCENT_HOVER
+from candidates.scoring.rating_confidence import has_unknown_rating
 
 
 def _round_one_decimal(value) -> str:
@@ -154,6 +155,8 @@ def format_year_display(year) -> str:
 
 def build_score_ring_item(card: dict) -> dict | None:
     """Build the TMDb-only score ring item for the detail card."""
+    if has_unknown_rating(card):
+        return None
     has_tmdb_score = card.get("tmdb_score") not in (None, "")
     if has_tmdb_score is False:
         return None

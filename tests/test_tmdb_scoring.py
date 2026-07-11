@@ -8,6 +8,7 @@ from candidates.sources.tmdb.scoring import (
     compute_tmdb_quality_score,
     compute_tmdb_vote_reliability,
 )
+from candidates.scoring.rating_confidence import candidate_rating_confidence
 
 
 def _candidate(**overrides) -> dict:
@@ -79,6 +80,15 @@ def test_zero_vote_ru_candidate_is_not_ranked_as_strong_evidence() -> None:
 
     assert compute_tmdb_quality_score(zero_votes) < 0.45
     assert compute_tmdb_final_score(zero_votes) < compute_tmdb_final_score(moderate)
+
+
+def test_zero_votes_make_rating_unknown_instead_of_treating_zero_as_bad_rating() -> None:
+    zero_rating = _candidate(tmdb_score=0.0, tmdb_votes=0, country_codes=["US"])
+    placeholder_rating = _candidate(tmdb_score=9.9, tmdb_votes=0, country_codes=["US"])
+
+    assert candidate_rating_confidence(zero_rating) == "unknown"
+    assert compute_tmdb_bayesian_rating(zero_rating) == compute_tmdb_bayesian_rating(placeholder_rating)
+    assert compute_tmdb_quality_score(zero_rating) == compute_tmdb_quality_score(placeholder_rating)
 
 
 def test_low_rating_few_votes_is_below_moderate_ru_candidate() -> None:

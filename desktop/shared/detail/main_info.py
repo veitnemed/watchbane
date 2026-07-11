@@ -220,7 +220,9 @@ def build_main_info_items(card: dict, data_language: str | None = None) -> list[
     items.append(_build_watch_provider_item(provider_source, data_language=language))
 
     tmdb_votes = format_votes_display(card.get("tmdb_votes"), data_language=language)
-    if tmdb_votes is not None:
+    if card.get("rating_confidence") == "unknown":
+        items.append({"label": tr("detail.info.tmdb_votes"), "value": tr("rating.no_votes")})
+    elif tmdb_votes is not None:
         items.append({"label": tr("detail.info.tmdb_votes"), "value": tmdb_votes})
 
     items.extend(build_additional_info_items(card, data_language=language))

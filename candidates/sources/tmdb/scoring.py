@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import math
+from datetime import date
 from typing import Any
 
 from candidates.models.schema import coerce_candidate_number
+from candidates.scoring.rating_confidence import candidate_rating_value, has_unknown_rating
 
 
 def _number(value) -> float | None:
@@ -38,9 +40,7 @@ def _is_ru_candidate(candidate: dict[str, Any]) -> bool:
 
 
 def _rating_value(candidate: dict[str, Any]) -> float:
-    rating = _number(candidate.get("tmdb_score"))
-    if rating is None:
-        rating = _number(candidate.get("tmdb_rating"))
+    rating = candidate_rating_value(candidate)
     return _clamp(float(rating or 0.0), 0.0, 10.0)
 
 
@@ -67,6 +67,8 @@ def _country_score(candidate: dict[str, Any]) -> float:
 
 
 def compute_tmdb_bayesian_rating(candidate: dict[str, Any], country_prior: float = 6.8) -> float:
+    if has_unknown_rating(candidate):
+        return round(_clamp(float(country_prior) / 10.0), 4)
     rating = _rating_value(candidate)
     votes = _vote_count(candidate)
     m = 40.0 if _is_ru_candidate(candidate) else 200.0
@@ -122,6 +124,20 @@ def compute_metadata_completeness_score(candidate: dict[str, Any]) -> float:
 
 
 def compute_tmdb_quality_score(candidate: dict[str, Any]) -> float:
+    if has_unknown_rating(candidate):
+        metadata = compute_metadata_completeness_score(candidate)
+        popularity = _popularity_component(candidate)
+        year = _number(candidate.get("year"))
+        if year is None:
+            for field_name in ("first_air_date", "release_date"):
+                text = str(candidate.get(field_name) or "")
+                if len(text) >= 4 and text[:4].isdigit():
+                    year = float(text[:4])
+                    break
+        age = None if year is None else max(0.0, float(date.today().year) - year)
+        freshness = 0.0 if age is None else _clamp(1.0 - age / 5.0)
+        return round(_clamp(0.30 * metadata + 0.17 * popularity + 0.18 * freshness), 4)
+
     bayesian = compute_tmdb_bayesian_rating(candidate)
     reliability = compute_tmdb_vote_reliability(candidate)
     country_score = _country_score(candidate)
@@ -139,6 +155,8 @@ def compute_tmdb_quality_score(candidate: dict[str, Any]) -> float:
 
 
 def compute_tmdb_hidden_gem_score(candidate: dict[str, Any]) -> float:
+    if has_unknown_rating(candidate):
+        return 0.0
     bayesian = compute_tmdb_bayesian_rating(candidate)
     reliability = compute_tmdb_vote_reliability(candidate)
     popularity = _popularity_component(candidate)
@@ -160,6 +178,8 @@ def compute_tmdb_final_score(candidate: dict[str, Any], mode: str = "quality") -
     hidden_gem_score = _number(candidate.get("hidden_gem_score"))
     if hidden_gem_score is None:
         hidden_gem_score = compute_tmdb_hidden_gem_score(candidate)
+    if has_unknown_rating(candidate):
+        return round(_clamp(min(float(quality_score), 0.60)), 4)
     country_score = _country_score(candidate)
     if mode == "hidden_gems":
         score = 0.58 * quality_score + 0.27 * hidden_gem_score + 0.15 * country_score

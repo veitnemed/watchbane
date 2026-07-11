@@ -38,6 +38,7 @@ from candidates.sources.tmdb.scoring import (
     compute_tmdb_hidden_gem_score,
     compute_tmdb_quality_score,
 )
+from candidates.scoring.rating_confidence import has_unknown_rating, is_viable_unrated_candidate
 from storage.sqlite import action_repository
 from storage.sqlite.candidate_pool_repository import load_candidate_pool_dict, save_candidate_pool_dict
 from storage.sqlite.onboarding_repository import (
@@ -1665,6 +1666,7 @@ def classify_candidate_quality(
     vote_count = int(_result_number(result, "vote_count") or 0)
     popularity = float(_result_number(result, "popularity") or 0)
     vote_average = float(_result_number(result, "vote_average") or 0)
+    rating_unknown = has_unknown_rating(result)
     if missing_overview and missing_poster:
         reasons.append("missing_poster_and_overview")
     if missing_overview and vote_count <= 5 and popularity < 5:
@@ -1681,6 +1683,8 @@ def classify_candidate_quality(
     selected_countries = _selected_country_codes(profile)
     if fallback != FALLBACK_BASE and selected_countries and country_codes and selected_countries.isdisjoint(country_codes):
         reasons.append("emergency_fallback_outside_selected_countries")
+    if rating_unknown and not is_viable_unrated_candidate(result, current_year=current_year):
+        reasons.append("unrated_insufficient_metadata")
     if (
         not title_text
         and missing_overview
@@ -1697,7 +1701,9 @@ def classify_candidate_quality(
         weak_reasons.append("missing_overview")
     if result.get("overview_source") in {OVERVIEW_SOURCE_ORIGINAL_LANGUAGE, OVERVIEW_SOURCE_EN}:
         weak_reasons.append("fallback_overview")
-    if vote_average <= 0:
+    if rating_unknown:
+        weak_reasons.append("rating_unknown")
+    elif vote_average <= 0:
         weak_reasons.append("rating_0")
     result_year = _result_year(result, bucket.media_type)
     if current_year is not None and result_year is not None and result_year >= int(current_year) - 1 and vote_count <= 20:
@@ -1732,7 +1738,8 @@ def compute_candidate_score_debug(
     metadata_overview_penalty, overview_source, metadata_missing_overview = _overview_metadata_penalty(result)
     quality_decision = quality_decision or classify_candidate_quality(result, bucket)
     vote_confidence = vote_confidence_for_count(vote_count)
-    rating_bonus_raw = vote_average * 100
+    rating_unknown = has_unknown_rating(result)
+    rating_bonus_raw = 0.0 if rating_unknown else vote_average * 100
     rating_bonus_adjusted = rating_bonus_raw * vote_confidence
     vote_count_bonus = min(math.log10(max(vote_count, 1)) * 100, 500)
     popularity_bonus = min(popularity, 500)
@@ -1785,6 +1792,7 @@ def compute_candidate_score_debug(
         "genre_bonus": round(genre_bonus, 4),
         "rating_bonus_raw": round(rating_bonus_raw, 4),
         "vote_confidence": round(vote_confidence, 4),
+        "rating_confidence": "unknown" if rating_unknown else "known",
         "rating_bonus_adjusted": round(rating_bonus_adjusted, 4),
         "metadata_bonus": round(metadata_bonus, 4),
         "localization_bonus": round(localization_bonus, 4),

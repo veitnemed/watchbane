@@ -18,6 +18,8 @@ from candidates.models.keys import (
 )
 from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
 from candidates.repositories.pool_repository import load_candidate_pool
+from candidates.scoring.rating_confidence import has_unknown_rating, is_viable_unrated_candidate
+from candidates.sources.tmdb.scoring import compute_tmdb_quality_score
 from candidates import title_state_service
 from dataset.models.media_type import normalize_media_type
 from storage.sqlite import action_repository, impression_repository
@@ -30,6 +32,8 @@ DEFAULT_ACTIVE_LIMIT = 30
 DEFAULT_RESERVE_SIZE = 70
 DEFAULT_RECENT_DAYS = 30
 DEFAULT_REFILL_THRESHOLD = 20
+DEFAULT_UNKNOWN_RATING_LIMIT = 6
+EXPANDED_UNKNOWN_RATING_LIMIT = 12
 
 
 def _as_utc(value: datetime | date) -> datetime:
@@ -56,6 +60,12 @@ def _number(value) -> float | None:
 
 
 def _base_score(candidate: dict) -> float:
+    if has_unknown_rating(candidate):
+        for field in ("final_score", "candidate_score", "quality_score"):
+            score = _number(candidate.get(field))
+            if score is not None:
+                return score
+        return compute_tmdb_quality_score(candidate) * 100.0
     for field in ("final_score", "candidate_score", "quality_score", "tmdb_score"):
         score = _number(candidate.get(field))
         if score is not None:
@@ -136,6 +146,43 @@ def _rank_candidates(candidates: list[dict], day_seed: str) -> list[dict]:
     return ranked
 
 
+def _unknown_rating_limit(preferences: dict, active_limit: int) -> int:
+    collection = str(
+        preferences.get("_recommendation_collection")
+        or preferences.get("release_preference")
+        or ""
+    ).strip().casefold()
+    countries = preferences.get("country") or preferences.get("countries") or []
+    if isinstance(countries, str):
+        countries = [countries]
+    has_explicit_market = any(str(value or "").strip() for value in countries)
+    configured = (
+        EXPANDED_UNKNOWN_RATING_LIMIT
+        if collection == "new" and has_explicit_market
+        else DEFAULT_UNKNOWN_RATING_LIMIT
+    )
+    return min(max(0, int(active_limit)), configured)
+
+
+def _select_active_with_unknown_quota(
+    ranked: list[dict],
+    *,
+    active_limit: int,
+    unknown_limit: int,
+) -> tuple[list[dict], list[dict]]:
+    active: list[dict] = []
+    remaining: list[dict] = []
+    unknown_count = 0
+    for candidate in ranked:
+        unknown = has_unknown_rating(candidate)
+        if len(active) < active_limit and (not unknown or unknown_count < unknown_limit):
+            active.append(candidate)
+            unknown_count += int(unknown)
+        else:
+            remaining.append(candidate)
+    return active, remaining
+
+
 class RecommendationDeckService:
     def __init__(
         self,
@@ -201,6 +248,7 @@ class RecommendationDeckService:
             "future_release": 0,
             "duplicate": 0,
             "preferences": 0,
+            "quality_gate": 0,
         }
         for raw_candidate in source:
             if not isinstance(raw_candidate, dict):
@@ -224,6 +272,9 @@ class RecommendationDeckService:
             if year is not None and int(year) > now.year:
                 counters["future_release"] += 1
                 continue
+            if not is_viable_unrated_candidate(candidate, current_year=now.year):
+                counters["quality_gate"] += 1
+                continue
             if candidate_matches(candidate, criteria) is False:
                 counters["preferences"] += 1
                 continue
@@ -243,8 +294,13 @@ class RecommendationDeckService:
         reserve_limit = max(0, int(reserve_size))
         eligible, excluded = self._eligible_candidates(dict(preferences or {}), current)
         ranked = _rank_candidates(eligible, current.date().isoformat())
-        active = ranked[:active_limit]
-        reserve = ranked[active_limit : active_limit + reserve_limit]
+        unknown_limit = _unknown_rating_limit(dict(preferences or {}), active_limit)
+        active, remaining = _select_active_with_unknown_quota(
+            ranked,
+            active_limit=active_limit,
+            unknown_limit=unknown_limit,
+        )
+        reserve = remaining[:reserve_limit]
         if not active:
             underfilled_reason = "no_eligible_candidates" if excluded["pool_total"] else "pool_empty"
         elif len(active) < active_limit:
@@ -262,6 +318,7 @@ class RecommendationDeckService:
             "reserve": reserve,
             "active_limit": active_limit,
             "reserve_size": reserve_limit,
+            "unknown_rating_limit": unknown_limit,
             "refill_needed": len(reserve) < self._refill_threshold,
             "underfilled_reason": underfilled_reason,
             "eligible_count": len(eligible),
@@ -324,7 +381,18 @@ class RecommendationDeckService:
         ]
         promoted = None
         if len(deck["active"]) < deck["active_limit"] and deck["reserve"]:
-            promoted = deck["reserve"].pop(0)
+            unknown_count = sum(has_unknown_rating(item) for item in deck["active"])
+            promotion_index = next(
+                (
+                    index
+                    for index, item in enumerate(deck["reserve"])
+                    if not has_unknown_rating(item) or unknown_count < deck["unknown_rating_limit"]
+                ),
+                None,
+            )
+            if promotion_index is not None:
+                promoted = deck["reserve"].pop(promotion_index)
+        if promoted is not None:
             deck["active"].append(promoted)
             impression_repository.record_impressions(
                 [promoted],
