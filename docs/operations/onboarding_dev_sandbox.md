@@ -44,7 +44,7 @@ py start_console.py
 # choose: 7 >> Dev GUI: empty candidate pool on startup
 ```
 
-This starts `start_app.py` with `WATCHBANE_DEV_CLEAR_CANDIDATES_ON_START=1` only. GUI bootstrap backs up the active data root, clears candidate/onboarding tables, then opens the onboarding flow from a zero candidate pool.
+This copies the active data root into `tmp/dev_gui/empty_candidate_pool/`, starts `start_app.py` with `WATCHBANE_DATA_DIR` pointed at that isolated runtime root, and enables `WATCHBANE_DEV_CLEAR_CANDIDATES_ON_START=1`. GUI bootstrap backs up the copied data root, clears candidate/onboarding tables there, then opens the onboarding flow from a zero candidate pool without touching the active profile.
 
 ## Token Policy
 

@@ -1,8 +1,9 @@
 # Python
 __pycache__/
 *.py[cod]
-.pytest-tmp/
+.pytest-tmp*/
 .pytest_cache/
+tmp/pytest/
 
 # Editors and operating systems
 .idea/

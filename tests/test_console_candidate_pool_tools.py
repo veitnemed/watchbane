@@ -1,4 +1,5 @@
 import inspect
+from pathlib import Path
 
 from ui.console import candidate_pool_tools
 from ui.console import interface_funcs
@@ -39,6 +40,11 @@ def test_console_dev_gui_launcher_sets_candidate_clear_env(monkeypatch) -> None:
         return Result()
 
     monkeypatch.setenv(runtime.DEV_EMPTY_PROFILE_ENV, "1")
+    monkeypatch.setattr(
+        dev_gui,
+        "prepare_empty_candidate_pool_runtime",
+        lambda: Path("tmp/dev_gui/empty_candidate_pool"),
+    )
     monkeypatch.setattr(dev_gui.subprocess, "run", fake_run)
 
     return_code = dev_gui.launch_gui_with_empty_candidate_pool()
@@ -47,8 +53,39 @@ def test_console_dev_gui_launcher_sets_candidate_clear_env(monkeypatch) -> None:
     assert captured["command"][-1] == "start_app.py"
     assert captured["cwd"].name == "watchbane"
     assert captured["check"] is False
+    assert captured["env"]["WATCHBANE_DATA_DIR"] == str(Path("tmp/dev_gui/empty_candidate_pool"))
     assert captured["env"][runtime.DEV_CLEAR_CANDIDATES_ENV] == "1"
     assert runtime.DEV_EMPTY_PROFILE_ENV not in captured["env"]
+
+
+def test_console_dev_gui_prepares_isolated_runtime(monkeypatch, tmp_path) -> None:
+    from ui.console import dev_gui
+
+    repo_root = tmp_path / "repo"
+    source_data = tmp_path / "source-data"
+    (source_data / "watched").mkdir(parents=True)
+    (source_data / "cache").mkdir()
+    (source_data / "logs").mkdir()
+    (source_data / "backups").mkdir()
+    (source_data / "watched" / "titles.json").write_text("[]", encoding="utf-8")
+    (source_data / "cache" / "large.bin").write_text("cache", encoding="utf-8")
+    (source_data / "logs" / "session.log").write_text("log", encoding="utf-8")
+    (source_data / "backups" / "copy.zip").write_text("backup", encoding="utf-8")
+
+    monkeypatch.setattr(dev_gui, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        dev_gui.profiles,
+        "describe_active_profile",
+        lambda: {"data_dir": source_data},
+    )
+
+    runtime_root = dev_gui.prepare_empty_candidate_pool_runtime()
+
+    assert runtime_root == repo_root / "tmp" / "dev_gui" / "empty_candidate_pool"
+    assert (runtime_root / "data" / "watched" / "titles.json").read_text(encoding="utf-8") == "[]"
+    assert (runtime_root / "data" / "cache").exists() is False
+    assert (runtime_root / "data" / "logs").exists() is False
+    assert (runtime_root / "data" / "backups").exists() is False
 
 
 def test_console_app_routes_dev_gui_command(monkeypatch) -> None:
