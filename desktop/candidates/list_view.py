@@ -495,14 +495,29 @@ class CandidateListView(CandidateListActionsMixin):
         indicator.apply_presentation(presentation)
         self._deck_reserve_label.setVisible(presentation.mode != "idle")
         snapshot = presentation.snapshot
+        retry_build = presentation.mode == "error"
+        self._deck_refill_button.setText(
+            tr(
+                "recommendations.deck_reserve.retry"
+                if retry_build
+                else "recommendations.deck_reserve.refresh"
+            )
+        )
         self._deck_refill_button.setVisible(
-            presentation.mode == "ready"
-            and snapshot is not None
-            and snapshot.remaining < 25
-            and self._on_refill_needed is not None
+            retry_build
+            or (
+                presentation.mode == "ready"
+                and snapshot is not None
+                and snapshot.remaining < 25
+                and self._on_refill_needed is not None
+            )
         )
 
     def _on_deck_refill_clicked(self) -> None:
+        if self._deck is None:
+            self._deck_build_failed = False
+            self._load_recommendation_deck(force_new=False)
+            return
         deck_id = str((self._deck or {}).get("deck_id") or "")
         if deck_id:
             self._refill_requested_deck_ids.discard(deck_id)

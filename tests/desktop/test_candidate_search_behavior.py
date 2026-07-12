@@ -474,6 +474,8 @@ def test_recommendation_deck_error_uses_non_modal_workspace_state(qtbot) -> None
         "recommendations.empty_state.error.title"
     )
     assert list_view._deck_status_label.isHidden()
+    assert list_view._deck_refill_button.isVisible()
+    assert list_view._deck_refill_button.text() == tr("recommendations.deck_reserve.retry")
 
 
 def test_filter_replenish_lifecycle_updates_empty_recommendation_workspace(qtbot) -> None:
