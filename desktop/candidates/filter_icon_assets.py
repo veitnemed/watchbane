@@ -39,6 +39,7 @@ _CLEAN_ICON_NAMES = {
     "globe",
     "heart",
     "media",
+    "bookmark",
     "refresh",
     "replenish",
     "search",
@@ -213,6 +214,19 @@ def _draw_section_icon(painter: QPainter, name: str, size: int, color: str) -> N
         painter.drawPath(path)
         return
 
+    if name == "bookmark":
+        path = QPainterPath()
+        path.moveTo(size * 0.34, size * 0.27)
+        path.lineTo(size * 0.66, size * 0.27)
+        path.quadTo(size * 0.70, size * 0.27, size * 0.70, size * 0.32)
+        path.lineTo(size * 0.70, size * 0.73)
+        path.lineTo(size * 0.50, size * 0.62)
+        path.lineTo(size * 0.30, size * 0.73)
+        path.lineTo(size * 0.30, size * 0.32)
+        path.quadTo(size * 0.30, size * 0.27, size * 0.34, size * 0.27)
+        painter.drawPath(path)
+        return
+
     if name == "sliders":
         x1 = size * 0.30
         x2 = size * 0.70
@@ -338,4 +352,32 @@ def filter_section_icon_label(name: str, object_name: str, size: int, color: str
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
     label.setFixedSize(size, size)
     label.setPixmap(filter_section_icon_pixmap(name, size, color))
+    return label
+
+
+def filter_section_badge_label(
+    name: str,
+    object_name: str,
+    size: int,
+    color: str,
+    background: str,
+    border: str,
+) -> QLabel:
+    """Return a scale-stable circular badge with a clean section icon."""
+    pixmap = QPixmap(size, size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    painter.setPen(QPen(QColor(border), max(1, round(size * 0.025))))
+    painter.setBrush(QColor(background))
+    inset = max(1, round(size * 0.025))
+    painter.drawEllipse(QRectF(inset, inset, size - inset * 2, size - inset * 2))
+    _draw_section_icon(painter, name, size, color)
+    painter.end()
+
+    label = QLabel()
+    label.setObjectName(object_name)
+    label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    label.setFixedSize(size, size)
+    label.setPixmap(pixmap)
     return label

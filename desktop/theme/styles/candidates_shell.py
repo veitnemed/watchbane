@@ -272,28 +272,38 @@ QFrame#recommendationReasonsPanel {{
     background-color: {FILM_SURFACE_2};
     border: 1px solid {FILM_BORDER};
     border-radius: {detail_px(RADIUS_CARD)}px;
+    min-height: {list_px(92)}px;
 }}
 QFrame#recommendationActionPanel {{
     background-color: {FILM_SURFACE_1};
     border: 1px solid {FILM_BORDER_WEAK};
     border-radius: {detail_px(RADIUS_CARD)}px;
+    min-height: {list_px(126)}px;
+}}
+QLabel#recommendationReasonsIcon {{
+    background: transparent;
+    border: none;
+    padding: 0;
+}}
+QWidget#recommendationReasonsCopy {{
+    background: transparent;
 }}
 QLabel#recommendationReasonsTitle {{
     background: transparent;
-    color: {FILM_ACCENT_HOVER};
-    font-size: {font_px(FONT_BASE)}px;
+    color: {FILM_TEXT};
+    font-size: {font_px(FONT_SECTION + 1)}px;
     font-weight: 700;
 }}
 QLabel#recommendationReasonsText {{
     background: transparent;
     color: {FILM_TEXT_SUBTLE};
-    font-size: {font_px(FONT_SMALL)}px;
+    font-size: {font_px(FONT_BASE)}px;
 }}
 QLabel#recommendationUserRatingPrompt {{
     background: transparent;
     color: {FILM_TEXT};
-    font-size: {font_px(FONT_BASE + 1)}px;
-    font-weight: 600;
+    font-size: {font_px(FONT_SECTION + 1)}px;
+    font-weight: 700;
 }}
 QPushButton#recommendationWatchedButton,
 QPushButton#recommendationWatchlistButton,
@@ -301,8 +311,8 @@ QPushButton#recommendationHiddenButton {{
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
     font-size: {font_px(FONT_SMALL)}px;
     font-weight: 700;
-    min-height: {px(34)}px;
-    padding: {px(5)}px {px(10)}px;
+    min-height: {list_px(32)}px;
+    padding: {list_px(4)}px {list_px(10)}px;
 }}
 QPushButton#recommendationWatchedButton {{
     background-color: {COLOR_ADD_BUTTON_TOP};
@@ -311,7 +321,7 @@ QPushButton#recommendationWatchedButton {{
 }}
 QPushButton#recommendationWatchlistButton {{
     background-color: {COLOR_CARD_ALT};
-    border: 1px solid {COLOR_BORDER_HOVER};
+    border: 1px solid {FILM_BORDER_STRONG};
     color: {COLOR_TEXT};
 }}
 QPushButton#recommendationHiddenButton {{

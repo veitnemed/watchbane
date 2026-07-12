@@ -27,6 +27,12 @@ QPushButton#userRatingButton {{
     padding: {layout_px(6)}px {layout_px(7)}px;
     min-height: {layout_px(40)}px;
 }}
+QWidget[candidatePanel="true"] QPushButton#userRatingButton {{
+    font-size: {font_px(FONT_TINY - 1)}px;
+    min-height: {layout_px(32)}px;
+    padding-left: {layout_px(4)}px;
+    padding-right: {layout_px(4)}px;
+}}
 QPushButton#userRatingButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};
     color: {COLOR_TEXT};

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from math import ceil
 from time import perf_counter
 
-from PyQt6.QtCore import QModelIndex, QTimer, Qt, pyqtSignal
+from PyQt6.QtCore import QModelIndex, QSize, QTimer, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFrame,
@@ -31,6 +31,7 @@ from candidates.recommendation_deck_service import ACTIVE_DECK_SIZE, Recommendat
 from candidates.scoring.rating_confidence import has_unknown_rating
 from desktop.candidates.list_actions import CandidateListActionsMixin
 from desktop.candidates.list_delegate import build_candidate_list_item_delegate
+from desktop.candidates.filter_icon_assets import filter_section_badge_label
 from desktop.candidates.list_model import CandidateListModel
 from desktop.candidates.poster_prefetch import CandidatePosterPrefetchController
 from desktop.candidates.presenters import (
@@ -61,6 +62,7 @@ from desktop.theme.shell_layout import (
 )
 from desktop.theme.layout import CANDIDATE_LIST_MAX_WIDTH, CANDIDATE_LIST_MIN_WIDTH
 from desktop.theme.scaling import list_px
+from desktop.theme.tokens import FILM_ACCENT, FILM_ACCENT_DIM, FILM_BORDER
 
 logger = logging.getLogger(__name__)
 
@@ -319,41 +321,56 @@ class CandidateListView(CandidateListActionsMixin):
         self._decision_cluster.setObjectName("recommendationDecisionCluster")
         decision_layout = QVBoxLayout(self._decision_cluster)
         decision_layout.setContentsMargins(0, 0, 0, 0)
-        decision_layout.setSpacing(list_px(6))
+        decision_layout.setSpacing(list_px(10))
 
         self._reason_panel = QFrame()
         self._reason_panel.setObjectName("recommendationReasonsPanel")
-        reason_layout = QVBoxLayout(self._reason_panel)
+        reason_layout = QHBoxLayout(self._reason_panel)
         reason_layout.setContentsMargins(
-            list_px(8),
-            list_px(6),
-            list_px(8),
-            list_px(6),
+            list_px(14),
+            list_px(10),
+            list_px(14),
+            list_px(10),
         )
-        reason_layout.setSpacing(list_px(4))
+        reason_layout.setSpacing(list_px(12))
+        reason_icon = filter_section_badge_label(
+            "bookmark",
+            "recommendationReasonsIcon",
+            list_px(34),
+            FILM_ACCENT,
+            FILM_ACCENT_DIM,
+            FILM_BORDER,
+        )
+        reason_layout.addWidget(reason_icon, alignment=Qt.AlignmentFlag.AlignVCenter)
+        reason_copy = QWidget()
+        reason_copy.setObjectName("recommendationReasonsCopy")
+        reason_copy_layout = QVBoxLayout(reason_copy)
+        reason_copy_layout.setContentsMargins(0, 0, 0, 0)
+        reason_copy_layout.setSpacing(list_px(7))
         self._reason_title = QLabel(tr("recommendations.reasons.title"))
         self._reason_title.setObjectName("recommendationReasonsTitle")
-        reason_layout.addWidget(self._reason_title)
+        reason_copy_layout.addWidget(self._reason_title)
         self._reason_label = QLabel("")
         self._reason_label.setObjectName("recommendationReasonsText")
         self._reason_label.setWordWrap(True)
-        reason_layout.addWidget(self._reason_label)
+        reason_copy_layout.addWidget(self._reason_label)
+        reason_layout.addWidget(reason_copy, stretch=1)
 
         self._action_panel = QFrame()
         self._action_panel.setObjectName("recommendationActionPanel")
         action_layout = QVBoxLayout(self._action_panel)
         action_layout.setContentsMargins(
-            list_px(8),
-            list_px(6),
-            list_px(8),
-            list_px(8),
+            list_px(10),
+            list_px(12),
+            list_px(10),
+            list_px(14),
         )
-        action_layout.setSpacing(list_px(6))
+        action_layout.setSpacing(list_px(10))
 
         action_buttons_layout = QGridLayout()
         action_buttons_layout.setContentsMargins(0, 0, 0, 0)
-        action_buttons_layout.setHorizontalSpacing(list_px(8))
-        action_buttons_layout.setVerticalSpacing(list_px(6))
+        action_buttons_layout.setHorizontalSpacing(list_px(12))
+        action_buttons_layout.setVerticalSpacing(list_px(10))
         self._watched_action_button = QPushButton(tr("recommendations.action.watched"))
         self._watched_action_button.setObjectName("recommendationWatchedButton")
         self._watched_action_button.hide()
@@ -367,15 +384,23 @@ class CandidateListView(CandidateListActionsMixin):
         action_layout.addWidget(rating_prompt)
         self._candidate_rating_selector = UserRatingSelector()
         self._candidate_rating_selector.setObjectName("recommendationUserRatingSelector")
+        self._candidate_rating_selector.setProperty("candidatePanel", True)
+        self._candidate_rating_selector.setMaximumWidth(list_px(360))
+        for button in self._candidate_rating_selector.buttons():
+            button.setMinimumWidth(list_px(72))
+            button.setIconSize(QSize(list_px(18), list_px(18)))
         self._candidate_rating_selector.valueChanged.connect(
             lambda value: self._apply_recommendation_action("watched", user_score=value)
             if value is not None
             else None
         )
-        action_layout.addWidget(
-            self._candidate_rating_selector,
-            alignment=Qt.AlignmentFlag.AlignHCenter,
-        )
+        rating_row = QHBoxLayout()
+        rating_row.setContentsMargins(0, 0, 0, 0)
+        rating_row.setSpacing(0)
+        rating_row.addStretch(1)
+        rating_row.addWidget(self._candidate_rating_selector, stretch=100)
+        rating_row.addStretch(1)
+        action_layout.addLayout(rating_row)
         self._watchlist_action_button.clicked.connect(
             lambda: self._apply_recommendation_action("watchlist")
         )
