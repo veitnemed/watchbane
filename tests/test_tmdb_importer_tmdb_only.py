@@ -1,5 +1,7 @@
 """Tests for TMDb-only candidate pool import."""
 
+import pytest
+
 from candidates.sources.tmdb import importer
 
 
@@ -24,11 +26,14 @@ def _candidate(**overrides) -> dict:
 
 def _patch_importer(monkeypatch, pool: dict, saved: dict) -> None:
     monkeypatch.setattr(importer, "load_candidate_pool", lambda: dict(pool))
-    monkeypatch.setattr(importer, "save_candidate_pool", lambda value: saved.update({"pool": value}))
     monkeypatch.setattr(importer, "build_watched_signatures", lambda: set())
     monkeypatch.setattr(importer, "build_dataset_title_keys", lambda: set())
     monkeypatch.setattr(importer, "load_candidate_criteria", lambda: {})
-    monkeypatch.setattr(importer, "save_named_criteria", lambda name, criteria: saved.update({"criteria": criteria}))
+    monkeypatch.setattr(
+        importer,
+        "_save_import_state",
+        lambda value, _name, criteria: saved.update({"pool": value, "criteria": criteria}),
+    )
 
 
 def test_import_new_tmdb_candidate(monkeypatch) -> None:
@@ -81,9 +86,12 @@ def test_import_skips_watched_localized_title(monkeypatch) -> None:
     }
 
     monkeypatch.setattr(importer, "load_candidate_pool", lambda: {})
-    monkeypatch.setattr(importer, "save_candidate_pool", lambda value: saved.update({"pool": value}))
     monkeypatch.setattr(importer, "load_candidate_criteria", lambda: {})
-    monkeypatch.setattr(importer, "save_named_criteria", lambda name, criteria: saved.update({"criteria": criteria}))
+    monkeypatch.setattr(
+        importer,
+        "_save_import_state",
+        lambda value, _name, criteria: saved.update({"pool": value, "criteria": criteria}),
+    )
     monkeypatch.setattr("storage.data.load_dataset", lambda: dataset)
 
     stats = importer.import_tmdb_candidates_to_common_pool([
@@ -164,6 +172,33 @@ def test_same_title_year_different_media_type_is_added_as_distinct_candidate(mon
     assert stats["added"] == 1
     assert stats["updated"] == 0
     assert set(saved["pool"]) == {"watchmen|2009", "watchmen|2009|movie"}
+
+
+def test_import_state_rolls_back_pool_criteria_and_fts_together(monkeypatch) -> None:
+    from storage.sqlite import candidate_pool_repository
+    from storage.sqlite.candidate_criteria_repository import load_candidate_criteria_dict
+    from storage.sqlite.candidate_pool_repository import load_candidate_pool_dict
+
+    original_pool = {"before|2020": _candidate(title="Before", tmdb_id=1)}
+    original_criteria = {"criteria_name": "common", "count": 1}
+    importer._save_import_state(original_pool, "common", original_criteria)
+    persisted_pool = load_candidate_pool_dict()
+
+    monkeypatch.setattr(
+        candidate_pool_repository,
+        "rebuild_fts_index",
+        lambda _conn: (_ for _ in ()).throw(RuntimeError("simulated FTS failure")),
+    )
+
+    with pytest.raises(RuntimeError, match="FTS failure"):
+        importer._save_import_state(
+            {"after|2021": _candidate(title="After", year=2021, tmdb_id=2)},
+            "common",
+            {"criteria_name": "common", "count": 2},
+        )
+
+    assert load_candidate_pool_dict() == persisted_pool
+    assert load_candidate_criteria_dict() == {"common": original_criteria}
 
 
 def test_import_builds_tmdb_id_index_once_for_large_batch(monkeypatch) -> None:

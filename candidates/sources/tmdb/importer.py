@@ -18,8 +18,8 @@ from candidates.pool.storage import (
     find_candidate_storage_match,
 )
 from candidates.pool.watched_cleanup import build_watched_signatures, is_watched_candidate
-from candidates.repositories.criteria_repository import load_candidate_criteria, save_named_criteria
-from candidates.repositories.pool_repository import load_candidate_pool, save_candidate_pool
+from candidates.repositories.criteria_repository import load_candidate_criteria
+from candidates.repositories.pool_repository import load_candidate_pool
 from candidates.scoring.sort_keys import candidate_sort_score
 from candidates.sources.tmdb.scoring import (
     compute_metadata_completeness_score,
@@ -28,6 +28,13 @@ from candidates.sources.tmdb.scoring import (
     compute_tmdb_quality_score,
 )
 from candidates.sources.tmdb.output import list_tmdb_result_files
+from storage.sqlite.candidate_criteria_repository import (
+    load_candidate_criteria_dict,
+    save_candidate_criteria_dict,
+)
+from storage.sqlite.candidate_pool_repository import save_candidate_pool_dict
+from storage.sqlite.connection import connect
+from storage.sqlite.migrations import apply_migrations
 
 
 def _count_external_rating_fields(candidate: dict[str, Any]) -> int:
@@ -196,6 +203,20 @@ def merge_criteria_metadata(existing: dict[str, Any], incoming_metadata: dict[st
     return merged
 
 
+def _save_import_state(pool: dict, criteria_name: str, criteria_entry: dict) -> None:
+    """Persist pool, criteria and FTS changes in one SQLite transaction."""
+    conn = connect()
+    try:
+        apply_migrations(conn)
+        with conn:
+            all_criteria = load_candidate_criteria_dict(conn=conn)
+            all_criteria[criteria_name] = criteria_entry
+            save_candidate_criteria_dict(all_criteria, conn=conn)
+            save_candidate_pool_dict(pool, conn=conn, purge_watched=False)
+    finally:
+        conn.close()
+
+
 def import_tmdb_candidates_to_common_pool(
     candidates: list[dict[str, Any]],
     criteria_name: str | None = None,
@@ -273,11 +294,11 @@ def import_tmdb_candidates_to_common_pool(
     )
     if criteria_entry.get("count") in (None, 0, ""):
         criteria_entry["count"] = len(candidates)
-    save_named_criteria(
+    _save_import_state(
+        pool,
         resolved_criteria_name,
         merge_criteria_metadata(criteria_entry, criteria_metadata),
     )
-    save_candidate_pool(pool)
     pool_size_after = len(load_candidate_pool())
     stats["pool_size_after"] = pool_size_after
     stats["pool_size"] = pool_size_after

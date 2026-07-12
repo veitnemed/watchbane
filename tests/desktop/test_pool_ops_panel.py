@@ -9,6 +9,7 @@ from desktop.settings.pool_ops_worker import (
     ACTION_DEDUPE,
     ACTION_IMPORT_JSON,
     ACTION_PURGE_WATCHED,
+    ACTION_TMDB_BUILD,
     PoolMaintenanceWorker,
 )
 
@@ -227,6 +228,45 @@ def test_import_file_dialog_cancel_starts_no_worker(qtbot, monkeypatch) -> None:
     qtbot.mouseClick(panel.findChild(QPushButton, "poolOpsImportButton"), Qt.MouseButton.LeftButton)
 
     assert workers == []
+
+
+def test_build_dialog_cancel_starts_no_worker(qtbot, monkeypatch) -> None:
+    panel, _service, workers, _status, _changed = _build_panel(qtbot, monkeypatch)
+
+    class RejectedBuildDialog:
+        DialogCode = PoolClearDialog.DialogCode
+
+        def __init__(self, parent=None):
+            del parent
+
+        def exec(self):
+            return self.DialogCode.Rejected
+
+    monkeypatch.setattr("desktop.settings.pool_ops_panel.TmdbBuildDialog", RejectedBuildDialog)
+
+    qtbot.mouseClick(panel.findChild(QPushButton, "poolOpsBuildButton"), Qt.MouseButton.LeftButton)
+
+    assert workers == []
+
+
+def test_busy_panel_rejects_second_worker_start(qtbot, monkeypatch) -> None:
+    panel, _service, workers, _status, _changed = _build_panel(qtbot, monkeypatch)
+
+    panel._start_worker(ACTION_TMDB_BUILD, build_kwargs={"country": "US"})
+    panel._start_worker(ACTION_TMDB_BUILD, build_kwargs={"country": "GB"})
+
+    assert len(workers) == 1
+    assert workers[0].build_kwargs == {"country": "US"}
+    assert all(
+        button.isEnabled() is False
+        for button in (
+            panel._dedupe_button,
+            panel._purge_button,
+            panel._clear_button,
+            panel._import_button,
+            panel._build_button,
+        )
+    )
 
 
 def test_invalid_import_reports_safe_message_without_raw_error(qtbot, monkeypatch) -> None:
