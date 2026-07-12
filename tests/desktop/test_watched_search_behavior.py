@@ -105,3 +105,21 @@ def test_filter_only_empty_state_does_not_claim_library_is_empty(qtbot, monkeypa
 
     qtbot.waitUntil(lambda: watched_tab._visible_entries == [])
     assert watched_tab._detail_card._title_label.text() == tr("watched.empty.not_found")
+
+
+def test_watched_default_year_filter_keeps_supported_classics_visible(qtbot, monkeypatch) -> None:
+    from desktop.watched import tab as watched_tab_module
+
+    entries = [
+        _entry("classic", "Classic Show", year=1990),
+        _entry("modern", "Modern Show", year=2024),
+    ]
+    monkeypatch.setattr(watched_tab_module, "load_watched_entries", lambda: list(entries))
+
+    watched_tab = watched_tab_module.WatchedTabView()
+    qtbot.addWidget(watched_tab.widget)
+    list_widget = watched_tab.widget.findChild(QListWidget, "watchedList")
+
+    assert list_widget is not None
+    assert _listed_titles(list_widget) == ["Classic Show", "Modern Show"]
+    assert watched_tab._filters.year_filter_active() is False
