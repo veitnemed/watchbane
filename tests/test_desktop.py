@@ -6597,6 +6597,22 @@ def test_main_tab_registry_focus_activates_current_view(qapp) -> None:
     assert candidate_view.activation_count == 2
 
 
+def test_onboarding_dialog_stays_within_available_screen(qapp) -> None:
+    from desktop.onboarding.wizard import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="ru")
+    dialog.show()
+    qapp.processEvents()
+    available = dialog.screen().availableGeometry()
+
+    assert dialog.width() <= available.width()
+    assert dialog.height() <= available.height()
+    assert dialog._page_scroll.horizontalScrollBar().maximum() == 0
+    assert dialog._next_button.isVisible() is True
+
+    dialog.close()
+
+
 def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch, qapp) -> None:
     from types import SimpleNamespace
 
