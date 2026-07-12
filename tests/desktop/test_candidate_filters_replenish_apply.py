@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QCheckBox, QComboBox, QProgressBar, QPushButton
 
 from desktop.candidates.filters_view import CandidateFiltersView, clamp_filter_replenish_batch_size
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.i18n import tr
 
 
 class FakeReplenishService:
@@ -143,6 +144,74 @@ def test_filter_intro_stats_are_visible_when_copy_is_nonempty(qtbot) -> None:
 
     assert view._intro_stats.text().strip()
     assert view._intro_stats.isVisible()
+
+
+def test_filter_state_refreshes_when_pool_becomes_empty(qtbot) -> None:
+    _service, session, view = _build_view(qtbot)
+    session.last_error = "previous failure"
+    session.filters = dict(DEFAULT_BROWSE_FILTERS)
+    session.filtered_candidates = [{"title": "Before"}]
+    session.filtered_count = 1
+    session._notify_listeners()
+
+    session._apply_search_result(
+        dict(DEFAULT_BROWSE_FILTERS),
+        {
+            "is_empty_pool": True,
+            "overview": {"is_empty": True, "candidates": [], "stats": {}},
+        },
+    )
+
+    assert view._intro_lead.text() == tr("candidates.filters.empty.lead")
+    assert view._intro_stats.text() == tr("candidates.filters.empty.stats")
+    assert view._intro_stats.isVisible()
+    assert view._apply_button.isEnabled() is False
+    assert session.last_error is None
+
+
+def test_filter_error_hides_raw_service_details(qtbot) -> None:
+    _service, session, view = _build_view(qtbot)
+    raw_error = "token=secret-token path D:\\runtime\\watchbane.sqlite3"
+
+    session.last_error = raw_error
+    session._notify_listeners()
+
+    assert view._intro_lead.text() == tr("candidates.filters.error.lead")
+    assert view._intro_stats.text() == tr("candidates.filters.error.stats")
+    assert raw_error not in view._intro_stats.text()
+
+
+def test_async_error_does_not_retry_failed_overview_on_ui_thread(qtbot) -> None:
+    _service, session, view = _build_view(qtbot)
+
+    class BrokenOverviewService:
+        calls = 0
+
+        def get_search_overview_view(self):
+            self.calls += 1
+            raise RuntimeError("database unavailable")
+
+    broken = BrokenOverviewService()
+    session.service = broken
+    session._overview_cache = None
+    session._request_id = 1
+    session._set_loading(True)
+
+    session._on_async_result(
+        1,
+        dict(DEFAULT_BROWSE_FILTERS),
+        {
+            "ok": False,
+            "is_empty_pool": False,
+            "error": "database unavailable",
+            "candidates": [],
+        },
+    )
+
+    assert broken.calls == 0
+    assert session.is_loading is False
+    assert session.last_error == "database unavailable"
+    assert view._intro_stats.text() == tr("candidates.filters.error.stats")
 
 
 def test_summary_sidebar_yields_width_to_filters_on_narrow_window(qtbot) -> None:

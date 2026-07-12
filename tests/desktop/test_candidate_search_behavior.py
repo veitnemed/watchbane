@@ -384,6 +384,20 @@ def test_empty_recommendation_deck_shows_stable_empty_state(qtbot) -> None:
     assert list_view.widget.findChild(QFrame, "recommendationActionPanel").isHidden()
 
 
+def test_compact_recommendations_show_visible_loading_state(qtbot) -> None:
+    from desktop.i18n import tr
+
+    _service, session, _filters_view, list_view = _build_views(qtbot)
+    list_view.widget.resize(900, 700)
+    qtbot.waitUntil(lambda: list_view._is_compact_layout is True)
+
+    session._set_loading(True)
+
+    assert list_view._deck_status_label.isVisible()
+    assert list_view._deck_status_label.text() == tr("recommendations.state.replenishing")
+    assert list_view._decision_cluster.isHidden()
+
+
 def test_recommendation_copy_is_available_in_ru_and_en() -> None:
     from desktop.i18n import translate
 
@@ -670,6 +684,37 @@ def test_session_ignores_stale_async_result(qtbot) -> None:
 
     assert session.has_results is False
     assert session.sorted_total_count() == 0
+
+
+def test_candidate_search_worker_logs_service_error(monkeypatch, qapp) -> None:
+    from desktop.candidates.workers import search_worker as worker_module
+
+    class BrokenService:
+        def get_search_overview_view(self):
+            raise RuntimeError("service failed")
+
+    logged = []
+    completed = []
+    monkeypatch.setattr(
+        worker_module,
+        "log_exception",
+        lambda event, error, **fields: logged.append((event, str(error), fields)),
+    )
+    worker = worker_module.CandidateSearchWorker(
+        request_id=7,
+        service=BrokenService(),
+        filters={},
+        sort_mode="final_score",
+    )
+    worker.completed.connect(lambda request_id, result: completed.append((request_id, result)))
+
+    worker.run()
+
+    assert logged == [
+        ("candidates.search.worker.error", "service failed", {"request_id": 7})
+    ]
+    assert completed[0][0] == 7
+    assert completed[0][1]["ok"] is False
 
 
 def test_fts_disabled_falls_back_to_substring_filter(qtbot) -> None:

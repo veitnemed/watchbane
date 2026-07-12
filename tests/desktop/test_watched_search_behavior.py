@@ -86,3 +86,22 @@ def test_watched_media_type_combo_filters_visible_list(qtbot, monkeypatch) -> No
 
     media_combo.setCurrentIndex(0)
     qtbot.waitUntil(lambda: _listed_titles(list_widget) == ["Alpha Series", "Alpha Movie"])
+
+
+def test_filter_only_empty_state_does_not_claim_library_is_empty(qtbot, monkeypatch) -> None:
+    from desktop.i18n import tr
+    from desktop.watched import tab as watched_tab_module
+
+    monkeypatch.setattr(
+        watched_tab_module,
+        "load_watched_entries",
+        lambda: [_entry("movie", "Only Movie", media_type="movie")],
+    )
+    watched_tab = watched_tab_module.WatchedTabView()
+    qtbot.addWidget(watched_tab.widget)
+    media_combo = watched_tab.widget.findChild(QComboBox, "watchedMediaType")
+
+    media_combo.setCurrentIndex(media_combo.findData("tv"))
+
+    qtbot.waitUntil(lambda: watched_tab._visible_entries == [])
+    assert watched_tab._detail_card._title_label.text() == tr("watched.empty.not_found")

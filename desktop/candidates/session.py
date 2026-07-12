@@ -154,6 +154,7 @@ class CandidateSearchSession:
         if result.get("overview") is not None:
             self._overview_cache = result.get("overview")
         if result.get("is_empty_pool"):
+            self.last_error = None
             self.filters = None
             self.filtered_candidates = []
             self.filtered_count = 0
@@ -296,8 +297,8 @@ class CandidateSearchSession:
             self._request_started_at.pop(request_id, None)
             return
         started = self._request_started_at.pop(request_id, None)
-        self._set_loading(False)
         applied = self._apply_search_result(filters, result)
+        self._set_loading(False)
         elapsed_ms = None if started is None else round((perf_counter() - started) * 1000, 1)
         worker_latency = result.get("latency_ms")
         self._record_search_context(

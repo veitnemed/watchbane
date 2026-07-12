@@ -743,7 +743,7 @@ class CandidateFiltersView:
             self._intro_stats.setText(tr("candidates.filters.loading.stats"))
             self._intro_stats.setVisible(True)
             return
-        self._update_intro()
+        self._on_session_updated()
 
     def _on_session_updated(self) -> None:
         if self._session.is_loading:
@@ -755,7 +755,7 @@ class CandidateFiltersView:
             self._replenish_local_count_before = None
             self._local_apply_requested = False
             self._intro_lead.setText(tr("candidates.filters.error.lead"))
-            self._intro_stats.setText(self._session.last_error)
+            self._intro_stats.setText(tr("candidates.filters.error.stats"))
             self._intro_stats.setVisible(True)
             self._apply_button.setEnabled(self._is_replenishing is False)
             self._reset_button.setEnabled(self._is_replenishing is False)
@@ -771,6 +771,8 @@ class CandidateFiltersView:
                 and self._is_replenishing is False
             ):
                 self._intro_lead.setText(tr("recommendations.discovery.status.local_applied"))
+        else:
+            self._update_intro()
         if self._pending_replenish_intent is not None and self._replenish_worker is None:
             intent = self._pending_replenish_intent
             generation = self._pending_replenish_generation
@@ -1230,7 +1232,7 @@ class CandidateFiltersView:
         if payload.get("ok") is not True:
             self._hide_replenish_progress()
             self._intro_lead.setText(tr("recommendations.discovery.status.failed"))
-            self._intro_stats.setText(str(payload.get("error") or payload.get("message") or tr("common.unknown_error")))
+            self._intro_stats.setText(tr("candidates.filters.error.stats"))
             self._intro_stats.setVisible(True)
             return
         added = int(payload.get("saved_count") or payload.get("created_count") or 0)
@@ -1258,7 +1260,7 @@ class CandidateFiltersView:
         self._set_replenish_running(False)
         self._hide_replenish_progress()
         self._intro_lead.setText(tr("recommendations.discovery.status.failed"))
-        self._intro_stats.setText(str(message or tr("common.unknown_error")))
+        self._intro_stats.setText(tr("candidates.filters.error.stats"))
         self._intro_stats.setVisible(True)
 
     def _remove_replenish_worker(self, worker: FilterReplenishWorker) -> None:

@@ -6,6 +6,8 @@ from time import perf_counter
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from diagnostics.gui_event_log import log_exception
+
 
 class CandidateSearchWorker(QThread):
     """Load/filter/sort candidate pool without blocking the GUI thread."""
@@ -80,6 +82,11 @@ class CandidateSearchWorker(QThread):
                 },
             )
         except Exception as error:
+            log_exception(
+                "candidates.search.worker.error",
+                error,
+                request_id=self._request_id,
+            )
             self.completed.emit(
                 self._request_id,
                 {

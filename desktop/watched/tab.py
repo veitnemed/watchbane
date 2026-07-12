@@ -509,7 +509,8 @@ class WatchedTabView(WatchedTabActionsMixin):
         return self._visible_entries[row]
 
     def _show_empty_details(self) -> None:
-        if self._search_input.text().strip():
+        filtered_to_zero = bool(self._entries) and not self._visible_entries
+        if self._search_input.text().strip() or filtered_to_zero:
             title = tr("watched.empty.not_found")
         elif self._library_section == SECTION_SAVED:
             title = tr("library.empty.saved")

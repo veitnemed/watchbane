@@ -1298,6 +1298,8 @@ class CandidateListView(CandidateListActionsMixin):
     def _on_loading_changed(self) -> None:
         if self._session.is_loading:
             self._counter_label.setText(tr("recommendations.state.replenishing"))
+            self._deck_status_label.setText(tr("recommendations.state.replenishing"))
+            self._deck_status_label.show()
             self._clear_detail(show_filters_hint=False, loading=True)
         elif self._recommendations_active and self._deck_dirty:
             self._load_recommendation_deck(force_new=False)
