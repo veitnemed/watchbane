@@ -14,7 +14,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from scripts.migrations.legacy_paths import FILE_NAME, META_JSON
+from tools.migrations.legacy_paths import FILE_NAME, META_JSON
 
 REPORT_PATH = ROOT_DIR / "data" / "diagnostics" / "watched_tags_vibe_strip_migration_report.json"
 LEGACY_SECTION = "tags_vibe"

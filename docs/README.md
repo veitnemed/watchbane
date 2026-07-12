@@ -39,7 +39,7 @@ py start_app.py
 The default desktop release is an onedir bundle rather than a single-file executable. Build it from the repository root:
 
 ```powershell
-./scripts/build_desktop.ps1
+./tools/build_desktop.ps1
 ./dist/Watchbane/Watchbane.exe
 ```
 
@@ -194,17 +194,17 @@ py -m pytest
 ## Historical reports removed/archived
 
 - Старые generated onboarding reports удалены из активного `docs/`; оставлен только curated report в `docs/reports/onboarding/`.
-- Закрытый movie-cycle перенесён из `docs/codex_movie_cycle/` в [`archive/docs/codex_movie_cycle/`](../archive/docs/codex_movie_cycle/README.md).
-- Закрытые планы и аудиты перенесены в `archive/docs/closed-plans/` и `archive/docs/audits/`.
+- Закрытый movie-cycle перенесён из `docs/codex_movie_cycle/` в [`internal/archive/docs/codex_movie_cycle/`](../internal/archive/docs/codex_movie_cycle/README.md).
+- Закрытые планы и аудиты перенесены в `internal/archive/docs/closed-plans/` и `internal/archive/docs/audits/`.
 
 ## Legacy JSON import/export
 
 SQLite is canonical runtime storage. Legacy JSON is explicit compatibility only:
 
 ```powershell
-py scripts/migrations/migrate_json_to_sqlite.py --dry-run
-py scripts/migrations/migrate_json_to_sqlite.py --apply
-py scripts/migrations/export_sqlite_to_json.py --output-dir data/exports/legacy-json
+py tools/migrations/migrate_json_to_sqlite.py --dry-run
+py tools/migrations/migrate_json_to_sqlite.py --apply
+py tools/migrations/export_sqlite_to_json.py --output-dir data/exports/legacy-json
 ```
 
 For recovery, restore a SQLite backup from `data/backups/` first. Legacy JSON

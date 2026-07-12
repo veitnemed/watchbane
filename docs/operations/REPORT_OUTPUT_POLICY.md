@@ -20,7 +20,7 @@ Use these ignored locations for raw/generated outputs:
 Screenshots and visual smoke images go under:
 
 ```text
-screens/tmp_ui/<task-name>/
+tmp/ui/<task-name>/
 ```
 
 Generated export data goes under:
@@ -51,7 +51,7 @@ snapshots, logs, or one-off audit transcripts.
 ## Script Defaults
 
 New report scripts should default to ignored output paths under `reports/`,
-`data/diagnostics/`, `data/exports/` or `screens/tmp_ui/`.
+`data/diagnostics/`, `data/exports/` or `tmp/ui/`.
 
 If a script supports `--output`, examples in docs should use ignored paths.
 Only explicitly curated reports should target `docs/reports/`.

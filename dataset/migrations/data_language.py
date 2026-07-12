@@ -10,7 +10,7 @@ import shutil
 from typing import Any
 
 from config import constant
-from scripts.migrations import legacy_paths
+from tools.migrations import legacy_paths
 from dataset.language import build_localized_block_from_legacy
 
 

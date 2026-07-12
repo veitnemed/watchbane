@@ -18,13 +18,13 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-ONBOARDING_REPORT_ROOT = ROOT_DIR / "reports" / "onboarding"
+ONBOARDING_REPORT_ROOT = ROOT_DIR / "data" / "reports" / "onboarding"
 DEFAULT_REPORT_OUTPUT = ONBOARDING_REPORT_ROOT / "analysis" / "discover_quality_report.md"
 
 from apis import tmdb_api
 from candidates.onboarding import autofill
 from candidates.onboarding.autofill import OnboardingTasteProfile
-from scripts.reports.run_onboarding_pool_rebuild import (
+from tools.reports.run_onboarding_pool_rebuild import (
     MockTmdbClient,
     SCENARIOS,
     _country_metrics,

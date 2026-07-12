@@ -1,7 +1,7 @@
 """Capture a native screenshot of the watched detail film card.
 
 Example:
-    py scripts/screenshots/capture_film_card.py --scale 1.0 --output screens/tmp_ui/film_card/movie.png
+    py tools/screenshots/capture_film_card.py --scale 1.0 --output tmp/ui/film_card/movie.png
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("screens/tmp_ui/film_card/movie_scale100.png"),
+        default=Path("tmp/ui/film_card/movie_scale100.png"),
     )
     parser.add_argument(
         "--scroll-detail-right",

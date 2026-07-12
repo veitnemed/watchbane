@@ -13,7 +13,7 @@ from candidates.replenish.filter_discover import (
     discover_params_have_vote_rating_filters,
 )
 
-DEFAULT_REPORT_DIR = Path("reports/candidates/replenish")
+DEFAULT_REPORT_DIR = Path("data/reports/candidates/replenish")
 LATEST_JSON = "filter_replenish_latest.json"
 LATEST_MD = "filter_replenish_latest.md"
 RUNS_JSONL = "filter_replenish_runs.jsonl"

@@ -12,21 +12,21 @@ APPROVED_DIRECT_JSON_WRITERS = {
     "storage/files.py",
     "storage/legacy_json/exporter.py",
     "storage/legacy_json/importer.py",
-    "scripts/migrations/export_sqlite_to_json.py",
-    "scripts/migrations/migrate_json_to_sqlite.py",
-    "scripts/migrations/migrate_candidate_pool_tmdb_only.py",
-    "scripts/migrations/migrate_watched_raw_scores_tmdb_only.py",
-    "scripts/migrations/strip_watched_tags_vibe.py",
-    "scripts/migrations/strip_watched_genre_section.py",
-    "scripts/migrations/strip_candidate_kp_imdb_fields.py",
-    "scripts/tmdb/refresh_candidate_pool_from_tmdb.py",
-    "scripts/tmdb/refresh_watched_from_tmdb.py",
+    "tools/migrations/export_sqlite_to_json.py",
+    "tools/migrations/migrate_json_to_sqlite.py",
+    "tools/migrations/migrate_candidate_pool_tmdb_only.py",
+    "tools/migrations/migrate_watched_raw_scores_tmdb_only.py",
+    "tools/migrations/strip_watched_tags_vibe.py",
+    "tools/migrations/strip_watched_genre_section.py",
+    "tools/migrations/strip_candidate_kp_imdb_fields.py",
+    "tools/tmdb/refresh_candidate_pool_from_tmdb.py",
+    "tools/tmdb/refresh_watched_from_tmdb.py",
     "dataset/migrations/data_language.py",
     "dataset/migrations/tmdb_localized.py",
     "storage/profiles.py",
 }
 
-from scripts.migrations.legacy_paths import LEGACY_JSON_MARKERS
+from tools.migrations.legacy_paths import LEGACY_JSON_MARKERS
 
 MIGRATED_STORAGE_MARKERS = LEGACY_JSON_MARKERS + (
     "watchlist.json",
@@ -46,7 +46,7 @@ WRITE_MARKERS = (
 
 def test_no_unapproved_direct_json_writes_to_migrated_runtime_data() -> None:
     findings: set[tuple[str, str]] = set()
-    for root in ("app", "candidates", "config", "dataset", "desktop", "posters", "scripts", "storage", "ui", "web"):
+    for root in ("app", "candidates", "config", "dataset", "desktop", "posters", "storage", "tools", "ui", "web"):
         for path in Path(root).rglob("*.py"):
             normalized = path.as_posix()
             if normalized in APPROVED_DIRECT_JSON_WRITERS:

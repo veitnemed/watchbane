@@ -10,7 +10,7 @@
 Watchbane brings your watched collection, saved titles and a living recommendation deck into one focused Windows app. Choose a direction, adjust how adventurous the mix should be, and get a queue you can understand and control.
 
 <p align="center">
-  <img src="screens/candidates.png" alt="Watchbane recommendation deck featuring cult American series" width="100%">
+  <img src="docs/assets/screens/candidates.png" alt="Watchbane recommendation deck featuring cult American series" width="100%">
 </p>
 
 ## Find the next title, not another endless catalogue
@@ -29,7 +29,7 @@ Watchbane is built around a simple idea: recommendations should feel personal wi
 Start with a direction such as worldwide, Hollywood, Russian mainstream, anime, K-drama or European detective. Then shape the result with a small set of visual controls. Exact country, year, genre and TMDb filters remain available when you need them.
 
 <p align="center">
-  <img src="screens/filters.png" alt="Watchbane recommendation controls in English" width="100%">
+  <img src="docs/assets/screens/filters.png" alt="Watchbane recommendation controls in English" width="100%">
 </p>
 
 The default screen stays compact. Detailed filters open only on demand, so everyday use never feels like filling out a database form.
@@ -101,7 +101,7 @@ py start_console.py
 The MVP release uses PyInstaller **onedir** mode, not a single-file executable. This keeps the executable and its bundled runtime/assets together in `dist/Watchbane/`.
 
 ```powershell
-./scripts/build_desktop.ps1
+./tools/build_desktop.ps1
 ./dist/Watchbane/Watchbane.exe
 ```
 
@@ -135,7 +135,7 @@ py -m pytest
 
 Start with the documentation map for architecture, storage contracts, candidate flow and UI scaling:
 
-- [Architecture overview](ARCHITECTURE.md)
+- [Architecture overview](docs/architecture/OVERVIEW.md)
 - [Documentation index](docs/README.md)
 - [Project map](docs/architecture/PROJECT_MAP.md)
 - [Candidate queue and posters](docs/architecture/CANDIDATE_QUEUE_AND_POSTERS.md)

@@ -11,7 +11,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from scripts.reports.evaluate_search_relevance import evaluate_payload
+from tools.reports.evaluate_search_relevance import evaluate_payload
 
 
 def summarize_directory(directory: Path, *, k: int = 10) -> dict:
@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "directory",
         nargs="?",
-        default="reports/search/curation",
+        default="data/reports/search/curation",
         help="Directory with reviewed export JSON files.",
     )
     parser.add_argument("--k", type=int, default=10)

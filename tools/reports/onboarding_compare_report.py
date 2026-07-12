@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 
-REPORT_ROOT = Path("reports/onboarding")
+REPORT_ROOT = Path("data/reports/onboarding")
 RAW_DIR = REPORT_ROOT / "raw"
 ANALYSIS_DIR = REPORT_ROOT / "analysis"
 BASELINES_DIR = REPORT_ROOT / "baselines"

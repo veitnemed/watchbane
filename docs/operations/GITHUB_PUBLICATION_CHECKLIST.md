@@ -22,7 +22,7 @@ Things that cannot be fully configured from files in the repository.
 
 ## Visuals
 
-- Add 2-4 screenshots to `screens/`.
+- Add 2-4 screenshots to `docs/assets/screens/`.
 - Use one screenshot as GitHub social preview.
 - Watchbane screenshots:
   - watched list + detail card;

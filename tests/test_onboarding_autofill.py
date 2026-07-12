@@ -645,7 +645,7 @@ def _genre_filter_ids(params: dict, key: str) -> set[int]:
 
 
 def _scenario_profile(name: str, **overrides) -> OnboardingTasteProfile:
-    from scripts.reports.run_onboarding_pool_rebuild import SCENARIOS
+    from tools.reports.run_onboarding_pool_rebuild import SCENARIOS
 
     data = dict(SCENARIOS[name])
     data.update(overrides)
@@ -1357,8 +1357,8 @@ def test_onboarding_preset_ui_smoke_object_names_and_screenshot_path(qapp) -> No
         assert dialog._plan_summary_label.objectName() == "onboardingPlanSummary"
         assert "Preset: Anime (anime)" in dialog._plan_summary_label.text()
 
-        allowed_output = Path("screens/tmp_ui/onboarding") / "taste_scale100.png"
-        assert allowed_output.as_posix().startswith("screens/tmp_ui/onboarding/")
+        allowed_output = Path("tmp/ui/onboarding") / "taste_scale100.png"
+        assert allowed_output.as_posix().startswith("tmp/ui/onboarding/")
     finally:
         dialog.close()
 
@@ -1767,7 +1767,7 @@ def test_country_first_mocked_normal_scenario_has_no_broad_origin_or_fallback(tm
 
 
 def test_country_leakage_metric_counts_off_country_candidate() -> None:
-    from scripts.reports.run_onboarding_pool_rebuild import _country_metrics
+    from tools.reports.run_onboarding_pool_rebuild import _country_metrics
 
     metrics = _country_metrics(
         [
@@ -2665,7 +2665,7 @@ def test_quality_gate_allows_weak_low_vote_candidates_when_metadata_is_good(tmp_
 
 
 def test_quality_report_sample_includes_quality_class_and_reasons() -> None:
-    from scripts.reports import run_onboarding_discover_quality_report as report
+    from tools.reports import run_onboarding_discover_quality_report as report
 
     row = report._candidate_row(
         {

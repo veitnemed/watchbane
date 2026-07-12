@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from scripts.migrations import strip_watched_tags_vibe as migration
+from tools.migrations import strip_watched_tags_vibe as migration
 
 
 def _create_watched_table(conn: sqlite3.Connection) -> None:

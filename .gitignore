@@ -43,6 +43,7 @@ datasets/
 *.db
 
 data/diagnostics/
+data/reports/
 logs/
 config/model_metrics.json
 config/rating_comparison_last_snapshot.json
@@ -52,8 +53,7 @@ data/rating_order_drafts/*.json
 _safety_audit/
 
 # Local UI screenshot smoke outputs
-screens/tmp_ui/*
-!screens/tmp_ui/.gitkeep
+/tmp/ui/
 
 /tmdb_net
 

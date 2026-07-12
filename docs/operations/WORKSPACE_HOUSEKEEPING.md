@@ -6,13 +6,12 @@ database dumps or one-off screenshots.
 
 ## UI Screenshots
 
-- Committed product screenshots live in `screens/`.
-- Temporary UI smoke screenshots live in `screens/tmp_ui/`.
-- `screens/tmp_ui/.gitkeep` is tracked so the folder exists after clone.
-- Files under `screens/tmp_ui/` are ignored and can be deleted or regenerated.
+- Committed product screenshots live in `docs/assets/screens/`.
+- Temporary UI smoke screenshots live in `tmp/ui/`.
+- Files under `tmp/ui/` are ignored and can be deleted or regenerated.
 
 When checking desktop UI changes, keep screenshots grouped by task under
-`screens/tmp_ui/tmp_ui_*` instead of creating root-level `tmp_ui_*` folders.
+`tmp/ui/tmp_ui_*` instead of creating root-level `tmp_ui_*` folders.
 
 ## Reports
 
@@ -47,7 +46,7 @@ restore it locally; do not commit it.
 
 Safe cleanup targets when the workspace gets large:
 
-- old `screens/tmp_ui/tmp_ui_*` screenshot batches;
+- old `tmp/ui/tmp_ui_*` screenshot batches;
 - raw generated reports under `reports/`;
 - generated release zip files under `data/exports/`;
 - old `pool.before_*.json` snapshots after confirming the active pool is valid;

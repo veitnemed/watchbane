@@ -21,8 +21,8 @@ from candidates.replenish.filter_replenisher import replenish_candidates_for_fil
 from tests.fixtures.filter_replenish_tmdb import build_mock_tmdb_client  # noqa: E402
 
 
-DEFAULT_MD_OUTPUT = Path("reports/candidates/replenish/mock_filter_replenish_quality.md")
-DEFAULT_JSON_OUTPUT = Path("reports/candidates/replenish/mock_filter_replenish_quality.json")
+DEFAULT_MD_OUTPUT = Path("data/reports/candidates/replenish/mock_filter_replenish_quality.md")
+DEFAULT_JSON_OUTPUT = Path("data/reports/candidates/replenish/mock_filter_replenish_quality.json")
 
 SCENARIOS: dict[str, dict[str, Any]] = {
     "ru_dark_tv": {

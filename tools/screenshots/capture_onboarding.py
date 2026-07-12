@@ -1,8 +1,8 @@
 """Capture native screenshots for the fullscreen onboarding flow.
 
 Examples:
-    py scripts/screenshots/capture_onboarding.py --step welcome --scale 1.0
-    py scripts/screenshots/capture_onboarding.py --step plan --language ru --output screens/tmp_ui/onboarding/plan.png
+    py tools/screenshots/capture_onboarding.py --step welcome --scale 1.0
+    py tools/screenshots/capture_onboarding.py --step plan --language ru --output tmp/ui/onboarding/plan.png
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         default=None,
-        help="PNG output path. Defaults to screens/tmp_ui/onboarding/<step>_scaleNNN.png.",
+        help="PNG output path. Defaults to tmp/ui/onboarding/<step>_scaleNNN.png.",
     )
     return parser
 
@@ -125,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     output = args.output
     if output is None:
         scale_text = str(int(round(args.scale * 100))).zfill(3)
-        output = Path("screens/tmp_ui/onboarding") / f"{args.step}_scale{scale_text}.png"
+        output = Path("tmp/ui/onboarding") / f"{args.step}_scale{scale_text}.png"
     output.parent.mkdir(parents=True, exist_ok=True)
     saved = dialog.grab().save(str(output))
     print(f"platform={app.platformName()}")

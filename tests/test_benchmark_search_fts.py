@@ -21,7 +21,7 @@ def test_benchmark_search_fts_smoke(tmp_path, monkeypatch, capsys) -> None:
         path=data_dir / "watchbane.sqlite3",
     )
 
-    from scripts.reports import benchmark_search_fts
+    from tools.reports import benchmark_search_fts
 
     assert benchmark_search_fts.main(["--repeats", "1", "--query", "detective"]) == 0
     output = capsys.readouterr().out

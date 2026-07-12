@@ -11,7 +11,7 @@ posters/             poster resolution, cache, and downloads
 storage/             SQLite runtime and repositories
 apis/                remote service clients
 config/, common/     configuration and shared utilities
-scripts/, diagnostics/  maintenance and diagnostics
+tools/, diagnostics/    maintenance and diagnostics
 ```
 
 ## Candidate flow

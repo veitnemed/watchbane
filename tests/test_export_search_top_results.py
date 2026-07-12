@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-import scripts.reports.export_search_top_results as export
+import tools.reports.export_search_top_results as export
 
 
 def _pool() -> list[dict]:

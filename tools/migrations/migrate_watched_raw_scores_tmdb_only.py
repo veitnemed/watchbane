@@ -16,7 +16,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from common import format_score
 from config import constant, scheme
-from scripts.migrations.legacy_paths import FILE_NAME, META_JSON
+from tools.migrations.legacy_paths import FILE_NAME, META_JSON
 from storage.normalize import normalize_raw_scores
 
 REPORT_PATH = ROOT_DIR / "data" / "diagnostics" / "watched_raw_scores_tmdb_only_migration_report.json"

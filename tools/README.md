@@ -1,4 +1,4 @@
-# Scripts
+# Tools
 
 Manual entrypoints live here. Reusable application logic belongs in active
 packages such as `dataset/`, `candidates/`, `storage/`, `apis/` or `posters/`;
@@ -15,8 +15,8 @@ scripts should stay thin CLI wrappers.
 
 ## Output Policy
 
-Raw reports should default to ignored paths under `reports/`, `data/diagnostics/`,
-`data/exports/` or `screens/tmp_ui/`.
+Raw reports should default to ignored paths under `data/reports/`, `data/diagnostics/`,
+`data/exports/` or `tmp/ui/`.
 
 Do not write generated raw reports into `docs/`. Curated summaries that should
 be committed belong under `docs/reports/<topic>/`.

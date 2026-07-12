@@ -4,8 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from diagnostics import runtime_reports
-from scripts.reports import onboarding_compare_report
-from scripts.reports import run_onboarding_discover_quality_report as onboarding_report
+from tools.reports import onboarding_compare_report
+from tools.reports import run_onboarding_discover_quality_report as onboarding_report
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -252,11 +252,11 @@ def test_onboarding_compare_report_mentions_failed_scenarios() -> None:
 
 
 def test_onboarding_report_output_hygiene_contract() -> None:
-    assert onboarding_compare_report.RAW_DIR == Path("reports/onboarding/raw")
-    assert onboarding_compare_report.ANALYSIS_DIR == Path("reports/onboarding/analysis")
-    assert onboarding_compare_report.BASELINES_DIR == Path("reports/onboarding/baselines")
+    assert onboarding_compare_report.RAW_DIR == Path("data/reports/onboarding/raw")
+    assert onboarding_compare_report.ANALYSIS_DIR == Path("data/reports/onboarding/analysis")
+    assert onboarding_compare_report.BASELINES_DIR == Path("data/reports/onboarding/baselines")
     assert onboarding_report.DEFAULT_REPORT_OUTPUT.relative_to(PROJECT_ROOT) == Path(
-        "reports/onboarding/analysis/discover_quality_report.md"
+        "data/reports/onboarding/analysis/discover_quality_report.md"
     )
 
     generated_reports_in_docs = sorted((PROJECT_ROOT / "docs").glob("onboarding_*report*.md"))
@@ -264,7 +264,7 @@ def test_onboarding_report_output_hygiene_contract() -> None:
 
 
 def test_onboarding_final_report_template_contains_required_review_fields() -> None:
-    template = (PROJECT_ROOT / "reports/onboarding/analysis/final_report_template.md").read_text(encoding="utf-8")
+    template = (PROJECT_ROOT / "docs/reports/curated/onboarding/analysis/final_report_template.md").read_text(encoding="utf-8")
     required_fragments = [
         "## Changed files",
         "## Discover filter confirmation",

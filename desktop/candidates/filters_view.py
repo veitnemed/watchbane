@@ -782,9 +782,13 @@ class CandidateFiltersView:
     def _update_apply_button_width(self) -> None:
         if not hasattr(self, "_intro_card"):
             return
-        card_width = self._intro_card.width()
-        if hasattr(self, "_summary_scroll"):
-            card_width = self._summary_scroll.viewport().width()
+        try:
+            card_width = self._intro_card.width()
+            if hasattr(self, "_summary_scroll"):
+                card_width = self._summary_scroll.viewport().width()
+        except RuntimeError:
+            # A deferred resize can fire after Qt has deleted the view at teardown.
+            return
         content_width = card_width - layout_px(36)
         if content_width <= 0:
             content_width = SUMMARY_CARD_WIDTH - layout_px(36)

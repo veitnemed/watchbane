@@ -17,7 +17,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from scripts.reports.export_search_top_results import (  # noqa: E402
+from tools.reports.export_search_top_results import (  # noqa: E402
     build_item,
     candidate_service_default_filters,
     rank_candidates,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scripts.reports.json_cleanup_metrics import collect_metrics
+from tools.reports.json_cleanup_metrics import collect_metrics
 
 
 def test_json_cleanup_metrics_reports_cleanup_baseline() -> None:

@@ -1,5 +1,5 @@
-from scripts.migrations import migrate_watched_raw_scores_tmdb_only as migrate_script
-from scripts.tmdb import refresh_watched_from_tmdb as refresh_script
+from tools.migrations import migrate_watched_raw_scores_tmdb_only as migrate_script
+from tools.tmdb import refresh_watched_from_tmdb as refresh_script
 
 
 def _movie(title: str = "Show", year: int = 2020) -> dict:

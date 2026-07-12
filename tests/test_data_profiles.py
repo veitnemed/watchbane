@@ -104,7 +104,7 @@ def test_switch_sandbox_changes_active_profile_and_paths(isolated_profiles) -> N
     profiles.create_sandbox_profile()
     profiles.set_active_profile(profiles.SANDBOX_PROFILE)
 
-    from scripts.migrations.legacy_paths import watched_titles_json
+    from tools.migrations.legacy_paths import watched_titles_json
 
     assert profiles.get_active_profile() == profiles.SANDBOX_PROFILE
     assert profiles.get_active_data_dir() == isolated_profiles / "profiles" / "sandbox"

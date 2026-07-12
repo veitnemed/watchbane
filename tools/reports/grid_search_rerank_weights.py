@@ -10,14 +10,14 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from scripts.reports.bootstrap_search_curation import (  # noqa: E402
+from tools.reports.bootstrap_search_curation import (  # noqa: E402
     CALIBRATION_SPECS,
     build_item,
     candidate_service_default_filters,
     label_items,
     rank_candidates,
 )
-from scripts.reports.evaluate_search_relevance import evaluate_payload  # noqa: E402
+from tools.reports.evaluate_search_relevance import evaluate_payload  # noqa: E402
 
 
 def _eval_weights(w_bm25: float, w_final: float, *, top: int = 10) -> dict:

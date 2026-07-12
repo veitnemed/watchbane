@@ -1,7 +1,7 @@
 """Capture a native screenshot of the onboarding autofill wizard.
 
 Example:
-    py scripts/screenshots/capture_onboarding_wizard.py --scale 1.0 --output screens/tmp_ui/onboarding/wizard_scale100.png
+    py tools/screenshots/capture_onboarding_wizard.py --scale 1.0 --output tmp/ui/onboarding/wizard_scale100.png
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("screens/tmp_ui/onboarding/wizard_scale100.png"),
+        default=Path("tmp/ui/onboarding/wizard_scale100.png"),
     )
     return parser
 

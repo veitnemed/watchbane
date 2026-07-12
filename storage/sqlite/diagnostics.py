@@ -7,7 +7,7 @@ import sqlite3
 from typing import Any
 
 from config import constant
-from scripts.migrations.legacy_paths import legacy_json_paths_for_data_root
+from tools.migrations.legacy_paths import legacy_json_paths_for_data_root
 from storage.sqlite.connection import get_db_path
 from storage.sqlite.migrations import get_current_schema_version
 from storage.sqlite.session import connection

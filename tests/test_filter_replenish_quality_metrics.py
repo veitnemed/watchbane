@@ -1,6 +1,6 @@
 import json
 
-from scripts.reports.run_filter_replenish_quality_report import (
+from tools.reports.run_filter_replenish_quality_report import (
     build_quality_report,
     main,
     run_mock_scenario,

@@ -18,7 +18,7 @@ from apis import tmdb_api
 from candidates.models import genre_schema
 from common import format_score
 from config import constant, scheme
-from scripts.migrations.legacy_paths import FILE_NAME, META_JSON
+from tools.migrations.legacy_paths import FILE_NAME, META_JSON
 from posters.fetch_watched_tmdb import match_tmdb_search_result
 from storage import data as storage_data
 from storage.normalize import normalize_raw_scores

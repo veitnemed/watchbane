@@ -11,7 +11,7 @@ from typing import Any
 
 from apis import tmdb_api
 from config import constant
-from scripts.migrations import legacy_paths
+from tools.migrations import legacy_paths
 from dataset.language import normalize_data_language, tmdb_locale_for_data_language
 
 

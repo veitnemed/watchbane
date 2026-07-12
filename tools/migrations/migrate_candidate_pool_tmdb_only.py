@@ -20,7 +20,7 @@ from candidates.models.schema import (
     resolve_canonical_year,
     strip_external_rating_fields,
 )
-from scripts.migrations.legacy_paths import candidate_pool_json
+from tools.migrations.legacy_paths import candidate_pool_json
 
 REPORT_PATH = ROOT_DIR / "data" / "diagnostics" / "candidate_pool_tmdb_only_migration_report.json"
 

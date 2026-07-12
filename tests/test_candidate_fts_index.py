@@ -151,7 +151,7 @@ def test_rebuild_script_smoke(tmp_path, monkeypatch, capsys) -> None:
         path=data_dir / "watchbane.sqlite3",
     )
 
-    from scripts.reports import rebuild_candidate_fts_index
+    from tools.reports import rebuild_candidate_fts_index
 
     assert rebuild_candidate_fts_index.main([]) == 0
     output = capsys.readouterr().out

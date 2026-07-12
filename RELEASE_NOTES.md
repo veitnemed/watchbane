@@ -22,7 +22,7 @@ The candidate, TMDb, watched-library, and poster refactors retain compatibility 
 ## Publication checklist
 
 1. Confirm CI is green for the release commit.
-2. Build with `scripts/build_desktop.ps1`.
+2. Build with `tools/build_desktop.ps1`.
 3. Smoke-launch `dist/Watchbane/Watchbane.exe` with an isolated `WATCHBANE_DATA_DIR`.
 4. Attach the complete `dist/Watchbane/` directory and a checksum to the release.
 5. Publish the Git tag and release only after approving the artifact.
