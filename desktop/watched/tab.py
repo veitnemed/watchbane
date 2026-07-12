@@ -7,6 +7,7 @@ from collections.abc import Callable
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QScrollArea, QSplitter, QVBoxLayout, QWidget
 
+from app.use_cases.watched_library import load_watched_library as load_watched_entries
 from candidates import title_state_service
 from desktop.i18n import tr
 from desktop.settings.app_settings import get_persisted_data_language
@@ -125,13 +126,9 @@ class WatchedTabView(WatchedTabActionsMixin):
 
     def _load_entries(self) -> list[WatchedEntry]:
         try:
-            from app.use_cases.watched_library import load_watched_library
-
-            return load_watched_library(data_language=self._data_language)
+            return load_watched_entries(data_language=self._data_language)
         except TypeError:
-            from app.use_cases.watched_library import load_watched_library
-
-            return load_watched_library()
+            return load_watched_entries()
 
     def _set_watched_entries(self, entries: list[WatchedEntry]) -> None:
         self._watched_entries = list(entries)

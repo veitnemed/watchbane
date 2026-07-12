@@ -1419,10 +1419,6 @@ def test_desktop_storage_web_import_boundary_uses_documented_whitelist() -> None
             "desktop/shell/bootstrap.py",
             "from storage.runtime import apply_dev_startup_reset_from_env",
         ),
-        (
-            "desktop/shared/detail/posters.py",
-            "from storage.files import open_file",
-        ),
     }
     findings = set()
 
@@ -6717,7 +6713,7 @@ def test_watched_tab_reload_entries_rereads_data_language(monkeypatch, qapp) -> 
             )
         ]
 
-    monkeypatch.setattr("app.use_cases.watched_library.load_watched_library", fake_load_watched_entries)
+    monkeypatch.setattr("desktop.watched.tab.load_watched_entries", fake_load_watched_entries)
     save_app_settings(AppSettings(interface_language="ru", data_language="ru"))
 
     view = WatchedTabView(on_status_message=lambda _message, _timeout_ms=0: None)
@@ -6734,7 +6730,7 @@ def test_watched_tab_disables_horizontal_scrolling(monkeypatch, qapp) -> None:
 
     from desktop.watched.tab import WatchedTabView
 
-    monkeypatch.setattr("app.use_cases.watched_library.load_watched_library", lambda **_kwargs: [])
+    monkeypatch.setattr("desktop.watched.tab.load_watched_entries", lambda **_kwargs: [])
 
     view = WatchedTabView(on_status_message=lambda _message, _timeout_ms=0: None)
 
