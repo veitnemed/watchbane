@@ -6268,6 +6268,8 @@ def test_main_tab_registry_focus_activates_current_view(qapp) -> None:
     registry.register(ShellTabSpec("candidates", "Candidates", candidate_view))
 
     registry.focus("candidates")
+    assert candidate_view.activation_count == 1
+
     registry.focus("candidates")
 
     assert tabs.currentWidget() is candidate_view.widget

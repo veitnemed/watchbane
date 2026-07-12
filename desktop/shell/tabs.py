@@ -48,6 +48,7 @@ class MainTabRegistry:
         self._tabs = tabs_widget
         self._specs: dict[str, ShellTabSpec] = {}
         self._widget_to_id: dict[QWidget, str] = {}
+        self._tabs.currentChanged.connect(self.on_current_changed)
 
     def register(self, spec: ShellTabSpec) -> None:
         self._tabs.addTab(spec.view.widget, spec.label)
@@ -56,8 +57,10 @@ class MainTabRegistry:
 
     def focus(self, tab_id: str) -> None:
         spec = self._specs[tab_id]
+        if self._tabs.currentWidget() is spec.view.widget:
+            activate_tab_view(spec.view)
+            return
         self._tabs.setCurrentWidget(spec.view.widget)
-        activate_tab_view(spec.view)
 
     def on_current_changed(self, index: int) -> None:
         if index < 0:
@@ -140,8 +143,6 @@ def build_main_tabs(
         on_pool_changed=on_pool_changed,
     )
     registry.register(ShellTabSpec("settings", languages.tr("tabs.settings"), settings_tab_view))
-
-    tabs.currentChanged.connect(registry.on_current_changed)
 
     def activate_initial_tab() -> None:
         try:
