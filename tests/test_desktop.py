@@ -2859,6 +2859,13 @@ def test_detail_card_elides_extreme_title_and_keeps_full_tooltip(qapp) -> None:
     assert len(title.text()) < len(full_title)
     assert title.toolTip() == full_title
 
+    larger_font = title.font()
+    larger_font.setPointSize(max(1, larger_font.pointSize() + 8))
+    title.setFont(larger_font)
+    qapp.processEvents()
+    assert title.text().endswith("…")
+    assert title.toolTip() == full_title
+
     detail.show_entry(("short", {}, {"title": "Short title", "media_type": "movie"}))
     qapp.processEvents()
     assert title.text() == "Short title"

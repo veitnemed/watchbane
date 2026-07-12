@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QEvent, QTimer, Qt
 from PyQt6.QtGui import QFontMetrics, QTextLayout, QTextOption
 from PyQt6.QtWidgets import QLabel
 
@@ -51,6 +51,15 @@ class _DetailTitleLabel(QLabel):
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)
         self._refresh_elision()
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().showEvent(event)
+        QTimer.singleShot(0, self._refresh_elision)
+
+    def changeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            QTimer.singleShot(0, self._refresh_elision)
 
     def _refresh_elision(self) -> None:
         width = self.width()
