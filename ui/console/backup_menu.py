@@ -1,5 +1,7 @@
 """Показывает backup-файлы датасета и восстанавливает выбранный backup."""
 
+import sqlite3
+
 from storage import files as storage_files
 
 
@@ -35,8 +37,8 @@ def open_backup_menu() -> None:
 
     try:
         records_count = storage_files.restore_backup(file_path)
-    except ValueError as error:
-        print(f"Ошибка backup: {error}")
+    except (OSError, ValueError, sqlite3.DatabaseError):
+        print("Backup повреждён или несовместим. Данные не изменены.")
         return
 
     print(f"Backup загружен: {file_path.name}")
