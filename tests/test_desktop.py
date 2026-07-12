@@ -2841,6 +2841,30 @@ def test_detail_card_builds_layout_for_supported_profiles(qapp, profile_name) ->
         assert hide_button is None
 
 
+def test_detail_card_elides_extreme_title_and_keeps_full_tooltip(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel
+
+    from desktop.shared.detail import DetailCard
+
+    full_title = ("Long Unicode Ω title " * 40).strip()
+    detail = DetailCard()
+    detail.widget.resize(1000, 720)
+    detail.widget.show()
+    detail.show_entry(("long", {}, {"title": full_title, "media_type": "movie"}))
+    qapp.processEvents()
+
+    title = detail.widget.findChild(QLabel, "detailTitle")
+    assert title is not None
+    assert title.text().endswith("…")
+    assert len(title.text()) < len(full_title)
+    assert title.toolTip() == full_title
+
+    detail.show_entry(("short", {}, {"title": "Short title", "media_type": "movie"}))
+    qapp.processEvents()
+    assert title.text() == "Short title"
+    assert title.toolTip() == ""
+
+
 def test_detail_hero_layout_skeleton(qapp) -> None:
     from PyQt6.QtWidgets import QLabel, QFrame, QWidget
 

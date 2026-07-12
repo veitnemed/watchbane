@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFontMetrics, QTextLayout, QTextOption
+from PyQt6.QtWidgets import QLabel
+
 from desktop.i18n import tr
 from desktop.shared.detail.action_icons import make_detail_action_icon
 from desktop.shared.detail.profiles import (
@@ -29,6 +33,63 @@ from desktop.theme import (
 
 RATING_META_PILLS_SPACING = 1
 UNCONSTRAINED_MINIMUM_WIDTH = 0
+
+
+class _DetailTitleLabel(QLabel):
+    """Word-wrapped title that keeps extreme input within the title hierarchy."""
+
+    def __init__(self, text: str, *, maximum_lines: int) -> None:
+        super().__init__()
+        self._full_text = ""
+        self._maximum_lines = max(1, int(maximum_lines))
+        self.setText(text)
+
+    def setText(self, text: str) -> None:  # noqa: N802 - Qt override
+        self._full_text = " ".join(str(text or "").split())
+        self._refresh_elision()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        self._refresh_elision()
+
+    def _refresh_elision(self) -> None:
+        width = self.width()
+        if width < 40 or not self._full_text:
+            display = self._full_text
+        else:
+            text_layout = QTextLayout(self._full_text, self.font())
+            option = QTextOption()
+            option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+            text_layout.setTextOption(option)
+            text_layout.beginLayout()
+            lines = []
+            for _index in range(self._maximum_lines):
+                line = text_layout.createLine()
+                if not line.isValid():
+                    break
+                line.setLineWidth(width)
+                lines.append(line)
+            text_layout.endLayout()
+
+            if not lines:
+                display = self._full_text
+            else:
+                last_line = lines[-1]
+                visible_end = last_line.textStart() + last_line.textLength()
+                if visible_end >= len(self._full_text):
+                    display = self._full_text
+                else:
+                    last_start = last_line.textStart()
+                    last_segment = self._full_text[last_start:]
+                    elided_last = QFontMetrics(self.font()).elidedText(
+                        last_segment,
+                        Qt.TextElideMode.ElideRight,
+                        width,
+                    )
+                    display = self._full_text[:last_start] + elided_last
+        if super().text() != display:
+            super().setText(display)
+        self.setToolTip(self._full_text if display != self._full_text else "")
 
 
 @dataclass(frozen=True)
@@ -358,7 +419,10 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._poster_actions_layout.setContentsMargins(0, 0, 0, 0)
     owner._poster_actions_layout.setSpacing(profile.detail_small_spacing)
 
-    owner._title_label = QLabel(tr("watched.empty.select_title"))
+    owner._title_label = _DetailTitleLabel(
+        tr("watched.empty.select_title"),
+        maximum_lines=profile.detail_title_max_lines,
+    )
     owner._title_label.setObjectName("detailTitle")
     owner._title_label.setWordWrap(True)
     owner._title_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
