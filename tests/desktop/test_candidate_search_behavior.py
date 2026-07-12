@@ -14,6 +14,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QStackedWidget,
+    QWidget,
 )
 
 from desktop.candidates.list_model import CandidateListModel, CandidateListRoles
@@ -292,6 +293,10 @@ def test_recommendation_actions_use_deck_state_transition(
     assert button is not None
     qtbot.waitUntil(button.isVisible)
     assert button.isEnabled()
+    detail_scroll = list_view.widget.findChild(QScrollArea, "candidateSearchDetailScroll")
+    assert detail_scroll is not None
+    detail_scroll.ensureWidgetVisible(button)
+    qtbot.wait(10)
     qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(lambda: bool(deck_service.action_calls))
@@ -328,6 +333,10 @@ def test_recommendation_action_promotes_reserve_item(qtbot) -> None:
 
     assert button is not None
     qtbot.waitUntil(button.isVisible)
+    detail_scroll = list_view.widget.findChild(QScrollArea, "candidateSearchDetailScroll")
+    assert detail_scroll is not None
+    detail_scroll.ensureWidgetVisible(button)
+    qtbot.wait(10)
     qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
 
     updated_titles = set(_listed_titles(list_widget))
@@ -375,15 +384,22 @@ def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> Non
     list_widget.setCurrentIndex(list_widget.model().index(0, 0))
     qtbot.wait(10)
     panel = list_view.widget.findChild(QFrame, "recommendationActionPanel")
+    reasons_panel = list_view.widget.findChild(QFrame, "recommendationReasonsPanel")
+    decision_cluster = list_view.widget.findChild(QWidget, "recommendationDecisionCluster")
     detail_scroll = list_view.widget.findChild(QScrollArea, "candidateSearchDetailScroll")
     main_info_panel = list_view.widget.findChild(QFrame, "detailMainInfoPanel")
 
     assert panel is not None and panel.isVisible()
+    assert reasons_panel is not None and reasons_panel.isVisible()
+    assert decision_cluster is not None and decision_cluster.isVisible()
     assert detail_scroll is not None
     assert main_info_panel is not None
     assert detail_scroll.widget().isAncestorOf(panel)
-    assert panel.parentWidget().objectName() == "detailMainInfoSection"
-    assert panel.geometry().top() >= main_info_panel.geometry().bottom()
+    assert panel.parentWidget() is decision_cluster
+    assert reasons_panel.parentWidget() is decision_cluster
+    assert reasons_panel.geometry().bottom() < panel.geometry().top()
+    assert decision_cluster.parentWidget().objectName() == "detailMainInfoSection"
+    assert decision_cluster.geometry().top() >= main_info_panel.geometry().bottom()
 
 
 def test_filters_view_reload_filter_options_uses_new_pool_genres(qtbot) -> None:

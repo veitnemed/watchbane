@@ -108,7 +108,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     class UserScoreBadgeLabel(QLabel):
         def paintEvent(self, event) -> None:
             from PyQt6.QtCore import QPointF, QRectF, Qt
-            from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
+            from PyQt6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen, QPolygonF
 
             painter = QPainter(self)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -125,8 +125,14 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
             painter.drawRoundedRect(rect, radius, radius)
             if self.property("heartBadge"):
                 heart_size = min(rect.height() * 0.42, 15.0)
-                heart_left = rect.left() + max(7.0, rect.height() * 0.24)
-                heart_top = rect.center().y() - (heart_size * 0.52)
+                number_font = QFont(painter.font())
+                number_font.setBold(True)
+                metrics = QFontMetricsF(number_font)
+                number_width = metrics.horizontalAdvance(self.text())
+                content_gap = max(5.0, rect.height() * 0.14)
+                content_width = heart_size + content_gap + number_width
+                heart_left = rect.center().x() - (content_width / 2)
+                heart_top = rect.center().y() - (heart_size / 2)
                 lobe = heart_size * 0.5
                 painter.setPen(Qt.PenStyle.NoPen)
                 painter.setBrush(QColor(COLOR_USER_RATING_HEART))
@@ -141,9 +147,12 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
                         ]
                     )
                 )
-                number_rect = rect.adjusted(heart_size + max(8.0, rect.height() * 0.3), 0, -7.0, 0)
-                number_font = QFont(painter.font())
-                number_font.setBold(True)
+                number_rect = QRectF(
+                    heart_left + heart_size + content_gap,
+                    rect.top(),
+                    number_width + 1,
+                    rect.height(),
+                )
                 painter.setFont(number_font)
                 painter.setPen(QColor(COLOR_TEXT))
                 painter.drawText(number_rect, Qt.AlignmentFlag.AlignCenter, self.text())
@@ -265,12 +274,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._user_score_badge.setAutoFillBackground(True)
     owner._user_score_badge.setMinimumWidth(profile.detail_user_score_badge_min_width)
     owner._user_score_badge.setFixedHeight(profile.detail_user_score_badge_height)
-    owner._user_score_badge.setContentsMargins(
-        profile.detail_user_score_badge_padding_x,
-        0,
-        profile.detail_user_score_badge_padding_x,
-        0,
-    )
+    owner._user_score_badge.setContentsMargins(0, 0, 0, 0)
     owner._user_score_badge.hide()
 
     owner._media_type_badge = MediaTypeBadgeLabel("", owner._poster_shell)

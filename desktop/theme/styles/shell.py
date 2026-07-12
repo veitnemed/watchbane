@@ -99,8 +99,8 @@ QTabBar::tab {{
     color: {FILM_TEXT_SUBTLE};
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 600;
-    padding: {control_px(BUTTON_PADDING_Y)}px {control_px(BUTTON_PADDING_X)}px;
-    min-height: {control_px(34)}px;
+    padding: {control_px(SPACING_SMALL)}px {control_px(BUTTON_PADDING_X)}px;
+    min-height: {control_px(MAIN_TAB_MIN_HEIGHT)}px;
     margin-right: {px(SPACING_SMALL)}px;
 }}
 QTabBar::tab:selected {{

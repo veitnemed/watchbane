@@ -89,7 +89,7 @@ def test_brand_assets_are_available(qapp) -> None:
     wordmark = watchbane_wordmark_label(190, 58)
     assert wordmark.text() == "Watchbane"
     assert wordmark.pixmap().isNull() is True
-    assert "background: transparent" in wordmark.styleSheet()
+    assert wordmark.styleSheet() == ""
     tmdb_badge = tmdb_logo_label(46)
     assert tmdb_badge.text() == "TMDb"
     assert tmdb_badge.pixmap().isNull() is True
@@ -4495,6 +4495,7 @@ def test_detail_card_style_uses_requested_font_sizes() -> None:
     assert "QLabel#detailUserScoreBadge" in style
     assert f"font-size: {font_px(tokens.DETAIL_USER_SCORE_BADGE_FONT_SIZE)}px;" in style
     assert f"min-width: {detail_px(tokens.DETAIL_USER_SCORE_BADGE_MIN_WIDTH)}px;" in style
+    assert "padding: 0;" in style
     assert "QLabel#genrePill" in style
     assert f"font-size: {font_px(tokens.DETAIL_CHIP_FONT_SIZE)}px;" in style
     assert f"padding: 0 {detail_px(tokens.DETAIL_CHIP_H_PADDING)}px;" in style
@@ -6170,6 +6171,7 @@ def test_watched_window_includes_candidate_tabs() -> None:
 
 
 def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
+    from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QTabWidget, QWidget
 
     from desktop.settings.app_settings import AppSettings
@@ -6239,6 +6241,9 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
     assert all(hasattr(spec.view, "widget") for spec in registry._specs.values())
     assert registry._specs["candidates"].view.activation_count == 1
+    brand = tabs.cornerWidget(Qt.Corner.TopLeftCorner)
+    assert brand is not None
+    assert brand.findChild(QWidget, "watchbaneShellSymbol") is not None
 
     for index in range(tabs.count()):
         registry.on_current_changed(index)

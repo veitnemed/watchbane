@@ -16,6 +16,7 @@ from desktop.shell.tab_contract import TabView, activate_tab_view
 from desktop.settings.tab_view import SettingsTabView
 from desktop.shared.brand_assets import watchbane_symbol_label
 from desktop.theme.scaling import control_px, layout_px
+from desktop.theme.tokens import SPACING_SMALL
 from desktop.watched.tab import WatchedTabView
 
 
@@ -84,7 +85,12 @@ def build_main_tabs(
     brand = QWidget()
     brand.setObjectName("watchbaneShellBrand")
     brand_layout = QHBoxLayout(brand)
-    brand_layout.setContentsMargins(layout_px(6), 0, layout_px(7), 0)
+    brand_layout.setContentsMargins(
+        layout_px(6),
+        layout_px(SPACING_SMALL),
+        layout_px(7),
+        layout_px(SPACING_SMALL),
+    )
     brand_layout.setSpacing(0)
     symbol = watchbane_symbol_label(control_px(27))
     symbol.setToolTip("Watchbane")

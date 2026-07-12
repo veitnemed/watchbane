@@ -265,21 +265,35 @@ QPushButton#recommendationsNewDeckButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};
     border-color: {COLOR_FOCUS_BORDER};
 }}
+QWidget#recommendationDecisionCluster {{
+    background: transparent;
+}}
+QFrame#recommendationReasonsPanel {{
+    background-color: {FILM_SURFACE_2};
+    border: 1px solid {FILM_BORDER};
+    border-radius: {detail_px(RADIUS_CARD)}px;
+}}
 QFrame#recommendationActionPanel {{
-    background-color: {COLOR_DETAIL_GLASS};
-    border: 1px solid {COLOR_DETAIL_HERO_BORDER};
+    background-color: {FILM_SURFACE_1};
+    border: 1px solid {FILM_BORDER_WEAK};
     border-radius: {detail_px(RADIUS_CARD)}px;
 }}
 QLabel#recommendationReasonsTitle {{
     background: transparent;
-    color: {COLOR_TEXT};
+    color: {FILM_ACCENT_HOVER};
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 700;
 }}
 QLabel#recommendationReasonsText {{
     background: transparent;
-    color: {COLOR_TEXT_SECONDARY};
+    color: {FILM_TEXT_SUBTLE};
     font-size: {font_px(FONT_SMALL)}px;
+}}
+QLabel#recommendationUserRatingPrompt {{
+    background: transparent;
+    color: {FILM_TEXT};
+    font-size: {font_px(FONT_BASE + 1)}px;
+    font-weight: 600;
 }}
 QPushButton#recommendationWatchedButton,
 QPushButton#recommendationWatchlistButton,

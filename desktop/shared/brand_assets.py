@@ -8,7 +8,7 @@ from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QFont, QPixmap
 from PyQt6.QtWidgets import QLabel
 
-from desktop.theme.tokens import FILM_TEXT_SUBTLE, FONT_FAMILY
+from desktop.theme.tokens import FONT_FAMILY
 
 
 _IMAGE_ROOT = Path(__file__).resolve().parents[1] / "images"
@@ -53,10 +53,6 @@ def watchbane_wordmark_label(width: int, height: int) -> QLabel:
     font.setPixelSize(max(16, min(38, int(height * 0.42))))
     font.setWeight(QFont.Weight.DemiBold)
     label.setFont(font)
-    label.setStyleSheet(
-        f"QLabel#watchbaneWordmark {{ color: {FILM_TEXT_SUBTLE}; "
-        "background: transparent; border: none; padding: 0; }}"
-    )
     return label
 
 

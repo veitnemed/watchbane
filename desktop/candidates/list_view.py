@@ -315,23 +315,40 @@ class CandidateListView(CandidateListActionsMixin):
         self._detail_scroll = scroll
         detail_layout.addWidget(scroll, stretch=1)
 
+        self._decision_cluster = QWidget()
+        self._decision_cluster.setObjectName("recommendationDecisionCluster")
+        decision_layout = QVBoxLayout(self._decision_cluster)
+        decision_layout.setContentsMargins(0, 0, 0, 0)
+        decision_layout.setSpacing(list_px(6))
+
+        self._reason_panel = QFrame()
+        self._reason_panel.setObjectName("recommendationReasonsPanel")
+        reason_layout = QVBoxLayout(self._reason_panel)
+        reason_layout.setContentsMargins(
+            list_px(8),
+            list_px(6),
+            list_px(8),
+            list_px(6),
+        )
+        reason_layout.setSpacing(list_px(4))
+        self._reason_title = QLabel(tr("recommendations.reasons.title"))
+        self._reason_title.setObjectName("recommendationReasonsTitle")
+        reason_layout.addWidget(self._reason_title)
+        self._reason_label = QLabel("")
+        self._reason_label.setObjectName("recommendationReasonsText")
+        self._reason_label.setWordWrap(True)
+        reason_layout.addWidget(self._reason_label)
+
         self._action_panel = QFrame()
         self._action_panel.setObjectName("recommendationActionPanel")
         action_layout = QVBoxLayout(self._action_panel)
         action_layout.setContentsMargins(
-            0,
-            list_px(12),
-            0,
-            0,
+            list_px(8),
+            list_px(6),
+            list_px(8),
+            list_px(8),
         )
-        action_layout.setSpacing(list_px(8))
-        self._reason_title = QLabel(tr("recommendations.reasons.title"))
-        self._reason_title.setObjectName("recommendationReasonsTitle")
-        action_layout.addWidget(self._reason_title)
-        self._reason_label = QLabel("")
-        self._reason_label.setObjectName("recommendationReasonsText")
-        self._reason_label.setWordWrap(True)
-        action_layout.addWidget(self._reason_label)
+        action_layout.setSpacing(list_px(6))
 
         action_buttons_layout = QGridLayout()
         action_buttons_layout.setContentsMargins(0, 0, 0, 0)
@@ -375,7 +392,9 @@ class CandidateListView(CandidateListActionsMixin):
                 action_buttons_layout.addWidget(button, 0, column)
                 action_buttons_layout.setColumnStretch(column, 1)
         action_layout.addLayout(action_buttons_layout)
-        self._detail_card.add_main_info_footer(self._action_panel)
+        decision_layout.addWidget(self._reason_panel)
+        decision_layout.addWidget(self._action_panel)
+        self._detail_card.add_main_info_footer(self._decision_cluster)
         self._set_action_panel_enabled(False)
 
         splitter.addWidget(detail_panel)
@@ -431,6 +450,8 @@ class CandidateListView(CandidateListActionsMixin):
         return dict(self._session.recommendation_vector)
 
     def _set_action_panel_enabled(self, enabled: bool) -> None:
+        self._decision_cluster.setVisible(enabled)
+        self._reason_panel.setVisible(enabled)
         self._action_panel.setVisible(enabled)
         for button in (
             self._watched_action_button,

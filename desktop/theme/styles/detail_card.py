@@ -37,7 +37,7 @@ QLabel#detailUserScoreBadge {{
     color: {COLOR_TEXT_INVERTED};
     font-size: {font_px(DETAIL_USER_SCORE_BADGE_FONT_SIZE)}px;
     font-weight: 700;
-    padding: 0 {detail_px(DETAIL_USER_SCORE_BADGE_PADDING_X)}px;
+    padding: 0;
     min-height: {detail_px(DETAIL_USER_SCORE_BADGE_HEIGHT)}px;
     min-width: {detail_px(DETAIL_USER_SCORE_BADGE_MIN_WIDTH)}px;
 }}
