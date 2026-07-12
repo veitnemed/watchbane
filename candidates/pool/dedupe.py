@@ -108,15 +108,22 @@ def dedupe_pool_by_similar_titles(pool: dict) -> tuple[dict, int]:
         return dict(pool), 0
 
     kept: list[dict] = []
+    bucket_indices: dict[tuple[str, object], list[int]] = {}
     removed = 0
     for candidate in candidates:
+        bucket_key = (
+            normalize_media_type(candidate.get("media_type")),
+            candidate.get("year") or "",
+        )
         match_index = None
-        for index, existing in enumerate(kept):
+        for index in bucket_indices.get(bucket_key, []):
+            existing = kept[index]
             if candidates_are_same(candidate, existing, include_criteria=False):
                 match_index = index
                 break
         if match_index is None:
             kept.append(candidate)
+            bucket_indices.setdefault(bucket_key, []).append(len(kept) - 1)
             continue
 
         removed += 1
@@ -201,15 +208,22 @@ def dedupe_pool_cross_year_titles(pool: dict, *, max_year_delta: int = 1) -> tup
         return dict(pool), 0
 
     kept: list[dict] = []
+    bucket_indices: dict[tuple[str, str], list[int]] = {}
     removed = 0
     for candidate in candidates:
+        bucket_key = (
+            normalize_media_type(candidate.get("media_type")),
+            normalize_key_part(candidate_title(candidate)),
+        )
         match_index = None
-        for index, existing in enumerate(kept):
+        for index in bucket_indices.get(bucket_key, []):
+            existing = kept[index]
             if can_merge_cross_year_candidates(candidate, existing, max_year_delta=max_year_delta):
                 match_index = index
                 break
         if match_index is None:
             kept.append(candidate)
+            bucket_indices.setdefault(bucket_key, []).append(len(kept) - 1)
             continue
 
         removed += 1

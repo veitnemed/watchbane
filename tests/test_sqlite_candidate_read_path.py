@@ -63,3 +63,38 @@ def test_sqlite_runtime_candidate_service_views_use_pool_and_criteria(tmp_path, 
     assert defaults["has_defaults"] is True
     assert [candidate["title"] for candidate in filtered["candidates"]] == ["Severance"]
     assert duplicate_view["group_count"] == 0
+
+
+def test_pool_stats_cache_reuses_same_revision_and_invalidates_after_write(tmp_path, monkeypatch) -> None:
+    from candidates.pool import stats as pool_stats
+
+    _use_sqlite(tmp_path, monkeypatch)
+    candidate_repository.save_candidate_pool_dict(
+        {"first": _candidate("First", 2020, 8.0)},
+        purge_watched=False,
+    )
+    pool_stats.clear_pool_stats_cache()
+    original = pool_stats.dedupe_pool_by_similar_titles
+    calls = 0
+
+    def counted(pool):
+        nonlocal calls
+        calls += 1
+        return original(pool)
+
+    monkeypatch.setattr(pool_stats, "dedupe_pool_by_similar_titles", counted)
+
+    assert service.get_pool_stats_view()["stats"]["storage_total"] == 1
+    assert service.get_pool_stats_view()["stats"]["storage_total"] == 1
+    assert calls == 0  # Duplicate analysis is skipped for a one-row pool.
+
+    candidate_repository.save_candidate_pool_dict(
+        {
+            "first": _candidate("First", 2020, 8.0),
+            "second": _candidate("Second", 2021, 7.0),
+        },
+        purge_watched=False,
+    )
+    assert service.get_pool_stats_view()["stats"]["storage_total"] == 2
+    assert service.get_pool_stats_view()["stats"]["storage_total"] == 2
+    assert calls == 1
