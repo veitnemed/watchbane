@@ -22,6 +22,9 @@ tmdb.env
 recovered_edit_dataset.csv
 *.xlsx
 api_token.py
+*.pem
+*.key
+secrets/
 desktop/theme/local_ui_tuning.py
 .browser_profiles/
 data/cache/
@@ -35,6 +38,7 @@ data/profiles/*/backups/
 data/profiles/*/cache/
 data/profiles/*/logs/
 data/profiles/*/exports/
+data/profiles/**
 
 # Large local datasets and generated outputs
 datasets/
@@ -44,6 +48,7 @@ datasets/
 
 data/diagnostics/
 data/reports/
+docs/reports/curated/**/raw/
 logs/
 config/model_metrics.json
 config/rating_comparison_last_snapshot.json
