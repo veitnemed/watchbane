@@ -217,6 +217,32 @@ def test_backup_before_watched_delete_creates_files(monkeypatch, tmp_path) -> No
     assert any(Path(path).name == "posters.json.backup_before_delete_123" for path in backups)
 
 
+def test_backup_failure_cancels_delete_without_partial_write(monkeypatch) -> None:
+    from dataset.records import delete as records_delete
+
+    dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
+    monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
+    monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: {})
+    monkeypatch.setattr(records_delete, "load_poster_cache", lambda: {})
+    monkeypatch.setattr(
+        records_delete,
+        "backup_before_watched_delete",
+        lambda timestamp=None: (_ for _ in ()).throw(PermissionError("backup denied")),
+    )
+    monkeypatch.setattr(
+        records_delete.storage_data,
+        "save_dataset_meta_and_poster_cache",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("save must not run")),
+    )
+
+    result = records_delete.delete_watched_record("Alpha", timestamp="test")
+
+    assert result.ok is False
+    assert result.reason == "backup_error"
+    assert result.dataset_count == 1
+    assert "denied" not in result.message
+
+
 def test_build_watched_delete_preview(monkeypatch) -> None:
     from dataset.delete_record import build_watched_delete_preview
     from dataset.records import delete as records_delete

@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 
 from candidates import service as candidate_service
 from desktop.i18n import tr
+from desktop.storage_errors import is_storage_write_error, storage_write_error_message
 from desktop.settings.pool_clear_dialog import PoolClearDialog
 from desktop.settings.pool_ops_worker import (
     ACTION_CLEAR,
@@ -350,8 +351,11 @@ class PoolOpsPanel(QWidget):
             if action == ACTION_IMPORT_JSON:
                 self._show_status(tr("settings.pool.ops.import.error.invalid_file"), 8000)
                 return
-            error = payload.get("error") or tr("settings.pool.ops.error.generic")
-            self._show_status(tr("settings.pool.ops.error.action", error=error), 8000)
+            error = payload.get("error")
+            if error is not None and is_storage_write_error(error):
+                self._show_status(storage_write_error_message(), 8000)
+            else:
+                self._show_status(tr("settings.pool.ops.error.generic"), 8000)
             return
 
         self.poolChanged.emit()
@@ -362,7 +366,12 @@ class PoolOpsPanel(QWidget):
         self._hide_progress()
         self._worker = None
         self._set_busy(False)
-        self._show_status(tr("settings.pool.ops.error.action", error=message), 8000)
+        self._show_status(
+            storage_write_error_message()
+            if is_storage_write_error(message)
+            else tr("settings.pool.ops.error.generic"),
+            8000,
+        )
 
     def _success_message(self, action: str, payload: dict) -> str:
         result = payload.get("result") or {}

@@ -284,6 +284,29 @@ def test_invalid_import_reports_safe_message_without_raw_error(qtbot, monkeypatc
     assert "D:/private" not in status[-1][0]
 
 
+def test_disk_full_worker_failure_unlocks_panel_with_safe_message(qtbot, monkeypatch) -> None:
+    panel, _service, workers, status, _changed = _build_panel(qtbot, monkeypatch)
+    panel._start_worker(ACTION_DEDUPE)
+
+    workers[0].fail("database or disk is full: D:/private/runtime.sqlite3")
+
+    assert panel._worker is None
+    assert panel._progress_dialog is None
+    assert status
+    assert "D:/private" not in status[-1][0]
+    assert "сохранить" in status[-1][0].casefold()
+    assert all(
+        button.isEnabled()
+        for button in (
+            panel._dedupe_button,
+            panel._purge_button,
+            panel._clear_button,
+            panel._import_button,
+            panel._build_button,
+        )
+    )
+
+
 def test_pool_clear_confirmation_text_matches_language(monkeypatch) -> None:
     monkeypatch.setattr("desktop.settings.pool_clear_dialog.get_interface_language", lambda: "en")
     assert pool_clear_confirmation_text() == "CLEAR"

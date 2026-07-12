@@ -11,6 +11,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication
 
 from desktop.settings import APP_UI_SCALE_ENV, AppSettings, get_persisted_ui_scale, load_app_settings
+from desktop.storage_errors import is_storage_write_error, storage_write_error_message
 from desktop.shell.app_icon import apply_app_icon
 from desktop.theme import FONT_APP, FONT_FAMILY
 from desktop.theme.scaling import (
@@ -93,7 +94,15 @@ def main() -> None:
     app = QApplication(sys.argv)
     from desktop.shell.single_instance import SingleInstanceGuard, show_already_running_warning
 
-    instance_guard = SingleInstanceGuard()
+    try:
+        instance_guard = SingleInstanceGuard()
+    except Exception as error:
+        if is_storage_write_error(error):
+            from PyQt6.QtWidgets import QMessageBox
+
+            QMessageBox.warning(None, "Watchbane", storage_write_error_message())
+            return
+        raise
     if instance_guard.acquire() is False:
         show_already_running_warning()
         return
@@ -142,6 +151,11 @@ def main() -> None:
         sys.exit(exit_code)
     except Exception as error:
         log_exception("app.error", error)
+        if is_storage_write_error(error):
+            from PyQt6.QtWidgets import QMessageBox
+
+            QMessageBox.warning(None, "Watchbane", storage_write_error_message())
+            return
         raise
     finally:
         instance_guard.release()

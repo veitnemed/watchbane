@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import shutil
+import os
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 
@@ -112,7 +114,15 @@ def backup_before_watched_delete(timestamp: str | None = None) -> list[str]:
     poster_cache_path = DEFAULT_POSTER_CACHE_JSON
     if poster_cache_path.is_file():
         destination = poster_cache_path.with_name(poster_cache_path.name + suffix)
-        shutil.copy2(poster_cache_path, destination)
+        temp_destination = destination.with_name(destination.name + ".tmp")
+        try:
+            shutil.copy2(poster_cache_path, temp_destination)
+            os.replace(temp_destination, destination)
+        finally:
+            try:
+                temp_destination.unlink()
+            except OSError:
+                pass
         backups.append(str(destination))
 
     return backups
@@ -141,7 +151,17 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
     cache_entry = poster_cache.get(cache_identity) if isinstance(poster_cache.get(cache_identity), dict) else None
     had_cache_entry = cache_entry is not None
 
-    backups = backup_before_watched_delete(timestamp=timestamp)
+    try:
+        backups = backup_before_watched_delete(timestamp=timestamp)
+    except (OSError, sqlite3.Error):
+        return DeleteRecordResult(
+            ok=False,
+            dataset_key=dataset_key,
+            message="Не удалось создать резервную копию. Удаление отменено.",
+            reason="backup_error",
+            dataset_count=len(dataset),
+            backups=[],
+        )
 
     prepared_dataset = dict(dataset)
     prepared_meta = dict(meta)
@@ -168,11 +188,11 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
             prepared_meta,
             prepared_cache,
         )
-    except OSError as error:
+    except (OSError, sqlite3.Error):
         return DeleteRecordResult(
             ok=False,
             dataset_key=dataset_key,
-            message=f"Ошибка сохранения: {error}",
+            message="Не удалось сохранить изменения. Запись не удалена.",
             reason="save_error",
             dataset_count=len(dataset),
             backups=backups,

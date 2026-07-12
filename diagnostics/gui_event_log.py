@@ -61,11 +61,15 @@ def gui_event_log_enabled() -> bool:
 def start_gui_event_log_if_enabled(log_dir: str | Path | None = None) -> Path | None:
     if gui_event_log_enabled() is False:
         return None
-    return start_gui_event_log(log_dir)
+    try:
+        return start_gui_event_log(log_dir)
+    except OSError:
+        return None
 
 
 def log_event(event: str, **fields) -> None:
     """Append one event to the current GUI session log."""
+    global _SESSION_ENABLED
     if _SESSION_ENABLED is False or _SESSION_LOG_PATH is None:
         return
     payload = {
@@ -74,9 +78,12 @@ def log_event(event: str, **fields) -> None:
         **{str(key): _clean(value) for key, value in fields.items()},
     }
     line = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    with _LOCK:
-        with _SESSION_LOG_PATH.open("a", encoding="utf-8") as file:
-            file.write(line + "\n")
+    try:
+        with _LOCK:
+            with _SESSION_LOG_PATH.open("a", encoding="utf-8") as file:
+                file.write(line + "\n")
+    except OSError:
+        _SESSION_ENABLED = False
 
 
 def log_exception(event: str, error: BaseException, **fields) -> None:

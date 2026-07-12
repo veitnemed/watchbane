@@ -54,9 +54,15 @@ def _build_job_paths(job_name: str, *, jobs_root: Path | None = None) -> JobPath
 def _safe_json_dump(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_suffix(".tmp")
-    with open(temp_path, "w", encoding="utf-8") as file:
-        json.dump(payload, file, ensure_ascii=False, indent=2)
-    temp_path.replace(path)
+    try:
+        with open(temp_path, "w", encoding="utf-8") as file:
+            json.dump(payload, file, ensure_ascii=False, indent=2)
+        temp_path.replace(path)
+    finally:
+        try:
+            temp_path.unlink()
+        except OSError:
+            pass
 
 
 def _safe_json_load(path: Path) -> dict:
@@ -151,7 +157,10 @@ def _write_lock(paths: JobPaths, *, pid: int | None, started_at: str | None = No
         "started_at": started_at or _utcnow(),
         "job_name": paths.job_name,
     }
-    _safe_json_dump(paths.lock_path, payload)
+    try:
+        _safe_json_dump(paths.lock_path, payload)
+    except OSError:
+        pass
 
 
 def _acquire_lock(paths: JobPaths, *, pid: int | None) -> bool:
@@ -229,7 +238,10 @@ def _read_existing_status(paths: JobPaths) -> dict:
 
 def _write_status(paths: JobPaths, status: dict) -> None:
     status["updated_at"] = _utcnow()
-    _safe_json_dump(paths.status_path, status)
+    try:
+        _safe_json_dump(paths.status_path, status)
+    except OSError:
+        pass
 
 
 def _reset_run_status(status: dict, *, job_name: str, pid: int | None, started_at: str | None) -> dict:
@@ -358,7 +370,11 @@ def start_job(job_name: str = DEFAULT_JOB_NAME) -> dict:
         except OSError:
             pass
 
-    if not _acquire_lock(paths, pid=os.getpid()):
+    try:
+        lock_acquired = _acquire_lock(paths, pid=os.getpid())
+    except OSError:
+        return {"ok": False, "error": "storage_unavailable", "status": "failed"}
+    if not lock_acquired:
         return {"ok": False, "already_running": True, "status": "running"}
 
     _ensure_stop_file_absent(paths)
