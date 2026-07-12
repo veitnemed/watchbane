@@ -110,16 +110,24 @@ def evaluate_tmdb_startup_readiness(token: str | None = None) -> dict[str, Any]:
         }
 
     normalized_token = str(token or "").strip()
-    if normalized_token == "":
-        if tmdb_api.has_tmdb_credentials() is False:
-            return {
-                "ready": False,
-                "error": "missing_token",
-                "network": network,
-            }
-        api = tmdb_api.check_api_available()
-    else:
-        api = tmdb_api.check_api_available(token=normalized_token)
+    try:
+        if normalized_token == "":
+            if tmdb_api.has_tmdb_credentials() is False:
+                return {
+                    "ready": False,
+                    "error": "missing_token",
+                    "network": network,
+                }
+            api = tmdb_api.check_api_available()
+        else:
+            api = tmdb_api.check_api_available(token=normalized_token)
+    except Exception as error:  # noqa: BLE001 - startup callers require a result contract
+        return {
+            "ready": False,
+            "error": "validation_failed",
+            "network": network,
+            "details": str(error),
+        }
 
     if api.get("ok") is True:
         return {

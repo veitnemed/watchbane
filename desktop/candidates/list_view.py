@@ -43,6 +43,7 @@ from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FI
 from desktop.candidates.workers.poster_worker import CandidateLocalizedPosterWorker
 from desktop.i18n import get_interface_language, tr
 from desktop.settings.app_settings import get_persisted_data_language
+from desktop.shared.brand_assets import watchbane_wordmark_label
 from desktop.shared.detail import DetailCard
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.widgets.list_search import DebouncedLineEditSearch, resolve_selection_row
@@ -68,7 +69,7 @@ CANDIDATE_DETAIL_STRETCH = 1
 CANDIDATE_LIST_ITEM_SPACING = list_px(2)
 POSTER_PRIORITY_COUNT = 8
 POSTER_READY_TARGET = 20
-POSTER_REVEAL_DEADLINE_MS = 2_500
+POSTER_REVEAL_DEADLINE_MS = 8_000
 POSTER_MIN_LOADER_MS = 180
 
 
@@ -135,6 +136,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_prepare_settled = 0
         self._deck_prepare_cache_hits = 0
         self._deck_build_ms = 0.0
+        self._initial_deck_loaded = False
 
         self._widget = _CandidateListRoot()
         self._widget.setObjectName("candidateListRoot")
@@ -207,6 +209,11 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_loading_progress.setMaximumWidth(list_px(420))
         loading_layout.addWidget(
             self._deck_loading_progress,
+            alignment=Qt.AlignmentFlag.AlignHCenter,
+        )
+        loading_layout.addSpacing(list_px(10))
+        loading_layout.addWidget(
+            watchbane_wordmark_label(list_px(210), list_px(42)),
             alignment=Qt.AlignmentFlag.AlignHCenter,
         )
         loading_layout.addStretch(1)
@@ -339,6 +346,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._hidden_action_button.setObjectName("recommendationHiddenButton")
         rating_prompt = QLabel(tr("user_rating.candidate_prompt"))
         rating_prompt.setObjectName("recommendationUserRatingPrompt")
+        rating_prompt.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         action_layout.addWidget(rating_prompt)
         self._candidate_rating_selector = UserRatingSelector()
         self._candidate_rating_selector.setObjectName("recommendationUserRatingSelector")
@@ -347,7 +355,10 @@ class CandidateListView(CandidateListActionsMixin):
             if value is not None
             else None
         )
-        action_layout.addWidget(self._candidate_rating_selector)
+        action_layout.addWidget(
+            self._candidate_rating_selector,
+            alignment=Qt.AlignmentFlag.AlignHCenter,
+        )
         self._watchlist_action_button.clicked.connect(
             lambda: self._apply_recommendation_action("watchlist")
         )
@@ -827,7 +838,9 @@ class CandidateListView(CandidateListActionsMixin):
             deck,
             prepare_posters=replacement and not vector_only_remix,
         )
-        self._maybe_request_recommendation_refill()
+        if self._initial_deck_loaded:
+            self._maybe_request_recommendation_refill()
+        self._initial_deck_loaded = True
 
     def _on_new_deck_clicked(self) -> None:
         self._session.variation_seed += 1
@@ -1032,7 +1045,16 @@ class CandidateListView(CandidateListActionsMixin):
                     logger.exception("recommendation deck refresh top-up failed")
                     self._load_recommendation_deck(force_new=False)
                 else:
-                    self._present_recommendation_deck(updated)
+                    first_candidates_after_empty_deck = (
+                        len(deck.get("active") or []) == 0
+                        and len(updated.get("active") or []) > 0
+                    )
+                    if first_candidates_after_empty_deck:
+                        self._begin_deck_preparation()
+                    self._present_recommendation_deck(
+                        updated,
+                        prepare_posters=first_candidates_after_empty_deck,
+                    )
                     self._maybe_request_recommendation_refill()
             else:
                 self._load_recommendation_deck(force_new=False)

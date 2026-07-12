@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 
 from PyQt6.QtCore import QPointF, QRectF, QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QColor, QKeyEvent, QPainter, QPen
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QKeyEvent, QPainter, QPen
 from PyQt6.QtWidgets import QDial, QMenu
 
 from desktop.theme.scaling import control_px, font_px
@@ -45,10 +45,21 @@ class SteppedRotaryControl(QDial):
         self.valueChanged.connect(self._on_value_changed)
 
     def sizeHint(self) -> QSize:
-        return QSize(control_px(132), control_px(150))
+        return QSize(max(control_px(132), self._readout_minimum_width()), control_px(150))
 
     def minimumSizeHint(self) -> QSize:
-        return QSize(control_px(112), control_px(132))
+        return QSize(max(control_px(112), self._readout_minimum_width()), control_px(132))
+
+    def _readout_font(self) -> QFont:
+        font = QFont(self.font())
+        font.setPixelSize(font_px(14))
+        font.setBold(True)
+        return font
+
+    def _readout_minimum_width(self) -> int:
+        metrics = QFontMetrics(self._readout_font())
+        longest = max(self._labels, key=metrics.horizontalAdvance)
+        return metrics.horizontalAdvance(longest) + control_px(24)
 
     def canonical_text(self) -> str:
         return self._labels[self.value()]
@@ -149,10 +160,7 @@ class SteppedRotaryControl(QDial):
         painter.setBrush(QColor(COLOR_ACCENT_HOVER))
         painter.drawEllipse(marker, control_px(4), control_px(4))
 
-        font = painter.font()
-        font.setPixelSize(font_px(14))
-        font.setBold(True)
-        painter.setFont(font)
+        painter.setFont(self._readout_font())
         painter.setPen(QColor(COLOR_TEXT))
         text_rect = QRectF(0, rect.bottom() + control_px(4), width, control_px(30))
         painter.drawText(text_rect, Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop, self.canonical_text())

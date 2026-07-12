@@ -184,16 +184,11 @@ def build_user_score_badge_item(card: dict) -> dict | None:
     if display_value == "—":
         return None
     rating = normalize_user_rating(card.get("user_score"))
-    icon_names = {
-        int(UserRating.NOT_FOR_ME): "user_rating_not_for_me.svg",
-        int(UserRating.OK): "user_rating_ok.svg",
-        int(UserRating.TOP): "user_rating_top.svg",
-    }
     return {
         "kind": "user_score_badge",
-        "value": display_value,
-        "text": display_value,
-        "icon_name": icon_names.get(rating),
+        "value": rating,
+        "text": str(rating),
+        "heart": True,
     }
 
 

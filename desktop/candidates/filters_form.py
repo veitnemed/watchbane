@@ -159,7 +159,7 @@ def build_filters_form(
     form_host = QWidget()
     form_host.setObjectName("candidateSearchFiltersHost")
     form = QVBoxLayout(form_host)
-    form.setContentsMargins(0, 0, layout_px(10), 0)
+    form.setContentsMargins(0, 0, 0, 0)
     form.setSpacing(layout_px(8))
     compact_combo_max_width = layout_px(480)
     section_index = 0
@@ -313,7 +313,7 @@ def build_filters_form(
             super().resizeEvent(event)
             direction = (
                 QBoxLayout.Direction.TopToBottom
-                if self.width() < layout_px(980) or get_ui_scale() >= 1.5
+                if self.width() < layout_px(760) or get_ui_scale() >= 1.5
                 else QBoxLayout.Direction.LeftToRight
             )
             panels_layout.setDirection(direction)
@@ -376,7 +376,6 @@ def build_filters_form(
     ):
         discovery_layout.addWidget(field_label(tr(label_key)))
         discovery_layout.addWidget(control)
-    discovery_layout.addStretch(1)
 
     vector_panel = QFrame()
     vector_panel.setObjectName("recommendationVectorPanel")
@@ -436,8 +435,10 @@ def build_filters_form(
     variation_button.setObjectName("recommendationVariationButton")
     vector_layout.addWidget(variation_button)
 
-    panels_layout.addWidget(discovery_panel, 1)
-    panels_layout.addWidget(vector_panel, 1)
+    panels_layout.addWidget(discovery_panel, 5)
+    panels_layout.addWidget(vector_panel, 7)
+    panels_layout.setStretch(0, 5)
+    panels_layout.setStretch(1, 7)
     form.insertWidget(form.indexOf(simple_section), responsive_host)
 
     advanced_mode_toggle = QToolButton()

@@ -98,3 +98,21 @@ def test_evaluate_startup_readiness_checks_network_before_token(monkeypatch) -> 
     assert result["ready"] is False
     assert result["error"] == "dns_blocked"
     assert calls == ["network"]
+
+
+def test_evaluate_startup_readiness_converts_unexpected_validation_error(monkeypatch) -> None:
+    monkeypatch.setattr(
+        tmdb_connectivity,
+        "check_tmdb_network_available",
+        lambda **kwargs: {"ok": True},
+    )
+    monkeypatch.setattr(
+        "apis.tmdb_api.check_api_available",
+        lambda token=None: (_ for _ in ()).throw(ValueError("invalid response")),
+    )
+
+    result = tmdb_connectivity.evaluate_tmdb_startup_readiness("wrong-token")
+
+    assert result["ready"] is False
+    assert result["error"] == "validation_failed"
+    assert "invalid response" in result["details"]

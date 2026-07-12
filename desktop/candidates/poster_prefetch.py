@@ -16,7 +16,7 @@ from posters.download_images import (
     MAX_POSTER_BYTES,
     build_poster_request_headers,
     local_preview_poster_path_if_cached,
-    normalize_tmdb_poster_download_url,
+    poster_download_url_for_network,
     preview_poster_path_for_url,
 )
 
@@ -278,7 +278,7 @@ class CandidatePosterPrefetchController(QObject):
             if self._host_is_in_cooldown(source_url):
                 self._finish_url(source_url, None)
                 continue
-            download_url = normalize_tmdb_poster_download_url(source_url)
+            download_url = poster_download_url_for_network(source_url)
             if download_url is None:
                 self._finish_url(source_url, None)
                 continue

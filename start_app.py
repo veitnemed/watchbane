@@ -1,4 +1,4 @@
-"""Тонкая точка входа desktop-приложения."""
+
 
 from desktop.app import main
 

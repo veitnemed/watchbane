@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -132,6 +133,7 @@ class CandidateFiltersView:
         self._replenish_generation = 0
         self._active_replenish_generation: int | None = None
         self._active_replenish_signature: str | None = None
+        self._disposed = False
         self._vector_debounce = QTimer()
         self._vector_debounce.setSingleShot(True)
         self._vector_debounce.setInterval(300)
@@ -147,6 +149,7 @@ class CandidateFiltersView:
 
         self._widget = CandidateFiltersRootWidget()
         self._widget.setObjectName("candidateFiltersRoot")
+        self._widget.destroyed.connect(self._on_widget_destroyed)
         root_layout = QVBoxLayout(self._widget)
         root_layout.setContentsMargins(
             CANDIDATE_ROOT_MARGIN_PX,
@@ -190,8 +193,7 @@ class CandidateFiltersView:
 
         self._intro_card = QFrame()
         self._intro_card.setObjectName("candidateFiltersIntro")
-        self._intro_card.setFixedWidth(SUMMARY_CARD_WIDTH)
-        self._intro_card.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.MinimumExpanding)
+        self._intro_card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
         intro_layout = QVBoxLayout(self._intro_card)
         intro_layout.setContentsMargins(
             layout_px(16),
@@ -246,7 +248,7 @@ class CandidateFiltersView:
             row = QFrame()
             row.setObjectName("candidateFiltersSummaryRow")
             row_layout = QHBoxLayout(row)
-            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setContentsMargins(0, layout_px(2), 0, layout_px(2))
             row_layout.setSpacing(layout_px(7))
 
             icon_label = filter_icon_label(
@@ -265,8 +267,8 @@ class CandidateFiltersView:
             label.setWordWrap(True)
             value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             row_layout.addWidget(icon_label)
-            row_layout.addWidget(label, stretch=3)
-            row_layout.addWidget(value, stretch=2)
+            row_layout.addWidget(label)
+            row_layout.addWidget(value, stretch=1)
             self._summary_value_labels[key] = value
             self._summary_name_labels[key] = label
             self._summary_rows[key] = row
@@ -300,13 +302,23 @@ class CandidateFiltersView:
         self._set_simple_preferences_controls(load_simple_recommendation_preferences())
         self._discovery_preferences, self._recommendation_vector = load_recommendation_preferences()
 
+        self._summary_scroll = QScrollArea()
+        self._summary_scroll.setObjectName("candidateFiltersSummaryScroll")
+        self._summary_scroll.setWidgetResizable(True)
+        self._summary_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._summary_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._summary_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._summary_scroll.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self._summary_scroll.setWidget(self._intro_card)
+
         content_layout = QHBoxLayout()
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(layout_px(16))
         content_layout.addWidget(self._form.scroll, stretch=1)
-        content_layout.addWidget(self._intro_card, alignment=Qt.AlignmentFlag.AlignTop)
+        content_layout.addWidget(self._summary_scroll, alignment=Qt.AlignmentFlag.AlignTop)
         root_layout.addLayout(content_layout, stretch=1)
 
+        self._update_summary_card_width()
         self._update_apply_button_width()
         self._update_year_range_label()
         self._refresh_threshold_labels()
@@ -585,6 +597,7 @@ class CandidateFiltersView:
             for key, (label_key, value) in simple_values.items():
                 self._summary_name_labels[key].setText(tr(label_key))
                 self._summary_value_labels[key].setText(value)
+            QTimer.singleShot(0, self._update_summary_card_height)
             return
         advanced_label_keys = {
             "countries": "candidates.filters.summary.countries",
@@ -614,6 +627,7 @@ class CandidateFiltersView:
             label = self._summary_value_labels.get(key)
             if label is not None:
                 label.setText(str(value or tr("candidates.filters.summary.not_set")))
+        QTimer.singleShot(0, self._update_summary_card_height)
 
     def _set_simple_preferences_controls(self, preferences: SimpleRecommendationPreferences) -> None:
         values = preferences.normalized().to_dict()
@@ -769,7 +783,10 @@ class CandidateFiltersView:
     def _update_apply_button_width(self) -> None:
         if not hasattr(self, "_intro_card"):
             return
-        content_width = self._intro_card.width() - layout_px(36)
+        card_width = self._intro_card.width()
+        if hasattr(self, "_summary_scroll"):
+            card_width = self._summary_scroll.viewport().width()
+        content_width = card_width - layout_px(36)
         if content_width <= 0:
             content_width = SUMMARY_CARD_WIDTH - layout_px(36)
         target = max(control_px(148), content_width)
@@ -790,7 +807,52 @@ class CandidateFiltersView:
             SUMMARY_CARD_WIDTH,
             max(layout_px(240), proportional_width),
         )
-        self._intro_card.setFixedWidth(target_width)
+        if hasattr(self, "_summary_scroll"):
+            self._summary_scroll.setFixedWidth(target_width)
+            QTimer.singleShot(0, self._update_summary_card_height)
+        else:
+            self._intro_card.setFixedWidth(target_width)
+
+    def _update_summary_card_height(self) -> None:
+        if (
+            self._ui_is_available() is False
+            or not hasattr(self, "_summary_scroll")
+            or not hasattr(self, "_form")
+        ):
+            return
+        available_height = self._form.scroll.height()
+        if available_height <= 0:
+            return
+        desired_height = max(
+            self._intro_card.sizeHint().height(),
+            self._intro_card.minimumSizeHint().height(),
+        )
+        target_height = min(
+            available_height,
+            max(control_px(180), desired_height + control_px(24)),
+        )
+        self._summary_scroll.setFixedHeight(target_height)
+        QTimer.singleShot(0, self._update_apply_button_width)
+
+    def _ui_is_available(self) -> bool:
+        if self._disposed:
+            return False
+        try:
+            self._widget.isWidgetType()
+        except RuntimeError:
+            self._disposed = True
+            return False
+        return True
+
+    def _on_widget_destroyed(self, *_args) -> None:
+        self._disposed = True
+        self._replenish_generation += 1
+        self._pending_replenish_intent = None
+        self._pending_replenish_generation = None
+        worker = self._replenish_worker
+        cancel = getattr(worker, "cancel", None)
+        if callable(cancel):
+            cancel()
 
     def _on_year_range_changed(self, _lower: int, _upper: int) -> None:
         self._update_year_range_label()
@@ -1099,6 +1161,8 @@ class CandidateFiltersView:
         return True
 
     def _on_replenish_progress(self, progress: object, generation: int | None = None) -> None:
+        if self._ui_is_available() is False:
+            return
         if generation is not None and generation != self._replenish_generation:
             return
         if isinstance(progress, dict) is False:
@@ -1113,6 +1177,8 @@ class CandidateFiltersView:
         self._intro_stats.setVisible(True)
 
     def _on_replenish_finished(self, result: object, generation: int | None = None) -> None:
+        if self._ui_is_available() is False:
+            return
         if generation is not None and generation != self._replenish_generation:
             self._set_replenish_running(False)
             return
@@ -1147,6 +1213,8 @@ class CandidateFiltersView:
         self._intro_stats.setVisible(True)
 
     def _on_replenish_failed(self, message: str, generation: int | None = None) -> None:
+        if self._ui_is_available() is False:
+            return
         if generation is not None and generation != self._replenish_generation:
             self._set_replenish_running(False)
             return
@@ -1162,6 +1230,8 @@ class CandidateFiltersView:
             self._replenish_worker = None
             self._active_replenish_generation = None
             self._active_replenish_signature = None
+            if self._ui_is_available() is False:
+                return
             if self._pending_replenish_intent is not None and self._session.is_loading is False:
                 intent = self._pending_replenish_intent
                 generation = self._pending_replenish_generation

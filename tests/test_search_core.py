@@ -447,6 +447,30 @@ def test_normalize_tmdb_poster_download_url_uses_w342() -> None:
     assert normalize_tmdb_poster_download_url("https://example.com/x.jpg") == "https://example.com/x.jpg"
 
 
+def test_poster_download_uses_proxy_when_tmdb_image_dns_is_loopback(monkeypatch) -> None:
+    from posters import download_images
+
+    monkeypatch.setattr(download_images, "tmdb_image_delivery_is_loopback", lambda: True)
+
+    url = download_images.poster_download_url_for_network(
+        "https://image.tmdb.org/t/p/original/example.jpg"
+    )
+
+    assert url == (
+        "https://wsrv.nl/?url=image.tmdb.org%2Ft%2Fp%2Fw342%2Fexample.jpg&output=jpg"
+    )
+
+
+def test_poster_download_keeps_tmdb_host_when_dns_is_available(monkeypatch) -> None:
+    from posters import download_images
+
+    monkeypatch.setattr(download_images, "tmdb_image_delivery_is_loopback", lambda: False)
+
+    assert download_images.poster_download_url_for_network(
+        "https://image.tmdb.org/t/p/original/example.jpg"
+    ) == "https://image.tmdb.org/t/p/w342/example.jpg"
+
+
 def test_build_poster_request_headers_for_tmdb() -> None:
     from posters.download_images import build_poster_request_headers
 

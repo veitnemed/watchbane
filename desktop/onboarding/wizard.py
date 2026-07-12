@@ -67,6 +67,7 @@ from candidates.onboarding.taste_presets import (
 )
 from desktop.settings.app_settings import AppSettings, get_persisted_data_language, normalize_ui_scale, save_app_settings
 from desktop.onboarding.worker import OnboardingAutofillWorker
+from desktop.shared.brand_assets import watchbane_wordmark_label
 from desktop.shared.widgets.genre_chip_selector import FlowLayout
 from desktop.theme.scaling import font_px, get_ui_scale, scale_px
 from desktop.theme.scaling import set_ui_scale
@@ -1299,6 +1300,12 @@ class OnboardingAutofillDialog(QDialog):
         layout.addWidget(self._warning_label)
 
         layout.addStretch(1)
+        layout.addWidget(
+            watchbane_wordmark_label(scale_px(220), scale_px(44)),
+            0,
+            Qt.AlignmentFlag.AlignHCenter,
+        )
+        layout.addSpacing(scale_px(SPACING_SMALL))
 
         actions = QHBoxLayout()
         actions.setContentsMargins(0, 0, 0, 0)

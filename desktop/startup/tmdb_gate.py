@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.i18n import tr
+from desktop.shared.brand_assets import tmdb_logo_label, watchbane_wordmark_label
 from desktop.startup.worker import TmdbNetworkProbeWorker, TmdbStartupValidateWorker
 from desktop.theme.scaling import font_px, scale_px
 from desktop.theme.styles.startup import build_startup_gate_style
@@ -107,6 +108,20 @@ class TmdbStartupGateView(QWidget):
         hint.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         hint.setFont(QFont(FONT_FAMILY, font_px(FONT_SMALL)))
 
+        attribution = QFrame()
+        attribution.setObjectName("startupTmdbAttribution")
+        attribution_layout = QHBoxLayout(attribution)
+        attribution_layout.setContentsMargins(
+            scale_px(12), scale_px(10), scale_px(12), scale_px(10)
+        )
+        attribution_layout.setSpacing(scale_px(12))
+        attribution_layout.addWidget(tmdb_logo_label(scale_px(46)), 0, Qt.AlignmentFlag.AlignTop)
+        attribution_text = QLabel(tr("startup.tmdb.attribution"))
+        attribution_text.setObjectName("startupTmdbAttributionText")
+        attribution_text.setWordWrap(True)
+        attribution_text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        attribution_layout.addWidget(attribution_text, 1)
+
         self._error_label = QLabel("")
         self._error_label.setObjectName("startupGateError")
         self._error_label.setWordWrap(True)
@@ -137,6 +152,14 @@ class TmdbStartupGateView(QWidget):
         card_layout.addWidget(self._error_label)
         card_layout.addSpacing(scale_px(SPACING_SMALL))
         card_layout.addLayout(button_row)
+        card_layout.addSpacing(scale_px(SPACING_MEDIUM))
+        card_layout.addWidget(attribution)
+        card_layout.addSpacing(scale_px(SPACING_SMALL))
+        card_layout.addWidget(
+            watchbane_wordmark_label(scale_px(190), scale_px(40)),
+            0,
+            Qt.AlignmentFlag.AlignHCenter,
+        )
 
         outer.addWidget(card, 0, Qt.AlignmentFlag.AlignHCenter)
         outer.addStretch(2)
@@ -218,6 +241,7 @@ class TmdbStartupGateView(QWidget):
             "network_unreachable": "startup.tmdb.error.network_unreachable",
             "missing_token": "startup.tmdb.error.missing_token",
             "invalid_token": "startup.tmdb.error.invalid_token",
+            "validation_failed": "startup.tmdb.error.validation_failed",
             "save_failed": "startup.tmdb.error.save_failed",
         }
         self._show_error(tr(mapping.get(error_code, "startup.tmdb.error.invalid_token")))

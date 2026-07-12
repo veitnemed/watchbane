@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QKeySequence, QShortcut
-from PyQt6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QWidget
+from PyQt6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QSizePolicy, QWidget
 
 from dataset.models.user_rating import UserRating, normalize_user_rating
 from desktop.i18n import tr
@@ -21,13 +21,14 @@ class UserRatingSelector(QWidget):
         super().__init__(parent)
         self.setObjectName("userRatingSelector")
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
         self.setStyleSheet(build_user_rating_selector_style())
         self._group = QButtonGroup(self)
         self._group.setExclusive(True)
         self._buttons: dict[int, QPushButton] = {}
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(control_px(8))
+        layout.setSpacing(control_px(10))
         image_dir = Path(__file__).resolve().parents[2] / "images"
         options = (
             (UserRating.NOT_FOR_ME, "user_rating.not_for_me", image_dir / "user_rating_not_for_me.svg"),
@@ -41,8 +42,8 @@ class UserRatingSelector(QWidget):
             button.setCheckable(True)
             button.setAccessibleName(label)
             button.setToolTip(tr(f"{label_key}.tooltip"))
-            button.setIconSize(QSize(control_px(22), control_px(22)))
-            button.setMinimumWidth(control_px(118))
+            button.setIconSize(QSize(control_px(20), control_px(20)))
+            button.setMinimumWidth(control_px(92))
             self._group.addButton(button, int(rating))
             self._buttons[int(rating)] = button
             layout.addWidget(button, 1)

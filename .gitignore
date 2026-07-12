@@ -57,3 +57,8 @@ screens/tmp_ui/*
 
 /tmdb_net
 
+# Local Windows release artifact
+/Watchbane.exe
+/build/
+/dist/
+/tmp/

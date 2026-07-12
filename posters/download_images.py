@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import re
 import shutil
+import socket
 import time
+from functools import lru_cache
 from pathlib import Path
+from urllib.parse import urlencode, urlsplit
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -31,6 +35,8 @@ PREVIEW_SSL_BACKOFF_SECONDS = 12.0
 PREVIEW_CONSECUTIVE_FAILURE_THRESHOLD = 3
 PREVIEW_CONSECUTIVE_FAILURE_COOLDOWN_SECONDS = 45.0
 TMDB_REFERER = "https://www.themoviedb.org/"
+TMDB_IMAGE_HOST = "image.tmdb.org"
+TMDB_IMAGE_PROXY = "https://wsrv.nl/"
 DEFAULT_POSTER_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
@@ -70,6 +76,47 @@ def normalize_tmdb_poster_download_url(
     if path in ("", "/"):
         return None
     return f"{prefix}{size}{path}"
+
+
+@lru_cache(maxsize=1)
+def tmdb_image_delivery_is_loopback() -> bool:
+    """Return whether local DNS redirects TMDb image delivery to this machine."""
+    try:
+        records = socket.getaddrinfo(
+            TMDB_IMAGE_HOST,
+            443,
+            type=socket.SOCK_STREAM,
+        )
+    except OSError:
+        return False
+
+    addresses = []
+    for record in records:
+        try:
+            addresses.append(ipaddress.ip_address(record[4][0]))
+        except (IndexError, TypeError, ValueError):
+            continue
+    return bool(addresses) and all(address.is_loopback for address in addresses)
+
+
+def poster_download_url_for_network(
+    poster_url: str,
+    *,
+    size: str = PREVIEW_DOWNLOAD_SIZE,
+) -> str | None:
+    """Return a reachable download URL while keeping the source URL cache-stable."""
+    direct_url = normalize_tmdb_poster_download_url(poster_url, size=size)
+    if direct_url in (None, ""):
+        return None
+
+    parsed = urlsplit(direct_url)
+    if parsed.hostname != TMDB_IMAGE_HOST or tmdb_image_delivery_is_loopback() is False:
+        return direct_url
+
+    upstream = f"{parsed.netloc}{parsed.path}"
+    if parsed.query:
+        upstream = f"{upstream}?{parsed.query}"
+    return f"{TMDB_IMAGE_PROXY}?{urlencode({'url': upstream, 'output': 'jpg'})}"
 
 
 def build_poster_request_headers(url: str) -> dict[str, str]:
@@ -167,7 +214,7 @@ def _is_retryable_download_reason(reason: str) -> bool:
 
 
 def _download_preview_poster(source_url: str, destination: Path) -> tuple[bool, str]:
-    download_url = normalize_tmdb_poster_download_url(source_url)
+    download_url = poster_download_url_for_network(source_url)
     if download_url in (None, ""):
         return False, "invalid_url"
 

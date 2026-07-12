@@ -29,6 +29,9 @@ def main(argv: list[str] | None = None) -> int:
 
     app = QApplication(sys.argv)
     set_ui_scale(args.scale)
+    TmdbStartupGateView._start_network_probe = lambda self: self._on_network_probe_finished(  # type: ignore[method-assign]
+        {"ok": True, "dns": {"addresses": ["3.173.161.72"]}}
+    )
     gate = TmdbStartupGateView()
     gate.setStyleSheet(build_app_style())
     gate.resize(1180, 720)

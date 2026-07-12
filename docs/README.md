@@ -34,6 +34,17 @@ Desktop GUI:
 py start_app.py
 ```
 
+## Windows release build
+
+The default desktop release is an onedir bundle rather than a single-file executable. Build it from the repository root:
+
+```powershell
+./scripts/build_desktop.ps1
+./dist/Watchbane/Watchbane.exe
+```
+
+The result is `dist/Watchbane/`; `Watchbane.exe` must remain next to `_internal/` and the bundled assets. UI screenshots and layout checks use the application scale settings `0.75`, `1.0`, and `1.5` (not `QT_SCALE_FACTOR`).
+
 Для TMDb-потока нужен токен:
 
 - переменная окружения `TMDB_TOKEN`;

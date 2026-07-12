@@ -79,6 +79,23 @@ def test_desktop_app_icon_asset_loads(qapp) -> None:
     assert build_app_icon().isNull() is False
 
 
+def test_brand_assets_are_available(qapp) -> None:
+    from desktop.shared.brand_assets import (
+        tmdb_logo_label,
+        watchbane_symbol_label,
+        watchbane_wordmark_label,
+    )
+
+    wordmark = watchbane_wordmark_label(190, 58)
+    assert wordmark.text() == "Watchbane"
+    assert wordmark.pixmap().isNull() is True
+    assert "background: transparent" in wordmark.styleSheet()
+    tmdb_badge = tmdb_logo_label(46)
+    assert tmdb_badge.text() == "TMDb"
+    assert tmdb_badge.pixmap().isNull() is True
+    assert watchbane_symbol_label(27).pixmap().isNull() is False
+
+
 def test_i18n_catalogs_have_same_keys() -> None:
     from desktop.i18n import SUPPORTED_LANGUAGES, TRANSLATIONS
 
@@ -1826,9 +1843,9 @@ def test_user_score_badge_is_watched_only() -> None:
 
     assert build_user_score_badge_item({"runtime_status": "watched", "user_score": 3}) == {
         "kind": "user_score_badge",
-        "value": "Топ",
-        "text": "Топ",
-        "icon_name": "user_rating_top.svg",
+        "value": 3,
+        "text": "3",
+        "heart": True,
     }
     assert build_user_score_badge_item({"runtime_status": "watched", "user_score": None}) is None
     assert build_user_score_badge_item({"runtime_status": "candidate", "user_score": 3}) is None
@@ -2371,9 +2388,9 @@ def test_build_watched_movie_card_computes_tmdb_final_score_for_low_vote_watched
     assert card["final_score"] == 0.52
     assert build_user_score_badge_item(card) == {
         "kind": "user_score_badge",
-        "value": "Не зашло",
-        "text": "Не зашло",
-        "icon_name": "user_rating_not_for_me.svg",
+        "value": 1,
+        "text": "1",
+        "heart": True,
     }
     assert ring["display_value"] == "8.5"
     assert ring["ring_progress"] == 0.85
@@ -3897,8 +3914,8 @@ def test_watched_user_score_badge_is_poster_shell_overlay(qapp) -> None:
     assert shell is not None
     assert badge is not None
     assert is_descendant(badge, shell)
-    assert "Топ" in badge.text()
-    assert "user_rating_top.svg" in badge.text()
+    assert badge.text() == "3"
+    assert badge.property("heartBadge") is True
     assert badge.isHidden() is False
     assert badge.testAttribute(Qt.WidgetAttribute.WA_StyledBackground) is True
     badge_position = badge.mapTo(shell, badge.rect().topLeft())
@@ -3932,7 +3949,8 @@ def test_watched_user_score_badge_has_readable_background() -> None:
     assert "drawRoundedRect" in layout_source
     assert "border_color = FILM_MOVIE_BADGE_BORDER" in layout_source
     assert "border_color = FILM_SERIES_BADGE_BORDER" in layout_source
-    assert "fill_color = FILM_MOVIE_BADGE_BG" in layout_source
+    assert "fill_color = FILM_SERIES_BADGE_BG" in layout_source
+    assert "COLOR_USER_RATING_HEART" in layout_source
 
 
 def test_watched_user_score_badge_hides_without_user_score(qapp) -> None:
@@ -4775,6 +4793,27 @@ def test_resolve_local_poster_path_uses_preview_cache_for_poster_url() -> None:
             assert resolve_local_poster_path({}, card) == str(preview)
 
 
+def test_resolve_local_poster_path_accepts_cached_other_language_url() -> None:
+    from desktop.shared.detail.posters import resolve_local_poster_path_from_record
+
+    with tempfile.TemporaryDirectory() as temp_root:
+        poster = Path(temp_root) / "localized.jpg"
+        poster.write_bytes(b"x")
+        with (
+            patch("posters.download_images.local_preview_poster_path_if_cached", return_value=None),
+            patch(
+                "posters.cache.lookup_poster_cache_entry",
+                return_value={"poster_url": "https://image.tmdb.org/t/p/w342/ru.jpg"},
+            ),
+            patch("posters.cache.default_local_poster_path", return_value=str(poster)),
+        ):
+            assert resolve_local_poster_path_from_record(
+                {"poster_url": "https://image.tmdb.org/t/p/w342/en.jpg"},
+                title="Localized",
+                year=2024,
+            ) == str(poster)
+
+
 def test_watched_list_delegate_uses_poster_resolver() -> None:
     import inspect
 
@@ -5125,6 +5164,34 @@ def test_candidate_poster_url_for_download_uses_data_language_localized_url(monk
     assert (
         candidate_poster_url_for_download(candidate, data_language="en")
         == "https://image.tmdb.org/t/p/original/en.jpg"
+    )
+
+
+def test_candidate_local_poster_falls_back_to_cached_other_language(monkeypatch) -> None:
+    from desktop.candidates.presenters import resolve_local_poster_path_for_candidate
+
+    monkeypatch.setattr(
+        "desktop.shared.detail.posters.resolve_local_poster_path_from_record",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "posters.download_images.local_preview_poster_path_if_cached",
+        lambda url: "cached-root.jpg" if url.endswith("/root.jpg") else None,
+    )
+    candidate = {
+        "title": "Pool Show",
+        "year": 2020,
+        "poster_url": "https://image.tmdb.org/t/p/original/root.jpg",
+        "localized": {
+            "en": {
+                "poster_url": "https://image.tmdb.org/t/p/original/en.jpg",
+            }
+        },
+    }
+
+    assert (
+        resolve_local_poster_path_for_candidate(candidate, data_language="en")
+        == "cached-root.jpg"
     )
 
 
@@ -6065,7 +6132,8 @@ def test_candidate_filters_view_places_apply_button_in_summary_card() -> None:
     source = inspect.getsource(module.CandidateFiltersView.__init__)
     assert "candidateFiltersIntro" in source
     assert "candidateFiltersSummaryTitle" in source
-    assert "content_layout.addWidget(self._intro_card" in source
+    assert "self._summary_scroll.setWidget(self._intro_card)" in source
+    assert "content_layout.addWidget(self._summary_scroll" in source
     assert "_update_apply_button_width" in source
     assert "control_px(40)" in inspect.getsource(module)
     assert "form.addWidget(self._apply_button)" not in source

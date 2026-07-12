@@ -16,6 +16,7 @@ from desktop.shared.detail.rating_indicator import StarRatingIndicator
 from desktop.theme import (
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
+    COLOR_USER_RATING_HEART,
     FILM_MOVIE_BADGE_BG,
     FILM_MOVIE_BADGE_BORDER,
     FILM_SERIES_BADGE_BG,
@@ -106,8 +107,8 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
 
     class UserScoreBadgeLabel(QLabel):
         def paintEvent(self, event) -> None:
-            from PyQt6.QtCore import QRectF, Qt
-            from PyQt6.QtGui import QColor, QPainter, QPen
+            from PyQt6.QtCore import QPointF, QRectF, Qt
+            from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF
 
             painter = QPainter(self)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -118,12 +119,37 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
                 fill_color = FILM_MOVIE_BADGE_BG
             else:
                 border_color = FILM_SERIES_BADGE_BORDER
-                fill_color = FILM_MOVIE_BADGE_BG
+                fill_color = FILM_SERIES_BADGE_BG
             painter.setPen(QPen(QColor(border_color), 1))
             painter.setBrush(QColor(fill_color))
             painter.drawRoundedRect(rect, radius, radius)
+            if self.property("heartBadge"):
+                heart_size = min(rect.height() * 0.42, 15.0)
+                heart_left = rect.left() + max(7.0, rect.height() * 0.24)
+                heart_top = rect.center().y() - (heart_size * 0.52)
+                lobe = heart_size * 0.5
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(COLOR_USER_RATING_HEART))
+                painter.drawEllipse(QRectF(heart_left, heart_top, lobe, lobe))
+                painter.drawEllipse(QRectF(heart_left + lobe, heart_top, lobe, lobe))
+                painter.drawPolygon(
+                    QPolygonF(
+                        [
+                            QPointF(heart_left, heart_top + (lobe * 0.46)),
+                            QPointF(heart_left + heart_size, heart_top + (lobe * 0.46)),
+                            QPointF(heart_left + (heart_size * 0.5), heart_top + heart_size),
+                        ]
+                    )
+                )
+                number_rect = rect.adjusted(heart_size + max(8.0, rect.height() * 0.3), 0, -7.0, 0)
+                number_font = QFont(painter.font())
+                number_font.setBold(True)
+                painter.setFont(number_font)
+                painter.setPen(QColor(COLOR_TEXT))
+                painter.drawText(number_rect, Qt.AlignmentFlag.AlignCenter, self.text())
             painter.end()
-            super().paintEvent(event)
+            if self.property("heartBadge") is not True:
+                super().paintEvent(event)
 
     class MediaTypeBadgeLabel(QLabel):
         def paintEvent(self, event) -> None:

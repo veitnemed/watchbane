@@ -11,6 +11,7 @@ from desktop.theme.tokens import (
     COLOR_TEXT,
     COLOR_TEXT_SECONDARY,
     FONT_BASE,
+    FONT_TINY,
 )
 
 
@@ -22,9 +23,9 @@ QPushButton#userRatingButton {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {layout_px(6)}px;
     color: {COLOR_TEXT_SECONDARY};
-    font-size: {font_px(FONT_BASE)}px;
-    padding: {layout_px(7)}px {layout_px(10)}px;
-    min-height: {layout_px(38)}px;
+    font-size: {font_px(FONT_TINY)}px;
+    padding: {layout_px(6)}px {layout_px(7)}px;
+    min-height: {layout_px(40)}px;
 }}
 QPushButton#userRatingButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};

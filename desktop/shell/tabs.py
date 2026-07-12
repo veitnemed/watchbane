@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QTabWidget, QWidget
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QHBoxLayout, QTabWidget, QWidget
 
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.list_view import CandidateListView
@@ -14,6 +14,8 @@ from desktop.candidates.session import CandidateSearchSession
 from desktop.language_context import DesktopLanguageContext, load_desktop_language_context
 from desktop.shell.tab_contract import TabView, activate_tab_view
 from desktop.settings.tab_view import SettingsTabView
+from desktop.shared.brand_assets import watchbane_symbol_label
+from desktop.theme.scaling import control_px, layout_px
 from desktop.watched.tab import WatchedTabView
 
 
@@ -78,6 +80,16 @@ def build_main_tabs(
     """Create main-window tabs, register them and wire cross-tab callbacks."""
     registry = MainTabRegistry(tabs)
     languages = language_context or load_desktop_language_context()
+
+    brand = QWidget()
+    brand.setObjectName("watchbaneShellBrand")
+    brand_layout = QHBoxLayout(brand)
+    brand_layout.setContentsMargins(layout_px(6), 0, layout_px(7), 0)
+    brand_layout.setSpacing(0)
+    symbol = watchbane_symbol_label(control_px(27))
+    symbol.setToolTip("Watchbane")
+    brand_layout.addWidget(symbol, alignment=Qt.AlignmentFlag.AlignVCenter)
+    tabs.setCornerWidget(brand, Qt.Corner.TopLeftCorner)
 
     watched_tab_view = WatchedTabView(
         parent=parent,

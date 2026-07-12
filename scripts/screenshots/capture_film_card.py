@@ -79,6 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     window.show()
     window.raise_()
     window.activateWindow()
+    window._tab_registry.focus("watched")
     _process_events(app, 20)
 
     list_widget = window.findChild(QListWidget, "watchedList")

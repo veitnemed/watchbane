@@ -76,12 +76,8 @@ def resolve_local_poster_path_from_record(
         if year is None:
             year = display_card.get("year", main_info.get("year", record.get("year")))
     if title not in (None, ""):
-        from posters.cache import default_local_poster_path, lookup_poster_cache_entry
+        from posters.cache import default_local_poster_path
 
-        cache_entry = lookup_poster_cache_entry(str(title), year)
-        cache_url = cache_entry.get("poster_url") if isinstance(cache_entry, dict) else None
-        if poster_url not in (None, "") and cache_url not in (None, "", poster_url):
-            return None
         default_path = default_local_poster_path(str(title), year)
         if default_path not in (None, ""):
             return default_path

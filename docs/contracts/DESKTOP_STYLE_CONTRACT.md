@@ -70,7 +70,7 @@ Score ring в карточке использует TMDb-only contract: числ
 - под title отображается компактная meta-строка вида `2020 • 2 сезона / 20 серий`;
 - genre chips показывают только жанры, год не должен попадать в chips;
 - ratings остаются read-only и не показывают legacy IMDb/KP поля;
-- watched user score показывается только как poster overlay badge, не как ring;
+- watched user score показывается только как poster overlay badge `heart + 1..3`, не как ring и не как длинный текстовый label;
 - candidate actions находятся под poster и никогда не появляются перед title;
 - блок "Основная информация" показывает тип и страну; год и сезоны/серии находятся под title;
 - блок "Дополнительная информация" показывает providers/status/runtime/TMDb votes, если эти поля есть;
@@ -174,3 +174,5 @@ GUI-polish не должен менять:
 py -m compileall desktop dataset candidates storage ui tests
 py -m pytest tests/test_desktop.py
 ```
+
+Для layout/scaling-правок также снимаются и открываются screenshots на application scale `0.75`, `1.0` и `1.5`; временные PNG хранятся в `screens/tmp_ui/` и не коммитятся.

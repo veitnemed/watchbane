@@ -329,32 +329,19 @@ class DetailCard(DetailCardPosterMixin):
     def _set_user_score_badge(self, badge: dict | None) -> None:
         if badge is None:
             self._user_score_badge.setText("")
+            self._user_score_badge.setProperty("heartBadge", False)
             self._user_score_badge.hide()
             return
-        from html import escape
-        from pathlib import Path
-
-        icon_name = str(badge.get("icon_name") or "")
-        text = escape(str(badge.get("text", "")))
-        if icon_name:
-            icon_path = Path(__file__).resolve().parents[2] / "images" / icon_name
-            self._user_score_badge.setTextFormat(Qt.TextFormat.RichText)
-            self._user_score_badge.setText(
-                f'<img src="{icon_path.as_uri()}" width="18" height="18" />&nbsp;{text}'
-            )
-        else:
-            self._user_score_badge.setText(text)
+        self._user_score_badge.setTextFormat(Qt.TextFormat.PlainText)
+        self._user_score_badge.setText(str(badge.get("text", "")))
+        self._user_score_badge.setProperty("heartBadge", bool(badge.get("heart")))
         self._resize_user_score_badge()
         self._user_score_badge.show()
         self._user_score_badge.raise_()
 
     def _resize_user_score_badge(self) -> None:
-        badge_width = max(
-            self._profile.detail_user_score_badge_min_width,
-            self._user_score_badge.sizeHint().width(),
-        )
         self._user_score_badge.setFixedSize(
-            badge_width,
+            self._profile.detail_user_score_badge_min_width,
             self._profile.detail_user_score_badge_height,
         )
 

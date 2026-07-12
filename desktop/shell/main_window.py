@@ -129,7 +129,6 @@ class WatchedMoviesWindow(QMainWindow):
         if self._tmdb_gate_passed is False:
             return
         if candidate_service.should_show_onboarding_autofill() is False:
-            self.maybe_start_pool_auto_refill()
             return
         onboarding = OnboardingAutofillDialog(
             ui_language=get_persisted_interface_language(),

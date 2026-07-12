@@ -3,7 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QComboBox, QPushButton, QToolButton, QWidget
+from PyQt6.QtGui import QFontMetrics
+from PyQt6.QtWidgets import QComboBox, QPushButton, QScrollArea, QToolButton, QWidget
 
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 
@@ -110,6 +111,25 @@ def test_simple_preferences_are_default_and_advanced_filters_remain_available(qt
     assert view.widget.findChild(QWidget, "recommendationVectorPanel") is not None
     toggle.setChecked(True)
     assert any(section.isHidden() is False for section in advanced_sections)
+
+
+def test_recommendation_controls_fit_russian_labels_at_desktop_width(qtbot) -> None:
+    _session, view = _build_view(qtbot, SimplePreferenceService(30))
+    view.widget.resize(1280, 720)
+    qtbot.wait(50)
+
+    direction = view._form.direction_control
+    direction_values = direction.property("directionValues")
+    direction.setValue(direction_values.index("dark_thriller_crime"))
+    text_width = QFontMetrics(direction._readout_font()).horizontalAdvance(direction.canonical_text())
+    discovery = view.widget.findChild(QWidget, "recommendationDiscoveryPanel")
+    vector = view.widget.findChild(QWidget, "recommendationVectorPanel")
+    summary_scroll = view.widget.findChild(QScrollArea, "candidateFiltersSummaryScroll")
+
+    assert direction.minimumSizeHint().width() >= text_width + 16
+    assert vector.width() > discovery.width()
+    assert summary_scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert summary_scroll.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded
 
 
 def test_simple_preferences_save_and_start_one_auto_refill(qtbot) -> None:

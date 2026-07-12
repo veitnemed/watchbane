@@ -1,5 +1,17 @@
 # Candidate Queue And Posters
 
+## Current runtime guarantees (July 2026)
+
+- Opening Watchbane does not immediately replenish or rebuild the persisted candidate pool.
+- The first transition from an empty deck to a populated onboarding deck always starts the poster preparation gate.
+- The visible deck waits up to eight seconds for the active poster batch while showing deterministic progress; cached batches normally pass immediately.
+- Poster resolution prefers the selected data language, then reuses any valid cached poster from the root record or another locale before making a network request.
+- A localized poster URL that is not cached no longer hides an already cached poster for the same title.
+- Candidate poster downloads remain bounded to four concurrent requests and never execute on the UI thread.
+- A failed CDN request leaves a stable placeholder and an explicit unavailable status; it does not block navigation or mutate recommendation ranking.
+
+These guarantees are covered by startup, deck reveal, presenter fallback and poster-prefetch regression tests.
+
 Этот документ описывает текущий runtime-путь вкладок **Фильтры** и **Кандидаты**: от сохраненного `candidate pool` до видимой очереди рекомендаций, а также отдельный путь подгрузки постеров.
 
 ## Короткая схема

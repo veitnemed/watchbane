@@ -170,12 +170,32 @@ def _candidate_poster_hints(candidate: dict, data_language: str = "ru") -> dict:
     )
 
 
+def _candidate_poster_urls(candidate: dict, data_language: str = "ru") -> list[str]:
+    """Return preferred then fallback poster URLs without mutating the candidate."""
+    variants: list[dict] = [
+        _candidate_poster_hints(candidate, data_language=data_language),
+    ]
+    root_candidate = dict(candidate)
+    root_candidate.pop("localized", None)
+    variants.append(_candidate_poster_hints(root_candidate, data_language=data_language))
+    for language in ("ru", "en"):
+        if language != normalize_data_language(data_language):
+            variants.append(_candidate_poster_hints(candidate, data_language=language))
+
+    urls: list[str] = []
+    for hints in variants:
+        value = str(hints.get("poster_url") or "").strip()
+        if value.startswith(("http://", "https://")) and value not in urls:
+            urls.append(value)
+    return urls
+
+
 def resolve_local_poster_path_for_candidate(candidate: dict, data_language: str = "ru") -> str | None:
     """Return a local poster path from pool fields. Never downloads or uses network."""
     from desktop.shared.detail.posters import resolve_local_poster_path_from_record
 
     hints = _candidate_poster_hints(candidate, data_language=data_language)
-    return resolve_local_poster_path_from_record(
+    resolved = resolve_local_poster_path_from_record(
         candidate,
         card={
             "poster_url": hints.get("poster_url"),
@@ -185,6 +205,16 @@ def resolve_local_poster_path_for_candidate(candidate: dict, data_language: str 
         title=candidate.get("title") or candidate.get("name"),
         year=candidate.get("year"),
     )
+    if resolved not in (None, ""):
+        return resolved
+
+    from posters.download_images import local_preview_poster_path_if_cached
+
+    for poster_url in _candidate_poster_urls(candidate, data_language=data_language):
+        cached = local_preview_poster_path_if_cached(poster_url)
+        if cached not in (None, ""):
+            return str(cached)
+    return None
 
 
 def candidate_poster_url_for_download(candidate: dict, data_language: str = "ru") -> str | None:

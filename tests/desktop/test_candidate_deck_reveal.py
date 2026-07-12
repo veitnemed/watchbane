@@ -228,3 +228,21 @@ def test_force_new_deck_returns_to_loading_page(qtbot, monkeypatch) -> None:
     assert _stack(view).currentWidget() is view._deck_loading_page
     assert len(controller.start_calls) == 2
     assert view._deck_prepare_batch_id == 2
+
+
+def test_first_candidates_after_empty_start_use_poster_prepare_gate(qtbot, monkeypatch) -> None:
+    view = _build_view(qtbot, monkeypatch)
+    controller = view._poster_prefetch
+    empty_deck = deepcopy(view._deck)
+    empty_deck["active"] = []
+    empty_deck["reserve"] = []
+    empty_deck["recommendation_vector"] = view._deck_vector()
+    view._deck = empty_deck
+    view._all_candidates = []
+    view._deck_service.top_up_deck = lambda *_args, **_kwargs: _deck()
+
+    view.refresh()
+
+    assert _stack(view).currentWidget() is view._deck_loading_page
+    assert len(controller.start_calls) == 2
+    assert len(controller.start_calls[-1]) == 25

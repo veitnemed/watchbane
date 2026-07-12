@@ -20,9 +20,20 @@ QLabel#startupGateTitle,
 QLabel#startupGateSubtitle,
 QLabel#startupGateTokenLabel,
 QLabel#startupGateHint,
-QLabel#startupGateError {{
+QLabel#startupGateError,
+QLabel#startupTmdbAttributionText,
+QLabel#tmdbAttributionLogo,
+QLabel#watchbaneWordmark {{
     background: transparent;
     border: none;
+}}
+QLabel#tmdbAttributionLogo {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {layout_px(7)}px;
+    color: {COLOR_TEXT_SOFT};
+    font-weight: 600;
+    padding: 0 {layout_px(6)}px;
 }}
 QLabel#startupGateTitle {{
     color: {COLOR_TEXT};
@@ -48,7 +59,23 @@ QLabel#startupGateHint {{
     color: {COLOR_TEXT_MUTED};
 }}
 QLabel#startupGateError {{
-    color: {COLOR_TEXT_SECONDARY};
+    color: #FF7F8E;
+    font-weight: 600;
+}}
+QFrame#startupTmdbAttribution {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_INPUT)}px;
+}}
+QLabel#startupTmdbAttributionText {{
+    color: {COLOR_TEXT_MUTED};
+    font-size: {font_px(FONT_TINY)}px;
+}}
+QLabel#watchbaneWordmark {{
+    color: {FILM_TEXT_SUBTLE};
+    font-size: {font_px(20)}px;
+    font-weight: 600;
+    padding: 0;
 }}
 QLineEdit#startupTokenInput {{
     background-color: {COLOR_SURFACE};

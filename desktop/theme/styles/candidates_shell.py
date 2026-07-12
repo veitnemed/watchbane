@@ -266,8 +266,9 @@ QPushButton#recommendationsNewDeckButton:hover {{
     border-color: {COLOR_FOCUS_BORDER};
 }}
 QFrame#recommendationActionPanel {{
-    background: transparent;
-    border: none;
+    background-color: {COLOR_DETAIL_GLASS};
+    border: 1px solid {COLOR_DETAIL_HERO_BORDER};
+    border-radius: {detail_px(RADIUS_CARD)}px;
 }}
 QLabel#recommendationReasonsTitle {{
     background: transparent;
@@ -353,12 +354,12 @@ QWidget#recommendationVectorDialHost {{
 }}
 QFrame#recommendationDiscoveryPanel,
 QFrame#recommendationVectorPanel {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
+    background-color: #101F33;
+    border: 1px solid #29425F;
     border-radius: {px(8)}px;
 }}
 QFrame#recommendationVectorPanel {{
-    background-color: {COLOR_CARD_ALT};
+    background-color: #142238;
 }}
 QLabel#recommendationModuleLabel {{
     background: transparent;
@@ -369,15 +370,15 @@ QLabel#recommendationModuleLabel {{
 QLabel#recommendationPanelTitle {{
     background: transparent;
     color: {COLOR_TEXT};
-    font-size: {font_px(FONT_SECTION + 2)}px;
+    font-size: {font_px(FONT_SECTION + 1)}px;
     font-weight: 700;
 }}
 QWidget#segmentedControl {{
     background: transparent;
 }}
 QPushButton#segmentedControlButton {{
-    background-color: {COLOR_CARD};
-    border: 1px solid {COLOR_BORDER};
+    background-color: #0E1A2B;
+    border: 1px solid #29425F;
     border-radius: 0;
     color: {COLOR_TEXT_SECONDARY};
     font-size: {font_px(FONT_SMALL)}px;
@@ -396,7 +397,7 @@ QPushButton#segmentedControlButton:hover {{
     color: {COLOR_TEXT};
 }}
 QPushButton#segmentedControlButton:checked {{
-    background-color: {COLOR_ACCENT_SOFT};
+    background-color: #123E51;
     border-color: {COLOR_ACCENT};
     color: {COLOR_TEXT};
     font-weight: 700;

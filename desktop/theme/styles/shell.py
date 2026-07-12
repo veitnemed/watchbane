@@ -79,6 +79,19 @@ QTabWidget::pane {{
 QTabWidget#mainTabs::pane {{
     top: -{MAIN_TAB_PANE_TOP_LIFT_PX}px;
 }}
+QWidget#watchbaneShellBrand,
+QLabel#watchbaneShellSymbol {{
+    background: transparent;
+    border: none;
+}}
+QLabel#watchbaneWordmark {{
+    background: transparent;
+    border: none;
+    color: {FILM_TEXT_SUBTLE};
+    font-size: {font_px(20)}px;
+    font-weight: 600;
+    padding: 0;
+}}
 QTabBar::tab {{
     background-color: {FILM_SURFACE_1};
     border: 1px solid {FILM_BORDER_WEAK};
