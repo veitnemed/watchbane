@@ -48,7 +48,7 @@ def test_main_window_loads_watched_tab_from_sqlite(qtbot) -> None:
     assert entry[2]["title"] == "Alpha"
 
 
-def test_hidden_tabs_recalculate_responsive_layout_when_activated(qtbot) -> None:
+def test_main_window_resize_updates_both_responsive_tabs(qtbot) -> None:
     from desktop.shell.main_window import WatchedMoviesWindow
     from desktop.theme.shell_layout import (
         CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX,
@@ -61,20 +61,28 @@ def test_hidden_tabs_recalculate_responsive_layout_when_activated(qtbot) -> None
     watched_view = window._tab_registry._specs["watched"].view
     candidate_view = window._tab_registry._specs["candidates"].view
 
-    window._tab_registry.focus("candidates")
-    window.resize(WATCHED_DETAIL_COLLAPSE_WIDTH_PX + 200, 800)
+    compact_width = min(
+        WATCHED_DETAIL_COLLAPSE_WIDTH_PX,
+        CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX,
+    ) - 1
+    expanded_width = max(
+        WATCHED_DETAIL_COLLAPSE_WIDTH_PX,
+        CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX,
+    ) + 200
+
+    for compact, width in (
+        (True, compact_width),
+        (False, expanded_width),
+        (True, compact_width),
+        (False, expanded_width),
+    ):
+        window.resize(width, 800)
+        qtbot.waitUntil(lambda: watched_view._is_compact_layout is compact)
+        qtbot.waitUntil(lambda: candidate_view._is_compact_layout is compact)
+        assert watched_view._right_panel.isHidden() is compact
+        assert candidate_view._detail_panel.isHidden() is compact
+
     window._tab_registry.focus("watched")
-    qtbot.waitUntil(lambda: watched_view._is_compact_layout is False)
     assert watched_view._right_panel.isVisible()
-
-    window.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX - 1, 800)
-    window._tab_registry.focus("watched")
     window._tab_registry.focus("candidates")
-    qtbot.waitUntil(lambda: candidate_view._is_compact_layout is True)
-    assert candidate_view._detail_panel.isHidden()
-
-    window._tab_registry.focus("watched")
-    window.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200, 800)
-    window._tab_registry.focus("candidates")
-    qtbot.waitUntil(lambda: candidate_view._is_compact_layout is False)
     assert candidate_view._detail_panel.isHidden() is False

@@ -63,6 +63,7 @@ class WatchedMoviesWindow(QMainWindow):
             self,
             on_status_message=self._show_status_message,
         )
+        QTimer.singleShot(0, self._sync_responsive_tabs)
         self._onboarding_view: OnboardingAutofillDialog | None = None
         self._tmdb_gate_view: TmdbStartupGateView | None = None
         self._tmdb_gate_passed = False
@@ -71,6 +72,21 @@ class WatchedMoviesWindow(QMainWindow):
         self._pool_refill_timer.setInterval(POOL_AUTO_REFILL_CHECK_INTERVAL_MS)
         self._pool_refill_timer.timeout.connect(self.maybe_start_pool_auto_refill)
         self._pool_refill_timer.start()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        self._sync_responsive_tabs(event.size().width())
+
+    def _sync_responsive_tabs(self, available_width: int | None = None) -> None:
+        tabs_context = getattr(self, "_tabs_context", None)
+        if tabs_context is None:
+            return
+        width = self.width() if available_width is None else available_width
+        for view_name in ("watched_tab_view", "candidate_list_view"):
+            view = getattr(tabs_context, view_name, None)
+            update_layout = getattr(view, "_update_responsive_layout", None)
+            if callable(update_layout):
+                update_layout(width)
 
     def _show_status_message(self, message: str, timeout_ms: int) -> None:
         self.statusBar().showMessage(message, timeout_ms)

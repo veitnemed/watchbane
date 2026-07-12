@@ -62,12 +62,6 @@ class _ResponsiveWatchedTab(QWidget):
         if self._resize_handler is not None:
             self._resize_handler()
 
-    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
-        super().showEvent(event)
-        if self._resize_handler is not None:
-            self._resize_handler()
-
-
 class WatchedTabView(WatchedTabActionsMixin):
     """Watched tab: list sidebar, collapsible filters, detail card, CRUD actions."""
 
@@ -153,8 +147,9 @@ class WatchedTabView(WatchedTabActionsMixin):
     def entries(self) -> list[WatchedEntry]:
         return self._watched_entries
 
-    def _update_responsive_layout(self) -> None:
-        compact = self._widget.width() < WATCHED_DETAIL_COLLAPSE_WIDTH_PX
+    def _update_responsive_layout(self, available_width: int | None = None) -> None:
+        viewport_width = self._widget.width() if available_width is None else available_width
+        compact = viewport_width < WATCHED_DETAIL_COLLAPSE_WIDTH_PX
         was_compact = self._is_compact_layout
         if compact == was_compact:
             return

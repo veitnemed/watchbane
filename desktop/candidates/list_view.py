@@ -88,11 +88,6 @@ class _CandidateListRoot(QWidget):
         super().resizeEvent(event)
         self.resized.emit()
 
-    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
-        super().showEvent(event)
-        self.resized.emit()
-
-
 class CandidateListView(CandidateListActionsMixin):
     """Recommendations tab backed by a bounded, refillable candidate deck."""
 
@@ -480,8 +475,9 @@ class CandidateListView(CandidateListActionsMixin):
     def widget(self) -> QWidget:
         return self._widget
 
-    def _update_responsive_layout(self) -> None:
-        compact = self._widget.width() < CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX
+    def _update_responsive_layout(self, available_width: int | None = None) -> None:
+        viewport_width = self._widget.width() if available_width is None else available_width
+        compact = viewport_width < CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX
         was_compact = self._is_compact_layout
         if compact == was_compact:
             return

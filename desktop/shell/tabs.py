@@ -34,6 +34,7 @@ class AppTabsContext:
     """Feature views and shared session for cross-tab callbacks."""
 
     watched_tab_view: WatchedTabView
+    candidate_list_view: CandidateListView
     settings_tab_view: SettingsTabView
     candidate_session: CandidateSearchSession
     refresh_candidate_filters: Callable[[], None]
@@ -153,6 +154,7 @@ def build_main_tabs(
 
     context = AppTabsContext(
         watched_tab_view=watched_tab_view,
+        candidate_list_view=candidate_list_view,
         settings_tab_view=settings_tab_view,
         candidate_session=candidate_session,
         refresh_candidate_filters=refresh_candidate_filters,
