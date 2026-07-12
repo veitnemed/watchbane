@@ -88,6 +88,10 @@ class _CandidateListRoot(QWidget):
         super().resizeEvent(event)
         self.resized.emit()
 
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().showEvent(event)
+        self.resized.emit()
+
 
 class CandidateListView(CandidateListActionsMixin):
     """Recommendations tab backed by a bounded, refillable candidate deck."""

@@ -46,3 +46,35 @@ def test_main_window_loads_watched_tab_from_sqlite(qtbot) -> None:
     entry = first_item.data(Qt.ItemDataRole.UserRole)
     assert entry[0] == "Alpha"
     assert entry[2]["title"] == "Alpha"
+
+
+def test_hidden_tabs_recalculate_responsive_layout_when_activated(qtbot) -> None:
+    from desktop.shell.main_window import WatchedMoviesWindow
+    from desktop.theme.shell_layout import (
+        CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX,
+        WATCHED_DETAIL_COLLAPSE_WIDTH_PX,
+    )
+
+    window = WatchedMoviesWindow(initial_size=(900, 600))
+    qtbot.addWidget(window)
+    window.show()
+    watched_view = window._tab_registry._specs["watched"].view
+    candidate_view = window._tab_registry._specs["candidates"].view
+
+    window._tab_registry.focus("candidates")
+    window.resize(WATCHED_DETAIL_COLLAPSE_WIDTH_PX + 200, 800)
+    window._tab_registry.focus("watched")
+    qtbot.waitUntil(lambda: watched_view._is_compact_layout is False)
+    assert watched_view._right_panel.isVisible()
+
+    window.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX - 1, 800)
+    window._tab_registry.focus("watched")
+    window._tab_registry.focus("candidates")
+    qtbot.waitUntil(lambda: candidate_view._is_compact_layout is True)
+    assert candidate_view._detail_panel.isHidden()
+
+    window._tab_registry.focus("watched")
+    window.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200, 800)
+    window._tab_registry.focus("candidates")
+    qtbot.waitUntil(lambda: candidate_view._is_compact_layout is False)
+    assert candidate_view._detail_panel.isHidden() is False

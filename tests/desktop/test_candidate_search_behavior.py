@@ -282,17 +282,22 @@ def test_recommendations_hide_detail_panel_in_compact_layout(qtbot) -> None:
 
     service = FakeCandidateService(_candidate_set(2))
     _service, _session, _filters_view, list_view = _build_views(qtbot, service)
-    list_view.widget.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX - 1, 800)
+    for compact in (True, False, True, False):
+        width = (
+            CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX - 1
+            if compact
+            else CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200
+        )
+        list_view.widget.resize(width, 800)
 
-    qtbot.waitUntil(lambda: list_view._is_compact_layout is True)
-    assert list_view._detail_panel.isHidden()
-    assert list_view._list_panel.width() >= list_view._splitter.width() - 1
-
-    list_view.widget.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200, 800)
-
-    qtbot.waitUntil(lambda: list_view._is_compact_layout is False)
-    assert list_view._detail_panel.isVisible()
-    assert list_view._list_panel.maximumWidth() == CANDIDATE_LIST_MAX_WIDTH_PX
+        qtbot.waitUntil(lambda: list_view._is_compact_layout is compact)
+        assert list_view._detail_panel.isHidden() is compact
+        assert list_view._splitter.handle(1).isHidden() is compact
+        if compact:
+            assert list_view._list_panel.width() >= list_view._splitter.width() - 1
+        else:
+            assert list_view._detail_panel.isVisible()
+            assert list_view._list_panel.maximumWidth() == CANDIDATE_LIST_MAX_WIDTH_PX
 
 
 @pytest.mark.parametrize(

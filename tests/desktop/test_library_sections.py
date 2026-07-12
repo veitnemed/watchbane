@@ -99,16 +99,21 @@ def test_watched_tab_hides_detail_panel_in_compact_layout(qtbot, monkeypatch) ->
     from desktop.theme.shell_layout import WATCHED_DETAIL_COLLAPSE_WIDTH_PX
 
     view, _state = _build_library(qtbot, monkeypatch)
-    view.widget.resize(WATCHED_DETAIL_COLLAPSE_WIDTH_PX - 1, 800)
+    for compact in (True, False, True, False):
+        width = (
+            WATCHED_DETAIL_COLLAPSE_WIDTH_PX - 1
+            if compact
+            else WATCHED_DETAIL_COLLAPSE_WIDTH_PX + 200
+        )
+        view.widget.resize(width, 800)
 
-    qtbot.waitUntil(lambda: view._is_compact_layout is True)
-    assert view._right_panel.isHidden()
-    assert view._left_panel.width() >= view._splitter.width() - 1
-
-    view.widget.resize(WATCHED_DETAIL_COLLAPSE_WIDTH_PX + 200, 800)
-
-    qtbot.waitUntil(lambda: view._is_compact_layout is False)
-    assert view._right_panel.isVisible()
+        qtbot.waitUntil(lambda: view._is_compact_layout is compact)
+        assert view._right_panel.isHidden() is compact
+        assert view._splitter.handle(1).isHidden() is compact
+        if compact:
+            assert view._left_panel.width() >= view._splitter.width() - 1
+        else:
+            assert view._right_panel.isVisible()
 
 
 def test_library_sections_show_watched_saved_and_hidden(qtbot, monkeypatch) -> None:
