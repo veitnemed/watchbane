@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from enum import IntEnum
 import hashlib
 import json
 import math
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 from uuid import uuid4
 
 from candidates.search.filtering import candidate_matches
@@ -52,6 +53,51 @@ DEFAULT_UNKNOWN_RATING_LIMIT = 6
 EXPANDED_UNKNOWN_RATING_LIMIT = 12
 DEFAULT_EXPLORATION_RATIO = 0.2
 DECK_STATE_SCHEMA_VERSION = 1
+
+
+@dataclass(frozen=True)
+class DeckReserveSnapshot:
+    remaining: int
+    target: int
+    ratio: float
+    display_count: int
+    percent: int
+    band: Literal["ready", "low", "critical", "empty"]
+    empty_reason: Literal["processed", "pool_empty", None]
+
+
+def compute_deck_reserve_snapshot(deck: dict) -> DeckReserveSnapshot:
+    """Compute reserve UI metrics from a materialized recommendation deck."""
+    target = max(1, int(deck.get("active_limit") or ACTIVE_DECK_SIZE))
+    active = deck.get("active") or []
+    reserve = deck.get("reserve") or []
+    remaining = len(active) + len(reserve)
+    ratio = min(float(remaining) / float(target), 1.0)
+    display_count = min(remaining, target)
+    percent = int(round(ratio * 100))
+    if remaining == 0:
+        band: Literal["ready", "low", "critical", "empty"] = "empty"
+        empty_reason: Literal["processed", "pool_empty", None] = (
+            "processed" if deck.get("last_action") else "pool_empty"
+        )
+    elif ratio >= 0.60:
+        band = "ready"
+        empty_reason = None
+    elif ratio >= 0.25:
+        band = "low"
+        empty_reason = None
+    else:
+        band = "critical"
+        empty_reason = None
+    return DeckReserveSnapshot(
+        remaining=remaining,
+        target=target,
+        ratio=ratio,
+        display_count=display_count,
+        percent=percent,
+        band=band,
+        empty_reason=empty_reason,
+    )
 
 
 class RelevanceTier(IntEnum):
