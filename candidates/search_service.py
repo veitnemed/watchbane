@@ -235,6 +235,57 @@ def _search_candidate_pool_text_legacy(candidates: list, criteria: dict, *, norm
     }
 
 
+def _fallback_document_matches(document: str, normalized_query: str) -> bool:
+    from candidates.search.query_expand import (
+        expand_query_token_groups,
+        expand_query_typo_groups,
+    )
+
+    def matches(groups: list[list[str]]) -> bool:
+        if not groups:
+            return False
+        if len(groups) == 1:
+            return any(str(token).casefold() in document for token in groups[0])
+        return all(str(group[0]).casefold() in document for group in groups if group)
+
+    return matches(expand_query_token_groups(normalized_query)) or matches(
+        expand_query_typo_groups(normalized_query)
+    )
+
+
+def _search_candidate_pool_text_fallback(conn, criteria: dict, *, normalized_query: str) -> dict:
+    """Use canonical SQLite rows when the optional FTS index is unavailable or corrupt."""
+    from candidates.search.document import build_search_document
+    from candidates.search.match_fields import find_matched_fields
+    from candidates.search.rerank import attach_text_relevance
+    from storage.sqlite.candidate_query_repository import query_candidate_records
+
+    canonical_candidates = query_candidate_records(conn=conn)
+    search_view = search_candidate_pool(canonical_candidates, criteria)
+    matched_candidates = []
+    fallback_scores: dict[str, float] = {}
+    for candidate in search_view.get("candidates") or []:
+        document = build_search_document(candidate)
+        if not _fallback_document_matches(document, normalized_query):
+            continue
+        matched = dict(candidate)
+        matched["matched_fields"] = find_matched_fields(candidate, normalized_query)
+        pool_key = _candidate_pool_key(candidate)
+        fallback_scores[pool_key] = float(len(matched_candidates))
+        matched_candidates.append(matched)
+    enriched_candidates = attach_text_relevance(matched_candidates, fallback_scores)
+    return {
+        **search_view,
+        "candidates": enriched_candidates,
+        "filtered_candidates": enriched_candidates,
+        "filtered_count": len(enriched_candidates),
+        "text_query": normalized_query,
+        "text_relevance_by_key": fallback_scores,
+        "fts_enabled": True,
+        "fts_fallback": True,
+    }
+
+
 def search_candidate_pool_text(candidates: list, filters: dict, *, text_query: str | None = None) -> dict:
     """Apply structural filters plus optional FTS retrieval."""
     normalized_query = str(text_query or "").strip()
@@ -244,7 +295,7 @@ def search_candidate_pool_text(candidates: list, filters: dict, *, text_query: s
     from candidates.scoring.explain import explain_candidate
     from candidates.search.filtering import filter_candidates
     from candidates.scoring.ranking import rank_candidates
-    from candidates.search.fts_index import search_fts, search_fts_prefiltered
+    from candidates.search.fts_index import inspect_fts_index, search_fts, search_fts_prefiltered
     from candidates.search.match_fields import find_matched_fields
     from candidates.search.rerank import attach_text_relevance
     from candidates.search.structural_sql import build_structural_sql_filters
@@ -255,6 +306,12 @@ def search_candidate_pool_text(candidates: list, filters: dict, *, text_query: s
     structural_clauses, structural_params = build_structural_sql_filters(criteria)
     conn = connect()
     try:
+        if inspect_fts_index(conn).get("ok") is not True:
+            return _search_candidate_pool_text_fallback(
+                conn,
+                criteria,
+                normalized_query=normalized_query,
+            )
         fts_hits = search_fts_prefiltered(conn, normalized_query, structural_clauses=structural_clauses or None, structural_params=structural_params or None)
         if fts_hits:
             try:
@@ -268,8 +325,18 @@ def search_candidate_pool_text(candidates: list, filters: dict, *, text_query: s
                     candidate["matched_fields"] = find_matched_fields(candidate, normalized_query)
                 return {"criteria": criteria, "filtered_candidates": enriched_candidates, "candidates": enriched_candidates, "filtered_count": len(enriched_candidates), "text_query": normalized_query, "text_relevance_by_key": bm25_by_key, "fts_enabled": True}
             except sqlite3.OperationalError:
-                return _search_candidate_pool_text_legacy(candidates, criteria, normalized_query=normalized_query, fts_hits=fts_hits)
+                return _search_candidate_pool_text_fallback(
+                    conn,
+                    criteria,
+                    normalized_query=normalized_query,
+                )
         fts_hits = search_fts(conn, normalized_query)
+        if not fts_hits:
+            return _search_candidate_pool_text_fallback(
+                conn,
+                criteria,
+                normalized_query=normalized_query,
+            )
     finally:
         conn.close()
     return _search_candidate_pool_text_legacy(candidates, criteria, normalized_query=normalized_query, fts_hits=fts_hits)
