@@ -477,17 +477,69 @@ def test_ensure_scaled_ui_modules_reloads_early_imported_profiles() -> None:
 
     import desktop.shared.detail.profiles as profiles
     import desktop.theme.scaling as scaling
+    import desktop.theme.shell_layout as shell_layout
+    import desktop.theme.styles.shell as shell_style
     from desktop.theme.ui_modules import ensure_scaled_ui_modules
 
     scaling.set_ui_scale(1.0)
     scaling._scale_tuning = dict(DEFAULT_TUNING)
-    importlib.import_module("desktop.shared.detail.profiles")
+    profiles = importlib.reload(profiles)
     assert profiles.LIST_ITEM_HEIGHT == 84
 
     scaling.set_ui_scale(0.75)
     ensure_scaled_ui_modules()
 
     assert profiles.LIST_ITEM_HEIGHT == 63
+    assert f"top: -{shell_layout.MAIN_TAB_PANE_TOP_LIFT_PX}px;" in shell_style.build_shell_style()
+
+
+def test_ensure_scaled_main_tab_modules_refreshes_loaded_consumers() -> None:
+    import desktop.candidates as candidates_package
+    import desktop.candidates.filters_view as filters_view
+    import desktop.candidates.list_view as list_view
+    import desktop.settings.tab_view as settings_tab_view
+    import desktop.shell.tabs as shell_tabs
+    import desktop.theme.scaling as scaling
+    import desktop.theme.shell_layout as shell_layout
+    import desktop.theme.styles.shell as shell_style
+    import desktop.watched.sidebar as watched_sidebar
+    import desktop.watched.tab as watched_tab
+    from desktop.theme.ui_modules import ensure_scaled_main_tab_modules
+
+    scaling.set_ui_scale(1.0)
+    scaling._scale_tuning = dict(DEFAULT_TUNING)
+    ensure_scaled_main_tab_modules()
+    initial_metrics = (
+        list_view.CANDIDATE_LIST_MAX_WIDTH_PX,
+        filters_view.APPLY_BUTTON_HEIGHT,
+        watched_sidebar.SIDEBAR_MAX_WIDTH_PX,
+        watched_tab.WATCHED_TAB_MARGIN_PX,
+        settings_tab_view.WATCHED_TAB_MARGIN_PX,
+    )
+
+    try:
+        scaling.set_ui_scale(1.3)
+        ensure_scaled_main_tab_modules()
+
+        assert list_view.CANDIDATE_LIST_MAX_WIDTH_PX == shell_layout.CANDIDATE_LIST_MAX_WIDTH_PX
+        assert filters_view.APPLY_BUTTON_HEIGHT == scaling.control_px(40)
+        assert watched_sidebar.SIDEBAR_MAX_WIDTH_PX == shell_layout.SIDEBAR_MAX_WIDTH_PX
+        assert watched_tab.WATCHED_TAB_MARGIN_PX == shell_layout.WATCHED_TAB_MARGIN_PX
+        assert settings_tab_view.WATCHED_TAB_MARGIN_PX == shell_layout.WATCHED_TAB_MARGIN_PX
+        assert shell_tabs.CandidateListView is list_view.CandidateListView
+        assert candidates_package.CandidateListView is list_view.CandidateListView
+        assert f"top: -{shell_layout.MAIN_TAB_PANE_TOP_LIFT_PX}px;" in shell_style.build_shell_style()
+        assert (
+            list_view.CANDIDATE_LIST_MAX_WIDTH_PX,
+            filters_view.APPLY_BUTTON_HEIGHT,
+            watched_sidebar.SIDEBAR_MAX_WIDTH_PX,
+            watched_tab.WATCHED_TAB_MARGIN_PX,
+            settings_tab_view.WATCHED_TAB_MARGIN_PX,
+        ) != initial_metrics
+    finally:
+        scaling.set_ui_scale(1.0)
+        scaling._scale_tuning = dict(DEFAULT_TUNING)
+        ensure_scaled_main_tab_modules()
 
 
 def test_bootstrap_uses_app_scale_without_qt_scale_factor() -> None:

@@ -6641,6 +6641,106 @@ def test_onboarding_language_change_rebuilds_main_tabs(monkeypatch, qapp) -> Non
         window.close()
 
 
+def test_onboarding_scale_change_rebuilds_main_tabs_same_process(monkeypatch, qapp) -> None:
+    from types import SimpleNamespace
+
+    from PyQt6.QtCore import pyqtSignal
+    from PyQt6.QtGui import QFont
+    from PyQt6.QtWidgets import QWidget
+
+    import desktop.shell.main_window as main_window_module
+
+    class FakeOnboarding(QWidget):
+        completed = pyqtSignal(object)
+        finished = pyqtSignal(int)
+
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(kwargs.get("parent"))
+
+        def setModal(self, _value: bool) -> None:
+            return None
+
+        def setWindowFlag(self, *_args, **_kwargs) -> None:
+            return None
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.invalidate_calls = 0
+
+        def invalidate_pool_cache(self) -> None:
+            self.invalidate_calls += 1
+
+    scale = {"value": 1.0}
+    build_calls: list[float] = []
+    contexts = []
+    refresh_calls: list[float] = []
+    style_calls: list[str] = []
+
+    def fake_build_main_tabs(tabs, parent, *, on_status_message):
+        del tabs, parent, on_status_message
+        build_calls.append(scale["value"])
+        calls = {"refresh": 0, "focus": 0}
+        context = SimpleNamespace(
+            candidate_session=FakeSession(),
+            refresh_candidate_filters=lambda: calls.__setitem__(
+                "refresh", calls["refresh"] + 1
+            ),
+            focus_candidates=lambda: calls.__setitem__("focus", calls["focus"] + 1),
+            calls=calls,
+        )
+        contexts.append(context)
+        return object(), context
+
+    def fake_build_app_style() -> str:
+        style = f"style-{len(style_calls) + 1}"
+        style_calls.append(style)
+        return style
+
+    original_font = QFont(qapp.font())
+    monkeypatch.setattr(main_window_module, "get_ui_scale", lambda: scale["value"])
+    monkeypatch.setattr(main_window_module, "get_persisted_interface_language", lambda: "ru")
+    monkeypatch.setattr(main_window_module, "font_px", lambda _value: 19)
+    monkeypatch.setattr(main_window_module, "build_app_style", fake_build_app_style)
+    monkeypatch.setattr(
+        main_window_module,
+        "ensure_scaled_main_tab_modules",
+        lambda: refresh_calls.append(scale["value"]),
+    )
+    monkeypatch.setattr(
+        main_window_module.candidate_service,
+        "should_show_onboarding_autofill",
+        lambda: True,
+    )
+    monkeypatch.setattr(main_window_module, "build_main_tabs", fake_build_main_tabs)
+    monkeypatch.setattr(main_window_module, "OnboardingAutofillDialog", FakeOnboarding)
+
+    window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
+    window._tmdb_gate_passed = True
+    old_tabs = window._main_tabs
+    try:
+        window.maybe_show_onboarding_autofill()
+        onboarding = window._onboarding_view
+        assert onboarding is not None
+
+        scale["value"] = 1.3
+        onboarding.finished.emit(1)
+
+        assert build_calls == [1.0, 1.3]
+        assert refresh_calls == [1.3]
+        assert window._main_tabs is not old_tabs
+        assert old_tabs.isHidden() is True
+        assert window._root_stack.indexOf(old_tabs) == -1
+        assert window._root_stack.currentWidget() is window._main_tabs
+        assert window._main_tabs_ui_scale == 1.3
+        assert window.styleSheet() == "style-2"
+        assert qapp.font().pointSize() == 19
+        assert contexts[-1].candidate_session.invalidate_calls == 1
+        assert contexts[-1].calls == {"refresh": 1, "focus": 1}
+    finally:
+        window.close()
+        qapp.setFont(original_font)
+
+
 def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> None:
     from PyQt6.QtWidgets import QTabWidget, QWidget
 

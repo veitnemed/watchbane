@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QRect, Qt, QTimer
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QStyle, QTabWidget
 
 from candidates import service as candidate_service
@@ -15,8 +16,9 @@ from desktop.settings.app_settings import get_persisted_interface_language, load
 from desktop.shell.app_icon import build_app_icon
 from desktop.shell.tabs import build_main_tabs
 from desktop.startup import TmdbStartupGateView
-from desktop.theme import build_app_style
-from desktop.theme.scaling import scale_px
+from desktop.theme import FONT_APP, FONT_FAMILY, build_app_style
+from desktop.theme.scaling import font_px, get_ui_scale, scale_px
+from desktop.theme.ui_modules import ensure_scaled_main_tab_modules
 
 MAIN_WINDOW_BASE_WIDTH = 1180
 MAIN_WINDOW_BASE_HEIGHT = 720
@@ -62,6 +64,7 @@ class WatchedMoviesWindow(QMainWindow):
         root_stack.addWidget(tabs)
         self._main_tabs = tabs
         self._main_tabs_language = get_persisted_interface_language()
+        self._main_tabs_ui_scale = get_ui_scale()
         self._tab_registry, self._tabs_context = build_main_tabs(
             tabs,
             self,
@@ -219,11 +222,21 @@ class WatchedMoviesWindow(QMainWindow):
             if callable(update_layout):
                 update_layout(width)
 
-    def _rebuild_main_tabs_if_language_changed(self) -> bool:
-        """Recreate translated tab contents after onboarding changes UI language."""
+    def _rebuild_main_tabs_if_settings_changed(self) -> bool:
+        """Recreate main tabs after onboarding changes language or UI scale."""
         language = get_persisted_interface_language()
-        if language == self._main_tabs_language:
+        ui_scale = get_ui_scale()
+        language_changed = language != self._main_tabs_language
+        scale_changed = ui_scale != self._main_tabs_ui_scale
+        if language_changed is False and scale_changed is False:
             return False
+
+        if scale_changed:
+            ensure_scaled_main_tab_modules()
+            app = QApplication.instance()
+            if app is not None:
+                app.setFont(QFont(FONT_FAMILY, font_px(FONT_APP)))
+            self.setStyleSheet(build_app_style())
 
         tabs = QTabWidget()
         tabs.setObjectName("mainTabs")
@@ -242,6 +255,7 @@ class WatchedMoviesWindow(QMainWindow):
         old_tabs = self._main_tabs
         self._main_tabs = tabs
         self._main_tabs_language = language
+        self._main_tabs_ui_scale = ui_scale
         self._tab_registry = tab_registry
         self._tabs_context = tabs_context
         if self._root_stack.currentWidget() is old_tabs:
@@ -326,7 +340,7 @@ class WatchedMoviesWindow(QMainWindow):
             log_event("onboarding.view.completed")
 
         def finish_onboarding(_code: int) -> None:
-            self._rebuild_main_tabs_if_language_changed()
+            self._rebuild_main_tabs_if_settings_changed()
             refresh_candidate_pool_views()
             self._root_stack.setCurrentWidget(self._main_tabs)
             self._tabs_context.focus_candidates()
