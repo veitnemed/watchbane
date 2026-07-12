@@ -78,6 +78,7 @@ POSTER_READY_TARGET = 20
 POSTER_REVEAL_DEADLINE_MS = 8_000
 POSTER_MIN_LOADER_MS = 180
 REFILL_RETRY_COOLDOWN_SECONDS = 30.0
+ACTION_CLICK_GUARD_MS = 300
 
 
 class _CandidateListRoot(QWidget):
@@ -154,6 +155,8 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_build_failed = False
         self._deck_replenishing_active = False
         self._deck_refill_failed = False
+        self._action_in_progress = False
+        self._new_deck_in_progress = False
 
         self._widget = _CandidateListRoot()
         self._widget.setObjectName("candidateListRoot")
@@ -166,6 +169,12 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_minimum_timer = QTimer(self._widget)
         self._deck_minimum_timer.setSingleShot(True)
         self._deck_minimum_timer.timeout.connect(self._on_deck_minimum_elapsed)
+        self._action_unlock_timer = QTimer(self._widget)
+        self._action_unlock_timer.setSingleShot(True)
+        self._action_unlock_timer.timeout.connect(self._finish_action_guard)
+        self._new_deck_unlock_timer = QTimer(self._widget)
+        self._new_deck_unlock_timer.setSingleShot(True)
+        self._new_deck_unlock_timer.timeout.connect(self._finish_new_deck_guard)
         self._widget.hidden.connect(self._on_root_hidden)
         self._poster_prefetch = CandidatePosterPrefetchController(parent=self._widget)
         self._poster_prefetch.poster_ready.connect(self._on_poster_prefetch_ready)
@@ -1099,14 +1108,32 @@ class CandidateListView(CandidateListActionsMixin):
         self._maybe_request_recommendation_refill()
 
     def _on_new_deck_clicked(self) -> None:
+        if self._new_deck_in_progress:
+            return
+        self._new_deck_in_progress = True
+        self._new_deck_button.setEnabled(False)
         self._session.variation_seed += 1
         self._load_recommendation_deck(force_new=True)
+        self._new_deck_button.setEnabled(False)
+        self._new_deck_unlock_timer.start(ACTION_CLICK_GUARD_MS)
+
+    def _finish_new_deck_guard(self) -> None:
+        self._new_deck_in_progress = False
+        self._new_deck_button.setEnabled(True)
+
+    def _finish_action_guard(self) -> None:
+        self._action_in_progress = False
+        self._set_action_panel_enabled(isinstance(self._selected_candidate, dict))
 
     def _apply_recommendation_action(self, action: str, *, user_score: int | None = None) -> None:
+        if self._action_in_progress:
+            return
         candidate = self._selected_candidate
         deck = self._deck
         if not isinstance(candidate, dict) or not isinstance(deck, dict):
             return
+        self._action_in_progress = True
+        self._set_action_panel_enabled(False)
         current_row = self._results_list.currentIndex().row()
         try:
             action_kwargs = {"user_score": user_score} if user_score is not None else {}
@@ -1120,6 +1147,7 @@ class CandidateListView(CandidateListActionsMixin):
             logger.exception("recommendation action failed: %s", action)
             self._deck_status_label.setText(tr("recommendations.action.failed"))
             self._deck_status_label.show()
+            self._finish_action_guard()
             return
 
         top_up = getattr(self._deck_service, "top_up_deck", None)
@@ -1161,6 +1189,8 @@ class CandidateListView(CandidateListActionsMixin):
         # TODO: add transactional undo when the shell supports actionable toast notifications.
         if action == "watched" and self._on_watched_added is not None:
             self._on_watched_added(updated.get("last_action", {}).get("transition"))
+        self._set_action_panel_enabled(False)
+        self._action_unlock_timer.start(ACTION_CLICK_GUARD_MS)
 
     def _rebuild_list_delegate(self) -> None:
         self._delegate = build_candidate_list_item_delegate(

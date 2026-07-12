@@ -379,6 +379,21 @@ def test_recommendation_action_promotes_reserve_item(qtbot) -> None:
     )
 
 
+def test_rapid_repeated_recommendation_action_is_applied_once(qtbot) -> None:
+    service = FakeCandidateService(_candidate_set(31))
+    deck_service = FakeRecommendationDeckService(service)
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service, deck_service)
+    listing = _candidate_list(list_view)
+    listing.setCurrentIndex(listing.model().index(0, 0))
+
+    list_view._apply_recommendation_action("hidden")
+    list_view._apply_recommendation_action("hidden")
+
+    assert len(deck_service.action_calls) == 1
+    assert list_view._hidden_action_button.isEnabled() is False
+    qtbot.waitUntil(lambda: list_view._hidden_action_button.isEnabled())
+
+
 def test_empty_recommendation_deck_shows_stable_empty_state(qtbot) -> None:
     from desktop.i18n import tr
 
