@@ -58,6 +58,7 @@ class WatchedMoviesWindow(QMainWindow):
         tabs.setObjectName("mainTabs")
         root_stack.addWidget(tabs)
         self._main_tabs = tabs
+        self._main_tabs_language = get_persisted_interface_language()
         self._tab_registry, self._tabs_context = build_main_tabs(
             tabs,
             self,
@@ -87,6 +88,40 @@ class WatchedMoviesWindow(QMainWindow):
             update_layout = getattr(view, "_update_responsive_layout", None)
             if callable(update_layout):
                 update_layout(width)
+
+    def _rebuild_main_tabs_if_language_changed(self) -> bool:
+        """Recreate translated tab contents after onboarding changes UI language."""
+        language = get_persisted_interface_language()
+        if language == self._main_tabs_language:
+            return False
+
+        tabs = QTabWidget()
+        tabs.setObjectName("mainTabs")
+        self._root_stack.addWidget(tabs)
+        try:
+            tab_registry, tabs_context = build_main_tabs(
+                tabs,
+                self,
+                on_status_message=self._show_status_message,
+            )
+        except Exception:
+            self._root_stack.removeWidget(tabs)
+            tabs.deleteLater()
+            raise
+
+        old_tabs = self._main_tabs
+        self._main_tabs = tabs
+        self._main_tabs_language = language
+        self._tab_registry = tab_registry
+        self._tabs_context = tabs_context
+        if self._root_stack.currentWidget() is old_tabs:
+            self._root_stack.setCurrentWidget(tabs)
+        old_tabs.hide()
+        self._root_stack.removeWidget(old_tabs)
+        old_tabs.deleteLater()
+        self.statusBar().clearMessage()
+        QTimer.singleShot(0, self._sync_responsive_tabs)
+        return True
 
     def _show_status_message(self, message: str, timeout_ms: int) -> None:
         self.statusBar().showMessage(message, timeout_ms)
@@ -161,6 +196,7 @@ class WatchedMoviesWindow(QMainWindow):
             log_event("onboarding.view.completed")
 
         def finish_onboarding(_code: int) -> None:
+            self._rebuild_main_tabs_if_language_changed()
             refresh_candidate_pool_views()
             self._root_stack.setCurrentWidget(self._main_tabs)
             self._tabs_context.focus_candidates()

@@ -6385,6 +6385,101 @@ def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch,
         window.close()
 
 
+def test_onboarding_language_change_rebuilds_main_tabs(monkeypatch, qapp) -> None:
+    from types import SimpleNamespace
+
+    from PyQt6.QtCore import pyqtSignal
+    from PyQt6.QtWidgets import QWidget
+
+    import desktop.shell.main_window as main_window_module
+
+    class FakeOnboarding(QWidget):
+        completed = pyqtSignal(object)
+        finished = pyqtSignal(int)
+
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(kwargs.get("parent"))
+
+        def setModal(self, _value: bool) -> None:
+            return None
+
+        def setWindowFlag(self, *_args, **_kwargs) -> None:
+            return None
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.invalidate_calls = 0
+
+        def invalidate_pool_cache(self) -> None:
+            self.invalidate_calls += 1
+
+    language = {"value": "ru"}
+    build_calls: list[str] = []
+    contexts = []
+
+    def fake_build_main_tabs(tabs, parent, *, on_status_message):
+        del parent, on_status_message
+        current_language = language["value"]
+        build_calls.append(current_language)
+        labels = (
+            ["Recommendations", "Collection", "Search", "Settings"]
+            if current_language == "en"
+            else ["Рекомендации", "Коллекция", "Поиск", "Настройки"]
+        )
+        for label in labels:
+            tabs.addTab(QWidget(), label)
+
+        calls = {"refresh": 0, "focus": 0}
+        context = SimpleNamespace(
+            candidate_session=FakeSession(),
+            refresh_candidate_filters=lambda: calls.__setitem__(
+                "refresh", calls["refresh"] + 1
+            ),
+            focus_candidates=lambda: calls.__setitem__("focus", calls["focus"] + 1),
+            calls=calls,
+        )
+        contexts.append(context)
+        return object(), context
+
+    monkeypatch.setattr(
+        main_window_module,
+        "get_persisted_interface_language",
+        lambda: language["value"],
+    )
+    monkeypatch.setattr(
+        main_window_module.candidate_service,
+        "should_show_onboarding_autofill",
+        lambda: True,
+    )
+    monkeypatch.setattr(main_window_module, "build_main_tabs", fake_build_main_tabs)
+    monkeypatch.setattr(main_window_module, "OnboardingAutofillDialog", FakeOnboarding)
+
+    window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
+    window._tmdb_gate_passed = True
+    old_tabs = window._main_tabs
+    try:
+        window.maybe_show_onboarding_autofill()
+        onboarding = window._onboarding_view
+        assert onboarding is not None
+
+        language["value"] = "en"
+        onboarding.finished.emit(1)
+
+        assert build_calls == ["ru", "en"]
+        assert window._main_tabs is not old_tabs
+        assert old_tabs.isHidden() is True
+        assert window._root_stack.indexOf(old_tabs) == -1
+        assert window._root_stack.currentWidget() is window._main_tabs
+        assert [
+            window._main_tabs.tabText(index)
+            for index in range(window._main_tabs.count())
+        ] == ["Recommendations", "Collection", "Search", "Settings"]
+        assert contexts[-1].candidate_session.invalidate_calls == 1
+        assert contexts[-1].calls == {"refresh": 1, "focus": 1}
+    finally:
+        window.close()
+
+
 def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> None:
     from PyQt6.QtWidgets import QTabWidget, QWidget
 
