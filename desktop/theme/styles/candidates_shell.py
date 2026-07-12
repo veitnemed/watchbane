@@ -317,7 +317,7 @@ QPushButton#recommendationHiddenButton {{
 QPushButton#recommendationWatchedButton {{
     background-color: {COLOR_ADD_BUTTON_TOP};
     border: 1px solid {COLOR_FOCUS_BORDER};
-    color: {COLOR_TEXT};
+    color: {COLOR_TEXT_INVERTED};
 }}
 QPushButton#recommendationWatchlistButton {{
     background-color: {COLOR_CARD_ALT};

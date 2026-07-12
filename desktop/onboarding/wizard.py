@@ -81,6 +81,7 @@ from desktop.theme.tokens import (
     COLOR_CARD_ALT,
     COLOR_SURFACE,
     COLOR_TEXT,
+    COLOR_TEXT_INVERTED,
     COLOR_TEXT_MUTED,
     COLOR_TEXT_SECONDARY,
     COLOR_TEXT_SOFT,
@@ -597,7 +598,7 @@ QPushButton#onboardingNext, QPushButton#onboardingOpen {{
     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #25C6FF, stop:1 #159FE3);
     border: 1px solid #25C6FF;
     border-radius: {px(9)}px;
-    color: {COLOR_TEXT};
+    color: {COLOR_TEXT_INVERTED};
     font-size: {font_px(FONT_DIALOG_TITLE - 1)}px;
     font-weight: 700;
     padding: {px(9)}px {px(20)}px;
@@ -687,7 +688,7 @@ QPushButton#onboardingScalePreviewAction {{
     background-color: {COLOR_ACCENT};
     border: 1px solid {COLOR_ACCENT};
     border-radius: {px(RADIUS_BUTTON)}px;
-    color: {COLOR_TEXT};
+    color: {COLOR_TEXT_INVERTED};
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 700;
     padding: {px(9)}px {px(14)}px;

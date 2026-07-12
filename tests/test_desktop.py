@@ -96,6 +96,54 @@ def test_brand_assets_are_available(qapp) -> None:
     assert watchbane_symbol_label(27).pixmap().isNull() is False
 
 
+def test_bright_primary_controls_use_accessible_inverted_text() -> None:
+    from desktop.onboarding.wizard import _wizard_style
+    from desktop.theme import (
+        COLOR_ACCENT,
+        COLOR_ACCENT_HOVER,
+        COLOR_ADD_BUTTON_TOP,
+        COLOR_TEXT_INVERTED,
+        build_add_title_dialog_style,
+        build_score_edit_dialog_style,
+    )
+    from desktop.theme.styles.candidates_shell import build_candidates_shell_style
+
+    def rule(style: str, selector: str) -> str:
+        start = style.index(selector)
+        return style[start : style.index("}", start)]
+
+    expected_color = f"color: {COLOR_TEXT_INVERTED};"
+    rules = (
+        rule(build_score_edit_dialog_style(), "QPushButton#scoreEditSaveButton"),
+        rule(build_add_title_dialog_style(), "QPushButton#addTitleConfirmButton"),
+        rule(build_candidates_shell_style(), "QPushButton#recommendationWatchedButton {"),
+        rule(_wizard_style(), "QPushButton#onboardingNext"),
+        rule(_wizard_style(), "QPushButton#onboardingScalePreviewAction"),
+    )
+    assert all(expected_color in item for item in rules)
+
+    def relative_luminance(color: str) -> float:
+        channels = [int(color[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+        linear = [
+            value / 12.92
+            if value <= 0.04045
+            else ((value + 0.055) / 1.055) ** 2.4
+            for value in channels
+        ]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    foreground = relative_luminance(COLOR_TEXT_INVERTED)
+    for background in (
+        COLOR_ACCENT,
+        COLOR_ACCENT_HOVER,
+        COLOR_ADD_BUTTON_TOP,
+        "#25C6FF",
+        "#159FE3",
+    ):
+        luminances = sorted((foreground, relative_luminance(background)), reverse=True)
+        assert (luminances[0] + 0.05) / (luminances[1] + 0.05) >= 4.5
+
+
 def test_i18n_catalogs_have_same_keys() -> None:
     from desktop.i18n import SUPPORTED_LANGUAGES, TRANSLATIONS
 

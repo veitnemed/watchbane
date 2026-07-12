@@ -54,7 +54,7 @@ QPushButton:hover {{
 QPushButton#scoreEditSaveButton {{
     background-color: {COLOR_ACCENT};
     border-color: {COLOR_ACCENT};
-    color: {COLOR_TEXT};
+    color: {COLOR_TEXT_INVERTED};
 }}
 QPushButton#scoreEditSaveButton:hover {{
     background-color: {COLOR_ACCENT_HOVER};
@@ -280,7 +280,7 @@ QSpinBox#addTitleYearSpin {{
 QPushButton#addTitleConfirmButton {{
     background-color: {COLOR_ACCENT};
     border: 1px solid {COLOR_ACCENT};
-    color: {COLOR_TEXT};
+    color: {COLOR_TEXT_INVERTED};
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 700;
     padding: {px(9)}px {px(18)}px;
