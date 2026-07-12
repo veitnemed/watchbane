@@ -242,3 +242,47 @@ def test_replaced_batch_events_do_not_update_new_generation(qapp, monkeypatch) -
     controller._finish_url(new_url, "new.jpg")
     assert list(progress[-1]) == [new_batch_id, 1, 0, 1, 1, 0]
     assert list(ready[-1]) == ["candidate-2|2024|movie", "new.jpg"]
+
+
+def test_same_url_is_requested_once_and_updates_every_waiting_identity(qapp, monkeypatch) -> None:
+    import desktop.candidates.poster_prefetch as module
+
+    monkeypatch.setattr(module, "local_preview_poster_path_if_cached", lambda _url: None)
+    controller = module.CandidatePosterPrefetchController(parent=qapp)
+    monkeypatch.setattr(controller, "_pump", lambda: None)
+    ready = QSignalSpy(controller.poster_ready)
+    url = "https://example.com/shared.jpg"
+
+    controller.enqueue("candidate-1", url)
+    controller.enqueue("candidate-2", url)
+
+    assert list(controller._queue) == [url]
+    assert controller._waiters[url] == {("candidate-1", None), ("candidate-2", None)}
+    controller._finish_url(url, "shared.jpg")
+    assert {tuple(event) for event in ready} == {
+        ("candidate-1", "shared.jpg"),
+        ("candidate-2", "shared.jpg"),
+    }
+
+
+def test_twenty_five_poster_batch_settles_without_duplicate_requests(qapp, monkeypatch) -> None:
+    import desktop.candidates.poster_prefetch as module
+
+    _patch_candidate_posters(monkeypatch)
+    monkeypatch.setattr(module, "local_preview_poster_path_if_cached", lambda _url: None)
+    controller = module.CandidatePosterPrefetchController(parent=qapp)
+    monkeypatch.setattr(controller, "_pump", lambda: None)
+    finished = QSignalSpy(controller.batch_finished)
+    candidates = [
+        _candidate(index, poster_url=f"https://example.com/{index}.jpg")
+        for index in range(25)
+    ]
+
+    batch_id = controller.start_batch(candidates, data_language="ru", priority_count=8)
+    assert len(controller._queue) == 25
+    assert len(controller._queued_urls) == 25
+
+    for index in range(25):
+        controller._finish_url(f"https://example.com/{index}.jpg", f"poster-{index}.jpg")
+
+    assert list(finished[-1]) == [batch_id, 25, 0, 25, 0]
