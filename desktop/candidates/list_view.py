@@ -30,7 +30,6 @@ from PyQt6.QtWidgets import (
 from candidates.pool.localized_posters import candidate_needs_tmdb_detail_enrichment
 from candidates.deck_reserve_presentation import resolve_deck_reserve_presentation
 from candidates.recommendation_deck_service import ACTIVE_DECK_SIZE, RecommendationDeckService
-from candidates.scoring.rating_confidence import has_unknown_rating
 from desktop.candidates.empty_state import RecommendationEmptyState
 from desktop.candidates.deck_reserve_indicator import DeckReserveIndicator
 from desktop.candidates.list_actions import CandidateListActionsMixin
@@ -678,52 +677,15 @@ class CandidateListView(CandidateListActionsMixin):
         if not enabled:
             self._reason_label.clear()
 
-    def _country_reason_value(self, candidate: dict) -> str:
-        from candidates.models.country_reference import (
-            COUNTRY_NAME_BY_ISO2,
-            ENGLISH_COUNTRY_NAME_BY_ISO2,
-            country_value_to_iso2,
-        )
-
-        value = candidate.get("country") or candidate.get("origin_country") or ""
-        if isinstance(value, (list, tuple)):
-            value = value[0] if value else ""
-        text = str(value or "").strip()
-        iso2 = country_value_to_iso2(text) or text.upper()
-        names = ENGLISH_COUNTRY_NAME_BY_ISO2 if get_interface_language() == "en" else COUNTRY_NAME_BY_ISO2
-        return names.get(iso2, text)
-
     def _recommendation_reasons(self, candidate: dict) -> list[str]:
-        reasons: list[str] = []
-        country = self._country_reason_value(candidate)
-        try:
-            year = int(candidate.get("year"))
-        except (TypeError, ValueError):
-            year = None
-        if year is not None and year >= datetime.now().year - 2:
-            if country:
-                reasons.append(tr("recommendations.reason.recent_country", country=country))
-            else:
-                reasons.append(tr("recommendations.reason.recent"))
-            if has_unknown_rating(candidate):
-                reasons.append(tr("recommendations.reason.unrated_new"))
-        preferences = self._deck_preferences()
-        vibe = (
-            preferences.get("vibe")
-            or preferences.get("tone")
-            or preferences.get("atmosphere")
+        from desktop.candidates.presenters import build_recommendation_reasons
+
+        return build_recommendation_reasons(
+            candidate,
+            self._deck_preferences(),
+            self._deck_vector(),
+            current_year=datetime.now().year,
         )
-        if vibe not in (None, "", "any", "mixed"):
-            reasons.append(tr("recommendations.reason.vibe", vibe=vibe))
-        try:
-            tmdb_score = float(candidate.get("tmdb_score"))
-        except (TypeError, ValueError):
-            tmdb_score = 0.0
-        if not has_unknown_rating(candidate) and tmdb_score >= 7.5:
-            reasons.append(tr("recommendations.reason.tmdb_interest"))
-        if not reasons:
-            reasons.append(tr("recommendations.reason.preferences"))
-        return reasons[:3]
 
     def _update_recommendation_reasons(self, candidate: dict) -> None:
         self._reason_label.setText("\n".join(f"• {reason}" for reason in self._recommendation_reasons(candidate)))

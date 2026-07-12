@@ -5,10 +5,20 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.use_cases import candidate_search
-from candidates.models.country_schema import candidate_country_for_display
-from candidates.models.genre_schema import normalize_genre_display_labels
+from candidates.models.country_schema import (
+    build_country_codes,
+    candidate_country_for_display,
+    normalize_country_filter_list,
+)
+from candidates.models.genre_schema import (
+    build_genre_keys,
+    normalize_genre_display_labels,
+    normalize_genre_filter_list,
+)
+from candidates.preferences.simple import MOOD_GENRE_GROUPS
 from candidates.scoring.rating_confidence import candidate_rating_confidence, has_unknown_rating
 from candidates.scoring.recommendation_strength import candidate_recommendation_strength
+from dataset.models.media_type import normalize_media_type
 from dataset import service
 from dataset.language import (
     choose_display_overview,
@@ -40,6 +50,93 @@ SORT_MODE_LABEL_KEYS = {
     "text_relevance": "candidates.sort.text_relevance",
     "relevance": "candidates.sort.relevance",
 }
+
+
+def build_recommendation_reasons(
+    candidate: dict,
+    filters: dict | None,
+    vector: dict | None,
+    *,
+    current_year: int,
+) -> list[str]:
+    """Build conservative, deduplicated reasons from facts used by the deck."""
+    criteria = dict(filters or {})
+    recommendation_vector = dict(vector or {})
+    reason_keys: list[tuple[str, dict]] = []
+
+    candidate_countries = set(
+        normalize_country_filter_list(candidate.get("country_codes") or [])
+        or build_country_codes(candidate)
+    )
+    selected_countries = set(normalize_country_filter_list(criteria.get("country") or []))
+    if selected_countries and candidate_countries.intersection(selected_countries):
+        reason_keys.append(("recommendations.reason.country_match", {}))
+
+    candidate_genres = set(
+        normalize_genre_filter_list(candidate.get("genre_keys") or [])
+        or build_genre_keys(candidate)
+    )
+    selected_genres = set(
+        normalize_genre_filter_list(
+            criteria.get("include_genres")
+            or criteria.get("_recommendation_genre_groups")
+            or []
+        )
+    )
+    matching_genres = sorted(candidate_genres.intersection(selected_genres))
+    if matching_genres:
+        reason_keys.append(("recommendations.reason.genre_match", {"genre": matching_genres[0]}))
+
+    selected_media = criteria.get("media_type")
+    if selected_media not in (None, "", "both") and normalize_media_type(
+        candidate.get("media_type")
+    ) == normalize_media_type(selected_media):
+        reason_keys.append((f"recommendations.reason.media_{normalize_media_type(selected_media)}", {}))
+
+    try:
+        year = int(candidate.get("year"))
+    except (TypeError, ValueError):
+        year = None
+    year_min = criteria.get("year_min")
+    year_max = criteria.get("year_max")
+    if year is not None and (year_min is not None or year_max is not None):
+        if (year_min is None or year >= int(year_min)) and (year_max is None or year <= int(year_max)):
+            reason_keys.append(("recommendations.reason.year_match", {}))
+
+    mood = str(recommendation_vector.get("mood") or criteria.get("_recommendation_mood") or "any")
+    mood_genres = set(MOOD_GENRE_GROUPS.get(mood, ()))
+    if mood not in {"", "any", "mixed"} and candidate_genres.intersection(mood_genres):
+        reason_keys.append(("recommendations.reason.mood_match", {"mood": mood}))
+
+    raw_rarity_level = recommendation_vector.get("rarity_level")
+    rarity_level = 2 if raw_rarity_level in (None, "") else int(raw_rarity_level)
+    popularity = candidate.get("tmdb_popularity")
+    try:
+        popularity_value = float(popularity)
+    except (TypeError, ValueError):
+        popularity_value = 0.0
+    if rarity_level <= 1 and popularity_value >= 50:
+        reason_keys.append(("recommendations.reason.popular", {}))
+    elif rarity_level >= 3 and 0 < popularity_value <= 20:
+        reason_keys.append(("recommendations.reason.rare", {}))
+
+    if year is not None and year >= current_year - 2:
+        reason_keys.append(("recommendations.reason.recent", {}))
+    if not has_unknown_rating(candidate):
+        try:
+            if float(candidate.get("tmdb_score")) >= 7.5:
+                reason_keys.append(("recommendations.reason.tmdb_interest", {}))
+        except (TypeError, ValueError):
+            pass
+
+    reasons: list[str] = []
+    for key, kwargs in reason_keys:
+        text = tr(key, **kwargs).strip()
+        if text and text not in reasons:
+            reasons.append(text)
+        if len(reasons) == 3:
+            break
+    return reasons or [tr("recommendations.reason.local_fallback")]
 
 
 def _format_final_score_metric_number(value: float) -> str:

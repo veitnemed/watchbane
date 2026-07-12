@@ -632,6 +632,35 @@ def test_recommendation_reason_remains_visible_without_overview(qtbot) -> None:
     assert reasons_panel.mapTo(overview_section, QPoint(0, 0)).y() <= 1
 
 
+def test_recommendation_reason_label_replaces_previous_intent(qtbot) -> None:
+    candidates = _candidate_set(2)
+    candidates[0].update({"year": 2010, "tmdb_popularity": 90, "tmdb_score": None})
+    candidates[1].update({"year": 2011, "tmdb_popularity": 8, "tmdb_score": None})
+    service = FakeCandidateService(candidates)
+    _service, session, _filters_view, list_view = _build_views(qtbot, service)
+    list_widget = _candidate_list(list_view)
+
+    session.set_recommendation_vector(
+        {"mood": "any", "rarity_level": 0, "diversity_level": 2, "openness_level": 2}
+    )
+    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+    qtbot.wait(10)
+    first_text = list_view._reason_label.text()
+
+    session.set_recommendation_vector(
+        {"mood": "any", "rarity_level": 4, "diversity_level": 2, "openness_level": 2}
+    )
+    list_widget.setCurrentIndex(list_widget.model().index(1, 0))
+    qtbot.wait(10)
+    second_text = list_view._reason_label.text()
+
+    assert "Популярный выбор" in first_text
+    assert "Менее известный выбор" in second_text
+    assert "Популярный выбор" not in second_text
+    assert all(line.strip("• ") for line in second_text.splitlines())
+    assert len(second_text.splitlines()) == len(set(second_text.splitlines()))
+
+
 def test_settings_tab_does_not_overlap_recommendation_poster(qtbot) -> None:
     from PyQt6.QtCore import QPoint, QRect
     from PyQt6.QtWidgets import QTabWidget
