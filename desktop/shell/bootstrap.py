@@ -123,7 +123,7 @@ def main() -> None:
             active_ui_scale=active_ui_scale,
             requested_initial_size=requested_initial_size,
         )
-        window = WatchedMoviesWindow(initial_size=requested_initial_size)
+        window = WatchedMoviesWindow()
         window.show()
         QTimer.singleShot(250, window.maybe_show_tmdb_startup_gate)
         log_event("app.window.shown")

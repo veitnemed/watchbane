@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QTabWidget
+from PyQt6.QtCore import QRect, Qt, QTimer
+from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QStyle, QTabWidget
 
 from candidates import service as candidate_service
+from config import app_settings_store
 from diagnostics.gui_event_log import log_event
 from desktop.i18n import tr
 from desktop.onboarding import OnboardingAutofillDialog
@@ -21,6 +22,7 @@ MAIN_WINDOW_BASE_WIDTH = 1180
 MAIN_WINDOW_BASE_HEIGHT = 720
 MAIN_WINDOW_SCREEN_MARGIN = 80
 POOL_AUTO_REFILL_CHECK_INTERVAL_MS = 15 * 60 * 1000
+WINDOW_GEOMETRY_SETTINGS_KEY = "desktop_main_window_state_v1"
 
 
 def scaled_main_window_size() -> tuple[int, int]:
@@ -45,6 +47,7 @@ class WatchedMoviesWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Watchbane")
         self.setWindowIcon(build_app_icon())
+        self._persist_window_geometry = initial_size is None
         self.resize(*(initial_size or scaled_main_window_size()))
         self.setStyleSheet(build_app_style())
         self.statusBar().showMessage("")
@@ -73,6 +76,133 @@ class WatchedMoviesWindow(QMainWindow):
         self._pool_refill_timer.setInterval(POOL_AUTO_REFILL_CHECK_INTERVAL_MS)
         self._pool_refill_timer.timeout.connect(self.maybe_start_pool_auto_refill)
         self._pool_refill_timer.start()
+        self._restored_geometry_needs_frame_clamp = False
+        if self._persist_window_geometry:
+            self._restored_geometry_needs_frame_clamp = self._restore_window_geometry()
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().showEvent(event)
+        if self._restored_geometry_needs_frame_clamp:
+            self._restored_geometry_needs_frame_clamp = False
+            QTimer.singleShot(0, self._clamp_restored_frame_to_screen)
+
+    @staticmethod
+    def _screen_for_rect(rect: QRect):
+        screens = QApplication.screens()
+        if not screens:
+            return None
+        intersections = [
+            rect.intersected(screen.availableGeometry())
+            for screen in screens
+        ]
+        areas = [
+            intersection.width() * intersection.height()
+            if intersection.isValid()
+            else 0
+            for intersection in intersections
+        ]
+        if max(areas, default=0) > 0:
+            return screens[areas.index(max(areas))]
+        return QApplication.primaryScreen() or screens[0]
+
+    def _clamp_restored_frame_to_screen(self) -> None:
+        if self.isVisible() is False or self.isMaximized() or self.isFullScreen():
+            return
+        frame = self.frameGeometry()
+        screen = self._screen_for_rect(frame)
+        if screen is None:
+            return
+        available = screen.availableGeometry()
+        overflow_width = max(0, frame.width() - available.width())
+        overflow_height = max(0, frame.height() - available.height())
+        if overflow_width or overflow_height:
+            self.resize(
+                max(1, self.width() - overflow_width),
+                max(1, self.height() - overflow_height),
+            )
+            frame = self.frameGeometry()
+        target_x = min(
+            max(frame.x(), available.left()),
+            available.right() - frame.width() + 1,
+        )
+        target_y = min(
+            max(frame.y(), available.top()),
+            available.bottom() - frame.height() + 1,
+        )
+        self.move(
+            self.x() + target_x - frame.x(),
+            self.y() + target_y - frame.y(),
+        )
+
+    def _restore_window_geometry(self) -> bool:
+        try:
+            payload = app_settings_store.load_sqlite_settings_dict().get(
+                WINDOW_GEOMETRY_SETTINGS_KEY
+            )
+        except Exception as error:
+            log_event("app.window.geometry_load_failed", error=str(error))
+            return False
+        if isinstance(payload, dict) is False:
+            return False
+        try:
+            saved = QRect(
+                int(payload["x"]),
+                int(payload["y"]),
+                int(payload["width"]),
+                int(payload["height"]),
+            )
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return False
+        if saved.isValid() is False:
+            return False
+
+        screen = self._screen_for_rect(saved)
+        if screen is not None:
+            available = screen.availableGeometry()
+            title_bar_height = max(
+                0,
+                self.style().pixelMetric(QStyle.PixelMetric.PM_TitleBarHeight),
+            )
+            minimum = self.minimumSizeHint()
+            width = min(max(saved.width(), minimum.width()), available.width())
+            maximum_height = max(1, available.height() - title_bar_height)
+            height = min(max(saved.height(), minimum.height()), maximum_height)
+            x = min(max(saved.x(), available.left()), available.right() - width + 1)
+            client_top = available.top() + title_bar_height
+            y = min(max(saved.y(), client_top), available.bottom() - height + 1)
+            saved = QRect(x, y, width, height)
+
+        self.setGeometry(saved)
+        if payload.get("maximized") is True:
+            self.setWindowState(self.windowState() | Qt.WindowState.WindowMaximized)
+        return True
+
+    def _save_window_geometry(self) -> None:
+        geometry = (
+            self.normalGeometry()
+            if self.isMaximized() or self.isMinimized() or self.isFullScreen()
+            else self.geometry()
+        )
+        if geometry.isValid() is False:
+            return
+        payload = {
+            "x": geometry.x(),
+            "y": geometry.y(),
+            "width": geometry.width(),
+            "height": geometry.height(),
+            "maximized": self.isMaximized() or self.isFullScreen(),
+        }
+        try:
+            app_settings_store.save_sqlite_settings_dict(
+                {WINDOW_GEOMETRY_SETTINGS_KEY: payload}
+            )
+        except Exception as error:
+            log_event("app.window.geometry_save_failed", error=str(error))
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        if self._persist_window_geometry:
+            self._save_window_geometry()
+        super().closeEvent(event)
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)

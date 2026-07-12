@@ -6218,6 +6218,101 @@ def test_candidate_filters_view_places_apply_button_in_summary_card() -> None:
     assert "form.addWidget(self._apply_button)" not in source
 
 
+@pytest.mark.parametrize("maximized", (False, True))
+def test_main_window_restores_saved_geometry_inside_available_screen(qapp, maximized) -> None:
+    from config import app_settings_store
+    from desktop.shell.main_window import (
+        WINDOW_GEOMETRY_SETTINGS_KEY,
+        WatchedMoviesWindow,
+    )
+
+    available = qapp.primaryScreen().availableGeometry()
+    saved_width = min(700, available.width())
+    saved_height = min(500, available.height())
+    app_settings_store.save_sqlite_settings_dict(
+        {
+            WINDOW_GEOMETRY_SETTINGS_KEY: {
+                "x": available.right() + 500,
+                "y": available.bottom() + 500,
+                "width": saved_width,
+                "height": saved_height,
+                "maximized": maximized,
+            }
+        }
+    )
+
+    window = WatchedMoviesWindow()
+    restored = window.geometry()
+    assert available.contains(restored)
+    window.show()
+    qapp.processEvents()
+
+    assert window.isMaximized() is maximized
+    if maximized is False:
+        assert available.contains(window.frameGeometry())
+
+    window.close()
+
+
+def test_main_window_persists_normal_geometry_on_close(qapp) -> None:
+    import inspect
+
+    from config import app_settings_store
+    from desktop.shell import bootstrap
+    from desktop.shell.main_window import (
+        WINDOW_GEOMETRY_SETTINGS_KEY,
+        WatchedMoviesWindow,
+    )
+
+    available = qapp.primaryScreen().availableGeometry()
+    window = WatchedMoviesWindow()
+    window.show()
+    target = available.adjusted(40, 30, -80, -90)
+    window.setGeometry(target)
+    qapp.processEvents()
+    expected = window.geometry()
+    window.close()
+    qapp.processEvents()
+
+    payload = app_settings_store.load_sqlite_settings_dict()[WINDOW_GEOMETRY_SETTINGS_KEY]
+    assert payload == {
+        "x": expected.x(),
+        "y": expected.y(),
+        "width": expected.width(),
+        "height": expected.height(),
+        "maximized": False,
+    }
+    assert "WatchedMoviesWindow()" in inspect.getsource(bootstrap.main)
+
+
+def test_explicit_main_window_size_bypasses_persisted_geometry() -> None:
+    from config import app_settings_store
+    from desktop.shell.main_window import (
+        WINDOW_GEOMETRY_SETTINGS_KEY,
+        WatchedMoviesWindow,
+    )
+
+    persisted = {
+        "x": 111,
+        "y": 122,
+        "width": 700,
+        "height": 500,
+        "maximized": False,
+    }
+    app_settings_store.save_sqlite_settings_dict(
+        {WINDOW_GEOMETRY_SETTINGS_KEY: persisted}
+    )
+
+    window = WatchedMoviesWindow(initial_size=(900, 600))
+    assert (window.width(), window.height()) == (900, 600)
+    window.close()
+
+    assert (
+        app_settings_store.load_sqlite_settings_dict()[WINDOW_GEOMETRY_SETTINGS_KEY]
+        == persisted
+    )
+
+
 def test_watched_window_includes_candidate_tabs() -> None:
     import inspect
 
