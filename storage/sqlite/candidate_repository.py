@@ -9,6 +9,7 @@ from storage.sqlite.candidate_criteria_repository import (
 from storage.sqlite.candidate_pool_repository import (
     clear_candidate_pool,
     load_candidate_pool_dict,
+    merge_candidate_pool_dict,
     save_candidate_pool_dict,
 )
 from storage.sqlite.candidate_query_repository import (
@@ -22,6 +23,7 @@ __all__ = [
     "get_worst_candidate_records",
     "load_candidate_criteria_dict",
     "load_candidate_pool_dict",
+    "merge_candidate_pool_dict",
     "query_candidate_records",
     "save_candidate_criteria_dict",
     "save_candidate_pool_dict",

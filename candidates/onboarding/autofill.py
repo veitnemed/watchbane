@@ -40,7 +40,11 @@ from candidates.sources.tmdb.scoring import (
 )
 from candidates.scoring.rating_confidence import has_unknown_rating, is_viable_unrated_candidate
 from storage.sqlite import action_repository
-from storage.sqlite.candidate_pool_repository import load_candidate_pool_dict, save_candidate_pool_dict
+from storage.sqlite.candidate_pool_repository import (
+    load_candidate_pool_dict,
+    merge_candidate_pool_dict,
+    save_candidate_pool_dict,
+)
 from storage.sqlite.onboarding_repository import (
     complete_onboarding_profile,
     create_onboarding_profile,
@@ -2346,12 +2350,15 @@ def _save_pool_incremental(
     *,
     path: str | Path | None = None,
 ) -> None:
+    incoming: dict[str, dict[str, Any]] = {}
     for candidate in candidates:
         key = pool_entry_key(candidate)
         if key != "|":
             candidate["pool_entry_key"] = key
             pool[key] = candidate
-    save_candidate_pool_dict(pool, path=path)
+            incoming[key] = candidate
+    if incoming:
+        merge_candidate_pool_dict(incoming, path=path)
 
 
 def _run_onboarding_autofill_impl(
