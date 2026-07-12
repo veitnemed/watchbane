@@ -15,15 +15,21 @@ class TmdbNetworkProbeWorker(QThread):
     completed = pyqtSignal(dict)
 
     def run(self) -> None:
+        if self.isInterruptionRequested():
+            return
         try:
             result = check_tmdb_network_available()
         except Exception as error:  # noqa: BLE001 - never strand the startup gate
+            if self.isInterruptionRequested():
+                return
             log_exception("startup.tmdb_network_probe.error", error)
             result = {
                 "ok": False,
                 "error": "network_unreachable",
                 "details": str(error),
             }
+        if self.isInterruptionRequested():
+            return
         self.completed.emit(result)
 
 
@@ -37,9 +43,13 @@ class TmdbStartupValidateWorker(QThread):
         self._token = str(token or "").strip()
 
     def run(self) -> None:
+        if self.isInterruptionRequested():
+            return
         try:
             readiness = evaluate_tmdb_startup_readiness(self._token)
         except Exception as error:  # noqa: BLE001 - invalid input must stay inside the form
+            if self.isInterruptionRequested():
+                return
             log_exception("startup.tmdb_token_validation.error", error)
             self.completed.emit(
                 {
@@ -49,7 +59,11 @@ class TmdbStartupValidateWorker(QThread):
                 }
             )
             return
+        if self.isInterruptionRequested():
+            return
         if readiness.get("ready") is True:
+            if self.isInterruptionRequested():
+                return
             try:
                 tmdb_api.save_tmdb_bearer_token(self._token)
             except Exception as error:
@@ -61,4 +75,6 @@ class TmdbStartupValidateWorker(QThread):
                     }
                 )
                 return
+        if self.isInterruptionRequested():
+            return
         self.completed.emit(readiness)

@@ -6288,6 +6288,65 @@ def test_main_window_persists_normal_geometry_on_close(qapp) -> None:
     assert "WatchedMoviesWindow()" in inspect.getsource(bootstrap.main)
 
 
+def test_main_window_shutdown_cancels_and_joins_child_threads(qapp) -> None:
+    from threading import Event
+    from time import monotonic
+
+    from PyQt6.QtCore import QThread
+
+    from desktop.shell.main_window import WatchedMoviesWindow
+
+    class CooperativeWorker(QThread):
+        def __init__(self, parent) -> None:
+            super().__init__(parent)
+            self.started_running = Event()
+            self.release = Event()
+            self.interruption_observed = Event()
+            self.cancel_called = False
+
+        def cancel(self) -> None:
+            self.cancel_called = True
+
+        def run(self) -> None:
+            self.started_running.set()
+            deadline = monotonic() + 2.0
+            while monotonic() < deadline and self.release.wait(0.01) is False:
+                if self.isInterruptionRequested():
+                    self.interruption_observed.set()
+                    return
+
+    window = WatchedMoviesWindow(initial_size=(900, 600))
+    worker = CooperativeWorker(window)
+    try:
+        worker.start()
+        assert worker.started_running.wait(1.0)
+        assert window._pool_refill_timer.isActive() is True
+
+        window.shutdown_background_workers()
+
+        assert worker.cancel_called is True
+        assert worker.interruption_observed.is_set() is True
+        assert worker.isRunning() is False
+        assert window._pool_refill_timer.isActive() is False
+    finally:
+        worker.release.set()
+        worker.wait(1000)
+        window.close()
+
+
+def test_bootstrap_drains_workers_before_process_exit() -> None:
+    import inspect
+
+    from desktop.shell import bootstrap
+
+    source = inspect.getsource(bootstrap.main)
+    event_loop = source.index("exit_code = app.exec()")
+    drain = source.index("window.shutdown_background_workers()")
+    process_exit = source.index("sys.exit(exit_code)")
+
+    assert event_loop < drain < process_exit
+
+
 def test_explicit_main_window_size_bypasses_persisted_geometry() -> None:
     from config import app_settings_store
     from desktop.shell.main_window import (

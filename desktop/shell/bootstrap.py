@@ -124,10 +124,13 @@ def main() -> None:
             requested_initial_size=requested_initial_size,
         )
         window = WatchedMoviesWindow()
-        window.show()
-        QTimer.singleShot(250, window.maybe_show_tmdb_startup_gate)
-        log_event("app.window.shown")
-        exit_code = app.exec()
+        try:
+            window.show()
+            QTimer.singleShot(250, window.maybe_show_tmdb_startup_gate)
+            log_event("app.window.shown")
+            exit_code = app.exec()
+        finally:
+            window.shutdown_background_workers()
         log_event("app.exit", exit_code=exit_code)
         sys.exit(exit_code)
     except Exception as error:

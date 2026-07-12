@@ -30,6 +30,42 @@ def test_token_validation_worker_reports_error_instead_of_raising(monkeypatch, q
     ]
 
 
+def test_token_validation_worker_interruption_skips_validation_and_save(monkeypatch, qapp) -> None:
+    from threading import Event
+
+    from desktop.startup.worker import TmdbStartupValidateWorker
+
+    validation_started = Event()
+    release_validation = Event()
+
+    def blocking_readiness(_token):
+        validation_started.set()
+        assert release_validation.wait(2.0)
+        return {"ready": True}
+
+    monkeypatch.setattr(
+        "desktop.startup.worker.evaluate_tmdb_startup_readiness",
+        blocking_readiness,
+    )
+    saved_tokens: list[str] = []
+    monkeypatch.setattr(
+        "desktop.startup.worker.tmdb_api.save_tmdb_bearer_token",
+        saved_tokens.append,
+    )
+    results: list[dict] = []
+    worker = TmdbStartupValidateWorker("cancelled-token")
+    worker.completed.connect(results.append)
+
+    worker.start()
+    assert validation_started.wait(1.0)
+    worker.requestInterruption()
+    release_validation.set()
+    assert worker.wait(1000)
+
+    assert results == []
+    assert saved_tokens == []
+
+
 def test_startup_gate_shows_clear_validation_error_in_form(monkeypatch, qapp) -> None:
     from desktop.startup.tmdb_gate import TmdbStartupGateView
 

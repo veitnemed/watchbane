@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QRect, Qt, QTimer
+from PyQt6.QtCore import QRect, QThread, Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QStyle, QTabWidget
 
@@ -206,6 +206,38 @@ class WatchedMoviesWindow(QMainWindow):
         if self._persist_window_geometry:
             self._save_window_geometry()
         super().closeEvent(event)
+
+    def shutdown_background_workers(self) -> None:
+        """Cancel and join child QThreads before the Qt object tree is destroyed."""
+        refill_timer = getattr(self, "_pool_refill_timer", None)
+        if refill_timer is not None:
+            refill_timer.stop()
+
+        workers = [
+            worker
+            for worker in self.findChildren(QThread)
+            if worker.isRunning()
+        ]
+        if not workers:
+            return
+
+        log_event("app.worker_shutdown.begin", worker_count=len(workers))
+        for worker in workers:
+            cancel = getattr(worker, "cancel", None)
+            if callable(cancel):
+                try:
+                    cancel()
+                except Exception as error:
+                    log_event(
+                        "app.worker_shutdown.cancel_failed",
+                        worker=worker.metaObject().className(),
+                        error=str(error),
+                    )
+            worker.requestInterruption()
+
+        for worker in workers:
+            worker.wait()
+        log_event("app.worker_shutdown.end", worker_count=len(workers))
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)
