@@ -19,6 +19,7 @@ from desktop.theme.shell_layout import (
     LEFT_PANEL_TOP_COMPENSATION_PX,
     SPLITTER_DETAIL_DEFAULT_PX,
     SPLITTER_SIDEBAR_DEFAULT_PX,
+    WATCHED_DETAIL_COLLAPSE_WIDTH_PX,
     WATCHED_TAB_MARGIN_PX,
     WATCHED_TAB_SPACING_PX,
 )
@@ -44,6 +45,22 @@ from desktop.watched.tab_actions import WatchedTabActionsMixin
 
 StatusCallback = Callable[[str, int], None]
 EntriesCallback = Callable[[list[WatchedEntry]], None]
+
+
+class _ResponsiveWatchedTab(QWidget):
+    """Root widget that reports size changes to the tab view."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._resize_handler: Callable[[], None] | None = None
+
+    def set_resize_handler(self, handler: Callable[[], None]) -> None:
+        self._resize_handler = handler
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        if self._resize_handler is not None:
+            self._resize_handler()
 
 
 class WatchedTabView(WatchedTabActionsMixin):
@@ -73,7 +90,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         self._visible_entries: list[WatchedEntry] = list(self._entries)
         self._sort_key = SORT_OPTIONS[0][0]
 
-        tab = QWidget()
+        tab = _ResponsiveWatchedTab()
         layout = QHBoxLayout(tab)
         layout.setContentsMargins(
             WATCHED_TAB_MARGIN_PX,
@@ -110,7 +127,14 @@ class WatchedTabView(WatchedTabActionsMixin):
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([SPLITTER_SIDEBAR_DEFAULT_PX, SPLITTER_DETAIL_DEFAULT_PX])
 
+        self._splitter = splitter
+        self._left_panel = left_panel
+        self._right_panel = right_panel
+        self._expanded_splitter_sizes = [SPLITTER_SIDEBAR_DEFAULT_PX, SPLITTER_DETAIL_DEFAULT_PX]
+        self._is_compact_layout: bool | None = None
         self._widget = tab
+        tab.set_resize_handler(self._update_responsive_layout)
+        self._update_responsive_layout()
 
         self._refresh_list()
         if self._list_widget.count() > 0:
@@ -123,6 +147,25 @@ class WatchedTabView(WatchedTabActionsMixin):
     @property
     def entries(self) -> list[WatchedEntry]:
         return self._watched_entries
+
+    def _update_responsive_layout(self) -> None:
+        compact = self._widget.width() < WATCHED_DETAIL_COLLAPSE_WIDTH_PX
+        was_compact = self._is_compact_layout
+        if compact == was_compact:
+            return
+
+        self._is_compact_layout = compact
+        if compact:
+            if was_compact is False:
+                sizes = self._splitter.sizes()
+                if len(sizes) == 2 and sizes[1] > 0:
+                    self._expanded_splitter_sizes = sizes
+            self._right_panel.hide()
+            self._splitter.setSizes([max(1, self._widget.width()), 0])
+            return
+
+        self._right_panel.show()
+        self._splitter.setSizes(self._expanded_splitter_sizes)
 
     def _load_entries(self) -> list[WatchedEntry]:
         try:
