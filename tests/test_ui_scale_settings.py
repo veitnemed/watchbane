@@ -1,5 +1,6 @@
 import importlib
 import re
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -38,6 +39,21 @@ DEFAULT_TUNING = {
 }
 
 SCALE_ANCHORS = (0.75, 1.0, 1.50)
+
+
+def test_shell_package_does_not_eager_import_scaled_tab_modules() -> None:
+    source = (
+        "import sys; import desktop.shell; "
+        "assert 'desktop.shell.tabs' not in sys.modules; "
+        "assert 'desktop.candidates.list_view' not in sys.modules; "
+        "assert 'desktop.watched.tab' not in sys.modules"
+    )
+
+    subprocess.run(
+        [sys.executable, "-c", source],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -814,6 +830,9 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
     assert shell_layout.CANDIDATE_LIST_MIN_WIDTH_PX < shell_layout.CANDIDATE_LIST_MAX_WIDTH_PX
     assert shell_layout.CANDIDATE_SPLITTER_LIST_DEFAULT_PX == shell_layout.SPLITTER_SIDEBAR_DEFAULT_PX
     assert shell_layout.CANDIDATE_SPLITTER_DETAIL_DEFAULT_PX == shell_layout.SPLITTER_DETAIL_DEFAULT_PX
+    assert shell_layout.WATCHED_DETAIL_COLLAPSE_WIDTH_PX == layout.DETAIL_SPLIT_COLLAPSE_WIDTH
+    assert shell_layout.CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX == layout.DETAIL_SPLIT_COLLAPSE_WIDTH
+    assert layout.DETAIL_SPLIT_COLLAPSE_WIDTH < 1280
 
     watched_profile = profiles.DETAIL_CARD_LAYOUT_PROFILE
     candidate_profile = profiles.CANDIDATE_DETAIL_CARD_PROFILE

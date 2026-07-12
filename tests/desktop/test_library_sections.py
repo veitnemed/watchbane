@@ -103,7 +103,7 @@ def test_watched_tab_hides_detail_panel_in_compact_layout(qtbot, monkeypatch) ->
         width = (
             WATCHED_DETAIL_COLLAPSE_WIDTH_PX - 1
             if compact
-            else WATCHED_DETAIL_COLLAPSE_WIDTH_PX + 200
+            else 1280
         )
         view.widget.resize(width, 800)
 

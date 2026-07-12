@@ -65,10 +65,8 @@ def test_main_window_resize_updates_both_responsive_tabs(qtbot) -> None:
         WATCHED_DETAIL_COLLAPSE_WIDTH_PX,
         CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX,
     ) - 1
-    expanded_width = max(
-        WATCHED_DETAIL_COLLAPSE_WIDTH_PX,
-        CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX,
-    ) + 200
+    expanded_width = 1280
+    assert max(WATCHED_DETAIL_COLLAPSE_WIDTH_PX, CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX) < expanded_width
 
     for compact, width in (
         (True, compact_width),

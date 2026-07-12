@@ -225,7 +225,7 @@ def _build_views(
     qtbot.addWidget(filters_view.widget)
     qtbot.addWidget(list_view.widget)
     filters_view.widget.show()
-    list_view.widget.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200, 800)
+    list_view.widget.resize(1280, 800)
     list_view.widget.show()
     list_view.on_tab_activated()
     qtbot.waitUntil(lambda: list_view._deck is not None)
@@ -286,7 +286,7 @@ def test_recommendations_hide_detail_panel_in_compact_layout(qtbot) -> None:
         width = (
             CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX - 1
             if compact
-            else CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200
+            else 1280
         )
         list_view.widget.resize(width, 800)
 
@@ -410,7 +410,7 @@ def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> Non
 
     service = FakeCandidateService(_candidate_set(1, long_overview=True))
     _service, _session, _filters_view, list_view = _build_views(qtbot, service)
-    list_view.widget.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200, 720)
+    list_view.widget.resize(1280, 720)
     list_widget = _candidate_list(list_view)
     list_widget.setCurrentIndex(list_widget.model().index(0, 0))
     qtbot.wait(10)
