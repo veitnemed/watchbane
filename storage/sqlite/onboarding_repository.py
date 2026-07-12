@@ -77,6 +77,23 @@ def has_completed_onboarding_profile(
             active.close()
 
 
+def has_incomplete_onboarding_profile(
+    *,
+    conn: sqlite3.Connection | None = None,
+    path: str | Path | None = None,
+) -> bool:
+    """Return whether an interrupted/failed onboarding profile needs recovery."""
+    active, owned = connection(conn, path)
+    try:
+        row = active.execute(
+            "SELECT 1 FROM onboarding_profiles WHERE completed_at IS NULL LIMIT 1"
+        ).fetchone()
+        return row is not None
+    finally:
+        if owned:
+            active.close()
+
+
 def save_autofill_request_audit(
     audit: dict[str, Any],
     *,

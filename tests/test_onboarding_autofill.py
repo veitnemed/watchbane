@@ -41,7 +41,10 @@ from candidates.onboarding.taste_presets import (
 )
 from storage.sqlite.connection import connect
 from storage.sqlite.candidate_pool_repository import save_candidate_pool_dict
-from storage.sqlite.onboarding_repository import load_autofill_request_audits
+from storage.sqlite.onboarding_repository import (
+    has_completed_onboarding_profile,
+    load_autofill_request_audits,
+)
 
 
 MOVIE_GENRES = [
@@ -2725,17 +2728,54 @@ def test_acceptance_ru_tv_manual_sweep_contract() -> None:
 def test_autofill_can_be_cancelled_before_api_requests(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
     client = FakeTmdbClient()
+    db_path = tmp_path / "watchbane.sqlite3"
 
     result = run_onboarding_autofill(
         _profile(),
         client=client,
-        path=tmp_path / "watchbane.sqlite3",
+        path=db_path,
         cancel_checker=lambda: True,
     )
 
+    assert result.ok is False
     assert result.cancelled is True
     assert result.created_count == 0
     assert result.api_requests == 0
+    assert has_completed_onboarding_profile(path=db_path) is False
+    assert autofill.should_start_onboarding_autofill(path=db_path) is True
+
+
+def test_empty_autofill_stays_incomplete_for_restart(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    db_path = tmp_path / "watchbane.sqlite3"
+
+    result = run_onboarding_autofill(_profile(), client=EmptyTmdbClient(), path=db_path)
+
+    assert result.ok is False
+    assert result.cancelled is False
+    assert result.created_count == 0
+    assert has_completed_onboarding_profile(path=db_path) is False
+    assert autofill.should_start_onboarding_autofill(path=db_path) is True
+
+
+def test_partial_cancelled_autofill_is_recoverable_after_restart(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    db_path = tmp_path / "watchbane.sqlite3"
+    client = FakeTmdbClient()
+
+    result = run_onboarding_autofill(
+        _profile(media_preference="movie"),
+        client=client,
+        path=db_path,
+        current_year=2026,
+        cancel_checker=lambda: bool(client.calls),
+    )
+
+    assert result.ok is False
+    assert result.cancelled is True
+    assert result.created_count > 0
+    assert has_completed_onboarding_profile(path=db_path) is False
+    assert autofill.should_start_onboarding_autofill(path=db_path) is True
 
 
 def test_request_audit_rows_are_loadable(tmp_path, monkeypatch) -> None:

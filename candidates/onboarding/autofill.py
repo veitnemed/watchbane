@@ -45,6 +45,7 @@ from storage.sqlite.onboarding_repository import (
     complete_onboarding_profile,
     create_onboarding_profile,
     has_completed_onboarding_profile,
+    has_incomplete_onboarding_profile,
     load_autofill_request_audits,
     save_autofill_request_audit,
 )
@@ -2300,6 +2301,8 @@ def _mark_bucket_exhausted(state: _BucketState, reason: str, stop_reasons: Count
 def should_start_onboarding_autofill(*, path: str | Path | None = None) -> bool:
     if has_completed_onboarding_profile(path=path):
         return False
+    if has_incomplete_onboarding_profile(path=path):
+        return True
     return len(_pool_snapshot(path=path)) == 0
 
 
@@ -2621,7 +2624,9 @@ def _run_onboarding_autofill_impl(
         if cancelled or len(created_candidates) >= target or api_requests >= MAX_TMDB_REQUESTS:
             break
 
-    complete_onboarding_profile(profile_id, path=path)
+    completed = cancelled is False and bool(created_candidates)
+    if completed:
+        complete_onboarding_profile(profile_id, path=path)
     actual_counts = actual_counts_for_candidates(created_candidates)
     warnings = _build_warnings(
         profile=profile,
@@ -2635,7 +2640,7 @@ def _run_onboarding_autofill_impl(
     _emit(
         progress_callback,
         stage=6,
-        message="Готово",
+        message="Готово" if completed else ("Отменено" if cancelled else "Пул не собран"),
         profile_id=profile_id,
         pool_size=len(created_candidates),
         api_requests=api_requests,
@@ -2647,7 +2652,7 @@ def _run_onboarding_autofill_impl(
         warning=warning,
     )
     return AutofillResult(
-        ok=cancelled is False,
+        ok=completed,
         profile_id=profile_id,
         created_count=len(created_candidates),
         pool_size=len(_pool_snapshot(path=path)),
@@ -2857,7 +2862,7 @@ def run_onboarding_autofill(
         normalized_profile,
         duration_ms=duration_ms,
         result=result,
-        status="success" if result.ok else "cancelled",
+        status="success" if result.ok else ("cancelled" if result.cancelled else "failure"),
         path=path,
     )
     log_warning = request_log.append_onboarding_request_log(entry)
