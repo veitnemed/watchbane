@@ -21,5 +21,4 @@ def get_candidate_summary_view() -> dict:
 def get_profile_summary_line() -> str:
     """Return compact active data profile status for the main console screen."""
     profile = profiles.get_active_profile()
-    data_dir = profiles.get_profile_data_dir(profile)
-    return f"Активный профиль данных: {profile} | {data_dir}"
+    return f"Активный профиль данных: {profile}"

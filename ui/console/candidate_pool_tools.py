@@ -381,7 +381,7 @@ def download_candidate_pool_preview_posters() -> None:
 
     diagnostics = candidate_service.get_candidate_poster_diagnostics_view()
     if diagnostics.get("is_empty_pool"):
-        print("\nРћР±С‰РёР№ candidate pool РїСѓСЃС‚.")
+        print("\nОбщий candidate pool пуст.")
         return
 
     counts = diagnostics.get("counts") or {}
