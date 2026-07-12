@@ -532,6 +532,8 @@ class CandidateListView(CandidateListActionsMixin):
             self._load_recommendation_deck(force_new=False)
             return
         deck_id = str((self._deck or {}).get("deck_id") or "")
+        if deck_id and deck_id in self._refill_requested_deck_ids:
+            return
         if deck_id:
             self._refill_requested_deck_ids.discard(deck_id)
             self._refill_last_attempt = None

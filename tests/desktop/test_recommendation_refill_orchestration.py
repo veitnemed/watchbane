@@ -493,6 +493,11 @@ def test_candidate_list_first_activation_requests_underfilled_refill(qtbot, monk
     assert view._deck_reserve_indicator._mode == "offline"
     assert view._deck_refill_button.isVisible()
 
+    calls_before_retry = len(refill_calls)
+    view._deck_refill_button.click()
+    view._deck_refill_button.click()
+    assert len(refill_calls) == calls_before_retry + 1
+
 
 def test_candidate_list_requests_refill_after_action_exhausts_reserve(qtbot, monkeypatch) -> None:
     candidate = _candidate(1, country="RU", genres=["Crime"])
