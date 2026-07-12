@@ -2670,7 +2670,7 @@ def test_watched_layout_uses_collapsible_filters_and_rich_list() -> None:
     assert "watchedYearReset" not in filters_source
     assert 'tr("watched.context.delete_record")' in actions_source
     assert "_delete_watched_entry" in actions_source
-    assert "execute_watched_delete" in actions_source
+    assert "delete_watched_title" in actions_source
 
 
 def test_is_delete_confirmation_valid() -> None:
@@ -2726,9 +2726,9 @@ def test_watched_delete_entry_uses_service_helper() -> None:
     import desktop.watched.tab as watched_tab_module
 
     source = inspect.getsource(watched_tab_module.WatchedTabView._delete_watched_entry)
-    assert "load_delete_preview" in source
+    assert "get_watched_delete_preview" in source
     assert "WatchedDeleteDialog" in source
-    assert "execute_watched_delete" in source
+    assert "delete_watched_title" in source
     assert "storage_data.save_dataset" not in source
 
 
@@ -6717,7 +6717,7 @@ def test_watched_tab_reload_entries_rereads_data_language(monkeypatch, qapp) -> 
             )
         ]
 
-    monkeypatch.setattr("desktop.watched.tab.load_watched_entries", fake_load_watched_entries)
+    monkeypatch.setattr("app.use_cases.watched_library.load_watched_library", fake_load_watched_entries)
     save_app_settings(AppSettings(interface_language="ru", data_language="ru"))
 
     view = WatchedTabView(on_status_message=lambda _message, _timeout_ms=0: None)
@@ -6734,7 +6734,7 @@ def test_watched_tab_disables_horizontal_scrolling(monkeypatch, qapp) -> None:
 
     from desktop.watched.tab import WatchedTabView
 
-    monkeypatch.setattr("desktop.watched.tab.load_watched_entries", lambda **_kwargs: [])
+    monkeypatch.setattr("app.use_cases.watched_library.load_watched_library", lambda **_kwargs: [])
 
     view = WatchedTabView(on_status_message=lambda _message, _timeout_ms=0: None)
 

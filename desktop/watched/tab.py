@@ -29,7 +29,6 @@ from desktop.watched.model import (
     format_list_label,
     format_watched_list_counter,
     format_watched_list_status,
-    load_watched_entries,
     prepare_card_for_display,
 )
 from desktop.watched.sidebar import build_watched_sidebar
@@ -126,9 +125,13 @@ class WatchedTabView(WatchedTabActionsMixin):
 
     def _load_entries(self) -> list[WatchedEntry]:
         try:
-            return load_watched_entries(data_language=self._data_language)
+            from app.use_cases.watched_library import load_watched_library
+
+            return load_watched_library(data_language=self._data_language)
         except TypeError:
-            return load_watched_entries()
+            from app.use_cases.watched_library import load_watched_library
+
+            return load_watched_library()
 
     def _set_watched_entries(self, entries: list[WatchedEntry]) -> None:
         self._watched_entries = list(entries)

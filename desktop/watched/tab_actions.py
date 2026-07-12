@@ -7,17 +7,12 @@ from PyQt6.QtWidgets import QDialog, QMenu
 
 from desktop.i18n import tr
 from desktop.shared.widgets.list_search import resolve_selection_row
-from desktop.watched.delete import (
-    execute_watched_delete,
-    format_delete_status_message,
-    load_delete_preview,
-)
+from desktop.watched.delete import format_delete_status_message
 from desktop.watched.dialogs.delete_dialog import WatchedDeleteDialog
 from desktop.watched.dialogs.score_edit import ScoreEditDialog
 from desktop.watched.model import (
     WatchedEntry,
     format_save_user_score_status,
-    load_watched_entries,
     save_watched_user_score,
     validate_score_edit_entry,
 )
@@ -30,7 +25,9 @@ class WatchedTabActionsMixin:
         loader = getattr(self, "_load_entries", None)
         if callable(loader):
             return loader()
-        return load_watched_entries()
+        from app.use_cases.watched_library import load_watched_library
+
+        return load_watched_library()
 
     def _open_add_title_dialog(self) -> None:
         from desktop.watched.add_title import run_add_title_flow
@@ -69,7 +66,9 @@ class WatchedTabActionsMixin:
             return
 
         dataset_key, _movie, _card = entry
-        preview = load_delete_preview(dataset_key)
+        from app.use_cases.watched_library import get_watched_delete_preview
+
+        preview = get_watched_delete_preview(dataset_key)
         if preview is None:
             self._show_status(tr("watched.record.not_found"), 4000)
             return
@@ -78,7 +77,9 @@ class WatchedTabActionsMixin:
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
 
-        result = execute_watched_delete(dataset_key)
+        from app.use_cases.watched_library import delete_watched_title
+
+        result = delete_watched_title(dataset_key)
         if result.get("ok"):
             self._refresh_after_delete(result)
             return
@@ -126,7 +127,9 @@ class WatchedTabActionsMixin:
             return
 
         dataset_key, _movie, _card = entry
-        result = save_watched_user_score(dataset_key, score)
+        from app.use_cases.watched_library import update_user_score
+
+        result = update_user_score(dataset_key, score)
         if result.ok and result.reason in ("updated", "nothing_changed"):
             self._refresh_after_user_score_save(dataset_key, result)
             return
