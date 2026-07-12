@@ -22,6 +22,7 @@ from candidates.models.keys import (
 )
 from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
 from candidates.pool.storage import candidate_tmdb_identity
+from candidates.pool.dataset_overlap import candidate_title_aliases
 from candidates.preferences import (
     RecommendationVector,
     resolve_diversity_window,
@@ -177,6 +178,19 @@ def _stable_identity(candidate: dict) -> tuple[str, str, str]:
         return "tmdb", media_type, str(tmdb_id)
     title_key, media_type = _identity(candidate)
     return "title", media_type, title_key
+
+
+def _alias_identities(candidate: dict) -> set[tuple[str, str, str]]:
+    """Return media/year-scoped aliases used to prevent duplicate deck cards."""
+    from candidates.models.keys import normalize_key_part
+
+    media_type = normalize_media_type(candidate.get("media_type"))
+    year = str(candidate.get("year") or "").strip()
+    return {
+        (normalize_key_part(title), year, media_type)
+        for title in candidate_title_aliases(candidate)
+        if normalize_key_part(title)
+    }
 
 
 def _number(value) -> float | None:
@@ -723,6 +737,7 @@ class RecommendationDeckService:
         criteria["only_unwatched"] = False
         criteria["hide_hidden"] = False
         seen: set[tuple[str, str, str]] = set()
+        seen_aliases: set[tuple[str, str, str]] = set()
         eligible: list[dict] = []
         recent_fallback: list[dict] = []
         counters = {
@@ -764,7 +779,12 @@ class RecommendationDeckService:
             if stable_identity in seen:
                 counters["duplicate"] += 1
                 continue
+            aliases = _alias_identities(candidate)
+            if aliases.intersection(seen_aliases):
+                counters["duplicate"] += 1
+                continue
             seen.add(stable_identity)
+            seen_aliases.update(aliases)
             if identity in recently_seen:
                 counters["recently_seen"] += 1
                 recent_fallback.append(candidate)
@@ -935,32 +955,49 @@ class RecommendationDeckService:
 
         active: list[dict] = []
         active_identities: set[tuple[str, str, str]] = set()
+        used_aliases: set[tuple[str, str, str]] = set()
         for candidate in deck.get("active") or []:
             identity = _stable_identity(candidate)
-            if identity not in valid_identities or identity in active_identities:
+            aliases = _alias_identities(candidate)
+            if (
+                identity not in valid_identities
+                or identity in active_identities
+                or aliases.intersection(used_aliases)
+            ):
                 continue
             active_identities.add(identity)
+            used_aliases.update(aliases)
             active.append(candidate)
 
         existing_reserve: list[dict] = []
         available_identities: set[tuple[str, str, str]] = set()
         for candidate in list(deck.get("reserve") or []):
             identity = _stable_identity(candidate)
+            aliases = _alias_identities(candidate)
             if (
                 identity in active_identities
                 or identity in available_identities
                 or identity not in valid_identities
+                or aliases.intersection(used_aliases)
             ):
                 continue
             available_identities.add(identity)
+            used_aliases.update(aliases)
             existing_reserve.append(candidate)
 
-        new_candidates = [
-            candidate
-            for candidate in eligible
-            if _stable_identity(candidate) not in active_identities
-            and _stable_identity(candidate) not in available_identities
-        ]
+        new_candidates = []
+        for candidate in eligible:
+            identity = _stable_identity(candidate)
+            aliases = _alias_identities(candidate)
+            if (
+                identity in active_identities
+                or identity in available_identities
+                or aliases.intersection(used_aliases)
+            ):
+                continue
+            available_identities.add(identity)
+            used_aliases.update(aliases)
+            new_candidates.append(candidate)
         ranked_new = _automatic_ranked_candidates(
             _rank_candidates(new_candidates, rank_seed, vector),
             vector,

@@ -190,6 +190,86 @@ def test_duplicate_identity_media_is_emitted_once(tmp_path) -> None:
     assert len(deck["active"]) == 6
 
 
+def test_same_title_year_media_with_different_tmdb_ids_is_emitted_once(tmp_path) -> None:
+    first = _candidate(1, title="Shared title", media_type="tv")
+    second = {**first, "tmdb_id": 99_002, "final_score": first["final_score"] - 1}
+    deck = _service(
+        {"first": first, "second": second},
+        tmp_path / "deck.sqlite3",
+    ).build_deck({}, NOW, limit_active=10, reserve_size=10)
+
+    assert len(deck["active"] + deck["reserve"]) == 1
+    assert deck["excluded"]["duplicate"] == 1
+
+
+def test_same_title_and_tmdb_id_stays_distinct_between_movie_and_tv(tmp_path) -> None:
+    movie = _candidate(1, title="Shared title", media_type="movie")
+    tv = {**movie, "media_type": "tv"}
+    deck = _service(
+        {"movie": movie, "tv": tv},
+        tmp_path / "deck.sqlite3",
+    ).build_deck({}, NOW, limit_active=10, reserve_size=10)
+
+    shown = deck["active"] + deck["reserve"]
+    assert len(shown) == 2
+    assert {item["media_type"] for item in shown} == {"movie", "tv"}
+
+
+def test_remakes_with_same_title_and_different_years_are_preserved(tmp_path) -> None:
+    original = _candidate(1, title="The Thing", media_type="movie")
+    remake = {**original, "year": original["year"] + 20, "tmdb_id": 99_003}
+    deck = _service(
+        {"original": original, "remake": remake},
+        tmp_path / "deck.sqlite3",
+    ).build_deck({}, NOW, limit_active=10, reserve_size=10)
+
+    assert {item["year"] for item in deck["active"] + deck["reserve"]} == {
+        original["year"],
+        remake["year"],
+    }
+
+
+def test_localized_aliases_cannot_duplicate_active_or_reserve(tmp_path) -> None:
+    english = {
+        **_candidate(1, title="Squid Game", media_type="tv"),
+        "localized": {"ru": {"title": "Игра в кальмара"}},
+    }
+    russian = {
+        **_candidate(2, title="Игра в кальмара", media_type="tv"),
+        "year": english["year"],
+        "localized": {"en": {"title": "Squid Game"}},
+    }
+    deck = _service(
+        {"english": english, "russian": russian},
+        tmp_path / "deck.sqlite3",
+    ).build_deck({}, NOW, limit_active=1, reserve_size=10)
+
+    assert len(deck["active"] + deck["reserve"]) == 1
+
+
+def test_top_up_removes_alias_duplicate_between_active_and_reserve(tmp_path) -> None:
+    pool = _pool(8)
+    service = _service(pool, tmp_path / "deck.sqlite3")
+    deck = service.build_deck({}, NOW, limit_active=3, reserve_size=5)
+    duplicate = {
+        **deck["active"][0],
+        "tmdb_id": 88_888,
+        "pool_entry_key": "duplicate-alias",
+    }
+    deck["reserve"].append(duplicate)
+    service._decks[deck["deck_id"]] = deck
+
+    updated = service.top_up_deck(deck["deck_id"], NOW)
+    identities = _identities(updated["active"] + updated["reserve"])
+
+    assert len(identities) == len(set(identities))
+    titles = [
+        (item["title"].casefold(), item["year"], item["media_type"])
+        for item in updated["active"] + updated["reserve"]
+    ]
+    assert len(titles) == len(set(titles))
+
+
 def test_impressions_are_recorded_only_when_active_detail_is_revealed(tmp_path) -> None:
     db_path = tmp_path / "deck.sqlite3"
     service = _service(_pool(10), db_path)
