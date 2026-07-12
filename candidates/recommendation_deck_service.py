@@ -20,7 +20,11 @@ from candidates.models.keys import (
     candidate_state_identity_keys,
     title_identity_key,
 )
-from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
+from candidates.models.schema import (
+    coerce_candidate_number,
+    normalize_candidate_record,
+    resolve_canonical_year,
+)
 from candidates.pool.storage import candidate_tmdb_identity
 from candidates.pool.dataset_overlap import candidate_title_aliases
 from candidates.preferences import (
@@ -185,7 +189,8 @@ def _alias_identities(candidate: dict) -> set[tuple[str, str, str]]:
     from candidates.models.keys import normalize_key_part
 
     media_type = normalize_media_type(candidate.get("media_type"))
-    year = str(candidate.get("year") or "").strip()
+    canonical_year = resolve_canonical_year(candidate)
+    year = "" if canonical_year is None else str(canonical_year)
     return {
         (normalize_key_part(title), year, media_type)
         for title in candidate_title_aliases(candidate)
@@ -380,8 +385,20 @@ def _country(candidate: dict) -> str:
 
 
 def _decade(candidate: dict) -> int | None:
-    year = _number(candidate.get("year"))
+    year = resolve_canonical_year(candidate)
     return None if year is None else int(year) // 10 * 10
+
+
+def _candidate_release_date(candidate: dict) -> date | None:
+    for field_name in ("release_date", "first_air_date"):
+        value = str(candidate.get(field_name) or "").strip()
+        if len(value) < 10:
+            continue
+        try:
+            return date.fromisoformat(value[:10])
+        except ValueError:
+            continue
+    return None
 
 
 def _diversify_quality_group(
@@ -766,8 +783,13 @@ class RecommendationDeckService:
             ):
                 counters["actioned"] += 1
                 continue
-            year = _number(candidate.get("year"))
-            if year is not None and int(year) > now.year:
+            release_date = _candidate_release_date(candidate)
+            year = resolve_canonical_year(candidate)
+            if (
+                release_date is not None and release_date > now.date()
+            ) or (
+                release_date is None and year is not None and int(year) > now.year
+            ):
                 counters["future_release"] += 1
                 continue
             if not is_viable_unrated_candidate(candidate, current_year=now.year):

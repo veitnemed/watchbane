@@ -315,6 +315,66 @@ def test_future_release_is_not_eligible(tmp_path) -> None:
     assert deck["excluded"]["future_release"] == 1
 
 
+def test_full_release_date_distinguishes_today_from_tomorrow(tmp_path) -> None:
+    now = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
+    pool = {
+        "today": {**_candidate(1), "year": None, "release_date": "2026-07-13"},
+        "tomorrow": {**_candidate(2), "year": None, "release_date": "2026-07-14"},
+        "month-only": {**_candidate(3), "year": None, "release_date": "2026-07"},
+    }
+    deck = _service(pool, tmp_path / "deck.sqlite3").build_deck(
+        {}, now, limit_active=10, reserve_size=0
+    )
+
+    assert {item["title"] for item in deck["active"]} == {
+        pool["today"]["title"],
+        pool["month-only"]["title"],
+    }
+    assert deck["excluded"]["future_release"] == 1
+
+
+def test_unknown_string_and_zero_year_do_not_crash_or_look_future(tmp_path) -> None:
+    pool = {
+        "unknown": {**_candidate(1), "year": None},
+        "text": {**_candidate(2), "year": "unknown"},
+        "zero": {**_candidate(3), "year": 0},
+        "string": {**_candidate(4), "year": "2026"},
+    }
+    deck = _service(pool, tmp_path / "deck.sqlite3").build_deck(
+        {}, NOW, limit_active=10, reserve_size=0
+    )
+
+    assert len(deck["active"]) == 4
+    assert deck["excluded"]["future_release"] == 0
+
+
+def test_same_instant_across_midnight_and_timezones_has_same_daily_order(tmp_path) -> None:
+    pool = _pool(60)
+    local_before_midnight = datetime.fromisoformat("2026-12-31T23:30:00-02:00")
+    utc_after_midnight = datetime.fromisoformat("2027-01-01T01:30:00+00:00")
+
+    first = _service(pool, tmp_path / "first.sqlite3").build_deck({}, local_before_midnight)
+    second = _service(pool, tmp_path / "second.sqlite3").build_deck({}, utc_after_midnight)
+
+    assert _identities(first["active"] + first["reserve"]) == _identities(
+        second["active"] + second["reserve"]
+    )
+
+
+def test_leap_day_and_new_year_boundaries_use_utc_calendar(tmp_path) -> None:
+    pool = {
+        "leap": {**_candidate(1), "year": None, "release_date": "2028-02-29"},
+        "next-year": {**_candidate(2), "year": None, "release_date": "2029-01-01"},
+    }
+    leap_day = datetime(2028, 2, 29, 0, 0, tzinfo=timezone.utc)
+    deck = _service(pool, tmp_path / "deck.sqlite3").build_deck(
+        {}, leap_day, limit_active=10, reserve_size=0
+    )
+
+    assert [item["title"] for item in deck["active"]] == [pool["leap"]["title"]]
+    assert deck["excluded"]["future_release"] == 1
+
+
 def test_refresh_reuses_same_daily_deck_until_forced(tmp_path) -> None:
     db_path = tmp_path / "deck.sqlite3"
     service = _service(_pool(80), db_path)

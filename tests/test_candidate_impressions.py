@@ -97,6 +97,30 @@ def test_recently_seen_filters_strictly_after_cutoff(tmp_path) -> None:
     assert [(row["identity_key"], row["media_type"]) for row in recent] == [("new|2024", "tv")]
 
 
+def test_recent_cutoff_normalizes_timezone_offsets_to_one_instant(tmp_path) -> None:
+    db_path = tmp_path / "impressions.sqlite3"
+    record_impressions(
+        [_candidate("Boundary")],
+        shown_at="2026-06-11T15:00:00+03:00",
+        path=db_path,
+    )
+
+    at_same_instant = get_recently_seen(
+        "2026-06-11T12:00:00+00:00",
+        path=db_path,
+    )
+    one_second_before = get_recently_seen(
+        "2026-06-11T11:59:59+00:00",
+        path=db_path,
+    )
+
+    assert at_same_instant == []
+    assert [row["identity_key"] for row in one_second_before] == ["boundary|2024"]
+    assert get_impression("boundary|2024", "tv", path=db_path)["last_shown_at"] == (
+        "2026-06-11T12:00:00+00:00"
+    )
+
+
 def test_v4_migration_upgrades_nonempty_v3_database(tmp_path) -> None:
     db_path = tmp_path / "impressions.sqlite3"
     conn = connect(db_path)
