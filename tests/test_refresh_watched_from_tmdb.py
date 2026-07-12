@@ -1,14 +1,17 @@
+from copy import deepcopy
+
 from tools.migrations import migrate_watched_raw_scores_tmdb_only as migrate_script
 from tools.tmdb import refresh_watched_from_tmdb as refresh_script
 
 
-def _movie(title: str = "Show", year: int = 2020) -> dict:
+def _movie(title: str = "Show", year: int = 2020, media_type: str = "tv") -> dict:
     return {
         "main_info": {
             "title": title,
             "user_score": 8.0,
             "year": year,
             "country": "США",
+            "media_type": media_type,
         },
         "raw_scores": {
             "kp_score": 9.9,
@@ -55,7 +58,13 @@ def _details(tmdb_id: int = 123, title: str = "Show") -> dict:
 
 def test_refresh_watched_by_existing_tmdb_id_updates_meta_and_raw_scores() -> None:
     dataset = {"Show": _movie()}
-    meta = {"Show": {"tmdb_id": 123, "personal_notes": "keep me"}}
+    meta = {
+        "Show": {
+            "tmdb_id": 123,
+            "personal_notes": "keep me",
+            "episode_run_time": [44],
+        }
+    }
 
     updated_dataset, updated_meta, report = refresh_script.refresh_watched(
         dataset,
@@ -103,6 +112,148 @@ def test_refresh_watched_by_existing_tmdb_id_updates_meta_and_raw_scores() -> No
     assert meta_obj["quality_score"] > 0
     assert meta_obj["final_score"] > 0
     assert meta_obj["personal_notes"] == "keep me"
+    assert movie["main_info"]["user_score"] == 8.0
+
+
+def test_refresh_watched_uses_stable_movie_identity_and_movie_api(monkeypatch) -> None:
+    dataset_key = "Shared (2024, movie)"
+    dataset = {dataset_key: _movie("Shared", 2024, media_type="movie")}
+    meta = {dataset_key: {"tmdb_id": 501, "personal_notes": "local"}}
+    calls = []
+
+    def movie_details(tmdb_id, **kwargs):
+        calls.append((tmdb_id, kwargs["append_to_response"]))
+        details = _details(tmdb_id, "Shared")
+        details.pop("first_air_date")
+        details["title"] = "Shared"
+        details["release_date"] = "2024-02-03"
+        details["runtime"] = 132
+        return details
+
+    def fail_tv_details(*_args, **_kwargs):
+        raise AssertionError("TV API used for movie")
+
+    monkeypatch.setattr(refresh_script.tmdb_api, "get_movie_details", movie_details)
+    monkeypatch.setattr(refresh_script.tmdb_api, "get_tv_details", fail_tv_details)
+
+    updated_dataset, updated_meta, report = refresh_script.refresh_watched(dataset, meta)
+
+    assert report["refreshed_by_tmdb_id"] == 1
+    assert calls == [(501, refresh_script.tmdb_api.DEFAULT_MOVIE_DETAIL_APPENDS)]
+    assert list(updated_dataset) == [dataset_key]
+    assert list(updated_meta) == [dataset_key]
+    assert updated_meta[dataset_key]["tmdb_id"] == 501
+    assert updated_meta[dataset_key]["release_date"] == "2024-02-03"
+    assert updated_meta[dataset_key]["runtime"] == 132
+    assert updated_meta[dataset_key]["personal_notes"] == "local"
+
+
+def test_refresh_watched_clears_explicit_unknown_runtime_but_keeps_partial_fields() -> None:
+    dataset = {"Show": _movie()}
+    meta = {
+        "Show": {
+            "tmdb_id": 123,
+            "personal_notes": "keep",
+            "episode_run_time": [50],
+            "number_of_seasons": 1,
+            "number_of_episodes": 8,
+            "poster_path": "/old.jpg",
+        }
+    }
+    details = {
+        "id": 123,
+        "overview": "Updated overview",
+        "number_of_seasons": 2,
+        "number_of_episodes": 14,
+        "episode_run_time": [],
+        "vote_average": 8.1,
+        "vote_count": 999,
+    }
+
+    updated_dataset, updated_meta, report = refresh_script.refresh_watched(
+        dataset,
+        meta,
+        details_func=lambda _tmdb_id, **_kwargs: details,
+    )
+
+    assert report["refreshed_by_tmdb_id"] == 1
+    assert updated_dataset["Show"]["main_info"]["user_score"] == 8.0
+    assert updated_meta["Show"]["description"] == "Updated overview"
+    assert updated_meta["Show"]["number_of_seasons"] == 2
+    assert updated_meta["Show"]["number_of_episodes"] == 14
+    assert "episode_run_time" not in updated_meta["Show"]
+    assert updated_meta["Show"]["poster_path"] == "/old.jpg"
+    assert updated_meta["Show"]["personal_notes"] == "keep"
+
+
+def test_refresh_watched_timeout_and_deleted_title_leave_record_unchanged() -> None:
+    dataset = {"First": _movie("First"), "Second": _movie("Second")}
+    meta = {
+        "First": {"tmdb_id": 1, "personal_notes": "one"},
+        "Second": {"tmdb_id": 2, "personal_notes": "two"},
+    }
+    original_dataset = deepcopy(dataset)
+    original_meta = deepcopy(meta)
+
+    def unavailable(tmdb_id, **_kwargs):
+        if tmdb_id == 1:
+            raise TimeoutError("slow network")
+        return {}
+
+    updated_dataset, updated_meta, report = refresh_script.refresh_watched(
+        dataset,
+        meta,
+        details_func=unavailable,
+    )
+
+    assert report["failed"] == 2
+    assert report["processed"] == 2
+    assert [item["status"] for item in report["items"]] == ["failed", "failed"]
+    assert updated_dataset == original_dataset
+    assert updated_meta == original_meta
+    assert list(updated_dataset) == ["First", "Second"]
+
+
+def test_run_refresh_applies_atomically_to_sqlite_runtime(monkeypatch, tmp_path) -> None:
+    db_path = tmp_path / "watchbane.sqlite3"
+    db_path.write_bytes(b"sqlite placeholder")
+    report_path = tmp_path / "refresh-report.json"
+    backup_path = tmp_path / "before-refresh.sqlite3"
+    saved = []
+    dataset = {"Show": _movie()}
+    meta = {"Show": {"tmdb_id": 123, "personal_notes": "keep"}}
+
+    monkeypatch.setattr(refresh_script, "dataset_path", lambda: db_path)
+    monkeypatch.setattr(refresh_script, "meta_path", lambda: db_path)
+    monkeypatch.setattr(refresh_script.storage_data, "load_dataset", lambda: deepcopy(dataset))
+    monkeypatch.setattr(refresh_script.storage_data, "load_meta", lambda: deepcopy(meta))
+    monkeypatch.setattr(
+        refresh_script.storage_data,
+        "save_dataset_and_meta",
+        lambda updated_dataset, updated_meta: saved.append((updated_dataset, updated_meta)),
+    )
+    monkeypatch.setattr(
+        refresh_script,
+        "backup_sqlite_database",
+        lambda *, db_path: backup_path,
+    )
+
+    report = refresh_script.run_refresh(
+        apply=True,
+        report_path=report_path,
+        details_func=lambda tmdb_id, **_kwargs: _details(tmdb_id),
+    )
+
+    assert report["mode"] == "apply"
+    assert report["dataset_path"] == str(db_path)
+    assert report["meta_path"] == str(db_path)
+    assert report["backup_paths"] == {"database": str(backup_path)}
+    assert len(saved) == 1
+    saved_dataset, saved_meta = saved[0]
+    assert saved_dataset["Show"]["main_info"]["user_score"] == 8.0
+    assert saved_meta["Show"]["personal_notes"] == "keep"
+    assert saved_meta["Show"]["description"] == "TMDb overview"
+    assert report_path.is_file()
 
 
 def test_refresh_watched_without_tmdb_id_search_match_updates() -> None:
