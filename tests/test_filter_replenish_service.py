@@ -1,4 +1,5 @@
 from candidates import service as candidate_service
+from candidates import onboarding_service
 from candidates.repositories import pool_repository
 from candidates.replenish.filter_intent import FilterReplenishIntent
 from candidates.search.fts_index import search_fts
@@ -85,8 +86,8 @@ def test_service_uses_default_filter_replenish_tmdb_client_when_omitted(monkeypa
     fake_client = object()
     captured: dict = {}
 
-    monkeypatch.setattr(candidate_service, "load_candidate_pool", lambda: {})
-    monkeypatch.setattr(candidate_service, "_build_filter_replenish_tmdb_client", lambda: fake_client)
+    monkeypatch.setattr(onboarding_service, "load_candidate_pool", lambda: {})
+    monkeypatch.setattr(onboarding_service, "_build_filter_replenish_tmdb_client", lambda: fake_client)
 
     def fake_replenish_candidates_for_filters(_intent, **kwargs):
         captured.update(kwargs)
@@ -99,7 +100,7 @@ def test_service_uses_default_filter_replenish_tmdb_client_when_omitted(monkeypa
         }
 
     monkeypatch.setattr(
-        candidate_service,
+        onboarding_service,
         "replenish_candidates_for_filters",
         fake_replenish_candidates_for_filters,
     )
@@ -137,7 +138,7 @@ def test_filter_replenish_tmdb_client_maps_media_types_to_tmdb_paths() -> None:
             return {}
 
     base_client = FakeBaseClient()
-    client = candidate_service._FilterReplenishTmdbClient(base_client)
+    client = onboarding_service._FilterReplenishTmdbClient(base_client)
 
     client.discover("movie", {"page": 1})
     client.discover("tv", {"page": 2})

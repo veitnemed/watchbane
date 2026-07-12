@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import ROUND_HALF_UP, Decimal
 
-from candidates import service as candidate_service
+from app.use_cases import candidate_search
 from candidates.models.country_schema import candidate_country_for_display
 from candidates.models.genre_schema import normalize_genre_display_labels
 from candidates.scoring.rating_confidence import candidate_rating_confidence, has_unknown_rating
@@ -58,7 +58,7 @@ def candidate_sort_mode_label(sort_mode: str) -> str:
     key = SORT_MODE_LABEL_KEYS.get(sort_mode)
     if key is not None:
         return tr(key)
-    return candidate_service.SEARCH_SORT_MODE_LABELS.get(sort_mode, str(sort_mode))
+    return candidate_search.SEARCH_SORT_MODE_LABELS.get(sort_mode, str(sort_mode))
 
 
 def format_candidate_title_line(candidate: dict, data_language: str = "ru") -> str:
@@ -72,7 +72,7 @@ def format_candidate_metric_value(candidate: dict, sort_mode: str) -> str:
     """Secondary list metric for the active sort mode."""
     from candidates.models.schema import coerce_candidate_number
 
-    field_name = sort_mode if sort_mode in candidate_service.SEARCH_SORT_MODES else candidate_service.DEFAULT_SEARCH_SORT_MODE
+    field_name = sort_mode if sort_mode in candidate_search.SEARCH_SORT_MODES else candidate_search.DEFAULT_SEARCH_SORT_MODE
     prefix_key = SORT_MODE_METRIC_PREFIX.get(field_name, "")
     prefix = tr(prefix_key) if prefix_key.startswith("candidates.") else prefix_key
     if field_name in {"tmdb_score", "tmdb_votes"} and has_unknown_rating(candidate):

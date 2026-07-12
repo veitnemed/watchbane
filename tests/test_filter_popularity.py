@@ -141,19 +141,20 @@ def test_merge_country_popularity_normalizes_pool_code_labels() -> None:
 
 def test_get_search_filter_chip_options_view_uses_dataset_popularity(monkeypatch) -> None:
     from candidates import service as candidate_service
+    from candidates import search_service
 
     dataset = {
         "a": _movie(country="Россия", genres=["Драма"]),
         "b": _movie(country="США", genres=["Драма", "Комедия"]),
     }
-    monkeypatch.setattr("candidates.service.storage_data.load_dataset", lambda: dataset)
-    monkeypatch.setattr("candidates.service.get_pool_view", lambda: [])
+    monkeypatch.setattr("candidates.search_service.storage_data.load_dataset", lambda: dataset)
+    monkeypatch.setattr("candidates.search_service.get_pool_view", lambda: [])
     monkeypatch.setattr(
-        "candidates.service.collect_search_genre_options",
+        "candidates.search_service.collect_search_genre_options",
         lambda _candidates: ["Триллер"],
     )
     monkeypatch.setattr(
-        "candidates.service.collect_search_country_options",
+        "candidates.search_service.collect_search_country_options",
         lambda _candidates: [{"code": "GB", "label": "Великобритания"}],
     )
 
@@ -177,14 +178,14 @@ def test_get_search_filter_chip_options_view_does_not_show_raw_su_code(monkeypat
         "b": _movie(country="США"),
         "c": _movie(country="SU"),
     }
-    monkeypatch.setattr("candidates.service.storage_data.load_dataset", lambda: dataset)
-    monkeypatch.setattr("candidates.service.get_pool_view", lambda: [])
+    monkeypatch.setattr("candidates.search_service.storage_data.load_dataset", lambda: dataset)
+    monkeypatch.setattr("candidates.search_service.get_pool_view", lambda: [])
     monkeypatch.setattr(
-        "candidates.service.collect_search_genre_options",
+        "candidates.search_service.collect_search_genre_options",
         lambda _candidates: [],
     )
     monkeypatch.setattr(
-        "candidates.service.collect_search_country_options",
+        "candidates.search_service.collect_search_country_options",
         lambda _candidates: [],
     )
 
@@ -198,14 +199,14 @@ def test_get_search_filter_chip_options_view_does_not_show_raw_su_code(monkeypat
 def test_get_search_filter_chip_options_view_falls_back_when_dataset_empty(monkeypatch) -> None:
     from candidates import service as candidate_service
 
-    monkeypatch.setattr("candidates.service.storage_data.load_dataset", lambda: {})
-    monkeypatch.setattr("candidates.service.get_pool_view", lambda: [])
+    monkeypatch.setattr("candidates.search_service.storage_data.load_dataset", lambda: {})
+    monkeypatch.setattr("candidates.search_service.get_pool_view", lambda: [])
     monkeypatch.setattr(
-        "candidates.service.collect_search_genre_options",
+        "candidates.search_service.collect_search_genre_options",
         lambda _candidates: ["Драма"],
     )
     monkeypatch.setattr(
-        "candidates.service.collect_search_country_options",
+        "candidates.search_service.collect_search_country_options",
         lambda _candidates: [],
     )
 

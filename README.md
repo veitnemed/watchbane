@@ -120,6 +120,7 @@ py -m pytest
 
 Start with the documentation map for architecture, storage contracts, candidate flow and UI scaling:
 
+- [Architecture overview](ARCHITECTURE.md)
 - [Documentation index](docs/README.md)
 - [Project map](docs/architecture/PROJECT_MAP.md)
 - [Candidate queue and posters](docs/architecture/CANDIDATE_QUEUE_AND_POSTERS.md)

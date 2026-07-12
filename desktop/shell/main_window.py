@@ -163,10 +163,9 @@ class WatchedMoviesWindow(QMainWindow):
 
     def maybe_show_tmdb_startup_gate(self) -> None:
         """Block main UI until TMDb network and credentials are ready."""
-        from apis.tmdb_api import reload_tmdb_env
-        from apis.tmdb_connectivity import evaluate_tmdb_startup_readiness
+        from app.use_cases.tmdb_title_add import get_tmdb_startup_readiness, reload_tmdb_runtime
 
-        readiness = evaluate_tmdb_startup_readiness()
+        readiness = get_tmdb_startup_readiness()
         if readiness.get("ready") is True:
             self._tmdb_gate_passed = True
             log_event("startup.tmdb_gate.skipped")
@@ -177,7 +176,7 @@ class WatchedMoviesWindow(QMainWindow):
         gate.setWindowFlag(Qt.WindowType.Widget, True)
 
         def finish_gate() -> None:
-            reload_tmdb_env()
+            reload_tmdb_runtime()
             self._tmdb_gate_passed = True
             self._root_stack.setCurrentWidget(self._main_tabs)
             log_event("startup.tmdb_gate.passed")

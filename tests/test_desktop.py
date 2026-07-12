@@ -5665,11 +5665,11 @@ def test_candidate_filters_view_empty_pool_summary(monkeypatch, qapp) -> None:
     from desktop.candidates.session import CandidateSearchSession
 
     monkeypatch.setattr(
-        "desktop.candidates.filters_view.candidate_service.get_search_overview_view",
+        "app.use_cases.candidate_search.get_search_overview_view",
         lambda: {"is_empty": True, "summary": "", "candidates": []},
     )
     monkeypatch.setattr(
-        "desktop.candidates.filters_view.candidate_service.get_search_filter_chip_options_view",
+        "app.use_cases.candidate_search.get_search_filter_chip_options_view",
         lambda: {"genres": [], "countries": [], "dataset_total": 0, "is_empty": True, "source": "fallback"},
     )
     session = CandidateSearchSession()
@@ -5705,7 +5705,7 @@ def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch
     from desktop.candidates.session import CandidateSearchSession
 
     monkeypatch.setattr(
-        "desktop.candidates.filters_view.candidate_service.get_search_overview_view",
+        "app.use_cases.candidate_search.get_search_overview_view",
         lambda: {
             "is_empty": False,
             "summary": "в pool: 1 | ready: 1 | incomplete: 0",
@@ -5713,11 +5713,11 @@ def test_candidate_filters_view_country_all_and_year_slider_defaults(monkeypatch
         },
     )
     monkeypatch.setattr(
-        "desktop.candidates.filters_view.candidate_service.get_search_filter_defaults_view",
+        "app.use_cases.candidate_search.get_search_filter_defaults_view",
         lambda: {"defaults": {}},
     )
     monkeypatch.setattr(
-        "desktop.candidates.filters_view.candidate_service.get_search_filter_chip_options_view",
+        "app.use_cases.candidate_search.get_search_filter_chip_options_view",
         lambda: {"genres": [], "countries": [], "dataset_total": 0, "is_empty": True, "source": "fallback"},
     )
 
@@ -6025,15 +6025,15 @@ def test_candidate_filters_view_numeric_threshold_sliders_collect_values(monkeyp
     from desktop.candidates.session import CandidateSearchSession
 
     monkeypatch.setattr(
-        "desktop.candidates.filters_view.candidate_service.get_search_overview_view",
+        "app.use_cases.candidate_search.get_search_overview_view",
         lambda: {"is_empty": False, "summary": "ok", "candidates": []},
     )
     monkeypatch.setattr(
-        "desktop.candidates.filters_view.candidate_service.get_search_filter_defaults_view",
+        "app.use_cases.candidate_search.get_search_filter_defaults_view",
         lambda: {"defaults": {}},
     )
     monkeypatch.setattr(
-        "desktop.candidates.filters_view.candidate_service.get_search_filter_chip_options_view",
+        "app.use_cases.candidate_search.get_search_filter_chip_options_view",
         lambda: {"genres": [], "countries": [], "dataset_total": 0, "is_empty": True, "source": "fallback"},
     )
 
@@ -6597,15 +6597,15 @@ def test_candidate_search_session_sorts_once_and_returns_all(monkeypatch) -> Non
         }
 
     monkeypatch.setattr(
-        "desktop.candidates.session.candidate_service.sort_search_candidates",
+        "app.use_cases.candidate_search.sort_search_candidates",
         fake_sort,
     )
     monkeypatch.setattr(
-        "desktop.candidates.session.candidate_service.get_search_overview_view",
+        "app.use_cases.candidate_search.get_search_overview_view",
         lambda: {"is_empty": False, "candidates": candidates},
     )
     monkeypatch.setattr(
-        "desktop.candidates.session.candidate_service.search_candidate_pool",
+        "app.use_cases.candidate_search.search_candidate_pool",
         lambda _items, _filters: {"candidates": candidates, "filtered_count": len(candidates)},
     )
 

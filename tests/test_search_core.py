@@ -249,12 +249,12 @@ def test_service_build_public_params_do_not_include_kp_imdb() -> None:
 
 def test_candidate_service_exposes_search_named_views(monkeypatch) -> None:
     from candidates import service
+    from candidates import pool_service
 
-    monkeypatch.setattr(service, "get_pool_stats", lambda criteria_name=None: {"storage_total": 1, "ready_total": 0, "incomplete_total": 0, "watched_total": 0, "active_total": 1, "unique_total": 1, "raw_total": 1, "duplicate_entries": 0, "similar_duplicate_total": 0, "cross_year_duplicate_total": 0})
-    monkeypatch.setattr(service, "format_pool_stats_lines", lambda stats: ["В pool: 1"])
-    monkeypatch.setattr(service, "format_pool_stats_summary", lambda stats: "В pool: 1")
-    monkeypatch.setattr(service, "get_pool_view", lambda criteria_name=None: [_candidate()])
-    monkeypatch.setattr(service, "load_candidate_criteria", lambda: {})
+    monkeypatch.setattr(pool_service, "get_pool_stats", lambda criteria_name=None: {"storage_total": 1, "ready_total": 0, "incomplete_total": 0, "watched_total": 0, "active_total": 1, "unique_total": 1, "raw_total": 1, "duplicate_entries": 0, "similar_duplicate_total": 0, "cross_year_duplicate_total": 0})
+    monkeypatch.setattr(pool_service, "format_pool_stats_lines", lambda stats: ["pool: 1"])
+    monkeypatch.setattr(pool_service, "format_pool_stats_summary", lambda stats: "pool: 1")
+    monkeypatch.setattr(pool_service, "get_pool_view", lambda criteria_name=None: [_candidate()])
 
     overview = service.get_search_overview_view()
     assert overview["is_empty"] is False
@@ -357,13 +357,14 @@ def test_build_candidate_poster_diagnostics_summarizes_counts(monkeypatch) -> No
 
 def test_get_candidate_poster_diagnostics_view_uses_service_facade(monkeypatch) -> None:
     from candidates import service
+    from candidates import diagnostics_service
 
     monkeypatch.setattr(
         "posters.download_images.local_preview_poster_path_if_cached",
         lambda _url: None,
     )
     monkeypatch.setattr(
-        service,
+        diagnostics_service,
         "get_search_overview_view",
         lambda: {
             "is_empty": False,
@@ -573,9 +574,10 @@ def test_download_preview_posters_for_urls_reports_results(monkeypatch) -> None:
 
 def test_download_candidate_pool_preview_posters_service(monkeypatch) -> None:
     from candidates import service
+    from candidates import poster_service
 
     monkeypatch.setattr(
-        service,
+        poster_service,
         "get_search_overview_view",
         lambda: {
             "is_empty": False,
@@ -729,6 +731,7 @@ def test_find_title_duplicate_groups_includes_dataset_matches() -> None:
 
 def test_get_title_duplicates_view_uses_service_facade(monkeypatch) -> None:
     from candidates import service
+    from candidates import diagnostics_service
 
     groups = [{
         "title": "Show",
@@ -740,9 +743,9 @@ def test_get_title_duplicates_view_uses_service_facade(monkeypatch) -> None:
         "entries": [],
         "dataset_entries": [{"dataset_key": "Show", "title": "Show", "year": 2015}],
     }]
-    monkeypatch.setattr(service, "find_title_duplicate_groups", lambda: groups)
+    monkeypatch.setattr(diagnostics_service, "find_title_duplicate_groups", lambda: groups)
     monkeypatch.setattr(
-        service,
+        diagnostics_service,
         "build_title_duplicate_summary",
         lambda _groups: {
             "group_count": 1,

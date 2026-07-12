@@ -16,7 +16,12 @@ if str(ROOT_DIR) not in sys.path:
 from app.core.explain import explain_candidate  # noqa: E402
 from app.core.filters import filter_candidates  # noqa: E402
 from app.core.ranking import rank_candidates  # noqa: E402
-from candidates import service as candidate_service  # noqa: E402
+from candidates.pool_service import get_search_overview_view  # noqa: E402
+from candidates.search_service import (  # noqa: E402
+    _candidate_pool_key,
+    _prepare_text_search_criteria,
+    search_candidate_pool,
+)
 from candidates.search.fts_index import search_fts, search_fts_prefiltered  # noqa: E402
 from candidates.search.structural_sql import build_structural_sql_filters  # noqa: E402
 from storage.sqlite.candidate_query_repository import load_candidate_records_by_pool_keys  # noqa: E402
@@ -60,11 +65,11 @@ def _legacy_path_ms(
     started = perf_counter()
     fts_hits = search_fts(conn, query)
     fts_keys = {pool_key for pool_key, _ in fts_hits}
-    search_view = candidate_service.search_candidate_pool(candidates, criteria)
+    search_view = search_candidate_pool(candidates, criteria)
     result_count = sum(
         1
         for candidate in search_view.get("candidates") or []
-        if candidate_service._candidate_pool_key(candidate) in fts_keys
+        if _candidate_pool_key(candidate) in fts_keys
     )
     elapsed_ms = round((perf_counter() - started) * 1000, 2)
     return elapsed_ms, result_count
@@ -99,7 +104,7 @@ def run_benchmark(
     filter_sets: list[dict],
     repeats: int,
 ) -> dict:
-    overview = candidate_service.get_search_overview_view()
+    overview = get_search_overview_view()
     candidates = overview.get("candidates") or []
     pool_size = len(candidates)
     conn = connect()
@@ -108,7 +113,7 @@ def run_benchmark(
     cases: list[dict] = []
     try:
         for filters in filter_sets:
-            criteria = candidate_service._prepare_text_search_criteria(filters)
+            criteria = _prepare_text_search_criteria(filters)
             for query in queries:
                 legacy_samples: list[float] = []
                 sql_samples: list[float] = []

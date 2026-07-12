@@ -3,6 +3,7 @@
 import pytest
 
 from candidates import service as candidate_service
+from candidates import pool_service
 from candidates.repositories import pool_repository
 
 
@@ -37,7 +38,7 @@ def test_service_clean_common_pool_duplicates_delegates_without_recursion(
         return {"ok": True, "removed_total": 0}
 
     monkeypatch.setattr(
-        candidate_service,
+        pool_service,
         "_clean_common_pool_duplicates_impl",
         fake_clean_common_pool_duplicates,
     )
@@ -55,7 +56,7 @@ def test_service_ensure_common_pool_criteria_delegates_without_recursion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        candidate_service,
+        pool_service,
         "_ensure_common_pool_criteria_impl",
         lambda: ("pool", {"country": "RU"}),
     )

@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from candidates import service as candidate_service
 from candidates.preferences import (
     CandidateDiscoveryPreferences,
     RecommendationVector,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from candidates import service as candidate_service
+from app.use_cases import onboarding
 from diagnostics.gui_event_log import log_event, log_exception
 
 
@@ -26,7 +26,7 @@ class OnboardingAutofillWorker(QThread):
     def run(self) -> None:
         log_event("onboarding.autofill.worker.begin", profile=self._profile)
         try:
-            result = candidate_service.build_onboarding_candidate_pool(
+            result = onboarding.build_onboarding_candidate_pool(
                 self._profile,
                 progress_callback=self.progress.emit,
                 cancel_checker=lambda: self._cancelled,
@@ -64,7 +64,7 @@ class PoolReplenishWorker(QThread):
     def run(self) -> None:
         log_event("pool.auto_refill.worker.begin")
         try:
-            result = candidate_service.replenish_candidate_pool(
+            result = onboarding.replenish_candidate_pool(
                 cancel_checker=lambda: self._cancelled,
             )
         except Exception as error:  # noqa: BLE001 - surface to shell status bar

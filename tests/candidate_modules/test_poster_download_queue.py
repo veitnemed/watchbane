@@ -43,9 +43,10 @@ def test_download_candidate_pool_preview_posters_skips_downloader_when_queue_is_
     monkeypatch,
 ) -> None:
     from candidates import service
+    from candidates import poster_service
 
     monkeypatch.setattr(
-        service,
+        poster_service,
         "get_search_overview_view",
         lambda: {
             "is_empty": False,
@@ -79,9 +80,10 @@ def test_download_candidate_pool_preview_posters_skips_downloader_when_queue_is_
 
 def test_console_candidate_summary_view_formats_main_menu_line(monkeypatch) -> None:
     from candidates import service
+    from candidates import diagnostics_service
 
     monkeypatch.setattr(
-        service,
+        diagnostics_service,
         "get_pool_stats_view",
         lambda: {
             "stats": {
@@ -92,7 +94,7 @@ def test_console_candidate_summary_view_formats_main_menu_line(monkeypatch) -> N
         },
     )
     monkeypatch.setattr(
-        service,
+        diagnostics_service,
         "get_candidate_poster_diagnostics_view",
         lambda: {
             "counts": {

@@ -496,10 +496,11 @@ def test_candidate_list_requests_refill_after_action_exhausts_reserve(qtbot, mon
 
 
 def test_filter_replenish_rechecks_cancellation_before_import(monkeypatch) -> None:
+    from candidates import onboarding_service
     cancellation = {"requested": False}
     imported: list[list[dict]] = []
 
-    monkeypatch.setattr(candidate_service, "load_candidate_pool", lambda: {})
+    monkeypatch.setattr(onboarding_service, "load_candidate_pool", lambda: {})
 
     def fake_replenish(_intent, **_kwargs) -> dict:
         cancellation["requested"] = True
@@ -517,9 +518,9 @@ def test_filter_replenish_rechecks_cancellation_before_import(monkeypatch) -> No
         imported.append(deepcopy(candidates))
         return {"added": len(candidates)}
 
-    monkeypatch.setattr(candidate_service, "replenish_candidates_for_filters", fake_replenish)
+    monkeypatch.setattr(onboarding_service, "replenish_candidates_for_filters", fake_replenish)
     monkeypatch.setattr(
-        candidate_service.tmdb_import,
+        onboarding_service.tmdb_import,
         "import_tmdb_candidates_to_common_pool",
         fake_import,
     )

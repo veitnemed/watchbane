@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from candidates import service as candidate_service
+from app.use_cases import onboarding
 from diagnostics.gui_event_log import log_event, log_exception
 
 
@@ -18,7 +18,7 @@ class FilterReplenishWorker(QThread):
     def __init__(self, intent: dict, *, service=None, parent=None) -> None:
         super().__init__(parent)
         self._intent = dict(intent or {})
-        self._service = service or candidate_service
+        self._service = service or onboarding
         self._cancelled = False
 
     def cancel(self) -> None:

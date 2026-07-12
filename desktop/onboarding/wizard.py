@@ -48,7 +48,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from candidates import service as candidate_service
+from app.use_cases import onboarding
 from candidates.models import country_reference
 from candidates.onboarding.taste_presets import (
     ANIMATION_MODE_ANIMATION_ONLY,
@@ -1381,7 +1381,7 @@ class OnboardingAutofillDialog(QDialog):
 
     def _format_plan_summary(self) -> str:
         profile = self._profile()
-        plan = candidate_service.get_onboarding_autofill_plan_view(profile)
+        plan = onboarding.get_onboarding_autofill_plan_view(profile)
         quotas = plan.get("quotas") or {}
         media = quotas.get("media_type") or {}
         release = quotas.get("release") or {}

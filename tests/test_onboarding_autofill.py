@@ -1416,9 +1416,10 @@ def test_run_autofill_respects_replenish_target(tmp_path, monkeypatch) -> None:
 
 def test_replenish_skips_without_saved_profile_or_full_pool(monkeypatch) -> None:
     from candidates import service as candidate_service
+    from candidates import onboarding_service
 
-    monkeypatch.setattr(candidate_service, "load_last_onboarding_profile", lambda: None)
-    monkeypatch.setattr(candidate_service, "load_candidate_pool", lambda: [])
+    monkeypatch.setattr(onboarding_service, "load_last_onboarding_profile", lambda: None)
+    monkeypatch.setattr(onboarding_service, "load_candidate_pool", lambda: [])
 
     view = candidate_service.get_pool_replenish_view()
     assert view["needs_replenish"] is False
@@ -1436,9 +1437,9 @@ def test_replenish_skips_without_saved_profile_or_full_pool(monkeypatch) -> None
         "ui_language": "en",
         "country_selection": {"selected_countries": ["US"], "home_country": "US"},
     }
-    monkeypatch.setattr(candidate_service, "load_last_onboarding_profile", lambda: profile_payload)
+    monkeypatch.setattr(onboarding_service, "load_last_onboarding_profile", lambda: profile_payload)
     monkeypatch.setattr(
-        candidate_service,
+        onboarding_service,
         "load_candidate_pool",
         lambda: [{"title": f"t{i}"} for i in range(candidate_service.STARTER_POOL_TARGET)],
     )
@@ -1450,6 +1451,7 @@ def test_replenish_runs_autofill_with_missing_count_as_target(monkeypatch) -> No
     from types import SimpleNamespace
 
     from candidates import service as candidate_service
+    from candidates import onboarding_service
 
     profile_payload = {
         "media_preference": "movie",
@@ -1461,8 +1463,8 @@ def test_replenish_runs_autofill_with_missing_count_as_target(monkeypatch) -> No
         "genre_groups": ["comedy"],
         "country_selection": {"selected_countries": ["US"], "home_country": "US"},
     }
-    monkeypatch.setattr(candidate_service, "load_last_onboarding_profile", lambda: profile_payload)
-    monkeypatch.setattr(candidate_service, "load_candidate_pool", lambda: [{"title": f"t{i}"} for i in range(25)])
+    monkeypatch.setattr(onboarding_service, "load_last_onboarding_profile", lambda: profile_payload)
+    monkeypatch.setattr(onboarding_service, "load_candidate_pool", lambda: [{"title": f"t{i}"} for i in range(25)])
 
     captured: dict = {}
 
@@ -1499,7 +1501,7 @@ def test_replenish_runs_autofill_with_missing_count_as_target(monkeypatch) -> No
             candidates=[],
         )
 
-    monkeypatch.setattr(candidate_service, "run_onboarding_autofill", fake_run)
+    monkeypatch.setattr(onboarding_service, "run_onboarding_autofill", fake_run)
 
     view = candidate_service.get_pool_replenish_view()
     assert view["needs_replenish"] is True

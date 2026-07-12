@@ -6,7 +6,7 @@ import uuid
 from time import perf_counter
 from typing import Callable
 
-from candidates import service as candidate_service
+from app.use_cases import candidate_search
 from candidates.preferences import RecommendationVector
 from desktop.candidates.workers.search_worker import CandidateSearchWorker
 from diagnostics.gui_event_log import log_event
@@ -34,7 +34,7 @@ class CandidateSearchSession:
     """Runtime candidate search state shared across desktop tabs."""
 
     def __init__(self, service=None) -> None:
-        self.service = service or candidate_service
+        self.service = service or candidate_search
         self.filters: dict | None = None
         self.filtered_candidates: list[dict] = []
         self.filtered_count: int = 0

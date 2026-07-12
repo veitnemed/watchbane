@@ -134,6 +134,7 @@ def test_calibrated_brigada_query_regression(fts_pool, monkeypatch) -> None:
 
 
 def test_sql_path_parity_with_legacy_intersect(fts_pool, monkeypatch, tmp_path) -> None:
+    from candidates import search_service
     from candidates.search.fts_index import search_fts
     from storage.sqlite.connection import connect
 
@@ -151,16 +152,16 @@ def test_sql_path_parity_with_legacy_intersect(fts_pool, monkeypatch, tmp_path) 
         fts_hits = search_fts(conn, "криминал")
     finally:
         conn.close()
-    legacy_result = candidate_service._search_candidate_pool_text_legacy(
+    legacy_result = search_service._search_candidate_pool_text_legacy(
         fts_pool,
-        candidate_service._prepare_text_search_criteria(filters),
+        search_service._prepare_text_search_criteria(filters),
         normalized_query="криминал",
         fts_hits=fts_hits,
     )
     sql_keys = [
-        candidate_service._candidate_pool_key(item) for item in sql_result["candidates"]
+        search_service._candidate_pool_key(item) for item in sql_result["candidates"]
     ]
     legacy_keys = [
-        candidate_service._candidate_pool_key(item) for item in legacy_result["candidates"]
+        search_service._candidate_pool_key(item) for item in legacy_result["candidates"]
     ]
     assert sql_keys == legacy_keys
