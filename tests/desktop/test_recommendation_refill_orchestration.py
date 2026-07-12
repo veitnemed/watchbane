@@ -455,12 +455,17 @@ def test_candidate_list_requests_refill_for_initial_underfilled_deck() -> None:
     view._session = session
     view._deck = deck
     view._refill_requested_deck_ids = set()
+    view._refill_last_attempt = None
     view._on_refill_needed = lambda payload: refill_calls.append(deepcopy(payload)) or True
 
     view._maybe_request_recommendation_refill()
 
     assert len(refill_calls) == 1
     assert _intent_countries(refill_calls[0]) == {"RU"}
+
+    view._maybe_request_recommendation_refill()
+    assert len(refill_calls) == 1
+    assert view._refill_requested_deck_ids == {"refill-test-deck"}
 
 
 def test_candidate_list_first_activation_requests_underfilled_refill(qtbot, monkeypatch) -> None:

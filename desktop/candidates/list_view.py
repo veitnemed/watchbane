@@ -75,6 +75,7 @@ POSTER_PRIORITY_COUNT = 8
 POSTER_READY_TARGET = 20
 POSTER_REVEAL_DEADLINE_MS = 8_000
 POSTER_MIN_LOADER_MS = 180
+REFILL_RETRY_COOLDOWN_SECONDS = 30.0
 
 
 class _CandidateListRoot(QWidget):
@@ -130,6 +131,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._poster_prefetch_busy = False
         self._poster_prefetch_failed = 0
         self._refill_requested_deck_ids: set[str] = set()
+        self._refill_last_attempt: tuple[str, float] | None = None
         self._deck_prepare_active = False
         self._deck_prepare_batch_id: int | None = None
         self._deck_prepare_started_at = 0.0
@@ -524,6 +526,12 @@ class CandidateListView(CandidateListActionsMixin):
 
     def on_replenish_state_changed(self, state: str) -> None:
         """Reflect filter-worker lifecycle only when there is no usable list content."""
+        deck_id = str((self._deck or {}).get("deck_id") or "")
+        if state in {"error", "finished"} and deck_id:
+            self._refill_requested_deck_ids.discard(deck_id)
+            self._refill_last_attempt = (deck_id, perf_counter())
+        if state == "finished" and self._recommendations_active:
+            QTimer.singleShot(0, self.refresh)
         if self._candidates:
             return
         if state == "loading":
@@ -885,13 +893,23 @@ class CandidateListView(CandidateListActionsMixin):
         deck_id = str(deck.get("deck_id") or "")
         if deck_id and deck_id in self._refill_requested_deck_ids:
             return
+        last_attempt = getattr(self, "_refill_last_attempt", None)
+        if (
+            deck_id
+            and isinstance(last_attempt, tuple)
+            and len(last_attempt) == 2
+            and last_attempt[0] == deck_id
+            and perf_counter() - float(last_attempt[1]) < REFILL_RETRY_COOLDOWN_SECONDS
+        ):
+            return
         try:
             self._on_refill_needed(self._deck_preferences())
         except Exception:
             logger.exception("recommendation refill request failed")
             return
         if deck_id:
-            self._refill_requested_deck_ids.add(deck_id)
+            self._refill_requested_deck_ids = {deck_id}
+            self._refill_last_attempt = (deck_id, perf_counter())
         if deck.get("underfilled_reason") in {"no_eligible_candidates", "active_underfilled", "reserve_exhausted"}:
             self._deck_status_label.setText(tr("recommendations.state.replenishing"))
 
@@ -1210,9 +1228,10 @@ class CandidateListView(CandidateListActionsMixin):
         self._selected_candidate = candidate
         self._selected_identity = candidate_detail_identity(candidate)
         self._log_search_action("open", candidate, rank=row + 1)
-        if self._deck is not None:
+        record_reveal = getattr(self._deck_service, "record_detail_reveal", None)
+        if self._deck is not None and callable(record_reveal):
             try:
-                self._deck_service.record_detail_reveal(
+                record_reveal(
                     str(self._deck.get("deck_id") or ""),
                     candidate,
                 )
