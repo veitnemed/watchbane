@@ -99,6 +99,12 @@ def restore_sqlite_database(
     try:
         _validate_backup_source(source_conn, source)
 
+        # A valid restore is intentionally destructive. Preserve the current
+        # runtime first so the user can recover even if the chosen backup is
+        # valid but not the state they intended to restore.
+        if target.is_file():
+            backup_sqlite_database(db_path=target)
+
         target_conn = sqlite3.connect(target)
         try:
             source_conn.backup(target_conn)

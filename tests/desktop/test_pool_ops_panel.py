@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import QObject, pyqtSignal, Qt
-from PyQt6.QtWidgets import QMessageBox, QPushButton
+from PyQt6.QtWidgets import QPushButton
 
 from desktop.settings.pool_clear_dialog import PoolClearDialog, pool_clear_confirmation_text
 from desktop.settings.pool_ops_panel import PoolOpsPanel
@@ -134,11 +134,7 @@ def test_refresh_stats_shows_each_detail_once_and_duplicate_warning(qtbot, monke
 
 def test_dedupe_confirm_starts_worker_and_emits_pool_changed(qtbot, monkeypatch) -> None:
     panel, service, workers, _status, changed = _build_panel(qtbot, monkeypatch)
-    monkeypatch.setattr(
-        QMessageBox,
-        "question",
-        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
-    )
+    monkeypatch.setattr(panel, "_ask_confirmation", lambda *_args: True)
 
     qtbot.mouseClick(panel.findChild(QPushButton, "poolOpsDedupeButton"), Qt.MouseButton.LeftButton)
 
@@ -150,11 +146,7 @@ def test_dedupe_confirm_starts_worker_and_emits_pool_changed(qtbot, monkeypatch)
 
 def test_purge_confirm_starts_worker(qtbot, monkeypatch) -> None:
     panel, service, workers, _status, changed = _build_panel(qtbot, monkeypatch)
-    monkeypatch.setattr(
-        QMessageBox,
-        "question",
-        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
-    )
+    monkeypatch.setattr(panel, "_ask_confirmation", lambda *_args: True)
 
     qtbot.mouseClick(panel.findChild(QPushButton, "poolOpsPurgeButton"), Qt.MouseButton.LeftButton)
 
@@ -194,6 +186,7 @@ def test_import_path_starts_import_worker(qtbot, monkeypatch) -> None:
         "desktop.settings.pool_ops_panel.QFileDialog.getOpenFileName",
         lambda *_args, **_kwargs: ("D:/tmp/result.json", "TMDb JSON (*.json)"),
     )
+    monkeypatch.setattr(panel, "_ask_confirmation", lambda *_args: True)
 
     qtbot.mouseClick(panel.findChild(QPushButton, "poolOpsImportButton"), Qt.MouseButton.LeftButton)
 
@@ -201,6 +194,27 @@ def test_import_path_starts_import_worker(qtbot, monkeypatch) -> None:
     assert workers[0].import_path == "D:/tmp/result.json"
     workers[0].complete({"ok": True, "result": service.import_tmdb_result_to_pool("x")})
     qtbot.waitUntil(lambda: changed["count"] == 1)
+
+
+def test_import_into_non_empty_pool_requires_confirmation(qtbot, monkeypatch) -> None:
+    panel, _service, workers, _status, _changed = _build_panel(qtbot, monkeypatch)
+    monkeypatch.setattr(
+        "desktop.settings.pool_ops_panel.QFileDialog.getOpenFileName",
+        lambda *_args, **_kwargs: ("D:/tmp/result.json", "TMDb JSON (*.json)"),
+    )
+    questions = []
+
+    def reject_import(title, text):
+        questions.append((title, text))
+        return False
+
+    monkeypatch.setattr(panel, "_ask_confirmation", reject_import)
+
+    qtbot.mouseClick(panel.findChild(QPushButton, "poolOpsImportButton"), Qt.MouseButton.LeftButton)
+
+    assert workers == []
+    assert len(questions) == 1
+    assert "3" in questions[0][1]
 
 
 def test_pool_clear_confirmation_text_matches_language(monkeypatch) -> None:

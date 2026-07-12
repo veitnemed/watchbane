@@ -55,11 +55,14 @@ def test_restore_backup_restores_sqlite_database(tmp_path, monkeypatch) -> None:
     storage_data.save_dataset({"Alpha": _movie("Alpha")})
     backup_path = create_backup()
     storage_data.clean_dataset()
+    backups_before_restore = set((tmp_path / "data" / "backups").iterdir())
 
     restored_count = restore_backup(backup_path)
 
     assert restored_count == 1
     assert list(storage_data.load_dataset()) == ["Alpha"]
+    backups_after_restore = set((tmp_path / "data" / "backups").iterdir())
+    assert len(backups_after_restore - backups_before_restore) == 1
 
 
 def test_restore_sqlite_database_rejects_invalid_backup_without_touching_target(tmp_path) -> None:

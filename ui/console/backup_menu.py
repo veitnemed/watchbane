@@ -30,7 +30,10 @@ def open_backup_menu() -> None:
         return
 
     file_path = backups[idx]
-    confirm = input(f"Загрузить backup {file_path.name}? Введи yes >> ").strip().lower()
+    confirm = input(
+        f"Загрузить backup {file_path.name}? Текущие данные активного профиля будут "
+        "заменены после создания страховочного backup. Введи yes >> "
+    ).strip().lower()
     if confirm != "yes":
         print("Загрузка backup отменена.")
         return
