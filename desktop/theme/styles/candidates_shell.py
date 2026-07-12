@@ -575,6 +575,9 @@ QPushButton#candidateSearchApplyTopButton {{
 QPushButton#candidateSearchApplyTopButton:hover {{
     background-color: {COLOR_ADD_BUTTON_HOVER};
 }}
+QPushButton#candidateSearchApplyTopButton[pendingChanges="true"] {{
+    border-color: {COLOR_FOCUS_BORDER};
+}}
 QPushButton#candidateSearchResetTopButton {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};

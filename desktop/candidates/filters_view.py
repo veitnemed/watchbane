@@ -130,6 +130,8 @@ class CandidateFiltersView:
         self._is_replenishing = False
         self._replenish_worker: FilterReplenishWorker | None = None
         self._last_replenish_result: dict | None = None
+        self._filters_dirty = False
+        self._restoring_filter_controls = False
         self._pending_replenish_intent: dict | None = None
         self._pending_replenish_generation: int | None = None
         self._replenish_local_count_before: int | None = None
@@ -347,12 +349,17 @@ class CandidateFiltersView:
         selected_countries = self._effective_country_codes()
         selected_include = self._include_genre_selector.selected_genres()
         selected_exclude = self._exclude_genre_selector.selected_genres()
-        self._apply_filter_defaults(
-            selected_countries=selected_countries,
-            selected_include_genres=selected_include,
-            selected_exclude_genres=selected_exclude,
-            preserve_non_chip_filters=True,
-        )
+        self._restoring_filter_controls = True
+        try:
+            self._apply_filter_defaults(
+                selected_countries=selected_countries,
+                selected_include_genres=selected_include,
+                selected_exclude_genres=selected_exclude,
+                preserve_non_chip_filters=True,
+            )
+        finally:
+            self._restoring_filter_controls = False
+        self._update_summary_rows()
 
     @property
     def _country_selector(self):
@@ -439,7 +446,7 @@ class CandidateFiltersView:
         return self._form.replenish_advanced_override_check
 
     def _connect_summary_updates(self) -> None:
-        self._summary_update_callback = lambda *_args: self._update_summary_rows()
+        self._summary_update_callback = lambda *_args: self._on_filter_controls_changed()
         update = self._summary_update_callback
         self._country_selector.selection_changed.connect(update)
         self._media_type_combo.currentIndexChanged.connect(update)
@@ -453,7 +460,35 @@ class CandidateFiltersView:
         self._form.simple_collection_combo.currentIndexChanged.connect(update)
         self._form.simple_origin_combo.currentIndexChanged.connect(update)
         self._form.simple_mood_combo.currentIndexChanged.connect(update)
-        self._advanced_mode_toggle.toggled.connect(update)
+        self._advanced_mode_toggle.toggled.connect(self._update_summary_rows)
+        self._include_genre_selector.selection_changed.connect(update)
+        self._exclude_genre_selector.selection_changed.connect(update)
+        self._tmdb_score_slider.rangeChanged.connect(update)
+        self._tmdb_votes_slider.rangeChanged.connect(update)
+        self._only_complete_check.toggled.connect(update)
+        self._only_unwatched_check.toggled.connect(update)
+        self._hide_hidden_check.toggled.connect(update)
+        self._replenish_animation_mode_combo.currentIndexChanged.connect(update)
+        self._replenish_advanced_override_check.toggled.connect(update)
+
+    def _on_filter_controls_changed(self) -> None:
+        self._update_summary_rows()
+        if self._restoring_filter_controls:
+            return
+        self._set_filters_dirty(True)
+
+    def _set_filters_dirty(self, dirty: bool) -> None:
+        self._filters_dirty = bool(dirty)
+        self._apply_button.setProperty("pendingChanges", self._filters_dirty)
+        self._apply_button.setText(
+            tr(
+                "candidates.filters.summary.apply_pending"
+                if self._filters_dirty
+                else "candidates.filters.summary.apply"
+            )
+        )
+        self._apply_button.style().unpolish(self._apply_button)
+        self._apply_button.style().polish(self._apply_button)
 
     def _connect_recommendation_controls(self) -> None:
         update = self._summary_update_callback
@@ -545,7 +580,7 @@ class CandidateFiltersView:
                 self._genre_options,
                 _genre_labels_for_language(preset.include_genres, self._data_language),
             )
-        self._update_summary_rows()
+        self._on_filter_controls_changed()
 
     def _summary_countries_text(self) -> str:
         country_codes = self._effective_country_codes()
@@ -752,6 +787,8 @@ class CandidateFiltersView:
             return
         local_apply_completed = self._local_apply_requested
         if self._session.last_error:
+            if local_apply_completed:
+                self._set_filters_dirty(True)
             self._pending_replenish_intent = None
             self._pending_replenish_generation = None
             self._replenish_local_count_before = None
@@ -1090,6 +1127,7 @@ class CandidateFiltersView:
             self._hide_replenish_progress()
         self._replenish_local_count_before = None
         self._local_apply_requested = True
+        self._set_filters_dirty(False)
         self._session.apply_filters_async(filters, parent=self._widget)
 
         if self._on_applied is not None:

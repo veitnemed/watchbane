@@ -146,6 +146,20 @@ def test_filter_intro_stats_are_visible_when_copy_is_nonempty(qtbot) -> None:
     assert view._intro_stats.isVisible()
 
 
+def test_changed_filter_is_marked_pending_until_apply(qtbot) -> None:
+    _service, session, view = _build_view(qtbot)
+
+    view._media_type_combo.setCurrentIndex(1)
+
+    assert view._filters_dirty is True
+    assert view._apply_button.text() == tr("candidates.filters.summary.apply_pending")
+
+    view._apply_filters()
+    qtbot.waitUntil(lambda: session.filters is not None)
+    assert view._filters_dirty is False
+    assert view._apply_button.text() == tr("candidates.filters.summary.apply")
+
+
 def test_filter_state_refreshes_when_pool_becomes_empty(qtbot) -> None:
     _service, session, view = _build_view(qtbot)
     session.last_error = "previous failure"
