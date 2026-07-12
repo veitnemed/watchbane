@@ -80,6 +80,8 @@ class DetailCardHandles:
     overview_divider: Any
     overview_title_label: Any
     overview_label: Any
+    overview_footer_widget: Any
+    overview_footer_layout: Any
     overview_gap_widget: Any
 
 
@@ -92,6 +94,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         QHBoxLayout,
         QLabel,
         QPushButton,
+        QSpacerItem,
         QSizePolicy,
         QVBoxLayout,
         QWidget,
@@ -665,10 +668,35 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._overview_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
     overview_layout.addWidget(owner._overview_divider)
-    overview_layout.addSpacing(profile.detail_overview_title_top_gap)
+    owner._overview_title_gap_item = QSpacerItem(
+        0,
+        profile.detail_overview_title_top_gap,
+        QSizePolicy.Policy.Minimum,
+        QSizePolicy.Policy.Fixed,
+    )
+    overview_layout.addItem(owner._overview_title_gap_item)
     overview_layout.addWidget(owner._overview_title_label)
-    overview_layout.addSpacing(profile.detail_overview_text_top_gap)
+    owner._overview_text_gap_item = QSpacerItem(
+        0,
+        profile.detail_overview_text_top_gap,
+        QSizePolicy.Policy.Minimum,
+        QSizePolicy.Policy.Fixed,
+    )
+    overview_layout.addItem(owner._overview_text_gap_item)
     overview_layout.addWidget(owner._overview_label)
+
+    owner._overview_footer_widget = QWidget()
+    owner._overview_footer_widget.setObjectName("detailOverviewFooter")
+    owner._overview_footer_widget.setStyleSheet(TRANSPARENT_STYLE)
+    owner._overview_footer_widget.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Minimum,
+    )
+    owner._overview_footer_layout = QVBoxLayout(owner._overview_footer_widget)
+    owner._overview_footer_layout.setContentsMargins(0, 0, 0, 0)
+    owner._overview_footer_layout.setSpacing(profile.detail_small_spacing)
+    owner._overview_footer_widget.hide()
+    overview_layout.addWidget(owner._overview_footer_widget)
     owner._overview_frame.hide()
 
     owner._overview_gap_widget = QWidget()
@@ -765,6 +793,8 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         overview_divider=owner._overview_divider,
         overview_title_label=owner._overview_title_label,
         overview_label=owner._overview_label,
+        overview_footer_widget=owner._overview_footer_widget,
+        overview_footer_layout=owner._overview_footer_layout,
         overview_gap_widget=owner._overview_gap_widget,
     )
 

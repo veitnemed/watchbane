@@ -3102,18 +3102,21 @@ def test_detail_chips_container_height_matches_visible_rows(qapp) -> None:
     assert chips.height() == expected_height
 
 
-def test_watched_detail_card_hides_overview_without_text() -> None:
-    import inspect
+def test_watched_detail_card_hides_overview_without_text(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame, QWidget
 
-    import desktop.shared.detail.card_layout as card_layout_module
-    import desktop.shared.detail.card as watched_view_module
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
-    source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
-    layout_source = inspect.getsource(card_layout_module.build_detail_card_layout)
-    assert "has_overview_text(card)" in source
-    assert "_overview_frame.setVisible(False)" in source
-    assert "detailOverviewDivider" in layout_source
-    assert "detail_overview_top_gap" in layout_source
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(("Alpha", {}, {"title": "Alpha", "overview": ""}))
+    qapp.processEvents()
+
+    overview = detail.widget.findChild(QFrame, "detailOverviewSection")
+    overview_gap = detail.widget.findChild(QWidget, "detailOverviewTopGap")
+
+    assert overview is not None and overview.isHidden()
+    assert overview_gap is not None and overview_gap.isHidden()
+    assert detail.widget.findChild(QFrame, "detailOverviewDivider") is not None
 
 
 def test_detail_overview_section_renders_description(qapp) -> None:

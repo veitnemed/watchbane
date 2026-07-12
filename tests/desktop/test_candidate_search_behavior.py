@@ -541,7 +541,7 @@ def test_recommendation_copy_is_available_in_ru_and_en() -> None:
 
 
 def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> None:
-    from desktop.theme.shell_layout import CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX
+    from desktop.theme.shell_layout import LEFT_PANEL_TOP_COMPENSATION_PX
 
     service = FakeCandidateService(_candidate_set(1, long_overview=True))
     _service, _session, _filters_view, list_view = _build_views(qtbot, service)
@@ -554,18 +554,106 @@ def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> Non
     decision_cluster = list_view.widget.findChild(QWidget, "recommendationDecisionCluster")
     detail_scroll = list_view.widget.findChild(QScrollArea, "candidateSearchDetailScroll")
     main_info_panel = list_view.widget.findChild(QFrame, "detailMainInfoPanel")
+    overview_section = list_view.widget.findChild(QFrame, "detailOverviewSection")
+    overview_footer = list_view.widget.findChild(QWidget, "detailOverviewFooter")
+    overview_text = list_view.widget.findChild(QLabel, "detailOverviewText")
+    watchlist_button = list_view.widget.findChild(QPushButton, "recommendationWatchlistButton")
+    hidden_button = list_view.widget.findChild(QPushButton, "recommendationHiddenButton")
+    rating_buttons = list(list_view._candidate_rating_selector.buttons())
 
     assert panel is not None and panel.isVisible()
     assert reasons_panel is not None and reasons_panel.isVisible()
     assert decision_cluster is not None and decision_cluster.isVisible()
     assert detail_scroll is not None
     assert main_info_panel is not None
+    assert overview_section is not None and overview_section.isVisible()
+    assert overview_footer is not None and overview_footer.isVisible()
+    assert overview_text is not None and overview_text.isVisible()
     assert detail_scroll.widget().isAncestorOf(panel)
     assert panel.parentWidget() is decision_cluster
-    assert reasons_panel.parentWidget() is decision_cluster
-    assert reasons_panel.geometry().bottom() < panel.geometry().top()
+    assert reasons_panel.parentWidget() is overview_footer
+    assert overview_footer.parentWidget() is overview_section
+    assert overview_text.geometry().bottom() <= overview_footer.geometry().top()
+    assert decision_cluster.layout().count() == 1
     assert decision_cluster.parentWidget().objectName() == "detailMainInfoSection"
     assert decision_cluster.geometry().top() >= main_info_panel.geometry().bottom()
+    assert list_view._detail_panel.layout().contentsMargins().top() == LEFT_PANEL_TOP_COMPENSATION_PX
+    rating_widths = [button.width() for button in rating_buttons]
+    assert max(rating_widths) - min(rating_widths) <= 1
+    assert len({button.height() for button in rating_buttons}) == 1
+    assert watchlist_button is not None and hidden_button is not None
+    assert watchlist_button.size() == hidden_button.size()
+    assert detail_scroll.verticalScrollBar().maximum() > 0
+
+
+def test_recommendation_reason_remains_visible_without_overview(qtbot) -> None:
+    from PyQt6.QtCore import QPoint
+
+    candidates = _candidate_set(1)
+    candidates[0]["overview"] = ""
+    service = FakeCandidateService(candidates)
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service)
+    list_view.widget.resize(1280, 720)
+    list_widget = _candidate_list(list_view)
+    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+    qtbot.wait(10)
+
+    overview_section = list_view.widget.findChild(QFrame, "detailOverviewSection")
+    overview_title = list_view.widget.findChild(QLabel, "detailOverviewHeader")
+    overview_text = list_view.widget.findChild(QLabel, "detailOverviewText")
+    reasons_panel = list_view.widget.findChild(QFrame, "recommendationReasonsPanel")
+
+    assert overview_section is not None and overview_section.isVisible()
+    assert overview_title is not None and overview_title.isHidden()
+    assert overview_text is not None and overview_text.isHidden()
+    assert reasons_panel is not None and reasons_panel.isVisible()
+    assert reasons_panel.mapTo(overview_section, QPoint(0, 0)).y() <= 1
+
+
+def test_settings_tab_does_not_overlap_recommendation_poster(qtbot) -> None:
+    from PyQt6.QtCore import QPoint, QRect
+    from PyQt6.QtWidgets import QTabWidget
+
+    from desktop.theme import build_app_style
+
+    service = FakeCandidateService(_candidate_set(1))
+    session = CandidateSearchSession(service=service)
+    list_view = CandidateListView(
+        session,
+        service=service,
+        deck_service=FakeRecommendationDeckService(service),
+    )
+    list_view._results_list.setUpdatesEnabled(False)
+    tabs = QTabWidget()
+    tabs.setObjectName("mainTabs")
+    tabs.setStyleSheet(build_app_style())
+    tabs.addTab(list_view.widget, "Recommendations")
+    tabs.addTab(QWidget(), "Collection")
+    tabs.addTab(QWidget(), "Search")
+    settings_index = tabs.addTab(QWidget(), "Settings")
+    qtbot.addWidget(tabs)
+    tabs.resize(1280, 720)
+    tabs.show()
+    list_view.on_tab_activated()
+    qtbot.waitUntil(lambda: list_view._deck is not None)
+    qtbot.waitUntil(
+        lambda: list_view._deck_stack.currentWidget() is list_view._deck_content_page
+    )
+
+    list_widget = _candidate_list(list_view)
+    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+    qtbot.wait(10)
+
+    tab_bar = tabs.tabBar()
+    settings_rect = tab_bar.tabRect(settings_index)
+    settings_rect = QRect(
+        tab_bar.mapTo(tabs, settings_rect.topLeft()),
+        settings_rect.size(),
+    )
+    poster = list_view._detail_card._poster_shell
+    poster_rect = QRect(poster.mapTo(tabs, QPoint(0, 0)), poster.size())
+
+    assert settings_rect.intersects(poster_rect) is False
 
 
 def test_filters_view_reload_filter_options_uses_new_pool_genres(qtbot) -> None:

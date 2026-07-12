@@ -341,8 +341,8 @@ QPushButton#recommendationHiddenButton {{
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
     font-size: {font_px(FONT_SMALL)}px;
     font-weight: 700;
-    min-height: {list_px(32)}px;
-    padding: {list_px(4)}px {list_px(10)}px;
+    min-height: {list_px(38)}px;
+    padding: {list_px(5)}px {list_px(10)}px;
 }}
 QPushButton#recommendationWatchedButton {{
     background-color: {COLOR_ADD_BUTTON_TOP};

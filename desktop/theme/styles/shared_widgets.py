@@ -29,7 +29,7 @@ QPushButton#userRatingButton {{
 }}
 QWidget[candidatePanel="true"] QPushButton#userRatingButton {{
     font-size: {font_px(FONT_TINY - 1)}px;
-    min-height: {layout_px(32)}px;
+    min-height: {layout_px(40)}px;
     padding-left: {layout_px(4)}px;
     padding-right: {layout_px(4)}px;
 }}

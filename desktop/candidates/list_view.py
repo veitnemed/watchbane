@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QSplitter,
     QStackedWidget,
     QVBoxLayout,
@@ -305,7 +306,7 @@ class CandidateListView(CandidateListActionsMixin):
         detail_panel = QWidget()
         detail_panel.setObjectName("candidateSearchDetailPanel")
         detail_layout = QVBoxLayout(detail_panel)
-        detail_layout.setContentsMargins(0, 0, 0, 0)
+        detail_layout.setContentsMargins(0, LEFT_PANEL_TOP_COMPENSATION_PX, 0, 0)
         detail_layout.setSpacing(0)
 
         self._workspace_state = RecommendationEmptyState("idle")
@@ -367,12 +368,12 @@ class CandidateListView(CandidateListActionsMixin):
         self._action_panel.setObjectName("recommendationActionPanel")
         action_layout = QVBoxLayout(self._action_panel)
         action_layout.setContentsMargins(
-            list_px(10),
+            list_px(14),
             list_px(12),
-            list_px(10),
+            list_px(14),
             list_px(14),
         )
-        action_layout.setSpacing(list_px(10))
+        action_layout.setSpacing(list_px(12))
 
         action_buttons_layout = QGridLayout()
         action_buttons_layout.setContentsMargins(0, 0, 0, 0)
@@ -392,9 +393,14 @@ class CandidateListView(CandidateListActionsMixin):
         self._candidate_rating_selector = UserRatingSelector()
         self._candidate_rating_selector.setObjectName("recommendationUserRatingSelector")
         self._candidate_rating_selector.setProperty("candidatePanel", True)
-        self._candidate_rating_selector.setMaximumWidth(list_px(360))
+        self._candidate_rating_selector.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
         for button in self._candidate_rating_selector.buttons():
             button.setMinimumWidth(list_px(72))
+            button.setMinimumHeight(list_px(40))
+            button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
             button.setIconSize(QSize(list_px(18), list_px(18)))
         self._candidate_rating_selector.valueChanged.connect(
             lambda value: self._apply_recommendation_action("watched", user_score=value)
@@ -404,9 +410,7 @@ class CandidateListView(CandidateListActionsMixin):
         rating_row = QHBoxLayout()
         rating_row.setContentsMargins(0, 0, 0, 0)
         rating_row.setSpacing(0)
-        rating_row.addStretch(1)
-        rating_row.addWidget(self._candidate_rating_selector, stretch=100)
-        rating_row.addStretch(1)
+        rating_row.addWidget(self._candidate_rating_selector, stretch=1)
         action_layout.addLayout(rating_row)
         self._watchlist_action_button.clicked.connect(
             lambda: self._apply_recommendation_action("watchlist")
@@ -415,6 +419,9 @@ class CandidateListView(CandidateListActionsMixin):
             lambda: self._apply_recommendation_action("hidden")
         )
         action_buttons = (self._watchlist_action_button, self._hidden_action_button)
+        for button in action_buttons:
+            button.setMinimumHeight(list_px(38))
+            button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         if detail_profiles.use_compact_detail_content():
             for index, button in enumerate(action_buttons):
                 action_buttons_layout.addWidget(button, 0, index)
@@ -424,8 +431,8 @@ class CandidateListView(CandidateListActionsMixin):
                 action_buttons_layout.addWidget(button, 0, column)
                 action_buttons_layout.setColumnStretch(column, 1)
         action_layout.addLayout(action_buttons_layout)
-        decision_layout.addWidget(self._reason_panel)
         decision_layout.addWidget(self._action_panel)
+        self._detail_card.add_overview_footer(self._reason_panel)
         self._detail_card.add_main_info_footer(self._decision_cluster)
         self._set_action_panel_enabled(False)
 
