@@ -14,7 +14,7 @@ def get_tmdb_startup_readiness() -> dict:
 
 def reload_tmdb_runtime() -> None:
     """Reload locally entered TMDb credentials after the startup gate."""
-    from apis.tmdb_api import reload_tmdb_env
+    from apis.tmdb.auth import reload_tmdb_env
 
     reload_tmdb_env()
 
