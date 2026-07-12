@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
+import pytest
+
 from candidates.models.keys import pool_entry_key
 from storage.sqlite.candidate_pool_repository import (
     load_candidate_pool_dict,
@@ -57,3 +59,24 @@ def test_merge_caps_pool_and_protects_current_deck(tmp_path) -> None:
     assert result == {"merged": 13, "evicted": 5, "pool_size": 20}
     assert protected["pool_entry_key"] in pool
     assert set(incoming).issubset(pool)
+
+
+def test_merge_failure_rolls_back_upserts_and_eviction(tmp_path, monkeypatch) -> None:
+    db_path = tmp_path / "pool.sqlite3"
+    initial = {_candidate(index)["pool_entry_key"]: _candidate(index) for index in range(12)}
+    merge_candidate_pool_dict(initial, path=db_path, max_records=12)
+    before = load_candidate_pool_dict(path=db_path)
+    incoming = {_candidate(index)["pool_entry_key"]: _candidate(index) for index in range(12, 20)}
+
+    def fail_fts_rebuild(_conn) -> None:
+        raise RuntimeError("synthetic interruption before commit")
+
+    monkeypatch.setattr(
+        "storage.sqlite.candidate_pool_repository.rebuild_fts_index",
+        fail_fts_rebuild,
+    )
+
+    with pytest.raises(RuntimeError, match="synthetic interruption"):
+        merge_candidate_pool_dict(incoming, path=db_path, max_records=12)
+
+    assert load_candidate_pool_dict(path=db_path) == before

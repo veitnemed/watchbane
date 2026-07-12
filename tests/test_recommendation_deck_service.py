@@ -278,6 +278,30 @@ def test_reveal_idempotence_survives_service_restart(tmp_path) -> None:
     assert get_impression(impression_key, candidate["media_type"], path=db_path)["shown_count"] == 1
 
 
+def test_deck_snapshot_respects_interrupted_external_transaction(tmp_path) -> None:
+    from storage.sqlite.connection import connect
+    from storage.sqlite.migrations import apply_migrations
+    from storage.sqlite.recommendation_deck_repository import load_current_deck, save_current_deck
+
+    db_path = tmp_path / "deck.sqlite3"
+    original = {"deck_id": "stable-deck", "active": [_candidate(1)], "reserve": []}
+    save_current_deck(original, path=db_path)
+
+    conn = connect(db_path)
+    apply_migrations(conn)
+    try:
+        conn.execute("BEGIN")
+        save_current_deck(
+            {"deck_id": "interrupted-deck", "active": [_candidate(2)], "reserve": []},
+            conn=conn,
+        )
+        conn.rollback()
+    finally:
+        conn.close()
+
+    assert load_current_deck(path=db_path) == original
+
+
 def test_known_rating_candidate_continues_to_rank_by_rating() -> None:
     lower = {"title": "Lower", "year": 2024, "media_type": "movie", "tmdb_score": 6.5, "tmdb_votes": 100}
     higher = {"title": "Higher", "year": 2024, "media_type": "movie", "tmdb_score": 8.4, "tmdb_votes": 100}

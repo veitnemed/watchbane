@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import os
 import re
 import shutil
 import socket
+import tempfile
 import time
 from functools import lru_cache
 from pathlib import Path
@@ -190,7 +192,28 @@ def _download_poster_once(
         return False, read_error
 
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_bytes(content)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            dir=destination.parent,
+            delete=False,
+        ) as temporary:
+            temporary.write(content)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+            temporary_path = Path(temporary.name)
+        temporary_path.replace(destination)
+    except OSError:
+        return False, "write_failed"
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            try:
+                temporary_path.unlink()
+            except OSError:
+                pass
     if destination.is_file():
         return True, "downloaded"
     return False, "write_failed"
