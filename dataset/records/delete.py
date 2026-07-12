@@ -12,7 +12,6 @@ from posters.cache import (
     DEFAULT_POSTER_CACHE_JSON,
     load_poster_cache,
     poster_identity_key,
-    save_poster_cache,
 )
 from storage import data as storage_data
 
@@ -148,23 +147,6 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
     prepared_meta = dict(meta)
     prepared_cache = dict(poster_cache)
 
-    deleted_poster_file = 0
-    try:
-        from posters.download_images import remove_local_poster_file
-
-        remove_result = remove_local_poster_file(title, year, cache_entry=cache_entry)
-        if remove_result.get("deleted") is True:
-            deleted_poster_file = 1
-    except OSError as error:
-        return DeleteRecordResult(
-            ok=False,
-            dataset_key=dataset_key,
-            message=f"Ошибка удаления локального постера: {error}",
-            reason="poster_delete_error",
-            dataset_count=len(dataset),
-            backups=backups,
-        )
-
     deleted_dataset = 0
     if dataset_key in prepared_dataset:
         del prepared_dataset[dataset_key]
@@ -181,9 +163,11 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
         deleted_poster_cache = 1
 
     try:
-        storage_data.save_dataset(prepared_dataset)
-        storage_data.save_meta(prepared_meta)
-        save_poster_cache(prepared_cache)
+        storage_data.save_dataset_meta_and_poster_cache(
+            prepared_dataset,
+            prepared_meta,
+            prepared_cache,
+        )
     except OSError as error:
         return DeleteRecordResult(
             ok=False,
@@ -193,6 +177,19 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
             dataset_count=len(dataset),
             backups=backups,
         )
+
+    deleted_poster_file = 0
+    try:
+        from posters.download_images import remove_local_poster_file
+
+        remove_result = remove_local_poster_file(title, year, cache_entry=cache_entry)
+        if remove_result.get("deleted") is True:
+            deleted_poster_file = 1
+    except OSError:
+        # The database delete is already committed. A leftover cache image is
+        # harmless and may be cleaned later; it must not turn a successful
+        # record deletion into a false failure.
+        deleted_poster_file = 0
 
     return DeleteRecordResult(
         ok=True,

@@ -36,9 +36,12 @@ def test_delete_watched_record_returns_delete_record_result(monkeypatch) -> None
     monkeypatch.setattr(delete_module.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
     monkeypatch.setattr(delete_module.storage_data, "load_meta", lambda: copy.deepcopy(meta))
     monkeypatch.setattr(delete_module, "load_poster_cache", lambda: copy.deepcopy(poster_cache))
-    monkeypatch.setattr(delete_module.storage_data, "save_dataset", lambda payload: saved_dataset.update(payload))
-    monkeypatch.setattr(delete_module.storage_data, "save_meta", lambda payload: saved_meta.update(payload))
-    monkeypatch.setattr(delete_module, "save_poster_cache", lambda payload: saved_cache.update(payload))
+    def save_state(dataset_payload, meta_payload, cache_payload):
+        saved_dataset.update(dataset_payload)
+        saved_meta.update(meta_payload)
+        saved_cache.update(cache_payload)
+
+    monkeypatch.setattr(delete_module.storage_data, "save_dataset_meta_and_poster_cache", save_state)
     monkeypatch.setattr(delete_module, "backup_before_watched_delete", lambda timestamp=None: ["backup-dataset"])
 
     result = delete_watched_record("Alpha", timestamp="test")

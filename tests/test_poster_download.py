@@ -321,10 +321,12 @@ def test_delete_watched_record_removes_local_poster_file(monkeypatch) -> None:
 
         monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
         monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: {})
-        monkeypatch.setattr(records_delete.storage_data, "save_dataset", lambda payload: None)
-        monkeypatch.setattr(records_delete.storage_data, "save_meta", lambda payload: None)
+        monkeypatch.setattr(
+            records_delete.storage_data,
+            "save_dataset_meta_and_poster_cache",
+            lambda _dataset, _meta, cache: saved_cache.update(cache),
+        )
         monkeypatch.setattr(records_delete, "load_poster_cache", lambda: copy.deepcopy(poster_cache))
-        monkeypatch.setattr(records_delete, "save_poster_cache", lambda payload: saved_cache.update(payload))
         monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: [])
 
         result = module.delete_watched_record("Alpha", timestamp="test")
