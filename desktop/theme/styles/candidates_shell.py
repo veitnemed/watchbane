@@ -245,6 +245,9 @@ QProgressBar#recommendationsDeckLoadingProgress::chunk {{
 QWidget#recommendationsFeedHeader {{
     background: transparent;
 }}
+QWidget#recommendationsDeckReserveIndicator {{
+    background: transparent;
+}}
 QLabel#recommendationsFeedTitle {{
     background: transparent;
     color: {COLOR_TEXT};

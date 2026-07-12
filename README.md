@@ -22,6 +22,7 @@ Watchbane is built around a simple idea: recommendations should feel personal wi
 - **Movies and series together.** Keep one collection while still controlling format, period, animation and mood.
 - **Clear reasons and signals.** See genres, country, release details, TMDb rating and recommendation strength.
 - **One-click decisions.** Mark a title watched, save it for later or hide it from future decks.
+- **Deck reserve at a glance.** A circular indicator in Recommendations shows how much of your current deck is still available (target 25) and turns red when it is time to refresh. Details: [deck reserve report](docs/reports/2026-07/otchet_deck_reserve_indicator.md).
 - **A persistent local pool.** Your candidate pool survives restarts and is not rebuilt every time the app opens.
 
 ## Tune the recommendation, not the algorithm
@@ -115,7 +116,8 @@ Do not move `Watchbane.exe` out of that folder: it depends on the adjacent `_int
 - recommendation direction and vector settings;
 - interface scale and language;
 - downloaded poster previews;
-- the current local recommendation deck.
+- the current local recommendation deck;
+- deck reserve level on the Recommendations tab (remaining active + reserve cards vs target size 25).
 
 Opening the application does **not** immediately refresh the pool. New TMDb candidates are requested after an explicit search/filter action or a later background maintenance check when automatic refill is enabled.
 

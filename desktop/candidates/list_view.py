@@ -27,8 +27,10 @@ from PyQt6.QtWidgets import (
 )
 
 from candidates.pool.localized_posters import candidate_needs_tmdb_detail_enrichment
+from candidates.deck_reserve_presentation import resolve_deck_reserve_presentation
 from candidates.recommendation_deck_service import ACTIVE_DECK_SIZE, RecommendationDeckService
 from candidates.scoring.rating_confidence import has_unknown_rating
+from desktop.candidates.deck_reserve_indicator import DeckReserveIndicator
 from desktop.candidates.list_actions import CandidateListActionsMixin
 from desktop.candidates.list_delegate import build_candidate_list_item_delegate
 from desktop.candidates.filter_icon_assets import filter_section_badge_label
@@ -144,6 +146,9 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_prepare_cache_hits = 0
         self._deck_build_ms = 0.0
         self._initial_deck_loaded = False
+        self._deck_build_in_progress = False
+        self._deck_build_failed = False
+        self._deck_replenishing_active = False
 
         self._widget = _CandidateListRoot()
         self._widget.setObjectName("candidateListRoot")
@@ -268,6 +273,8 @@ class CandidateListView(CandidateListActionsMixin):
         self._feed_title = QLabel(tr("recommendations.feed.title"))
         self._feed_title.setObjectName("recommendationsFeedTitle")
         feed_header_layout.addWidget(self._feed_title)
+        self._deck_reserve_indicator = DeckReserveIndicator(feed_header)
+        feed_header_layout.addWidget(self._deck_reserve_indicator)
         feed_header_layout.addStretch(1)
         feed_header_layout.addWidget(self._deck_status_label)
         self._new_deck_button = QPushButton(tr("recommendations.new_deck"))
@@ -446,11 +453,29 @@ class CandidateListView(CandidateListActionsMixin):
         session.add_listener(self.refresh)
         session.add_loading_listener(self._on_loading_changed)
         self._clear_detail(show_filters_hint=True)
+        self._update_deck_reserve_indicator()
+
+    def _is_deck_replenishing(self) -> bool:
+        return self._session.is_loading or self._deck_replenishing_active
+
+    def _update_deck_reserve_indicator(self) -> None:
+        presentation = resolve_deck_reserve_presentation(
+            recommendations_active=self._recommendations_active,
+            deck=self._deck,
+            deck_build_in_progress=self._deck_build_in_progress,
+            deck_load_scheduled=self._deck_load_scheduled,
+            deck_prepare_active=self._deck_prepare_active,
+            session_loading=self._session.is_loading,
+            replenishing_for_deck=self._is_deck_replenishing(),
+            build_failed=self._deck_build_failed,
+        )
+        self._deck_reserve_indicator.apply_presentation(presentation)
 
     def on_tab_activated(self) -> None:
         self._refresh_data_language()
         self._recommendations_active = True
         if self._deck_load_scheduled:
+            self._update_deck_reserve_indicator()
             return
         if self._deck is None and not self._deck_prepare_active:
             self._begin_deck_preparation()
@@ -458,6 +483,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_status_label.setText(tr("recommendations.state.loading"))
         self._deck_status_label.show()
         self._deck_load_timer.start(25)
+        self._update_deck_reserve_indicator()
 
     def _run_scheduled_deck_load(self) -> None:
         self._deck_load_scheduled = False
@@ -470,6 +496,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_load_timer.stop()
         self._deck_load_scheduled = False
         self._deck_dirty = True
+        self._update_deck_reserve_indicator()
 
     @property
     def widget(self) -> QWidget:
@@ -604,6 +631,7 @@ class CandidateListView(CandidateListActionsMixin):
             else ""
         )
         self._deck_status_label.show()
+        self._update_deck_reserve_indicator()
 
     def _on_poster_prefetch_busy_changed(self, busy: bool) -> None:
         self._poster_prefetch_busy = bool(busy)
@@ -639,12 +667,14 @@ class CandidateListView(CandidateListActionsMixin):
             tr("recommendations.preparing.progress", settled=0, total=ACTIVE_DECK_SIZE)
         )
         self._deck_stack.setCurrentWidget(self._deck_loading_page)
+        self._update_deck_reserve_indicator()
 
     def _show_deck_content(self) -> None:
         self._deck_deadline_timer.stop()
         self._deck_minimum_timer.stop()
         self._deck_prepare_active = False
         self._deck_stack.setCurrentWidget(self._deck_content_page)
+        self._update_deck_reserve_indicator()
 
     def _on_poster_batch_started(self, batch_id: int, total: int) -> None:
         if not self._deck_prepare_active:
@@ -804,6 +834,8 @@ class CandidateListView(CandidateListActionsMixin):
     ) -> None:
         self._deck = deck
         self._deck_dirty = False
+        self._deck_build_in_progress = False
+        self._deck_build_failed = False
         active_limit = max(0, int(deck.get("active_limit") or ACTIVE_DECK_SIZE))
         self._all_candidates = list(deck.get("active") or [])[:active_limit]
         self._pool_unique_total = len(self._all_candidates)
@@ -829,6 +861,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._apply_visible_candidates()
         if not self._all_candidates:
             self._clear_detail(show_filters_hint=False)
+        self._update_deck_reserve_indicator()
 
     def _maybe_request_recommendation_refill(self) -> None:
         deck = self._deck or {}
@@ -846,6 +879,8 @@ class CandidateListView(CandidateListActionsMixin):
             self._refill_requested_deck_ids.add(deck_id)
         if deck.get("underfilled_reason") in {"no_eligible_candidates", "active_underfilled", "reserve_exhausted"}:
             self._deck_status_label.setText(tr("recommendations.state.replenishing"))
+            self._deck_replenishing_active = True
+        self._update_deck_reserve_indicator()
 
     def _load_recommendation_deck(self, *, force_new: bool) -> None:
         if not self._recommendations_active:
@@ -856,8 +891,11 @@ class CandidateListView(CandidateListActionsMixin):
         previous_preferences = dict((previous_deck or {}).get("candidate_filters") or (previous_deck or {}).get("preferences") or {})
         previous_vector = dict((previous_deck or {}).get("recommendation_vector") or {})
         self._new_deck_button.setEnabled(False)
+        self._deck_build_in_progress = True
+        self._deck_build_failed = False
         self._deck_status_label.setText(tr("recommendations.state.loading"))
         self._deck_status_label.show()
+        self._update_deck_reserve_indicator()
         build_started = perf_counter()
         try:
             try:
@@ -883,8 +921,11 @@ class CandidateListView(CandidateListActionsMixin):
             self._candidates = []
             self._model.set_candidates([])
             self._deck_status_label.setText(tr("recommendations.state.local_error"))
+            self._deck_build_in_progress = False
+            self._deck_build_failed = True
             self._clear_detail(show_filters_hint=False)
             self._show_deck_content()
+            self._update_deck_reserve_indicator()
             return
         finally:
             self._new_deck_button.setEnabled(True)
@@ -1299,7 +1340,10 @@ class CandidateListView(CandidateListActionsMixin):
         if self._session.is_loading:
             self._counter_label.setText(tr("recommendations.state.replenishing"))
             self._clear_detail(show_filters_hint=False, loading=True)
-        elif self._recommendations_active and self._deck_dirty:
+        else:
+            self._deck_replenishing_active = False
+        self._update_deck_reserve_indicator()
+        if not self._session.is_loading and self._recommendations_active and self._deck_dirty:
             self._load_recommendation_deck(force_new=False)
 
     def _reset_detail_scroll(self) -> None:
