@@ -845,6 +845,13 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
     )
     assert watched_profile.detail_poster_width >= 240
     assert watched_profile.detail_poster_height >= 360
+    if profiles.use_stacked_detail_layout():
+        first_fold_height = (
+            watched_profile.detail_poster_height
+            + watched_profile.detail_poster_right_gap
+            + watched_profile.detail_title_min_height
+        )
+        assert first_fold_height < 520
     assert candidate_profile.detail_poster_width == watched_profile.detail_poster_width
     assert candidate_profile.detail_poster_height == watched_profile.detail_poster_height
     assert candidate_profile.detail_content_max_width == watched_profile.detail_content_max_width
