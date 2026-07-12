@@ -217,6 +217,33 @@ def test_import_into_non_empty_pool_requires_confirmation(qtbot, monkeypatch) ->
     assert "3" in questions[0][1]
 
 
+def test_import_file_dialog_cancel_starts_no_worker(qtbot, monkeypatch) -> None:
+    panel, _service, workers, _status, _changed = _build_panel(qtbot, monkeypatch)
+    monkeypatch.setattr(
+        "desktop.settings.pool_ops_panel.QFileDialog.getOpenFileName",
+        lambda *_args, **_kwargs: ("", ""),
+    )
+
+    qtbot.mouseClick(panel.findChild(QPushButton, "poolOpsImportButton"), Qt.MouseButton.LeftButton)
+
+    assert workers == []
+
+
+def test_invalid_import_reports_safe_message_without_raw_error(qtbot, monkeypatch) -> None:
+    panel, _service, workers, status, _changed = _build_panel(qtbot, monkeypatch)
+    monkeypatch.setattr(
+        "desktop.settings.pool_ops_panel.QFileDialog.getOpenFileName",
+        lambda *_args, **_kwargs: ("D:/private/corrupt.json", "TMDb JSON (*.json)"),
+    )
+    monkeypatch.setattr(panel, "_ask_confirmation", lambda *_args: True)
+    qtbot.mouseClick(panel.findChild(QPushButton, "poolOpsImportButton"), Qt.MouseButton.LeftButton)
+
+    workers[0].complete({"ok": False, "error": "D:/private/corrupt.json: raw parser error"})
+
+    assert status
+    assert "D:/private" not in status[-1][0]
+
+
 def test_pool_clear_confirmation_text_matches_language(monkeypatch) -> None:
     monkeypatch.setattr("desktop.settings.pool_clear_dialog.get_interface_language", lambda: "en")
     assert pool_clear_confirmation_text() == "CLEAR"

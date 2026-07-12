@@ -347,6 +347,9 @@ class PoolOpsPanel(QWidget):
         self.refresh_stats()
 
         if payload.get("ok") is False:
+            if action == ACTION_IMPORT_JSON:
+                self._show_status(tr("settings.pool.ops.import.error.invalid_file"), 8000)
+                return
             error = payload.get("error") or tr("settings.pool.ops.error.generic")
             self._show_status(tr("settings.pool.ops.error.action", error=error), 8000)
             return

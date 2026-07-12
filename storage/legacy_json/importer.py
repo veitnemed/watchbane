@@ -17,6 +17,13 @@ from storage.sqlite import poster_repository
 from storage.sqlite import settings_repository
 from storage.sqlite import watched_repository
 from storage.sqlite.connection import get_db_path
+from storage.sqlite.backup import backup_sqlite_database
+from storage.sqlite.connection import connect
+from storage.sqlite.migrations import apply_migrations
+from storage.legacy_json.exporter import (
+    LEGACY_EXPORT_MANIFEST,
+    LEGACY_EXPORT_SCHEMA_VERSION,
+)
 
 
 @dataclass(frozen=True)
@@ -31,6 +38,7 @@ class LegacyJsonPaths:
     settings: Path
     poster_cache: Path
     backup_dir: Path
+    manifest: Path
 
 
 def legacy_paths(base_dir: str | Path = "data") -> LegacyJsonPaths:
@@ -46,6 +54,7 @@ def legacy_paths(base_dir: str | Path = "data") -> LegacyJsonPaths:
         settings=base / "settings.json",
         poster_cache=base / "cache" / "posters" / "posters.json",
         backup_dir=base / "backups",
+        manifest=base / LEGACY_EXPORT_MANIFEST,
     )
 
 
@@ -67,7 +76,19 @@ def _json_sources(paths: LegacyJsonPaths) -> tuple[Path, ...]:
         paths.hidden,
         paths.settings,
         paths.poster_cache,
+        paths.manifest,
     )
+
+
+def _validate_export_manifest(paths: LegacyJsonPaths) -> None:
+    if paths.manifest.is_file() is False:
+        return
+    manifest = load_legacy_json_mapping(paths.manifest)
+    schema_version = manifest.get("schema_version")
+    if manifest.get("format") != "watchbane-legacy-json" or schema_version != LEGACY_EXPORT_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported Watchbane export schema version: {schema_version!r}"
+        )
 
 
 def backup_legacy_json(paths: LegacyJsonPaths) -> Path:
@@ -95,6 +116,7 @@ def import_legacy_json_to_sqlite(
     """Import legacy JSON files into SQLite and return a count report."""
     paths = legacy_paths(base_dir)
     target_db = Path(db_path) if db_path is not None else get_db_path()
+    _validate_export_manifest(paths)
 
     payloads = {
         "watched": load_legacy_json_mapping(paths.titles),
@@ -119,6 +141,8 @@ def import_legacy_json_to_sqlite(
         "dry_run": dry_run,
         "db_path": str(target_db),
         "backup_dir": None,
+        "runtime_backup": None,
+        "schema_version": LEGACY_EXPORT_SCHEMA_VERSION,
         "counts": {name: len(value) for name, value in payloads.items()},
     }
     if dry_run:
@@ -126,28 +150,38 @@ def import_legacy_json_to_sqlite(
 
     if create_backup:
         report["backup_dir"] = str(backup_legacy_json(paths))
+    if target_db.is_file():
+        report["runtime_backup"] = str(
+            backup_sqlite_database(db_path=target_db, backup_dir=paths.backup_dir)
+        )
 
-    watched_repository.save_dataset_dict(payloads["watched"], path=target_db)
-    watched_repository.save_meta_dict(payloads["meta"], path=target_db)
-    candidate_repository.save_candidate_pool_dict(
-        payloads["candidate_pool"],
-        path=target_db,
-        purge_watched=False,
-    )
-    candidate_repository.save_candidate_criteria_dict(
-        payloads["candidate_criteria"],
-        path=target_db,
-    )
-    action_repository.save_candidate_actions_dict(
-        action_repository.ACTION_WATCHLIST,
-        payloads["watchlist"],
-        path=target_db,
-    )
-    action_repository.save_candidate_actions_dict(
-        action_repository.ACTION_HIDDEN,
-        payloads["hidden"],
-        path=target_db,
-    )
-    settings_repository.save_settings_dict(payloads["settings"], path=target_db)
-    poster_repository.save_poster_cache_dict(payloads["poster_cache"], path=target_db)
+    active = connect(target_db)
+    try:
+        apply_migrations(active)
+        with active:
+            watched_repository.save_dataset_dict(payloads["watched"], conn=active)
+            watched_repository.save_meta_dict(payloads["meta"], conn=active)
+            candidate_repository.save_candidate_pool_dict(
+                payloads["candidate_pool"],
+                conn=active,
+                purge_watched=False,
+            )
+            candidate_repository.save_candidate_criteria_dict(
+                payloads["candidate_criteria"],
+                conn=active,
+            )
+            action_repository.save_candidate_actions_dict(
+                action_repository.ACTION_WATCHLIST,
+                payloads["watchlist"],
+                conn=active,
+            )
+            action_repository.save_candidate_actions_dict(
+                action_repository.ACTION_HIDDEN,
+                payloads["hidden"],
+                conn=active,
+            )
+            settings_repository.save_settings_dict(payloads["settings"], conn=active)
+            poster_repository.save_poster_cache_dict(payloads["poster_cache"], conn=active)
+    finally:
+        active.close()
     return report

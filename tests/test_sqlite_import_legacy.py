@@ -81,3 +81,55 @@ def test_import_legacy_json_is_idempotent(tmp_path) -> None:
     assert len(watched_repository.load_dataset_dict(path=db_path)) == 1
     assert len(candidate_repository.load_candidate_pool_dict(path=db_path)) == 1
     assert len(action_repository.load_candidate_actions_dict(action_repository.ACTION_HIDDEN, path=db_path)) == 1
+
+
+def test_import_rejects_unknown_export_schema_without_touching_runtime(tmp_path) -> None:
+    base = tmp_path / "data"
+    db_path = tmp_path / "watchbane.sqlite3"
+    _fixture(base)
+    _write_json(
+        base / "_watchbane_export.json",
+        {"format": "watchbane-legacy-json", "schema_version": 999},
+    )
+    watched_repository.save_dataset_dict(
+        {"Existing": {"main_info": {"title": "Existing", "year": 2020}}},
+        path=db_path,
+    )
+
+    try:
+        import_legacy_json_to_sqlite(base_dir=base, db_path=db_path)
+    except ValueError as error:
+        assert "schema version" in str(error)
+    else:
+        raise AssertionError("unknown export schema should be rejected")
+
+    assert list(watched_repository.load_dataset_dict(path=db_path)) == ["Existing"]
+
+
+def test_import_rolls_back_every_payload_when_one_repository_fails(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    base = tmp_path / "data"
+    db_path = tmp_path / "watchbane.sqlite3"
+    _fixture(base)
+    watched_repository.save_dataset_dict(
+        {"Existing": {"main_info": {"title": "Existing", "year": 2020}}},
+        path=db_path,
+    )
+
+    def fail_candidate_save(*_args, **_kwargs):
+        raise RuntimeError("forced import failure")
+
+    monkeypatch.setattr(candidate_repository, "save_candidate_pool_dict", fail_candidate_save)
+
+    try:
+        import_legacy_json_to_sqlite(base_dir=base, db_path=db_path)
+    except RuntimeError as error:
+        assert "forced import failure" in str(error)
+    else:
+        raise AssertionError("injected repository failure should escape")
+
+    assert list(watched_repository.load_dataset_dict(path=db_path)) == ["Existing"]
+    assert watched_repository.load_meta_dict(path=db_path) == {}
+    assert candidate_repository.load_candidate_pool_dict(path=db_path) == {}
