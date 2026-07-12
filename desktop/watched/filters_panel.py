@@ -4,7 +4,19 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PyQt6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QAbstractScrollArea,
+    QComboBox,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
+)
 
 from desktop.i18n import tr
 from desktop.shared.widgets.range_slider import RangeSlider
@@ -34,22 +46,48 @@ class WatchedFiltersPanel:
         entries: list[WatchedEntry],
         *,
         on_filters_changed: Callable[[], None],
+        on_expansion_changed: Callable[[bool], None] | None = None,
     ) -> None:
         self._on_filters_changed = on_filters_changed
+        self._on_expansion_changed = on_expansion_changed
         self._entries = entries
         self._expanded = False
+        self._available = True
 
         self.toggle = QPushButton(format_watched_filters_label(is_expanded=False))
         self.toggle.setObjectName("watchedFilterToggle")
         self.toggle.clicked.connect(self.toggle_panel)
 
         self.panel = self._build_panel()
+        self.scroll = QScrollArea()
+        self.scroll.setObjectName("watchedFiltersScroll")
+        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setSizeAdjustPolicy(QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
+        self.scroll.setWidget(self.panel)
         self.panel.setVisible(False)
+        self.scroll.setVisible(False)
 
     def toggle_panel(self) -> None:
         self._expanded = not self._expanded
-        self.panel.setVisible(self._expanded)
+        self._sync_visibility()
         self.update_toggle_label()
+
+    def set_available(self, available: bool) -> None:
+        """Show filters only for sections where they can be applied."""
+        self._available = available
+        self.toggle.setVisible(available)
+        self._sync_visibility()
+
+    def _sync_visibility(self) -> None:
+        expanded_visible = self._available and self._expanded
+        self.panel.setVisible(expanded_visible)
+        self.scroll.setVisible(expanded_visible)
+        if self._on_expansion_changed is not None:
+            self._on_expansion_changed(expanded_visible)
 
     def update_toggle_label(self) -> None:
         score_active = self.score_filter_active()

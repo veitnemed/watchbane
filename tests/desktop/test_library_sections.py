@@ -130,6 +130,36 @@ def test_library_sections_show_watched_saved_and_hidden(qtbot, monkeypatch) -> N
     assert _listed_titles(listing) == ["Hidden Gamma"]
 
 
+def test_library_sections_restore_expanded_filters_only_for_watched(qtbot, monkeypatch) -> None:
+    view, _state = _build_library(qtbot, monkeypatch)
+    tabs = view.widget.findChild(QTabBar, "librarySectionTabs")
+    listing = view.widget.findChild(QListWidget, "watchedList")
+    counter = view._list_counter_label
+    filters = view._filters
+
+    filters.toggle.click()
+    assert filters.scroll.isVisible() is True
+    assert listing.isHidden() is True
+    assert counter.isHidden() is True
+
+    tabs.setCurrentIndex(1)
+    assert filters.toggle.isHidden() is True
+    assert filters.scroll.isHidden() is True
+    assert listing.isVisible() is True
+    assert counter.isVisible() is True
+
+    tabs.setCurrentIndex(0)
+    assert filters.toggle.isVisible() is True
+    assert filters.scroll.isVisible() is True
+    assert listing.isHidden() is True
+    assert counter.isHidden() is True
+
+    filters.toggle.click()
+    assert filters.scroll.isHidden() is True
+    assert listing.isVisible() is True
+    assert counter.isVisible() is True
+
+
 def test_hidden_restore_removes_hidden_state(qtbot, monkeypatch) -> None:
     view, state = _build_library(qtbot, monkeypatch)
     tabs = view.widget.findChild(QTabBar, "librarySectionTabs")

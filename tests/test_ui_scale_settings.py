@@ -943,8 +943,10 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
 
     watched_filters = WatchedFiltersPanel([], on_filters_changed=lambda: None)
     assert watched_filters.panel.isHidden() is True
+    assert watched_filters.scroll.isHidden() is True
     watched_filters.toggle_panel()
     assert watched_filters.panel.isHidden() is False
+    assert watched_filters.scroll.isHidden() is False
     assert set(watched_filters._score_buttons) == {1, 2, 3}
     assert all(button.sizeHint().height() >= 20 for button in watched_filters._score_buttons.values())
     assert watched_filters._year_slider.minimumHeight() >= 34
@@ -1029,6 +1031,77 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
         else:
             assert isinstance(top_row.layout(), QHBoxLayout)
             assert isinstance(score_content.layout(), QHBoxLayout)
+
+
+@pytest.mark.parametrize("ui_scale", SCALE_ANCHORS)
+def test_scale_anchor_watched_filter_surface_is_bounded(qapp, ui_scale) -> None:
+    from PyQt6.QtCore import QPoint, QRect, Qt
+    from PyQt6.QtWidgets import QAbstractScrollArea, QListWidget, QSizePolicy
+
+    _set_anchor_ui_scale(ui_scale)
+
+    import desktop.watched.filters_panel as filters_panel_module
+    import desktop.watched.sidebar as sidebar_module
+
+    importlib.reload(filters_panel_module)
+    sidebar_module = importlib.reload(sidebar_module)
+
+    sidebar, handles = sidebar_module.build_watched_sidebar(
+        entries=[],
+        on_add_title=lambda: None,
+        on_filters_changed=lambda: None,
+        on_selection_changed=lambda _row: None,
+        on_context_menu=lambda _position: None,
+        on_section_changed=lambda _index: None,
+    )
+    sidebar.resize(sidebar.maximumWidth(), 700)
+    sidebar.show()
+    qapp.processEvents()
+
+    filters = handles["filters"]
+    listing = handles["list_widget"]
+    counter = handles["list_counter_label"]
+    scroll = filters.scroll
+
+    assert isinstance(listing, QListWidget)
+    assert listing.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Ignored
+    assert scroll.widgetResizable() is True
+    assert scroll.sizeAdjustPolicy() == QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored
+    assert scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert scroll.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Ignored
+    assert scroll.isHidden() is True
+    assert listing.isVisible() is True
+    assert counter.isVisible() is True
+
+    filters.toggle.click()
+    qapp.processEvents()
+
+    assert scroll.isVisible() is True
+    assert filters.panel.isVisible() is True
+    assert listing.isHidden() is True
+    assert counter.isHidden() is True
+    assert sidebar.height() <= 700
+    assert sidebar.minimumSizeHint().height() <= 700
+    if ui_scale == max(SCALE_ANCHORS):
+        assert scroll.verticalScrollBar().maximum() > 0
+
+    scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum())
+    qapp.processEvents()
+    reset = filters.panel.findChild(filters_panel_module.QPushButton, "watchedFilterResetAll")
+    assert reset is not None
+    reset_top_left = reset.mapTo(scroll.viewport(), QPoint(0, 0))
+    assert scroll.viewport().rect().intersects(QRect(reset_top_left, reset.size()))
+
+    filters.toggle.click()
+    qapp.processEvents()
+
+    assert scroll.isHidden() is True
+    assert filters.panel.isHidden() is True
+    assert listing.isVisible() is True
+    assert counter.isVisible() is True
+    assert sidebar.height() <= 700
+    assert sidebar.minimumSizeHint().height() <= 700
+    sidebar.close()
 
 
 @pytest.mark.parametrize("ui_scale", SCALE_ANCHORS)

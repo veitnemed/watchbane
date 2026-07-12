@@ -201,8 +201,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         self._filters.reload_genre_options(self._entries)
         watched_visible = self._library_section == SECTION_WATCHED
         self._add_title_button.setVisible(watched_visible)
-        self._filters.toggle.setVisible(watched_visible)
-        self._filters.panel.setVisible(watched_visible and self._filters._expanded)
+        self._filters.set_available(watched_visible)
         self._refresh_list()
         if self._list_widget.count() > 0:
             self._list_widget.setCurrentRow(0)

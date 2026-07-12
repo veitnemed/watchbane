@@ -84,3 +84,45 @@ def test_main_window_resize_updates_both_responsive_tabs(qtbot) -> None:
     assert watched_view._right_panel.isVisible()
     window._tab_registry.focus("candidates")
     assert candidate_view._detail_panel.isHidden() is False
+
+
+def test_stale_resize_event_uses_current_window_width(qtbot) -> None:
+    from PyQt6.QtCore import QSize
+    from PyQt6.QtGui import QResizeEvent
+
+    from desktop.shell.main_window import WatchedMoviesWindow
+    from desktop.theme.shell_layout import (
+        CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX,
+        WATCHED_DETAIL_COLLAPSE_WIDTH_PX,
+    )
+
+    window = WatchedMoviesWindow(initial_size=(1280, 700))
+    qtbot.addWidget(window)
+    window.show()
+    watched_view = window._tab_registry._specs["watched"].view
+    candidate_view = window._tab_registry._specs["candidates"].view
+    compact_width = min(
+        WATCHED_DETAIL_COLLAPSE_WIDTH_PX,
+        CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX,
+    ) - 1
+    qtbot.waitUntil(lambda: window.width() >= 1280)
+    qtbot.waitUntil(lambda: watched_view._is_compact_layout is False)
+    qtbot.waitUntil(lambda: candidate_view._is_compact_layout is False)
+
+    stale_event = QResizeEvent(
+        QSize(compact_width, window.height()),
+        QSize(window.width(), window.height()),
+    )
+    window.resizeEvent(stale_event)
+    assert window.width() >= 1280
+    assert watched_view._is_compact_layout is False
+    assert candidate_view._is_compact_layout is False
+
+    window._tab_registry.focus("settings")
+    window._tab_registry.focus("candidates")
+    assert candidate_view._detail_panel.isHidden() is False
+    assert candidate_view._splitter.sizes()[1] > 0
+
+    window._tab_registry.focus("watched")
+    assert watched_view._right_panel.isVisible() is True
+    assert watched_view._splitter.sizes()[1] > 0

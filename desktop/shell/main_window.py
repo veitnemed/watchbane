@@ -206,7 +206,7 @@ class WatchedMoviesWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)
-        self._sync_responsive_tabs(event.size().width())
+        self._sync_responsive_tabs(self.width())
 
     def _sync_responsive_tabs(self, available_width: int | None = None) -> None:
         tabs_context = getattr(self, "_tabs_context", None)

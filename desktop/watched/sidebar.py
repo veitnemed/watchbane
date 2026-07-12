@@ -3,7 +3,18 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton, QTabBar, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QPushButton,
+    QSizePolicy,
+    QTabBar,
+    QVBoxLayout,
+    QWidget,
+)
 
 from desktop.i18n import tr
 from desktop.shared.detail import WatchedListItemDelegate
@@ -97,16 +108,12 @@ def build_watched_sidebar(
     sort_layout.addWidget(sort_combo, stretch=1)
     layout.addWidget(sort_row)
 
-    filters = WatchedFiltersPanel(entries, on_filters_changed=on_filters_changed)
-    layout.addWidget(filters.toggle)
-    layout.addWidget(filters.panel)
-
     list_counter_label = QLabel("")
     list_counter_label.setObjectName("watchedListCounter")
-    layout.addWidget(list_counter_label)
 
     list_widget = QListWidget()
     list_widget.setObjectName("watchedList")
+    list_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
     list_widget.setSpacing(list_px(2))
     list_widget.setUniformItemSizes(True)
     list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -114,6 +121,19 @@ def build_watched_sidebar(
     list_widget.currentRowChanged.connect(on_selection_changed)
     list_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
     list_widget.customContextMenuRequested.connect(on_context_menu)
+
+    def set_filter_surface_expanded(expanded: bool) -> None:
+        list_counter_label.setVisible(not expanded)
+        list_widget.setVisible(not expanded)
+
+    filters = WatchedFiltersPanel(
+        entries,
+        on_filters_changed=on_filters_changed,
+        on_expansion_changed=set_filter_surface_expanded,
+    )
+    layout.addWidget(filters.toggle)
+    layout.addWidget(filters.scroll, stretch=1)
+    layout.addWidget(list_counter_label)
     layout.addWidget(list_widget, stretch=1)
 
     handles = {
