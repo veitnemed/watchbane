@@ -122,7 +122,7 @@ def test_library_sections_show_watched_saved_and_hidden(qtbot, monkeypatch) -> N
     listing = view.widget.findChild(QListWidget, "watchedList")
 
     assert tabs is not None and listing is not None
-    assert [tabs.tabText(index) for index in range(tabs.count())] == ["Просмотрено", "Отложено", "Скрыто"]
+    assert [tabs.tabText(index) for index in range(tabs.count())] == ["Смотрел", "Запомнено", "Не показывать"]
     assert _listed_titles(listing) == ["Watched Alpha"]
     tabs.setCurrentIndex(1)
     assert _listed_titles(listing) == ["Saved Beta"]
@@ -219,7 +219,7 @@ def test_library_section_labels_are_localized_without_mojibake() -> None:
     from desktop.i18n import translate
 
     for language, expected in (
-        ("ru", ("Просмотрено", "Отложено", "Скрыто")),
+        ("ru", ("Смотрел", "Запомнено", "Не показывать")),
         ("en", ("Watched", "Saved", "Hidden")),
     ):
         actual = tuple(

@@ -151,6 +151,42 @@ def test_i18n_catalogs_have_same_keys() -> None:
     assert key_sets["ru"] == key_sets["en"]
 
 
+def test_primary_navigation_and_recommendation_terms_follow_glossary() -> None:
+    from desktop.i18n import TRANSLATIONS
+
+    assert {
+        key: TRANSLATIONS["ru"][key]
+        for key in (
+            "tabs.watched",
+            "tabs.candidates",
+            "tabs.filters",
+            "recommendations.deck_reserve.label",
+            "recommendations.action.watched",
+            "recommendations.action.watchlist",
+            "recommendations.action.hidden",
+            "recommendations.discovery.module",
+            "recommendations.vector.module",
+            "media_type.movie",
+            "media_type.tv",
+        )
+    } == {
+        "tabs.watched": "Коллекция",
+        "tabs.candidates": "Рекомендации",
+        "tabs.filters": "Настройки поиска",
+        "recommendations.deck_reserve.label": "Запас колоды",
+        "recommendations.action.watched": "✓ Смотрел",
+        "recommendations.action.watchlist": "+ Запомнить",
+        "recommendations.action.hidden": "× Не показывать",
+        "recommendations.discovery.module": "ИСТОЧНИК",
+        "recommendations.vector.module": "МИКС",
+        "media_type.movie": "Фильм",
+        "media_type.tv": "Сериал",
+    }
+    assert TRANSLATIONS["en"]["tabs.filters"] == "Search settings"
+    assert TRANSLATIONS["en"]["recommendations.action.hidden"] == "× Don't show"
+    assert all("�" not in value for catalog in TRANSLATIONS.values() for value in catalog.values())
+
+
 def test_i18n_translator_defaults_and_fallbacks(monkeypatch) -> None:
     from desktop.settings.app_settings import AppSettings
     import desktop.i18n.translator as translator_module
@@ -6509,7 +6545,7 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     assert [tabs.tabText(index) for index in range(tabs.count())] == [
         "Рекомендации",
         "Коллекция",
-        "Поиск",
+        "Настройки поиска",
         "Настройки",
     ]
     assert hasattr(context, "analytics_tab_view") is False
@@ -6673,9 +6709,9 @@ def test_onboarding_language_change_rebuilds_main_tabs(monkeypatch, qapp) -> Non
         current_language = language["value"]
         build_calls.append(current_language)
         labels = (
-            ["Recommendations", "Collection", "Search", "Settings"]
+            ["Recommendations", "Collection", "Search settings", "Settings"]
             if current_language == "en"
-            else ["Рекомендации", "Коллекция", "Поиск", "Настройки"]
+            else ["Рекомендации", "Коллекция", "Настройки поиска", "Настройки"]
         )
         for label in labels:
             tabs.addTab(QWidget(), label)
@@ -6724,7 +6760,7 @@ def test_onboarding_language_change_rebuilds_main_tabs(monkeypatch, qapp) -> Non
         assert [
             window._main_tabs.tabText(index)
             for index in range(window._main_tabs.count())
-        ] == ["Recommendations", "Collection", "Search", "Settings"]
+        ] == ["Recommendations", "Collection", "Search settings", "Settings"]
         assert contexts[-1].candidate_session.invalidate_calls == 1
         assert contexts[-1].calls == {"refresh": 1, "focus": 1}
     finally:
@@ -6872,7 +6908,7 @@ def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> N
     assert [tabs.tabText(index) for index in range(tabs.count())] == [
         "Recommendations",
         "Collection",
-        "Search",
+        "Search settings",
         "Settings",
     ]
     assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
