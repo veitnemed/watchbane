@@ -1210,6 +1210,14 @@ class CandidateListView(CandidateListActionsMixin):
         self._selected_candidate = candidate
         self._selected_identity = candidate_detail_identity(candidate)
         self._log_search_action("open", candidate, rank=row + 1)
+        if self._deck is not None:
+            try:
+                self._deck_service.record_detail_reveal(
+                    str(self._deck.get("deck_id") or ""),
+                    candidate,
+                )
+            except (OSError, ValueError, KeyError):
+                logger.exception("could not persist recommendation detail reveal")
         lookup_done = perf_counter()
 
         identity = candidate_detail_identity(candidate)

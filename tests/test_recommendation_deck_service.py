@@ -131,7 +131,11 @@ def test_apply_action_promotes_closest_quality_at_removed_position(tmp_path) -> 
     )
     assert len(updated["reserve"]) == 3
     promotion_identity = candidate_state_identity_key(expected_promotion).rsplit("|", 1)[0]
-    assert get_impression(promotion_identity, expected_promotion["media_type"], path=tmp_path / "deck.sqlite3")
+    assert get_impression(
+        promotion_identity,
+        expected_promotion["media_type"],
+        path=tmp_path / "deck.sqlite3",
+    ) is None
 
 
 def test_empty_reserve_shrinks_active_and_requests_refill(tmp_path) -> None:
@@ -186,16 +190,23 @@ def test_duplicate_identity_media_is_emitted_once(tmp_path) -> None:
     assert len(deck["active"]) == 6
 
 
-def test_impressions_are_recorded_for_active_but_not_reserve(tmp_path) -> None:
+def test_impressions_are_recorded_only_when_active_detail_is_revealed(tmp_path) -> None:
     db_path = tmp_path / "deck.sqlite3"
-    deck = _service(_pool(10), db_path).build_deck({}, NOW, limit_active=3, reserve_size=5)
+    service = _service(_pool(10), db_path)
+    deck = service.build_deck({}, NOW, limit_active=3, reserve_size=5)
 
     for candidate in deck["active"]:
         identity_key = candidate_state_identity_key(candidate).rsplit("|", 1)[0]
-        assert get_impression(identity_key, candidate["media_type"], path=db_path) is not None
+        assert get_impression(identity_key, candidate["media_type"], path=db_path) is None
     for candidate in deck["reserve"]:
         identity_key = candidate_state_identity_key(candidate).rsplit("|", 1)[0]
         assert get_impression(identity_key, candidate["media_type"], path=db_path) is None
+
+    revealed = deck["active"][0]
+    assert service.record_detail_reveal(deck["deck_id"], revealed, shown_at=NOW.isoformat()) is True
+    assert service.record_detail_reveal(deck["deck_id"], revealed, shown_at=NOW.isoformat()) is False
+    identity_key = candidate_state_identity_key(revealed).rsplit("|", 1)[0]
+    assert get_impression(identity_key, revealed["media_type"], path=db_path)["shown_count"] == 1
 
 
 def test_underfilled_deck_reports_reason_and_counts(tmp_path) -> None:
@@ -235,8 +246,36 @@ def test_refresh_reuses_same_daily_deck_until_forced(tmp_path) -> None:
     assert second["deck_id"] == first["deck_id"]
     first_candidate = first["active"][0]
     impression_key = candidate_state_identity_key(first_candidate).rsplit("|", 1)[0]
-    assert get_impression(impression_key, first_candidate["media_type"], path=db_path)["shown_count"] == 1
+    assert get_impression(impression_key, first_candidate["media_type"], path=db_path) is None
     assert forced["deck_id"] != first["deck_id"]
+
+
+def test_refresh_restores_same_deck_order_across_restart_and_next_day(tmp_path) -> None:
+    db_path = tmp_path / "deck.sqlite3"
+    pool = _pool(120)
+    first = _service(pool, db_path).refresh_deck({}, NOW)
+
+    restored = _service(pool, db_path).refresh_deck({}, NOW + timedelta(days=1))
+
+    assert restored["deck_id"] == first["deck_id"]
+    assert _identities(restored["active"]) == _identities(first["active"])
+    assert _identities(restored["reserve"]) == _identities(first["reserve"])
+
+
+def test_reveal_idempotence_survives_service_restart(tmp_path) -> None:
+    db_path = tmp_path / "deck.sqlite3"
+    pool = _pool(30)
+    service = _service(pool, db_path)
+    deck = service.refresh_deck({}, NOW)
+    candidate = deck["active"][0]
+    assert service.record_detail_reveal(deck["deck_id"], candidate) is True
+
+    restarted = _service(pool, db_path)
+    restored = restarted.refresh_deck({}, NOW + timedelta(hours=1))
+
+    assert restarted.record_detail_reveal(restored["deck_id"], candidate) is False
+    impression_key = candidate_state_identity_key(candidate).rsplit("|", 1)[0]
+    assert get_impression(impression_key, candidate["media_type"], path=db_path)["shown_count"] == 1
 
 
 def test_known_rating_candidate_continues_to_rank_by_rating() -> None:

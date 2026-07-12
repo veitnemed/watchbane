@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import sqlite3
 
 from storage.sqlite.connection import connect
-from storage.sqlite.schema import apply_v1, apply_v2, apply_v3, apply_v4, apply_v5
+from storage.sqlite.schema import apply_v1, apply_v2, apply_v3, apply_v4, apply_v5, apply_v6
 
 
 MigrationFunc = Callable[[sqlite3.Connection], None]
@@ -28,6 +28,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(3, "candidate_fts_v3", apply_v3),
     Migration(4, "candidate_impressions_v4", apply_v4),
     Migration(5, "user_rating_scale_v5", apply_v5, backup_before=True),
+    Migration(6, "recommendation_deck_state_v6", apply_v6),
 )
 
 

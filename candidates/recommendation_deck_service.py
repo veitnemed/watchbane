@@ -33,7 +33,11 @@ from candidates.sources.tmdb.scoring import compute_tmdb_quality_score
 from candidates import title_state_service
 from dataset.models.media_type import normalize_media_type
 from dataset.models.user_rating import normalize_user_rating
-from storage.sqlite import action_repository, impression_repository
+from storage.sqlite import (
+    action_repository,
+    impression_repository,
+    recommendation_deck_repository,
+)
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
 
@@ -47,6 +51,7 @@ DEFAULT_REFILL_THRESHOLD = 20
 DEFAULT_UNKNOWN_RATING_LIMIT = 6
 EXPANDED_UNKNOWN_RATING_LIMIT = 12
 DEFAULT_EXPLORATION_RATIO = 0.2
+DECK_STATE_SCHEMA_VERSION = 1
 
 
 class RelevanceTier(IntEnum):
@@ -497,6 +502,108 @@ class RecommendationDeckService:
         self._latest_cache_key: str | None = None
         self._latest_deck_id: str | None = None
 
+    @staticmethod
+    def _material_signature(
+        candidate_filters: dict,
+        vector: RecommendationVector | dict | None,
+        variation_seed: int,
+    ) -> str:
+        current_vector = _coerce_vector(vector, candidate_filters)
+        return json.dumps(
+            {
+                "candidate_filters": dict(candidate_filters or {}),
+                "recommendation_vector": current_vector.to_dict(),
+                "variation_seed": max(0, int(variation_seed or 0)),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+
+    def _remember_deck(self, deck: dict, *, reason: str) -> None:
+        snapshot = deepcopy(deck)
+        snapshot["state_schema_version"] = DECK_STATE_SCHEMA_VERSION
+        snapshot["material_signature"] = self._material_signature(
+            dict(snapshot.get("candidate_filters") or snapshot.get("preferences") or {}),
+            snapshot.get("recommendation_vector"),
+            int(snapshot.get("variation_seed") or 0),
+        )
+        snapshot["last_change_reason"] = reason
+        snapshot["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        deck.clear()
+        deck.update(snapshot)
+        deck_id = str(deck["deck_id"])
+        self._decks = {deck_id: deck}
+        self._latest_cache_key = snapshot["material_signature"]
+        self._latest_deck_id = deck_id
+        recommendation_deck_repository.save_current_deck(snapshot, path=self._db_path)
+
+    def _load_persisted_deck(self, material_signature: str) -> dict | None:
+        snapshot = recommendation_deck_repository.load_current_deck(path=self._db_path)
+        if not isinstance(snapshot, dict):
+            return None
+        if snapshot.get("state_schema_version") != DECK_STATE_SCHEMA_VERSION:
+            return None
+        if snapshot.get("material_signature") != material_signature:
+            return None
+        deck_id = str(snapshot.get("deck_id") or "").strip()
+        if not deck_id or not isinstance(snapshot.get("active"), list) or not isinstance(
+            snapshot.get("reserve"), list
+        ):
+            return None
+        self._decks = {deck_id: snapshot}
+        self._latest_cache_key = material_signature
+        self._latest_deck_id = deck_id
+        return snapshot
+
+    def record_detail_reveal(
+        self,
+        deck_id: str,
+        candidate: dict,
+        *,
+        shown_at: str | None = None,
+    ) -> bool:
+        """Record one actual detail reveal per candidate within a persisted deck."""
+        deck = self._decks.get(str(deck_id))
+        if deck is None:
+            raise KeyError(f"Unknown recommendation deck: {deck_id}")
+        identity = _stable_identity(candidate)
+        if identity not in {
+            _stable_identity(item) for item in (deck.get("active") or [])
+        }:
+            return False
+        identity_token = "|".join(identity)
+        revealed = {
+            str(item) for item in (deck.get("revealed_identities") or []) if str(item)
+        }
+        if identity_token in revealed:
+            return False
+
+        snapshot = deepcopy(deck)
+        revealed.add(identity_token)
+        snapshot["revealed_identities"] = sorted(revealed)
+        snapshot["last_selected_identity"] = identity_token
+        snapshot["last_change_reason"] = "detail_reveal"
+        snapshot["updated_at"] = str(
+            shown_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        )
+        conn = connect(self._db_path)
+        try:
+            apply_migrations(conn)
+            with conn:
+                recommendation_deck_repository.save_current_deck(snapshot, conn=conn)
+                impression_repository.record_impressions(
+                    [candidate],
+                    deck_id=str(deck_id),
+                    shown_at=shown_at,
+                    conn=conn,
+                )
+        finally:
+            conn.close()
+        deck.clear()
+        deck.update(snapshot)
+        return True
+
     def _watched_identities(
         self,
     ) -> tuple[set[tuple[str, str]], set[tuple[str, int]]]:
@@ -710,13 +817,7 @@ class RecommendationDeckService:
             "recently_seen_reused": len(active) + len(reserve) if reused_recent else 0,
             "excluded": excluded,
         }
-        self._decks[deck_id] = deck
-        impression_repository.record_impressions(
-            active,
-            deck_id=deck_id,
-            shown_at=deck["generated_at"],
-            path=self._db_path,
-        )
+        self._remember_deck(deck, reason="new_deck")
         return deepcopy(deck)
 
     def refresh_deck(
@@ -731,16 +832,10 @@ class RecommendationDeckService:
         current = _as_utc(now)
         current_filters = dict(candidate_filters or {})
         current_vector = _coerce_vector(vector, current_filters)
-        cache_key = json.dumps(
-            {
-                "day": current.date().isoformat(),
-                "candidate_filters": current_filters,
-                "recommendation_vector": current_vector.to_dict(),
-                "variation_seed": max(0, int(variation_seed or 0)),
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-            default=str,
+        cache_key = self._material_signature(
+            current_filters,
+            current_vector,
+            variation_seed,
         )
         if (
             not force_new
@@ -748,14 +843,19 @@ class RecommendationDeckService:
             and self._latest_deck_id in self._decks
         ):
             return deepcopy(self._decks[self._latest_deck_id])
+        if not force_new:
+            restored = self._load_persisted_deck(cache_key)
+            if restored is not None:
+                try:
+                    return self.top_up_deck(str(restored["deck_id"]), current)
+                except (KeyError, TypeError, ValueError):
+                    recommendation_deck_repository.clear_current_deck(path=self._db_path)
         deck = self.build_deck(
             current_filters,
             current,
             vector=current_vector,
             variation_seed=variation_seed,
         )
-        self._latest_cache_key = cache_key
-        self._latest_deck_id = deck["deck_id"]
         return deck
 
     def top_up_deck(self, deck_id: str, now: datetime | date) -> dict:
@@ -767,7 +867,8 @@ class RecommendationDeckService:
         candidate_filters = dict(deck.get("candidate_filters") or deck.get("preferences") or {})
         vector = _coerce_vector(deck.get("recommendation_vector"), candidate_filters)
         variation_seed = max(0, int(deck.get("variation_seed") or 0))
-        rank_seed = f"{current.date().isoformat()}|{variation_seed}"
+        generated_at = str(deck.get("generated_at") or current.isoformat())
+        rank_seed = f"{generated_at[:10]}|{variation_seed}"
         eligible, recent_fallback, excluded = self._eligible_candidates(candidate_filters, current)
         valid_candidates = list(eligible) + list(recent_fallback)
         valid_identities = {_stable_identity(candidate) for candidate in valid_candidates}
@@ -781,14 +882,32 @@ class RecommendationDeckService:
             active_identities.add(identity)
             active.append(candidate)
 
-        available_by_identity: dict[tuple[str, str, str], dict] = {}
-        for candidate in list(deck.get("reserve") or []) + list(eligible):
+        existing_reserve: list[dict] = []
+        available_identities: set[tuple[str, str, str]] = set()
+        for candidate in list(deck.get("reserve") or []):
             identity = _stable_identity(candidate)
-            if identity in active_identities or identity not in valid_identities:
+            if (
+                identity in active_identities
+                or identity in available_identities
+                or identity not in valid_identities
+            ):
                 continue
-            available_by_identity.setdefault(identity, candidate)
+            available_identities.add(identity)
+            existing_reserve.append(candidate)
 
-        policy_candidates = active + list(available_by_identity.values())
+        new_candidates = [
+            candidate
+            for candidate in eligible
+            if _stable_identity(candidate) not in active_identities
+            and _stable_identity(candidate) not in available_identities
+        ]
+        ranked_new = _automatic_ranked_candidates(
+            _rank_candidates(new_candidates, rank_seed, vector),
+            vector,
+            capacity=int(deck["active_limit"]) + int(deck["reserve_size"]),
+        )
+
+        policy_candidates = active + existing_reserve + ranked_new
         relevance_counts = {
             tier.name: sum(
                 _relevance_tier(candidate, vector) == tier
@@ -796,21 +915,7 @@ class RecommendationDeckService:
             )
             for tier in RelevanceTier
         }
-        ranked_policy = _rank_candidates(
-            policy_candidates,
-            rank_seed,
-            vector,
-        )
-        automatic_policy = _automatic_ranked_candidates(
-            ranked_policy,
-            vector,
-            capacity=int(deck["active_limit"]) + int(deck["reserve_size"]),
-        )
-        ranked_available = [
-            candidate
-            for candidate in automatic_policy
-            if _stable_identity(candidate) not in active_identities
-        ]
+        ranked_available = existing_reserve + ranked_new
         original_active_identities = set(active_identities)
         active, remaining = _select_active_with_unknown_quota(
             ranked_available,
@@ -820,12 +925,6 @@ class RecommendationDeckService:
             initial_active=active,
         )
         reserve = remaining[: int(deck["reserve_size"])]
-        promoted = [
-            candidate
-            for candidate in active
-            if _stable_identity(candidate) not in original_active_identities
-        ]
-
         if not active:
             underfilled_reason = "no_eligible_candidates" if excluded["pool_total"] else "pool_empty"
         elif len(active) < int(deck["active_limit"]):
@@ -839,10 +938,7 @@ class RecommendationDeckService:
         excluded["exploration_capped"] = max(
             0,
             relevance_counts[RelevanceTier.C.name]
-            - sum(
-                _relevance_tier(candidate, vector) == RelevanceTier.C
-                for candidate in automatic_policy
-            ),
+            - sum(_relevance_tier(candidate, vector) == RelevanceTier.C for candidate in policy_candidates),
         )
         deck.update({
             "active": active,
@@ -854,20 +950,14 @@ class RecommendationDeckService:
                 reserve_threshold=self._refill_threshold,
             ),
             "underfilled_reason": underfilled_reason,
-            "eligible_count": len(automatic_policy),
+            "eligible_count": len(policy_candidates),
             "catalog_eligible_count": len(policy_candidates),
             "eligible_reserve_count": len(reserve),
             "relevance_counts": relevance_counts,
             "excluded": excluded,
             "last_top_up_at": current.isoformat(timespec="seconds"),
         })
-        if promoted:
-            impression_repository.record_impressions(
-                promoted,
-                deck_id=deck_id,
-                shown_at=deck["last_top_up_at"],
-                path=self._db_path,
-            )
+        self._remember_deck(deck, reason="top_up")
         return deepcopy(deck)
 
     def apply_action_and_refill(
@@ -985,11 +1075,6 @@ class RecommendationDeckService:
                     promoted = deck["reserve"].pop(promotion_index)
         if promoted is not None:
             deck["active"].insert(min(removed_index, len(deck["active"])), promoted)
-            impression_repository.record_impressions(
-                [promoted],
-                deck_id=deck_id,
-                path=self._db_path,
-            )
         deck["refill_needed"] = _deck_refill_needed(
             deck["active"],
             deck["reserve"],
@@ -1025,4 +1110,5 @@ class RecommendationDeckService:
             "transition": transition,
             "promoted_identity": candidate_state_identity_key(promoted) if promoted else None,
         }
+        self._remember_deck(deck, reason=f"action:{normalized_action}")
         return deepcopy(deck)

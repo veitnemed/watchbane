@@ -274,3 +274,17 @@ def apply_v5(conn: sqlite3.Connection) -> None:
         """
     )
 
+
+def apply_v6(conn: sqlite3.Connection) -> None:
+    """Persist the single current recommendation deck across app restarts."""
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_deck_state (
+          singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+          deck_id TEXT NOT NULL,
+          state_json TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        """
+    )
+
