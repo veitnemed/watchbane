@@ -1033,7 +1033,8 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
 
 @pytest.mark.parametrize("ui_scale", SCALE_ANCHORS)
 def test_scale_anchor_add_title_dialog_contract_properties(qapp, ui_scale) -> None:
-    from PyQt6.QtWidgets import QLabel, QLineEdit, QPushButton
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QLabel, QLineEdit, QPushButton, QScrollArea
 
     _set_anchor_ui_scale(ui_scale)
 
@@ -1087,8 +1088,19 @@ def test_scale_anchor_add_title_dialog_contract_properties(qapp, ui_scale) -> No
     confirm_hint = preview_dialog.findChild(QLabel, "addTitleConfirmHint")
     confirm_button = preview_dialog.findChild(QPushButton, "addTitleConfirmButton")
     back_button = preview_dialog.findChild(QPushButton, "addTitleSecondaryButton")
+    preview_scroll = preview_dialog.findChild(QScrollArea, "addTitlePreviewScroll")
+    screen = qapp.primaryScreen()
+    safe_height = (
+        max(1, screen.availableGeometry().height() - preview_dialog_module.layout_px(48))
+        if screen is not None
+        else PREVIEW_DIALOG_HEIGHT
+    )
     assert preview_dialog.minimumWidth() == PREVIEW_DIALOG_WIDTH
-    assert preview_dialog.height() == PREVIEW_DIALOG_HEIGHT
+    assert preview_dialog.height() == min(PREVIEW_DIALOG_HEIGHT, safe_height)
+    assert preview_dialog.maximumHeight() == min(PREVIEW_DIALOG_HEIGHT, safe_height)
+    assert preview_scroll is not None
+    assert preview_scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert preview_scroll.isAncestorOf(confirm_button) is False
     assert warning is not None and warning.wordWrap() is True
     assert confirm_hint is not None and confirm_hint.wordWrap() is True
     assert confirm_button is not None and confirm_button.sizeHint().height() >= 24

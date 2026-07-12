@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QFormLayout,
     QFrame,
@@ -11,8 +12,10 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
+    QWidget,
 )
 
 from common import valid
@@ -59,7 +62,18 @@ class AddTitlePreviewDialog(QDialog):
         self.setWindowTitle(window_title)
         self.setModal(True)
         self.setMinimumWidth(PREVIEW_DIALOG_WIDTH)
-        self.resize(PREVIEW_DIALOG_WIDTH, PREVIEW_DIALOG_HEIGHT)
+        screen = QApplication.primaryScreen()
+        available_height = (
+            screen.availableGeometry().height()
+            if screen is not None
+            else PREVIEW_DIALOG_HEIGHT + layout_px(48)
+        )
+        dialog_height = min(
+            PREVIEW_DIALOG_HEIGHT,
+            max(1, available_height - layout_px(48)),
+        )
+        self.setMaximumHeight(dialog_height)
+        self.resize(PREVIEW_DIALOG_WIDTH, dialog_height)
         self.setStyleSheet(ADD_TITLE_DIALOG_STYLE)
 
         root_layout = QVBoxLayout(self)
@@ -71,15 +85,31 @@ class AddTitlePreviewDialog(QDialog):
         )
         root_layout.setSpacing(layout_px(10))
 
+        preview_scroll = QScrollArea()
+        preview_scroll.setObjectName("addTitlePreviewScroll")
+        preview_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        preview_scroll.setWidgetResizable(True)
+        preview_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        preview_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        preview_scroll.viewport().setAutoFillBackground(False)
+
+        preview_content = QWidget()
+        preview_content.setObjectName("addTitlePreviewScrollContent")
+        preview_content.setAutoFillBackground(False)
+        preview_layout = QVBoxLayout(preview_content)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(layout_px(10))
+
         self._preview_header = QLabel(self._format_preview_header(bundle.preview_card))
         self._preview_header.setObjectName("addTitleHeader")
-        root_layout.addWidget(self._preview_header)
+        self._preview_header.setWordWrap(True)
+        preview_layout.addWidget(self._preview_header)
 
         self._warning_label = QLabel("")
         self._warning_label.setObjectName("addTitleWarning")
         self._warning_label.setWordWrap(True)
         self._fill_warning_label()
-        root_layout.addWidget(self._warning_label)
+        preview_layout.addWidget(self._warning_label)
 
         card_shell = QFrame()
         card_shell.setObjectName("addTitlePreviewCard")
@@ -95,7 +125,7 @@ class AddTitlePreviewDialog(QDialog):
 
         self._preview_card = AddTitleCompactPreviewCard(card_shell)
         card_shell_layout.addWidget(self._preview_card.widget, alignment=Qt.AlignmentFlag.AlignTop)
-        root_layout.addWidget(card_shell, alignment=Qt.AlignmentFlag.AlignHCenter)
+        preview_layout.addWidget(card_shell, alignment=Qt.AlignmentFlag.AlignHCenter)
 
         confirm_hint = QLabel(
             tr("add_title.confirm.hint")
@@ -104,11 +134,12 @@ class AddTitlePreviewDialog(QDialog):
         )
         confirm_hint.setObjectName("addTitleConfirmHint")
         confirm_hint.setWordWrap(True)
-        root_layout.addWidget(confirm_hint)
+        preview_layout.addWidget(confirm_hint)
 
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
         form.setSpacing(layout_px(8))
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
 
         year_label = QLabel(tr("add_title.field.year"))
         year_label.setObjectName("addTitleFieldLabel")
@@ -123,7 +154,10 @@ class AddTitlePreviewDialog(QDialog):
         score_label.setObjectName("addTitleFieldLabel")
         form.addRow(year_label, self._year_label)
         form.addRow(score_label, self._score_input)
-        root_layout.addLayout(form)
+        preview_layout.addLayout(form)
+
+        preview_scroll.setWidget(preview_content)
+        root_layout.addWidget(preview_scroll, stretch=1)
 
         actions = QHBoxLayout()
         actions.setSpacing(layout_px(10))

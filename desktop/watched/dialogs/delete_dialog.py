@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialog,
     QDialogButtonBox,
     QFrame,
     QLabel,
     QLineEdit,
+    QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
+    QWidget,
 )
 
 from desktop.i18n import tr
@@ -33,6 +37,14 @@ class WatchedDeleteDialog(QDialog):
         self.setWindowTitle(tr("watched.delete.dialog.title"))
         self.setModal(True)
         self.setFixedWidth(layout_px(430))
+        screen = QApplication.primaryScreen()
+        available_height = (
+            screen.availableGeometry().height()
+            if screen is not None
+            else layout_px(720)
+        )
+        dialog_height = max(1, available_height - layout_px(48))
+        self.setMaximumHeight(dialog_height)
         self.setStyleSheet(DELETE_DIALOG_STYLE)
 
         root_layout = QVBoxLayout(self)
@@ -57,20 +69,44 @@ class WatchedDeleteDialog(QDialog):
         )
         card_layout.setSpacing(layout_px(12))
 
+        preview_scroll = QScrollArea()
+        preview_scroll.setObjectName("deleteRecordPreviewScroll")
+        preview_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        preview_scroll.setWidgetResizable(True)
+        preview_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        preview_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        preview_scroll.viewport().setAutoFillBackground(False)
+
+        preview_content = QWidget()
+        preview_content.setObjectName("deleteRecordPreviewContent")
+        preview_content.setAutoFillBackground(False)
+        preview_layout = QVBoxLayout(preview_content)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(layout_px(12))
+
         header = QLabel(tr("watched.delete.dialog.title"))
         header.setObjectName("deleteRecordTitle")
-        card_layout.addWidget(header)
+        header.setWordWrap(True)
+        preview_layout.addWidget(header)
 
         warning = QLabel(tr("watched.delete.dialog.warning"))
         warning.setObjectName("deleteRecordWarning")
         warning.setWordWrap(True)
-        card_layout.addWidget(warning)
+        preview_layout.addWidget(warning)
 
         for line in format_delete_preview_lines(preview):
             label = QLabel(line)
             label.setObjectName("deleteRecordPreviewLine")
             label.setWordWrap(True)
-            card_layout.addWidget(label)
+            preview_layout.addWidget(label)
+
+        preview_scroll.setWidget(preview_content)
+        preview_height = min(
+            preview_content.sizeHint().height(),
+            max(layout_px(140), dialog_height - layout_px(210)),
+        )
+        preview_scroll.setMinimumHeight(preview_height)
+        card_layout.addWidget(preview_scroll, stretch=1)
 
         confirm_label = QLabel(
             tr("watched.delete.dialog.confirm_label", confirmation=DELETE_CONFIRMATION_TEXT)
@@ -103,6 +139,7 @@ class WatchedDeleteDialog(QDialog):
 
         self._delete_button = delete_button
         self._confirm_input.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.resize(self.width(), min(self.sizeHint().height(), dialog_height))
 
     def _update_delete_button_state(self, _text: str = "") -> None:
         if self._delete_button is not None:

@@ -75,6 +75,11 @@ QFrame#deleteRecordCard {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_CARD_LARGE)}px;
 }}
+QScrollArea#deleteRecordPreviewScroll,
+QWidget#deleteRecordPreviewContent {{
+    background: transparent;
+    border: none;
+}}
 QLabel#deleteRecordTitle {{
     background: transparent;
     color: {COLOR_TEXT};

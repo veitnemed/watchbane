@@ -81,6 +81,7 @@ class ScoreEditDialog(QDialog):
         form = QFormLayout()
         form.setContentsMargins(0, layout_px(4), 0, 0)
         form.setSpacing(layout_px(8))
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         field_label = QLabel(tr("watched.score.dialog.field"))
         field_label.setObjectName("scoreEditFieldLabel")
         self._score_input = UserRatingSelector()

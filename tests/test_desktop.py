@@ -1030,7 +1030,7 @@ def test_add_title_compact_preview_dialog_centers_card_shell(qapp) -> None:
     shell = dialog.findChild(QFrame, "addTitlePreviewCard")
     assert shell is not None
     dialog_center_x = dialog.rect().center().x()
-    shell_center_x = shell.geometry().center().x()
+    shell_center_x = shell.mapTo(dialog, shell.rect().center()).x()
 
     assert abs(shell_center_x - dialog_center_x) <= 2
     assert shell.width() < dialog.width() - 20
@@ -4918,6 +4918,40 @@ def test_watched_delete_dialog_contract() -> None:
     assert "is_delete_confirmation_valid" in source
     assert "setEnabled(False)" in source
     assert "dialog.exec()" not in source
+
+
+def test_watched_delete_dialog_keeps_confirmation_outside_preview_scroll(qapp) -> None:
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QDialogButtonBox, QLineEdit, QScrollArea
+
+    from desktop.watched.dialogs.delete_dialog import WatchedDeleteDialog
+
+    preview = {
+        "title": "A very long title " * 20,
+        "year": 2024,
+        "user_score": 2,
+        "tmdb_score": 8.1,
+        "has_meta": True,
+        "has_poster_cache": True,
+        "poster_local_path": "posters/" + ("nested/" * 30) + "poster.jpg",
+    }
+    dialog = WatchedDeleteDialog(preview)
+    dialog.show()
+    qapp.processEvents()
+
+    preview_scroll = dialog.findChild(QScrollArea, "deleteRecordPreviewScroll")
+    confirm_input = dialog.findChild(QLineEdit, "deleteRecordConfirmInput")
+    buttons = dialog.findChild(QDialogButtonBox)
+
+    assert preview_scroll is not None
+    assert confirm_input is not None and confirm_input.isVisible() is True
+    assert buttons is not None and buttons.isVisible() is True
+    assert preview_scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert preview_scroll.isAncestorOf(confirm_input) is False
+    assert preview_scroll.isAncestorOf(buttons) is False
+    assert dialog.height() <= dialog.maximumHeight()
+
+    dialog.close()
 
 
 def test_watched_delete_dialog_button_state_logic() -> None:

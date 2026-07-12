@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -11,8 +12,11 @@ from PyQt6.QtWidgets import (
     QFormLayout,
     QFrame,
     QLabel,
+    QScrollArea,
+    QSizePolicy,
     QSpinBox,
     QVBoxLayout,
+    QWidget,
 )
 
 from candidates import service as candidate_service
@@ -48,6 +52,14 @@ class TmdbBuildDialog(QDialog):
         self.setWindowTitle(tr("settings.pool.ops.build.dialog.title"))
         self.setModal(True)
         self.setMinimumWidth(layout_px(420))
+        screen = QApplication.primaryScreen()
+        available_height = (
+            screen.availableGeometry().height()
+            if screen is not None
+            else layout_px(720)
+        )
+        dialog_height = max(1, available_height - layout_px(48))
+        self.setMaximumHeight(dialog_height)
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(
@@ -58,9 +70,24 @@ class TmdbBuildDialog(QDialog):
         )
         root_layout.setSpacing(layout_px(12))
 
+        form_scroll = QScrollArea()
+        form_scroll.setObjectName("tmdbBuildScroll")
+        form_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        form_scroll.setWidgetResizable(True)
+        form_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        form_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        form_scroll.viewport().setAutoFillBackground(False)
+
+        scroll_content = QWidget()
+        scroll_content.setObjectName("tmdbBuildScrollContent")
+        scroll_content.setAutoFillBackground(False)
+        scroll_layout = QVBoxLayout(scroll_content)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+        scroll_layout.setSpacing(0)
+
         card = QFrame()
         card.setObjectName("settingsInterfaceSection")
-        root_layout.addWidget(card)
+        scroll_layout.addWidget(card)
 
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(
@@ -85,6 +112,7 @@ class TmdbBuildDialog(QDialog):
         form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
         form.setHorizontalSpacing(layout_px(12))
         form.setVerticalSpacing(layout_px(8))
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
 
         self._media_type_combo = QComboBox()
         self._media_type_combo.setObjectName("tmdbBuildMediaTypeCombo")
@@ -116,6 +144,14 @@ class TmdbBuildDialog(QDialog):
 
         card_layout.addLayout(form)
 
+        form_scroll.setWidget(scroll_content)
+        form_height = min(
+            scroll_content.sizeHint().height(),
+            max(layout_px(180), dialog_height - layout_px(100)),
+        )
+        form_scroll.setMinimumHeight(form_height)
+        root_layout.addWidget(form_scroll, stretch=1)
+
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -127,7 +163,8 @@ class TmdbBuildDialog(QDialog):
             cancel_button.setText(tr("common.cancel"))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        card_layout.addWidget(buttons)
+        root_layout.addWidget(buttons)
+        self.resize(self.minimumWidth(), min(self.sizeHint().height(), dialog_height))
 
     def _build_optional_year_spin(self, empty_label: str) -> QSpinBox:
         spin = QSpinBox()

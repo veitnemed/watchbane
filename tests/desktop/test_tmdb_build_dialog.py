@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QComboBox, QDoubleSpinBox, QSpinBox
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QComboBox, QDialogButtonBox, QDoubleSpinBox, QScrollArea, QSpinBox
 
 from dataset.models.media_type import MEDIA_TYPE_MOVIE, MEDIA_TYPE_TV
 from desktop.settings.tmdb_build_dialog import (
@@ -66,3 +67,18 @@ def test_build_kwargs_leaves_optional_filters_empty(qtbot, monkeypatch) -> None:
     assert kwargs["year_max"] is None
     assert kwargs["min_tmdb_score"] is None
     assert kwargs["min_tmdb_votes"] is None
+
+
+def test_build_dialog_keeps_actions_outside_scroll(qtbot) -> None:
+    dialog = TmdbBuildDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+
+    form_scroll = dialog.findChild(QScrollArea, "tmdbBuildScroll")
+    buttons = dialog.findChild(QDialogButtonBox)
+
+    assert form_scroll is not None
+    assert buttons is not None
+    assert form_scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert form_scroll.isAncestorOf(buttons) is False
+    assert dialog.height() <= dialog.maximumHeight()
