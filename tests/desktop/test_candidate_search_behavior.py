@@ -211,6 +211,8 @@ def _build_views(
     service: FakeCandidateService | None = None,
     deck_service: FakeRecommendationDeckService | None = None,
 ):
+    from desktop.theme.shell_layout import CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX
+
     service = service or FakeCandidateService()
     deck_service = deck_service or FakeRecommendationDeckService(service)
     session = CandidateSearchSession(service=service)
@@ -223,6 +225,7 @@ def _build_views(
     qtbot.addWidget(filters_view.widget)
     qtbot.addWidget(list_view.widget)
     filters_view.widget.show()
+    list_view.widget.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200, 800)
     list_view.widget.show()
     list_view.on_tab_activated()
     qtbot.waitUntil(lambda: list_view._deck is not None)
@@ -269,6 +272,27 @@ def test_recommendations_screen_displays_at_most_twenty_five_items(qtbot) -> Non
     _service, _session, _filters_view, list_view = _build_views(qtbot, service)
 
     assert _listed_count(_candidate_list(list_view)) == 25
+
+
+def test_recommendations_hide_detail_panel_in_compact_layout(qtbot) -> None:
+    from desktop.theme.shell_layout import (
+        CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX,
+        CANDIDATE_LIST_MAX_WIDTH_PX,
+    )
+
+    service = FakeCandidateService(_candidate_set(2))
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service)
+    list_view.widget.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX - 1, 800)
+
+    qtbot.waitUntil(lambda: list_view._is_compact_layout is True)
+    assert list_view._detail_panel.isHidden()
+    assert list_view._list_panel.width() >= list_view._splitter.width() - 1
+
+    list_view.widget.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200, 800)
+
+    qtbot.waitUntil(lambda: list_view._is_compact_layout is False)
+    assert list_view._detail_panel.isVisible()
+    assert list_view._list_panel.maximumWidth() == CANDIDATE_LIST_MAX_WIDTH_PX
 
 
 @pytest.mark.parametrize(
@@ -377,9 +401,11 @@ def test_recommendation_copy_is_available_in_ru_and_en() -> None:
 
 
 def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> None:
+    from desktop.theme.shell_layout import CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX
+
     service = FakeCandidateService(_candidate_set(1, long_overview=True))
     _service, _session, _filters_view, list_view = _build_views(qtbot, service)
-    list_view.widget.resize(1280, 720)
+    list_view.widget.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200, 720)
     list_widget = _candidate_list(list_view)
     list_widget.setCurrentIndex(list_widget.model().index(0, 0))
     qtbot.wait(10)

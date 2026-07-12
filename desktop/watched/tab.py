@@ -161,10 +161,12 @@ class WatchedTabView(WatchedTabActionsMixin):
                 if len(sizes) == 2 and sizes[1] > 0:
                     self._expanded_splitter_sizes = sizes
             self._right_panel.hide()
+            self._splitter.handle(1).hide()
             self._splitter.setSizes([max(1, self._widget.width()), 0])
             return
 
         self._right_panel.show()
+        self._splitter.handle(1).show()
         self._splitter.setSizes(self._expanded_splitter_sizes)
 
     def _load_entries(self) -> list[WatchedEntry]:

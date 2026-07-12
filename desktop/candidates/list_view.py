@@ -50,6 +50,7 @@ from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.widgets.list_search import DebouncedLineEditSearch, resolve_selection_row
 from desktop.shared.widgets.user_rating_selector import UserRatingSelector
 from desktop.theme.shell_layout import (
+    CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX,
     CANDIDATE_LIST_MAX_WIDTH_PX,
     CANDIDATE_LIST_MIN_WIDTH_PX,
     CANDIDATE_LIST_SPACING_PX,
@@ -77,10 +78,15 @@ POSTER_MIN_LOADER_MS = 180
 
 class _CandidateListRoot(QWidget):
     hidden = pyqtSignal()
+    resized = pyqtSignal()
 
     def hideEvent(self, event) -> None:
         self.hidden.emit()
         super().hideEvent(event)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        self.resized.emit()
 
 
 class CandidateListView(CandidateListActionsMixin):
@@ -427,6 +433,17 @@ class CandidateListView(CandidateListActionsMixin):
         splitter.setStretchFactor(1, CANDIDATE_DETAIL_STRETCH)
         splitter.setSizes([CANDIDATE_SPLITTER_LIST_DEFAULT_PX, CANDIDATE_SPLITTER_DETAIL_DEFAULT_PX])
 
+        self._splitter = splitter
+        self._list_panel = list_panel
+        self._detail_panel = detail_panel
+        self._expanded_splitter_sizes = [
+            CANDIDATE_SPLITTER_LIST_DEFAULT_PX,
+            CANDIDATE_SPLITTER_DETAIL_DEFAULT_PX,
+        ]
+        self._is_compact_layout: bool | None = None
+        self._widget.resized.connect(self._update_responsive_layout)
+        self._update_responsive_layout()
+
         session.add_listener(self.refresh)
         session.add_loading_listener(self._on_loading_changed)
         self._clear_detail(show_filters_hint=True)
@@ -458,6 +475,29 @@ class CandidateListView(CandidateListActionsMixin):
     @property
     def widget(self) -> QWidget:
         return self._widget
+
+    def _update_responsive_layout(self) -> None:
+        compact = self._widget.width() < CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX
+        was_compact = self._is_compact_layout
+        if compact == was_compact:
+            return
+
+        self._is_compact_layout = compact
+        if compact:
+            if was_compact is False:
+                sizes = self._splitter.sizes()
+                if len(sizes) == 2 and sizes[1] > 0:
+                    self._expanded_splitter_sizes = sizes
+            self._list_panel.setMaximumWidth(self._widget.maximumWidth())
+            self._detail_panel.hide()
+            self._splitter.handle(1).hide()
+            self._splitter.setSizes([max(1, self._widget.width()), 0])
+            return
+
+        self._list_panel.setMaximumWidth(CANDIDATE_LIST_MAX_WIDTH_PX)
+        self._detail_panel.show()
+        self._splitter.handle(1).show()
+        self._splitter.setSizes(self._expanded_splitter_sizes)
 
     def _load_pool_for_deck(self) -> dict:
         view = self._session.overview()
