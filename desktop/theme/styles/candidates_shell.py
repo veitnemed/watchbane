@@ -278,6 +278,11 @@ QWidget#recommendationsFeedHeader {{
 QWidget#recommendationsDeckReserveIndicator {{
     background: transparent;
 }}
+QLabel#recommendationsDeckReserveLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_MUTED};
+    font-size: {font_px(FONT_SMALL)}px;
+}}
 QLabel#recommendationsFeedTitle {{
     background: transparent;
     color: {COLOR_TEXT};

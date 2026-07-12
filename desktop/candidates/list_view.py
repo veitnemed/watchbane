@@ -275,6 +275,9 @@ class CandidateListView(CandidateListActionsMixin):
         self._feed_title = QLabel(tr("recommendations.feed.title"))
         self._feed_title.setObjectName("recommendationsFeedTitle")
         feed_header_layout.addWidget(self._feed_title)
+        self._deck_reserve_label = QLabel(tr("recommendations.deck_reserve.label"))
+        self._deck_reserve_label.setObjectName("recommendationsDeckReserveLabel")
+        feed_header_layout.addWidget(self._deck_reserve_label)
         self._deck_reserve_indicator = DeckReserveIndicator(feed_header)
         feed_header_layout.addWidget(self._deck_reserve_indicator)
         feed_header_layout.addStretch(1)
@@ -470,6 +473,9 @@ class CandidateListView(CandidateListActionsMixin):
         return self._session.is_loading or self._deck_replenishing_active
 
     def _update_deck_reserve_indicator(self) -> None:
+        indicator = getattr(self, "_deck_reserve_indicator", None)
+        if indicator is None:
+            return
         presentation = resolve_deck_reserve_presentation(
             recommendations_active=self._recommendations_active,
             deck=self._deck,
@@ -479,8 +485,10 @@ class CandidateListView(CandidateListActionsMixin):
             session_loading=self._session.is_loading,
             replenishing_for_deck=self._is_deck_replenishing(),
             build_failed=self._deck_build_failed,
+            offline=bool(self._session.last_error),
         )
-        self._deck_reserve_indicator.apply_presentation(presentation)
+        indicator.apply_presentation(presentation)
+        self._deck_reserve_label.setVisible(presentation.mode != "idle")
 
     def on_tab_activated(self) -> None:
         self._refresh_data_language()
@@ -897,6 +905,12 @@ class CandidateListView(CandidateListActionsMixin):
         self._pool_unique_total = len(self._all_candidates)
         self._detail_entries = {}
         self._search_index = build_candidate_search_index(self._all_candidates)
+        restored_selection = str(deck.get("last_selected_pool_key") or "")
+        if restored_selection and any(
+            candidate_detail_identity(candidate) == restored_selection
+            for candidate in self._all_candidates
+        ):
+            self._selected_identity = restored_selection
         self._update_deck_status()
         self._poster_prefetch.allow_failed_retries()
         if prepare_posters:

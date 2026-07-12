@@ -73,7 +73,7 @@ class DeckReserveIndicator(QWidget):
             return
 
         self.show()
-        if presentation.mode == "ready" and presentation.snapshot is not None:
+        if presentation.mode in {"ready", "offline"} and presentation.snapshot is not None:
             snapshot = presentation.snapshot
             self._progress = snapshot.ratio
             self._center_text = f"{snapshot.percent}%"
@@ -143,7 +143,7 @@ class DeckReserveIndicator(QWidget):
                 (90 - self._spinner_angle) * 16,
                 -_SPINNER_ARC_DEGREES * 16,
             )
-        elif self._mode == "ready" and self._progress > 0:
+        elif self._mode in {"ready", "offline"} and self._progress > 0:
             fill_pen = QPen(_progress_color(self._progress), self._ring_pen_width)
             fill_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(fill_pen)

@@ -76,6 +76,10 @@ def main(argv: list[str] | None = None) -> int:
     feed_title.setObjectName("recommendationsFeedTitle")
     feed_header_layout.addWidget(feed_title)
 
+    supply_label = QLabel(tr("recommendations.deck_reserve.label"))
+    supply_label.setObjectName("recommendationsDeckReserveLabel")
+    feed_header_layout.addWidget(supply_label)
+
     indicator = DeckReserveIndicator(feed_header)
     if args.mode == "loading":
         indicator.apply_presentation(

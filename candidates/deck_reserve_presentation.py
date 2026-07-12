@@ -13,7 +13,7 @@ from candidates.recommendation_deck_service import (
 
 @dataclass(frozen=True)
 class DeckReservePresentation:
-    mode: Literal["idle", "loading", "replenishing", "error", "ready"]
+    mode: Literal["idle", "loading", "replenishing", "error", "offline", "ready"]
     snapshot: DeckReserveSnapshot | None = None
     tooltip_key: str | None = None
     tooltip_kwargs: dict = field(default_factory=dict)
@@ -29,6 +29,7 @@ def resolve_deck_reserve_presentation(
     session_loading: bool,
     replenishing_for_deck: bool,
     build_failed: bool,
+    offline: bool = False,
 ) -> DeckReservePresentation:
     if not recommendations_active:
         return DeckReservePresentation(mode="idle")
@@ -59,6 +60,19 @@ def resolve_deck_reserve_presentation(
         )
 
     snapshot = compute_deck_reserve_snapshot(deck)
+    if offline:
+        return DeckReservePresentation(
+            mode="offline",
+            snapshot=snapshot,
+            tooltip_key="recommendations.deck_reserve.offline",
+            tooltip_kwargs={"remaining": snapshot.remaining},
+        )
+    if snapshot.remaining == 0:
+        return DeckReservePresentation(
+            mode="ready",
+            snapshot=snapshot,
+            tooltip_key="recommendations.deck_reserve.empty",
+        )
     return DeckReservePresentation(
         mode="ready",
         snapshot=snapshot,

@@ -58,6 +58,7 @@ DECK_STATE_SCHEMA_VERSION = 1
 @dataclass(frozen=True)
 class DeckReserveSnapshot:
     remaining: int
+    fresh_eligible: int
     target: int
     ratio: float
     display_count: int
@@ -68,10 +69,17 @@ class DeckReserveSnapshot:
 
 def compute_deck_reserve_snapshot(deck: dict) -> DeckReserveSnapshot:
     """Compute reserve UI metrics from a materialized recommendation deck."""
-    target = max(1, int(deck.get("active_limit") or ACTIVE_DECK_SIZE))
     active = deck.get("active") or []
     reserve = deck.get("reserve") or []
-    remaining = len(active) + len(reserve)
+    materialized = len(active) + len(reserve)
+    catalog_eligible = max(0, int(deck.get("catalog_eligible_count") or materialized))
+    fresh_eligible = max(
+        0,
+        int(deck.get("fresh_eligible_count") or 0),
+        catalog_eligible - materialized,
+    )
+    remaining = materialized + fresh_eligible
+    target = 45
     ratio = min(float(remaining) / float(target), 1.0)
     display_count = min(remaining, target)
     percent = int(round(ratio * 100))
@@ -80,10 +88,10 @@ def compute_deck_reserve_snapshot(deck: dict) -> DeckReserveSnapshot:
         empty_reason: Literal["processed", "pool_empty", None] = (
             "processed" if deck.get("last_action") else "pool_empty"
         )
-    elif ratio >= 0.60:
+    elif remaining >= 45:
         band = "ready"
         empty_reason = None
-    elif ratio >= 0.25:
+    elif remaining >= 25:
         band = "low"
         empty_reason = None
     else:
@@ -91,6 +99,7 @@ def compute_deck_reserve_snapshot(deck: dict) -> DeckReserveSnapshot:
         empty_reason = None
     return DeckReserveSnapshot(
         remaining=remaining,
+        fresh_eligible=fresh_eligible,
         target=target,
         ratio=ratio,
         display_count=display_count,
@@ -629,6 +638,7 @@ class RecommendationDeckService:
         revealed.add(identity_token)
         snapshot["revealed_identities"] = sorted(revealed)
         snapshot["last_selected_identity"] = identity_token
+        snapshot["last_selected_pool_key"] = str(candidate.get("pool_entry_key") or "")
         snapshot["last_change_reason"] = "detail_reveal"
         snapshot["updated_at"] = str(
             shown_at or datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -1130,6 +1140,10 @@ class RecommendationDeckService:
         deck["eligible_count"] = max(
             len(deck["active"]) + len(deck["reserve"]),
             int(deck.get("eligible_count") or 0) - 1,
+        )
+        deck["catalog_eligible_count"] = max(
+            len(deck["active"]) + len(deck["reserve"]),
+            int(deck.get("catalog_eligible_count") or 0) - 1,
         )
         deck["eligible_reserve_count"] = len(deck["reserve"])
         relevance_counts = deck.get("relevance_counts")
