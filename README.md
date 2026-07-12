@@ -75,6 +75,21 @@ py -m pip install -r requirements.txt
 py start_app.py
 ```
 
+For development and tests, install the extended set:
+
+```powershell
+py -m pip install -r requirements-dev.txt
+py -m pytest -q
+```
+
+Plotly analytics, WebEngine charts and ML experiments are optional and can be installed separately:
+
+```powershell
+py -m pip install -r requirements-experiments.txt
+```
+
+Without the optional set, the app remains usable and shows local UI fallbacks for unavailable analytics widgets.
+
 The maintenance console remains available through:
 
 ```powershell
