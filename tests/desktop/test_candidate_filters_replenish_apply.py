@@ -118,6 +118,33 @@ def _build_view(qtbot, service: FakeReplenishService | None = None):
     return service, session, view
 
 
+def test_default_candidate_search_service_exposes_filter_replenish() -> None:
+    session = CandidateSearchSession()
+
+    assert callable(getattr(session.service, "replenish_candidate_pool_for_filters", None))
+
+
+def test_filter_layout_stacks_without_hidden_horizontal_overflow(qtbot) -> None:
+    _service, _session, view = _build_view(qtbot)
+
+    view.widget.resize(900, 700)
+    qtbot.waitUntil(lambda: view._content_stacked is True)
+
+    assert abs(view._form.scroll.width() - view._summary_scroll.width()) <= 4
+
+    view.widget.resize(1280, 700)
+    qtbot.waitUntil(lambda: view._content_stacked is False)
+
+    assert view._form.scroll.width() > view._summary_scroll.width()
+
+
+def test_filter_intro_stats_are_visible_when_copy_is_nonempty(qtbot) -> None:
+    _service, _session, view = _build_view(qtbot)
+
+    assert view._intro_stats.text().strip()
+    assert view._intro_stats.isVisible()
+
+
 def test_summary_sidebar_yields_width_to_filters_on_narrow_window(qtbot) -> None:
     _service, _session, view = _build_view(qtbot)
     view.widget.resize(1100, 800)

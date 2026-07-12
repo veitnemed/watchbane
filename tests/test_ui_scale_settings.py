@@ -962,6 +962,17 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
     assert filters_view._form.scroll.widgetResizable() is True
     assert filters_view._tmdb_score_slider.minimumHeight() >= 34
     assert filters_view._tmdb_votes_slider.minimumHeight() >= 34
+    filters_view.widget.resize(900, 700)
+    filters_view.widget.show()
+    qapp.processEvents()
+    assert filters_view._content_stacked is True
+    assert abs(filters_view._form.scroll.width() - filters_view._summary_scroll.width()) <= 4
+    assert filters_view.widget.minimumSizeHint().width() <= 900
+    assert filters_view.widget.minimumSizeHint().height() <= 700
+    filters_view.widget.resize(1280, 700)
+    qapp.processEvents()
+    assert filters_view._content_stacked is False
+    assert filters_view._form.scroll.width() > filters_view._summary_scroll.width()
     for row in filters_view.widget.findChildren(QFrame, "candidateFiltersSummaryRow"):
         row_layout = row.layout()
         assert isinstance(row_layout, QHBoxLayout)

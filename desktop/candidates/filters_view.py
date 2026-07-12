@@ -7,6 +7,7 @@ from typing import Callable
 
 from PyQt6.QtCore import QSize, QTimer, Qt
 from PyQt6.QtWidgets import (
+    QBoxLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -68,6 +69,8 @@ from desktop.theme.shell_layout import (
 
 APPLY_BUTTON_HEIGHT = control_px(40)
 SUMMARY_CARD_WIDTH = layout_px(348)
+FILTERS_STACK_BREAKPOINT = 1100
+FILTERS_STACK_SUMMARY_MAX_HEIGHT = control_px(200)
 FILTER_REPLENISH_DEFAULT_BATCH_SIZE = 30
 FILTER_REPLENISH_MAX_BATCH_SIZE = 30
 
@@ -143,7 +146,7 @@ class CandidateFiltersView:
         class CandidateFiltersRootWidget(QWidget):
             def resizeEvent(self, event) -> None:
                 super().resizeEvent(event)
-                view._update_summary_card_width()
+                view._update_responsive_layout()
                 view._update_apply_button_width()
 
         self._widget = CandidateFiltersRootWidget()
@@ -315,9 +318,11 @@ class CandidateFiltersView:
         content_layout.setSpacing(layout_px(16))
         content_layout.addWidget(self._form.scroll, stretch=1)
         content_layout.addWidget(self._summary_scroll, alignment=Qt.AlignmentFlag.AlignTop)
+        self._content_layout = content_layout
+        self._content_stacked: bool | None = None
         root_layout.addLayout(content_layout, stretch=1)
 
-        self._update_summary_card_width()
+        self._update_responsive_layout()
         self._update_apply_button_width()
         self._update_year_range_label()
         self._refresh_threshold_labels()
@@ -724,7 +729,7 @@ class CandidateFiltersView:
         )
         self._intro_lead.setText(lead)
         self._intro_stats.setText(stats)
-        self._intro_stats.setVisible(False)
+        self._intro_stats.setVisible(bool(str(stats or "").strip()))
         self._update_summary_rows()
         enabled = apply_enabled and self._session.is_loading is False and self._is_replenishing is False
         self._apply_button.setEnabled(enabled)
@@ -798,18 +803,40 @@ class CandidateFiltersView:
         self._apply_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
         self._reset_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
 
+    def _update_responsive_layout(self) -> None:
+        if not hasattr(self, "_content_layout"):
+            return
+        stacked = self._widget.width() < FILTERS_STACK_BREAKPOINT
+        if stacked != self._content_stacked:
+            self._content_stacked = stacked
+            self._content_layout.setDirection(
+                QBoxLayout.Direction.TopToBottom
+                if stacked
+                else QBoxLayout.Direction.LeftToRight
+            )
+            self._summary_scroll.setSizePolicy(
+                QSizePolicy.Policy.Expanding if stacked else QSizePolicy.Policy.Fixed,
+                QSizePolicy.Policy.Preferred,
+            )
+        self._update_summary_card_width()
+        QTimer.singleShot(0, self._update_summary_card_height)
+
     def _update_summary_card_width(self) -> None:
         if not hasattr(self, "_intro_card"):
             return
-        available_width = max(
-            0,
-            self._widget.width() - (2 * CANDIDATE_ROOT_MARGIN_PX) - layout_px(16),
-        )
-        proportional_width = int(available_width * 0.32)
-        target_width = min(
-            SUMMARY_CARD_WIDTH,
-            max(layout_px(240), proportional_width),
-        )
+        content_width = max(0, self._widget.width() - (2 * CANDIDATE_ROOT_MARGIN_PX))
+        if self._content_stacked:
+            self._summary_scroll.setMinimumWidth(control_px(0))
+            self._summary_scroll.setMaximumWidth(self._widget.maximumWidth())
+            QTimer.singleShot(0, self._update_summary_card_height)
+            return
+        else:
+            available_width = max(0, content_width - layout_px(16))
+            proportional_width = int(available_width * 0.32)
+            target_width = min(
+                SUMMARY_CARD_WIDTH,
+                max(layout_px(240), proportional_width),
+            )
         if hasattr(self, "_summary_scroll"):
             self._summary_scroll.setFixedWidth(target_width)
             QTimer.singleShot(0, self._update_summary_card_height)
@@ -830,11 +857,17 @@ class CandidateFiltersView:
             self._intro_card.sizeHint().height(),
             self._intro_card.minimumSizeHint().height(),
         )
-        target_height = min(
-            available_height,
-            max(control_px(180), desired_height + control_px(24)),
+        height_cap = (
+            FILTERS_STACK_SUMMARY_MAX_HEIGHT
+            if self._content_stacked
+            else available_height
         )
-        self._summary_scroll.setFixedHeight(target_height)
+        target_height = min(
+            height_cap,
+            max(control_px(120), desired_height + control_px(24)),
+        )
+        self._summary_scroll.setMinimumHeight(control_px(0))
+        self._summary_scroll.setMaximumHeight(max(1, target_height))
         QTimer.singleShot(0, self._update_apply_button_width)
 
     def _ui_is_available(self) -> bool:
