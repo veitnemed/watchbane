@@ -13,9 +13,9 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.core.explain import explain_candidate  # noqa: E402
-from app.core.filters import filter_candidates  # noqa: E402
-from app.core.ranking import rank_candidates  # noqa: E402
+from candidates.scoring.explain import explain_candidate  # noqa: E402
+from candidates.scoring.ranking import rank_candidates  # noqa: E402
+from candidates.search.filtering import filter_candidates  # noqa: E402
 from candidates.pool_service import get_search_overview_view  # noqa: E402
 from candidates.search_service import (  # noqa: E402
     _candidate_pool_key,

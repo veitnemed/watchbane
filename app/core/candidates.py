@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from app.core.explain import explain_candidate
-from app.core.filters import filter_candidates
-from app.core.ranking import rank_candidates
+from candidates.scoring.explain import explain_candidate
+from candidates.scoring.ranking import rank_candidates
+from candidates.search.filtering import filter_candidates
 from app.core import storage as search_storage
 
 

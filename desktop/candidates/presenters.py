@@ -321,7 +321,7 @@ def _search_reason_lines(
     if has_search_signal is False:
         return []
 
-    from app.core.explain import explain_candidate
+    from candidates.scoring.explain import explain_candidate
 
     all_reasons = explain_candidate(
         candidate,

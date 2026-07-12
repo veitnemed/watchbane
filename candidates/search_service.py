@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from app.core import candidates as search_core
-from app.core import ranking as search_ranking
+from candidates.scoring import ranking as search_ranking
 from app.core import storage as search_storage
 from candidates.models.keys import COMMON_POOL_CRITERIA_NAME, pool_entry_key
 from candidates.pool.queries import is_candidate_incomplete
@@ -241,9 +241,9 @@ def search_candidate_pool_text(candidates: list, filters: dict, *, text_query: s
     if normalized_query == "" or not is_fts_search_enabled():
         return search_candidate_pool(candidates, filters)
     import sqlite3
-    from app.core.explain import explain_candidate
-    from app.core.filters import filter_candidates
-    from app.core.ranking import rank_candidates
+    from candidates.scoring.explain import explain_candidate
+    from candidates.search.filtering import filter_candidates
+    from candidates.scoring.ranking import rank_candidates
     from candidates.search.fts_index import search_fts, search_fts_prefiltered
     from candidates.search.match_fields import find_matched_fields
     from candidates.search.rerank import attach_text_relevance

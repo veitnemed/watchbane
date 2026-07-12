@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any, Callable
 from uuid import uuid4
 
-from app.core.filters import candidate_matches
+from candidates.search.filtering import candidate_matches
 from candidates.models import genre_schema
 from candidates.models.keys import (
     candidate_state_identity_key,
