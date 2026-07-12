@@ -280,6 +280,11 @@ class CandidateListView(CandidateListActionsMixin):
         feed_header_layout.addWidget(self._deck_reserve_label)
         self._deck_reserve_indicator = DeckReserveIndicator(feed_header)
         feed_header_layout.addWidget(self._deck_reserve_indicator)
+        self._deck_refill_button = QPushButton(tr("recommendations.deck_reserve.refresh"))
+        self._deck_refill_button.setObjectName("recommendationsDeckRefillButton")
+        self._deck_refill_button.clicked.connect(self._on_deck_refill_clicked)
+        self._deck_refill_button.hide()
+        feed_header_layout.addWidget(self._deck_refill_button)
         feed_header_layout.addStretch(1)
         feed_header_layout.addWidget(self._deck_status_label)
         self._new_deck_button = QPushButton(tr("recommendations.new_deck"))
@@ -489,6 +494,20 @@ class CandidateListView(CandidateListActionsMixin):
         )
         indicator.apply_presentation(presentation)
         self._deck_reserve_label.setVisible(presentation.mode != "idle")
+        snapshot = presentation.snapshot
+        self._deck_refill_button.setVisible(
+            presentation.mode == "ready"
+            and snapshot is not None
+            and snapshot.remaining < 25
+            and self._on_refill_needed is not None
+        )
+
+    def _on_deck_refill_clicked(self) -> None:
+        deck_id = str((self._deck or {}).get("deck_id") or "")
+        if deck_id:
+            self._refill_requested_deck_ids.discard(deck_id)
+            self._refill_last_attempt = None
+        self._maybe_request_recommendation_refill()
 
     def on_tab_activated(self) -> None:
         self._refresh_data_language()

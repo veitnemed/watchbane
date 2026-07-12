@@ -283,6 +283,19 @@ QLabel#recommendationsDeckReserveLabel {{
     color: {COLOR_TEXT_MUTED};
     font-size: {font_px(FONT_SMALL)}px;
 }}
+QPushButton#recommendationsDeckRefillButton {{
+    background: transparent;
+    border: 1px solid {COLOR_BORDER_HOVER};
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+    min-height: {px(26)}px;
+    padding: {px(2)}px {px(9)}px;
+}}
+QPushButton#recommendationsDeckRefillButton:hover {{
+    border-color: {COLOR_FOCUS_BORDER};
+    color: {COLOR_TEXT};
+}}
 QLabel#recommendationsFeedTitle {{
     background: transparent;
     color: {COLOR_TEXT};

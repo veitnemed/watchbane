@@ -68,3 +68,8 @@ def test_empty_states() -> None:
     assert pool_empty.band == "empty"
     assert pool_empty.empty_reason == "pool_empty"
     assert pool_empty.percent == 0
+
+    fallback = compute_deck_reserve_snapshot(
+        _deck(excluded={"recently_seen": 3})
+    )
+    assert fallback.empty_reason == "recent_fallback"

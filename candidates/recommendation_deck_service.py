@@ -64,7 +64,7 @@ class DeckReserveSnapshot:
     display_count: int
     percent: int
     band: Literal["ready", "low", "critical", "empty"]
-    empty_reason: Literal["processed", "pool_empty", None]
+    empty_reason: Literal["processed", "recent_fallback", "pool_empty", None]
 
 
 def compute_deck_reserve_snapshot(deck: dict) -> DeckReserveSnapshot:
@@ -85,9 +85,13 @@ def compute_deck_reserve_snapshot(deck: dict) -> DeckReserveSnapshot:
     percent = int(round(ratio * 100))
     if remaining == 0:
         band: Literal["ready", "low", "critical", "empty"] = "empty"
-        empty_reason: Literal["processed", "pool_empty", None] = (
-            "processed" if deck.get("last_action") else "pool_empty"
-        )
+        excluded = deck.get("excluded") if isinstance(deck.get("excluded"), dict) else {}
+        if deck.get("last_action"):
+            empty_reason: Literal["processed", "recent_fallback", "pool_empty", None] = "processed"
+        elif int(excluded.get("recently_seen") or 0) > 0:
+            empty_reason = "recent_fallback"
+        else:
+            empty_reason = "pool_empty"
     elif remaining >= 45:
         band = "ready"
         empty_reason = None

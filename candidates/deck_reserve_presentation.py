@@ -71,7 +71,11 @@ def resolve_deck_reserve_presentation(
         return DeckReservePresentation(
             mode="ready",
             snapshot=snapshot,
-            tooltip_key="recommendations.deck_reserve.empty",
+            tooltip_key=(
+                "recommendations.deck_reserve.fallback"
+                if snapshot.empty_reason == "recent_fallback"
+                else "recommendations.deck_reserve.empty"
+            ),
         )
     return DeckReservePresentation(
         mode="ready",

@@ -78,7 +78,6 @@ def merge_candidate_pool_dict(
     try:
         with transaction(active, owned):
             timestamp = utc_now()
-            incoming_keys: set[str] = set()
             for pool_key, candidate in incoming.items():
                 media_type = str(candidate.get("media_type") or "tv").strip().casefold()
                 tmdb_id = candidate.get("tmdb_id")
@@ -94,12 +93,23 @@ def merge_candidate_pool_dict(
                     candidate=candidate,
                     timestamp=timestamp,
                 )
-                incoming_keys.add(pool_key)
 
             protected_identities = {
                 str(row["identity_key"])
                 for row in active.execute("SELECT identity_key FROM candidate_actions")
             }
+            for row in active.execute(
+                "SELECT title, year, media_type FROM watched_records WHERE payload_json != '{}'"
+            ):
+                protected_identities.add(
+                    candidate_state_identity_key(
+                        {
+                            "title": row["title"],
+                            "year": row["year"],
+                            "media_type": row["media_type"],
+                        }
+                    )
+                )
             deck_row = active.execute(
                 "SELECT state_json FROM recommendation_deck_state WHERE singleton_id = 1"
             ).fetchone()
@@ -124,8 +134,6 @@ def merge_candidate_pool_dict(
                 for row in rows:
                     pool_key = str(row["pool_key"])
                     candidate = loads_json(row["payload_json"], {})
-                    if pool_key in incoming_keys:
-                        continue
                     if isinstance(candidate, dict) and candidate_state_identity_key(candidate) in protected_identities:
                         continue
                     evicted_keys.append(pool_key)

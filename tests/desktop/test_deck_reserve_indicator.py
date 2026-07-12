@@ -39,6 +39,7 @@ def test_apply_presentation_ready_shows_percent(qtbot) -> None:
     )
     assert indicator.isVisible()
     assert indicator.progress() == snapshot.ratio
+    assert indicator._center_text == "18"
 
 
 def test_apply_presentation_loading_hides_percent(qtbot) -> None:

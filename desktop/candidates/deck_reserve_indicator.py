@@ -76,7 +76,7 @@ class DeckReserveIndicator(QWidget):
         if presentation.mode in {"ready", "offline"} and presentation.snapshot is not None:
             snapshot = presentation.snapshot
             self._progress = snapshot.ratio
-            self._center_text = f"{snapshot.percent}%"
+            self._center_text = "45+" if snapshot.remaining >= 45 else str(snapshot.remaining)
             self.update()
             return
 
