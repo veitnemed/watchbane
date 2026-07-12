@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QModelIndex, Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.candidates.list_model import CandidateListModel, CandidateListRoles
+from desktop.candidates.empty_state import RecommendationEmptyState
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.list_view import CandidateListView
 from desktop.candidates.presenters import candidate_detail_identity
@@ -374,28 +375,138 @@ def test_recommendation_action_promotes_reserve_item(qtbot) -> None:
 
 
 def test_empty_recommendation_deck_shows_stable_empty_state(qtbot) -> None:
+    from desktop.i18n import tr
+
     service = FakeCandidateService([])
     service.candidates = []
     _service, _session, _filters_view, list_view = _build_views(qtbot, service)
     status = list_view.widget.findChild(QLabel, "recommendationsDeckStatus")
 
     assert _listed_count(_candidate_list(list_view)) == 0
-    assert status is not None and status.text()
+    assert status is not None and status.isHidden()
+    assert list_view._workspace_state.state == "pool_empty"
+    assert list_view._workspace_state.title_label.text() == tr(
+        "recommendations.empty_state.pool_empty.title"
+    )
+    assert list_view._workspace_state.isVisible()
+    assert list_view._detail_panel.isAncestorOf(list_view._workspace_state)
     assert list_view.widget.findChild(QFrame, "recommendationActionPanel").isHidden()
 
 
 def test_compact_recommendations_show_visible_loading_state(qtbot) -> None:
     from desktop.i18n import tr
 
-    _service, session, _filters_view, list_view = _build_views(qtbot)
+    service = FakeCandidateService([])
+    service.candidates = []
+    _service, session, _filters_view, list_view = _build_views(qtbot, service)
     list_view.widget.resize(900, 700)
     qtbot.waitUntil(lambda: list_view._is_compact_layout is True)
 
     session._set_loading(True)
 
-    assert list_view._deck_status_label.isVisible()
-    assert list_view._deck_status_label.text() == tr("recommendations.state.replenishing")
+    assert list_view._deck_status_label.isHidden()
+    assert list_view._active_workspace_state == "loading"
+    assert list_view._list_body_stack.currentWidget() is list_view._compact_workspace_state
+    assert list_view._compact_workspace_state.isVisible()
+    assert list_view._compact_workspace_state.title_label.text() == tr(
+        "recommendations.empty_state.loading.title"
+    )
     assert list_view._decision_cluster.isHidden()
+
+
+def test_compact_recommendations_keep_non_empty_list_without_selection(qtbot) -> None:
+    _service, _session, _filters_view, list_view = _build_views(qtbot)
+    list_view.widget.resize(900, 700)
+    qtbot.waitUntil(lambda: list_view._is_compact_layout)
+
+    list_view._results_list.clearSelection()
+    list_view._results_list.setCurrentIndex(QModelIndex())
+    list_view._clear_detail(show_filters_hint=False)
+
+    assert list_view._candidates
+    assert list_view._active_workspace_state == "idle"
+    assert list_view._list_body_stack.currentWidget() is list_view._results_list
+    assert list_view._results_list.isVisible()
+
+
+def test_recommendation_workspace_uses_no_results_and_hides_for_card(qtbot) -> None:
+    from desktop.i18n import tr
+
+    _service, _session, _filters_view, list_view = _build_views(qtbot)
+    list_view._search_input.setText("definitely missing")
+    list_view._apply_visible_candidates()
+
+    assert list_view._workspace_state.state == "no_results"
+    assert list_view._workspace_state.title_label.text() == tr(
+        "recommendations.empty_state.no_results.title"
+    )
+    assert list_view._deck_status_label.isHidden()
+
+    list_view._search_input.clear()
+    list_view._apply_visible_candidates()
+    listing = _candidate_list(list_view)
+    listing.setCurrentIndex(listing.model().index(0, 0))
+
+    assert list_view._active_workspace_state is None
+    assert list_view._workspace_state.isHidden()
+    assert list_view._detail_scroll.isVisible()
+
+
+def test_recommendation_deck_error_uses_non_modal_workspace_state(qtbot) -> None:
+    from desktop.i18n import tr
+
+    class ErrorDeckService:
+        def refresh_deck(self, *_args, **_kwargs):
+            raise RuntimeError("network unavailable")
+
+    service = FakeCandidateService([])
+    service.candidates = []
+    session = CandidateSearchSession(service=service)
+    list_view = CandidateListView(session, service=service, deck_service=ErrorDeckService())
+    qtbot.addWidget(list_view.widget)
+    list_view.widget.resize(1280, 800)
+    list_view.widget.show()
+    list_view.on_tab_activated()
+    qtbot.waitUntil(lambda: list_view._active_workspace_state == "error")
+
+    assert list_view._workspace_state.isVisible()
+    assert list_view._workspace_state.title_label.text() == tr(
+        "recommendations.empty_state.error.title"
+    )
+    assert list_view._deck_status_label.isHidden()
+
+
+def test_filter_replenish_lifecycle_updates_empty_recommendation_workspace(qtbot) -> None:
+    service = FakeCandidateService([])
+    service.candidates = []
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service)
+
+    list_view.on_replenish_state_changed("loading")
+    assert list_view._active_workspace_state == "loading"
+
+    list_view.on_replenish_state_changed("error")
+    assert list_view._active_workspace_state == "error"
+    assert list_view._deck_stack.currentWidget() is list_view._deck_content_page
+
+    list_view._deck = {"active": [], "reserve": [], "excluded": {"pool_total": 0}}
+    list_view.on_replenish_state_changed("finished")
+    assert list_view._active_workspace_state == "pool_empty"
+
+
+def test_recommendation_empty_state_accepts_custom_presentation(qtbot) -> None:
+    state = RecommendationEmptyState(
+        "idle",
+        title="Custom title",
+        subtitle="Custom subtitle",
+        icon="search",
+        compact=True,
+    )
+    qtbot.addWidget(state)
+
+    assert state.state == "idle"
+    assert state.title_label.text() == "Custom title"
+    assert state.subtitle_label.text() == "Custom subtitle"
+    assert state._icon_label.pixmap().isNull() is False
 
 
 def test_recommendation_copy_is_available_in_ru_and_en() -> None:
@@ -408,6 +519,16 @@ def test_recommendation_copy_is_available_in_ru_and_en() -> None:
         "recommendations.preparing.title",
         "recommendations.preparing.detail",
         "recommendations.preparing.progress",
+        "recommendations.empty_state.loading.title",
+        "recommendations.empty_state.loading.subtitle",
+        "recommendations.empty_state.pool_empty.title",
+        "recommendations.empty_state.pool_empty.subtitle",
+        "recommendations.empty_state.no_results.title",
+        "recommendations.empty_state.no_results.subtitle",
+        "recommendations.empty_state.error.title",
+        "recommendations.empty_state.error.subtitle",
+        "recommendations.empty_state.idle.title",
+        "recommendations.empty_state.idle.subtitle",
         "recommendations.new_deck",
         "recommendations.reasons.title",
         "recommendations.action.watched",

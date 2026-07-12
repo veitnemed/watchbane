@@ -116,11 +116,13 @@ class CandidateFiltersView:
         service=None,
         on_applied: Callable[[], None] | None = None,
         on_before_apply: Callable[[dict], dict] | None = None,
+        on_replenish_state_changed: Callable[[str], None] | None = None,
     ) -> None:
         self._session = session
         self._service = service or session.service
         self._on_applied = on_applied
         self._on_before_apply = on_before_apply
+        self._on_replenish_state_changed = on_replenish_state_changed
         self._interface_language = get_persisted_interface_language()
         self._data_language = get_persisted_data_language()
         self._genre_options: list[str] = []
@@ -1098,6 +1100,15 @@ class CandidateFiltersView:
         self._apply_button.setEnabled(not self._is_replenishing and not self._session.is_loading)
         self._reset_button.setEnabled(not self._is_replenishing and not self._session.is_loading)
 
+    def set_replenish_state_listener(self, callback: Callable[[str], None] | None) -> None:
+        """Connect the worker lifecycle to another tab without coupling their widgets."""
+        self._on_replenish_state_changed = callback
+
+    def _notify_replenish_state(self, state: str) -> None:
+        callback = self._on_replenish_state_changed
+        if callback is not None:
+            callback(state)
+
     def _set_replenish_progress(self, value: int, maximum: int) -> None:
         maximum = max(1, int(maximum or FILTER_REPLENISH_DEFAULT_BATCH_SIZE))
         value = max(0, min(maximum, int(value or 0)))
@@ -1166,6 +1177,7 @@ class CandidateFiltersView:
         request_generation = self._replenish_generation if generation is None else int(generation)
         self._replenish_local_count_before = 0 if local_count_before is None else int(local_count_before)
         self._set_replenish_running(True)
+        self._notify_replenish_state("loading")
         target = clamp_filter_replenish_batch_size(intent.get("target_add_count", FILTER_REPLENISH_DEFAULT_BATCH_SIZE))
         self._set_replenish_progress(0, target)
         self._intro_lead.setText(tr("candidates.filters.replenish.status.started"))
@@ -1228,12 +1240,14 @@ class CandidateFiltersView:
             self._intro_lead.setText(tr("recommendations.discovery.status.conflict"))
             self._intro_stats.setText(tr("recommendations.discovery.status.conflict_detail"))
             self._intro_stats.setVisible(True)
+            self._notify_replenish_state("error")
             return
         if payload.get("ok") is not True:
             self._hide_replenish_progress()
             self._intro_lead.setText(tr("recommendations.discovery.status.failed"))
             self._intro_stats.setText(tr("candidates.filters.error.stats"))
             self._intro_stats.setVisible(True)
+            self._notify_replenish_state("error")
             return
         added = int(payload.get("saved_count") or payload.get("created_count") or 0)
         requested = int(payload.get("requested_count") or 30)
@@ -1249,6 +1263,7 @@ class CandidateFiltersView:
             else tr("recommendations.discovery.status.complete_full", before=local_before, added=added, visible=visible_after)
         )
         self._intro_stats.setVisible(True)
+        self._notify_replenish_state("finished")
 
     def _on_replenish_failed(self, message: str, generation: int | None = None) -> None:
         if self._ui_is_available() is False:
@@ -1262,6 +1277,7 @@ class CandidateFiltersView:
         self._intro_lead.setText(tr("recommendations.discovery.status.failed"))
         self._intro_stats.setText(tr("candidates.filters.error.stats"))
         self._intro_stats.setVisible(True)
+        self._notify_replenish_state("error")
 
     def _remove_replenish_worker(self, worker: FilterReplenishWorker) -> None:
         if self._replenish_worker is worker:

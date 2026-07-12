@@ -149,6 +149,9 @@ def test_reveal_requires_first_eight_and_twenty_settled(qtbot, monkeypatch) -> N
     view = _build_view(qtbot, monkeypatch)
     view._deck_loader_shown_at = perf_counter() - 1.0
 
+    assert view._deck_loading_state.state == "loading"
+    assert view._deck_loading_state.isVisible()
+    assert view._deck_loading_progress.isVisible()
     _settle(view, list(range(7)) + list(range(8, 21)), settled_total=20)
     assert _stack(view).currentWidget() is view._deck_loading_page
 

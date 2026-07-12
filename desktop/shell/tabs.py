@@ -127,6 +127,13 @@ def build_main_tabs(
             None,
         ),
     )
+    set_replenish_state_listener = getattr(
+        candidate_filters_view,
+        "set_replenish_state_listener",
+        None,
+    )
+    if callable(set_replenish_state_listener):
+        set_replenish_state_listener(candidate_list_view.on_replenish_state_changed)
     registry.register(ShellTabSpec("candidates", languages.tr("tabs.candidates"), candidate_list_view))
     registry.register(ShellTabSpec("watched", languages.tr("tabs.watched"), watched_tab_view))
     registry.register(ShellTabSpec("filters", languages.tr("tabs.filters"), candidate_filters_view))

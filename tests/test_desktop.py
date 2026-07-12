@@ -6377,13 +6377,24 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
         def on_tab_activated(self) -> None:
             self.activation_count += 1
 
+        def on_replenish_state_changed(self, _state: str) -> None:
+            return None
+
     class FakeSimpleTabView:
         def __init__(self, *args, **kwargs) -> None:
             self.widget = QWidget()
 
+    class FakeCandidateFiltersView(FakeSimpleTabView):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.replenish_state_listener = None
+
+        def set_replenish_state_listener(self, callback) -> None:
+            self.replenish_state_listener = callback
+
     monkeypatch.setattr(tabs_module, "WatchedTabView", FakeWatchedTabView)
     monkeypatch.setattr(tabs_module, "CandidateSearchSession", FakeCandidateSearchSession)
-    monkeypatch.setattr(tabs_module, "CandidateFiltersView", FakeSimpleTabView)
+    monkeypatch.setattr(tabs_module, "CandidateFiltersView", FakeCandidateFiltersView)
     monkeypatch.setattr(tabs_module, "CandidateListView", FakeCandidateListView)
     monkeypatch.setattr(tabs_module, "SettingsTabView", FakeSimpleTabView)
     monkeypatch.setattr(
@@ -6414,6 +6425,10 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
     assert all(hasattr(spec.view, "widget") for spec in registry._specs.values())
     assert registry._specs["candidates"].view.activation_count == 1
+    assert (
+        registry._specs["filters"].view.replenish_state_listener.__self__
+        is registry._specs["candidates"].view
+    )
     brand = tabs.cornerWidget(Qt.Corner.TopLeftCorner)
     assert brand is not None
     assert brand.findChild(QWidget, "watchbaneShellSymbol") is not None

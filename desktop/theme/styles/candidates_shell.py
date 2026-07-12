@@ -215,16 +215,46 @@ QLabel#recommendationsDeckStatus {{
 QWidget#recommendationsDeckLoadingPage {{
     background: transparent;
 }}
-QLabel#recommendationsDeckLoadingTitle {{
+QWidget#recommendationsLoadingListShell,
+QStackedWidget#recommendationsListBodyStack,
+QWidget#recommendationEmptyState,
+QWidget#recommendationEmptyStateContent,
+QWidget#recommendationEmptyStateAccessory {{
     background: transparent;
-    color: {COLOR_TEXT};
-    font-size: {font_px(FONT_TITLE)}px;
-    font-weight: 700;
 }}
-QLabel#recommendationsDeckLoadingDetail {{
+QFrame#recommendationsLoadingListPlaceholder {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_CARD)}px;
+}}
+QFrame#recommendationEmptyStateIconShell {{
+    background-color: {FILM_ACCENT_DIM};
+    border: 1px solid {FILM_BORDER};
+    border-radius: {list_px(36)}px;
+}}
+QLabel#recommendationEmptyStateIcon {{
     background: transparent;
-    color: {COLOR_TEXT_SECONDARY};
+    border: none;
+}}
+QLabel#candidateSearchDetailPlaceholder {{
+    background: transparent;
+    color: {FILM_TEXT};
+    font-size: {font_px(FONT_TITLE_LARGE)}px;
+    font-weight: 500;
+}}
+QLabel#recommendationEmptyStateSubtitle {{
+    background: transparent;
+    color: {FILM_TEXT_SUBTLE};
+    font-size: {font_px(FONT_SECTION)}px;
+}}
+QWidget#recommendationEmptyState[compact="true"] QLabel#candidateSearchDetailPlaceholder {{
+    font-size: {font_px(FONT_TITLE)}px;
+}}
+QWidget#recommendationEmptyState[compact="true"] QLabel#recommendationEmptyStateSubtitle {{
     font-size: {font_px(FONT_BASE)}px;
+}}
+QFrame#recommendationEmptyStateIconShell[compactIcon="true"] {{
+    border-radius: {list_px(27)}px;
 }}
 QProgressBar#recommendationsDeckLoadingProgress {{
     background-color: {COLOR_CARD_ALT};

@@ -29,6 +29,7 @@ from PyQt6.QtWidgets import (
 from candidates.pool.localized_posters import candidate_needs_tmdb_detail_enrichment
 from candidates.recommendation_deck_service import ACTIVE_DECK_SIZE, RecommendationDeckService
 from candidates.scoring.rating_confidence import has_unknown_rating
+from desktop.candidates.empty_state import RecommendationEmptyState
 from desktop.candidates.list_actions import CandidateListActionsMixin
 from desktop.candidates.list_delegate import build_candidate_list_item_delegate
 from desktop.candidates.filter_icon_assets import filter_section_badge_label
@@ -44,7 +45,6 @@ from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FI
 from desktop.candidates.workers.poster_worker import CandidateLocalizedPosterWorker
 from desktop.i18n import get_interface_language, tr
 from desktop.settings.app_settings import get_persisted_data_language
-from desktop.shared.brand_assets import watchbane_wordmark_label
 from desktop.shared.detail import DetailCard
 from desktop.shared.detail import profiles as detail_profiles
 from desktop.shared.widgets.list_search import DebouncedLineEditSearch, resolve_selection_row
@@ -144,6 +144,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_prepare_cache_hits = 0
         self._deck_build_ms = 0.0
         self._initial_deck_loaded = False
+        self._active_workspace_state: str | None = None
 
         self._widget = _CandidateListRoot()
         self._widget.setObjectName("candidateListRoot")
@@ -185,25 +186,31 @@ class CandidateListView(CandidateListActionsMixin):
 
         self._deck_loading_page = QWidget(self._deck_stack)
         self._deck_loading_page.setObjectName("recommendationsDeckLoadingPage")
-        loading_layout = QVBoxLayout(self._deck_loading_page)
+        loading_layout = QHBoxLayout(self._deck_loading_page)
         loading_layout.setContentsMargins(
-            list_px(24),
-            list_px(24),
-            list_px(24),
-            list_px(24),
+            0,
+            LEFT_PANEL_TOP_COMPENSATION_PX,
+            0,
+            0,
         )
-        loading_layout.setSpacing(list_px(12))
-        loading_layout.addStretch(1)
-        self._deck_loading_title = QLabel(tr("recommendations.preparing.title"))
-        self._deck_loading_title.setObjectName("recommendationsDeckLoadingTitle")
-        self._deck_loading_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._deck_loading_title.setWordWrap(True)
-        loading_layout.addWidget(self._deck_loading_title)
-        self._deck_loading_detail = QLabel(tr("recommendations.preparing.detail"))
-        self._deck_loading_detail.setObjectName("recommendationsDeckLoadingDetail")
-        self._deck_loading_detail.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._deck_loading_detail.setWordWrap(True)
-        loading_layout.addWidget(self._deck_loading_detail)
+        loading_layout.setSpacing(CANDIDATE_ROOT_SPACING_PX)
+
+        self._deck_loading_list_shell = QWidget()
+        self._deck_loading_list_shell.setObjectName("recommendationsLoadingListShell")
+        self._deck_loading_list_shell.setMinimumWidth(CANDIDATE_LIST_MIN_WIDTH_PX)
+        self._deck_loading_list_shell.setMaximumWidth(CANDIDATE_LIST_MAX_WIDTH_PX)
+        loading_list_layout = QVBoxLayout(self._deck_loading_list_shell)
+        loading_list_layout.setContentsMargins(0, 0, 0, 0)
+        loading_list_layout.setSpacing(CANDIDATE_LIST_SPACING_PX)
+        loading_feed_title = QLabel(tr("recommendations.feed.title"))
+        loading_feed_title.setObjectName("recommendationsFeedTitle")
+        loading_list_layout.addWidget(loading_feed_title)
+        loading_list_placeholder = QFrame()
+        loading_list_placeholder.setObjectName("recommendationsLoadingListPlaceholder")
+        loading_list_layout.addWidget(loading_list_placeholder, stretch=1)
+        loading_layout.addWidget(self._deck_loading_list_shell)
+
+        self._deck_loading_state = RecommendationEmptyState("loading")
         self._deck_loading_progress = QProgressBar(self._deck_loading_page)
         self._deck_loading_progress.setObjectName("recommendationsDeckLoadingProgress")
         self._deck_loading_progress.setRange(0, ACTIVE_DECK_SIZE)
@@ -214,16 +221,8 @@ class CandidateListView(CandidateListActionsMixin):
         )
         self._deck_loading_progress.setMinimumWidth(list_px(320))
         self._deck_loading_progress.setMaximumWidth(list_px(420))
-        loading_layout.addWidget(
-            self._deck_loading_progress,
-            alignment=Qt.AlignmentFlag.AlignHCenter,
-        )
-        loading_layout.addSpacing(list_px(10))
-        loading_layout.addWidget(
-            watchbane_wordmark_label(list_px(210), list_px(42)),
-            alignment=Qt.AlignmentFlag.AlignHCenter,
-        )
-        loading_layout.addStretch(1)
+        self._deck_loading_state.add_accessory(self._deck_loading_progress)
+        loading_layout.addWidget(self._deck_loading_state, stretch=1)
         self._deck_stack.addWidget(self._deck_loading_page)
 
         self._deck_content_page = QWidget(self._deck_stack)
@@ -293,7 +292,13 @@ class CandidateListView(CandidateListActionsMixin):
         selection_model = self._results_list.selectionModel()
         if selection_model is not None:
             selection_model.currentChanged.connect(self._on_result_selected)
-        list_layout.addWidget(self._results_list, stretch=1)
+        self._list_body_stack = QStackedWidget()
+        self._list_body_stack.setObjectName("recommendationsListBodyStack")
+        self._list_body_stack.addWidget(self._results_list)
+        self._compact_workspace_state = RecommendationEmptyState("idle", compact=True)
+        self._list_body_stack.addWidget(self._compact_workspace_state)
+        self._list_body_stack.setCurrentWidget(self._results_list)
+        list_layout.addWidget(self._list_body_stack, stretch=1)
         self._counter_label.hide()
         splitter.addWidget(list_panel)
 
@@ -303,11 +308,8 @@ class CandidateListView(CandidateListActionsMixin):
         detail_layout.setContentsMargins(0, 0, 0, 0)
         detail_layout.setSpacing(0)
 
-        self._detail_placeholder = QLabel(tr("candidates.detail.apply_filters_hint"))
-        self._detail_placeholder.setObjectName("candidateSearchDetailPlaceholder")
-        self._detail_placeholder.setWordWrap(True)
-        self._detail_placeholder.setAlignment(Qt.AlignmentFlag.AlignTop)
-        detail_layout.addWidget(self._detail_placeholder)
+        self._workspace_state = RecommendationEmptyState("idle")
+        detail_layout.addWidget(self._workspace_state, stretch=1)
 
         scroll = QScrollArea()
         scroll.setObjectName("candidateSearchDetailScroll")
@@ -483,6 +485,8 @@ class CandidateListView(CandidateListActionsMixin):
             return
 
         self._is_compact_layout = compact
+        self._deck_loading_list_shell.setVisible(not compact)
+        self._deck_loading_state.set_compact(compact)
         if compact:
             if was_compact is False:
                 sizes = self._splitter.sizes()
@@ -492,12 +496,48 @@ class CandidateListView(CandidateListActionsMixin):
             self._detail_panel.hide()
             self._splitter.handle(1).hide()
             self._splitter.setSizes([max(1, self._widget.width()), 0])
+            self._sync_workspace_state_surface()
             return
 
         self._list_panel.setMaximumWidth(CANDIDATE_LIST_MAX_WIDTH_PX)
         self._detail_panel.show()
         self._splitter.handle(1).show()
         self._splitter.setSizes(self._expanded_splitter_sizes)
+        self._sync_workspace_state_surface()
+
+    def _show_workspace_state(self, state: str) -> None:
+        self._active_workspace_state = state
+        self._workspace_state.set_state(state)
+        self._compact_workspace_state.set_state(state)
+        self._sync_workspace_state_surface()
+
+    def _hide_workspace_state(self) -> None:
+        self._active_workspace_state = None
+        self._sync_workspace_state_surface()
+
+    def on_replenish_state_changed(self, state: str) -> None:
+        """Reflect filter-worker lifecycle only when there is no usable list content."""
+        if self._candidates:
+            return
+        if state == "loading":
+            self._clear_detail(show_filters_hint=False, loading=True)
+            return
+        if state == "error":
+            self._clear_detail(show_filters_hint=False, error=True)
+            self._show_deck_content()
+            return
+        if state == "finished":
+            self._clear_detail(show_filters_hint=False)
+            self._show_deck_content()
+
+    def _sync_workspace_state_surface(self) -> None:
+        state_visible = self._active_workspace_state is not None
+        if state_visible and self._is_compact_layout and not self._candidates:
+            self._workspace_state.hide()
+            self._list_body_stack.setCurrentWidget(self._compact_workspace_state)
+            return
+        self._list_body_stack.setCurrentWidget(self._results_list)
+        self._workspace_state.setVisible(state_visible)
 
     def _load_pool_for_deck(self) -> dict:
         view = self._session.overview()
@@ -603,7 +643,7 @@ class CandidateListView(CandidateListActionsMixin):
             if self._poster_prefetch_failed > 0 and not self._poster_prefetch_busy
             else ""
         )
-        self._deck_status_label.show()
+        self._deck_status_label.setVisible(active_count > 0)
 
     def _on_poster_prefetch_busy_changed(self, busy: bool) -> None:
         self._poster_prefetch_busy = bool(busy)
@@ -638,6 +678,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_loading_progress.setFormat(
             tr("recommendations.preparing.progress", settled=0, total=ACTIVE_DECK_SIZE)
         )
+        self._deck_loading_state.set_state("loading")
         self._deck_stack.setCurrentWidget(self._deck_loading_page)
 
     def _show_deck_content(self) -> None:
@@ -883,7 +924,8 @@ class CandidateListView(CandidateListActionsMixin):
             self._candidates = []
             self._model.set_candidates([])
             self._deck_status_label.setText(tr("recommendations.state.local_error"))
-            self._clear_detail(show_filters_hint=False)
+            self._deck_status_label.hide()
+            self._clear_detail(show_filters_hint=False, error=True)
             self._show_deck_content()
             return
         finally:
@@ -1173,7 +1215,7 @@ class CandidateListView(CandidateListActionsMixin):
             self._detail_entries[identity] = entry
         build_done = perf_counter()
 
-        self._detail_placeholder.hide()
+        self._hide_workspace_state()
         self._detail_scroll.show()
         self._show_detail_entry(entry)
         self._set_action_panel_enabled(True)
@@ -1299,7 +1341,7 @@ class CandidateListView(CandidateListActionsMixin):
         if self._session.is_loading:
             self._counter_label.setText(tr("recommendations.state.replenishing"))
             self._deck_status_label.setText(tr("recommendations.state.replenishing"))
-            self._deck_status_label.show()
+            self._deck_status_label.hide()
             self._clear_detail(show_filters_hint=False, loading=True)
         elif self._recommendations_active and self._deck_dirty:
             self._load_recommendation_deck(force_new=False)
@@ -1318,23 +1360,27 @@ class CandidateListView(CandidateListActionsMixin):
         show_filters_hint: bool,
         search_active: bool = False,
         loading: bool = False,
+        error: bool = False,
     ) -> None:
         self._poster_request_seq += 1
         self._detail_scroll.hide()
         self._reset_detail_scroll()
         self._set_action_panel_enabled(False)
         if loading:
-            self._detail_placeholder.setText(tr("recommendations.state.replenishing"))
-            self._detail_placeholder.show()
+            state = "loading"
+        elif error or (self._session.last_error and len(self._candidates) == 0):
+            state = "error"
         elif show_filters_hint:
-            self._detail_placeholder.setText(tr("recommendations.state.open_hint"))
-            self._detail_placeholder.show()
+            state = "idle"
         elif search_active:
-            self._detail_placeholder.setText(tr("candidates.detail.no_results_query"))
-            self._detail_placeholder.show()
+            state = "no_results"
         elif len(self._candidates) == 0:
-            self._detail_placeholder.setText(tr("recommendations.state.empty"))
-            self._detail_placeholder.show()
+            deck = self._deck if isinstance(self._deck, dict) else {}
+            excluded = deck.get("excluded") if isinstance(deck.get("excluded"), dict) else {}
+            pool_total = int(excluded.get("pool_total") or 0)
+            state = "pool_empty" if pool_total == 0 and not deck.get("last_action") else "no_results"
         else:
-            self._detail_placeholder.setText(tr("candidates.detail.select_candidate"))
-            self._detail_placeholder.show()
+            state = "idle"
+        if len(self._candidates) == 0 or state in {"loading", "error"}:
+            self._deck_status_label.hide()
+        self._show_workspace_state(state)
