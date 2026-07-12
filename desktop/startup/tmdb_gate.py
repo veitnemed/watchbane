@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 
 from desktop.i18n import tr
 from desktop.shared.brand_assets import tmdb_logo_label, watchbane_wordmark_label
-from desktop.startup.worker import TmdbNetworkProbeWorker, TmdbStartupValidateWorker
+from desktop.startup.worker import TmdbStartupReadinessWorker, TmdbStartupValidateWorker
 from desktop.theme.scaling import font_px, scale_px
 from desktop.theme.styles.startup import build_startup_gate_style
 from desktop.theme.tokens import (
@@ -42,7 +42,7 @@ class TmdbStartupGateView(QWidget):
         self.setStyleSheet(build_startup_gate_style())
         self._network_ok = False
         self._busy = False
-        self._network_worker: TmdbNetworkProbeWorker | None = None
+        self._network_worker: TmdbStartupReadinessWorker | None = None
         self._validate_worker: TmdbStartupValidateWorker | None = None
         self._build_ui()
         self._start_network_probe()
@@ -180,7 +180,7 @@ class TmdbStartupGateView(QWidget):
 
     def _start_network_probe(self) -> None:
         self._network_label.setText(tr("startup.tmdb.network.checking"))
-        worker = TmdbNetworkProbeWorker(parent=self)
+        worker = TmdbStartupReadinessWorker(parent=self)
         worker.completed.connect(self._on_network_probe_finished)
         worker.finished.connect(worker.deleteLater)
         self._network_worker = worker
@@ -195,15 +195,33 @@ class TmdbStartupGateView(QWidget):
 
     def _on_network_probe_finished(self, result: dict) -> None:
         self._network_worker = None
-        if result.get("ok") is True:
+        if result.get("ready") is True:
+            self._network_ok = True
+            self._network_label.setText(tr("startup.tmdb.network.ok"))
+            self.passed.emit()
+            return
+
+        network = result.get("network") if isinstance(result.get("network"), dict) else result
+        if network.get("ok") is True:
             self._network_ok = True
             self._network_label.setText(tr("startup.tmdb.network.ok"))
             self._token_input.setEnabled(True)
             self._continue_button.setEnabled(self._token_input.text().strip() != "")
+            error_code = str(result.get("error") or "")
+            if error_code in {"invalid_token", "validation_failed"}:
+                mapping = {
+                    "invalid_token": "startup.tmdb.error.invalid_token",
+                    "validation_failed": "startup.tmdb.error.validation_failed",
+                }
+                self._show_error(tr(mapping[error_code]))
             return
 
-        dns = result.get("dns") if isinstance(result.get("dns"), dict) else {}
-        if result.get("error") == "dns_blocked" or dns.get("blocked_localhost"):
+        dns = network.get("dns") if isinstance(network.get("dns"), dict) else {}
+        if (
+            result.get("error") == "dns_blocked"
+            or network.get("error") == "dns_blocked"
+            or dns.get("blocked_localhost")
+        ):
             self._network_label.setText(tr("startup.tmdb.network.blocked"))
         else:
             self._network_label.setText(tr("startup.tmdb.network.unreachable"))

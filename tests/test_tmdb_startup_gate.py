@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import QTimer, pyqtSignal
 from PyQt6.QtWidgets import QWidget
 
 import desktop.shell.main_window as main_window_module
@@ -66,6 +66,37 @@ def test_token_validation_worker_interruption_skips_validation_and_save(monkeypa
     assert saved_tokens == []
 
 
+def test_startup_readiness_worker_keeps_gui_event_loop_responsive(monkeypatch, qapp) -> None:
+    from threading import Event
+
+    from desktop.startup.worker import TmdbStartupReadinessWorker
+
+    readiness_started = Event()
+    release_readiness = Event()
+
+    def blocking_readiness():
+        readiness_started.set()
+        assert release_readiness.wait(2.0)
+        return {"ready": False, "error": "network_unreachable"}
+
+    monkeypatch.setattr(
+        "desktop.startup.worker.evaluate_tmdb_startup_readiness",
+        blocking_readiness,
+    )
+    heartbeat = {"processed": False}
+    worker = TmdbStartupReadinessWorker()
+    worker.start()
+    assert readiness_started.wait(1.0)
+
+    QTimer.singleShot(0, lambda: heartbeat.__setitem__("processed", True))
+    qapp.processEvents()
+
+    assert heartbeat["processed"] is True
+    worker.requestInterruption()
+    release_readiness.set()
+    assert worker.wait(1000)
+
+
 def test_startup_gate_shows_clear_validation_error_in_form(monkeypatch, qapp) -> None:
     from desktop.startup.tmdb_gate import TmdbStartupGateView
 
@@ -82,16 +113,10 @@ def test_startup_gate_shows_clear_validation_error_in_form(monkeypatch, qapp) ->
         gate.close()
 
 
-def test_startup_gate_fast_path_skips_view(monkeypatch, qapp) -> None:
-    monkeypatch.setattr(
-        "apis.tmdb_connectivity.evaluate_tmdb_startup_readiness",
-        lambda token=None: {"ready": True},
-    )
-    monkeypatch.setattr(
-        main_window_module,
-        "TmdbStartupGateView",
-        lambda parent=None: (_ for _ in ()).throw(AssertionError("gate should not open")),
-    )
+def test_startup_gate_async_fast_path_passes_without_token_entry(monkeypatch, qapp) -> None:
+    from desktop.startup.tmdb_gate import TmdbStartupGateView
+
+    monkeypatch.setattr(TmdbStartupGateView, "_start_network_probe", lambda self: None)
     monkeypatch.setattr(
         main_window_module.candidate_service,
         "should_show_onboarding_autofill",
@@ -116,6 +141,9 @@ def test_startup_gate_fast_path_skips_view(monkeypatch, qapp) -> None:
     window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
     try:
         window.maybe_show_tmdb_startup_gate()
+        gate = window._tmdb_gate_view
+        assert isinstance(gate, TmdbStartupGateView)
+        gate._on_network_probe_finished({"ready": True, "network": {"ok": True}})
         assert window._tmdb_gate_passed is True
         assert window._tmdb_gate_view is None
         window.maybe_show_onboarding_autofill()

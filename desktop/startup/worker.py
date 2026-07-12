@@ -33,6 +33,30 @@ class TmdbNetworkProbeWorker(QThread):
         self.completed.emit(result)
 
 
+class TmdbStartupReadinessWorker(QThread):
+    """Evaluate stored TMDb credentials without blocking the GUI thread."""
+
+    completed = pyqtSignal(dict)
+
+    def run(self) -> None:
+        if self.isInterruptionRequested():
+            return
+        try:
+            result = evaluate_tmdb_startup_readiness()
+        except Exception as error:  # noqa: BLE001 - keep startup inside the gate
+            if self.isInterruptionRequested():
+                return
+            log_exception("startup.tmdb_readiness.error", error)
+            result = {
+                "ready": False,
+                "error": "validation_failed",
+                "details": str(error),
+            }
+        if self.isInterruptionRequested():
+            return
+        self.completed.emit(result)
+
+
 class TmdbStartupValidateWorker(QThread):
     """Validate a bearer token and persist it on success."""
 
