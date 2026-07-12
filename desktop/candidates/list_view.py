@@ -973,9 +973,8 @@ class CandidateListView(CandidateListActionsMixin):
             deck,
             prepare_posters=replacement and not vector_only_remix,
         )
-        if self._initial_deck_loaded:
-            self._maybe_request_recommendation_refill()
         self._initial_deck_loaded = True
+        self._maybe_request_recommendation_refill()
 
     def _on_new_deck_clicked(self) -> None:
         self._session.variation_seed += 1

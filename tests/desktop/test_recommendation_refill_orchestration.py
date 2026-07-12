@@ -463,6 +463,26 @@ def test_candidate_list_requests_refill_for_initial_underfilled_deck() -> None:
     assert _intent_countries(refill_calls[0]) == {"RU"}
 
 
+def test_candidate_list_first_activation_requests_underfilled_refill(qtbot, monkeypatch) -> None:
+    candidate = _candidate(1, country="RU", genres=["Crime"])
+    preferences = _dark_ru_preferences()
+    refill_calls: list[dict] = []
+    initial = _deck_payload(candidate, preferences, refill_needed=True)
+    initial["underfilled_reason"] = "reserve_underfilled"
+    view = _build_list_view(
+        qtbot,
+        monkeypatch,
+        candidate=candidate,
+        preferences=preferences,
+        deck_service=FakeDeckService(initial),
+        refill_calls=refill_calls,
+    )
+
+    assert view._initial_deck_loaded is True
+    assert len(refill_calls) == 1
+    assert _intent_countries(refill_calls[0]) == {"RU"}
+
+
 def test_candidate_list_requests_refill_after_action_exhausts_reserve(qtbot, monkeypatch) -> None:
     candidate = _candidate(1, country="RU", genres=["Crime"])
     preferences = _dark_ru_preferences()
