@@ -247,6 +247,7 @@ def search_tmdb_defaults_data(
     normalizer=None,
     language: str | None = None,
     media_type: str = "tv",
+    selected_tmdb_id: int | None = None,
 ) -> dict:
     """Search TMDb and return normalized add-flow data without KP/IMDb rating fields."""
     normalized_media_type = normalize_media_type(media_type)
@@ -274,16 +275,26 @@ def search_tmdb_defaults_data(
                         results = search_func(search_title, language=search_language)
                     except TypeError:
                         results = search_func(search_title)
-                    choose = choose_func or choose_best_tmdb_result
-                    try:
-                        selected = choose(
-                            results,
-                            title=search_title,
-                            year=_query_year(query),
-                            country=_query_country(query),
+                    if selected_tmdb_id is not None:
+                        selected = next(
+                            (
+                                item
+                                for item in results
+                                if int(item.get("id") or 0) == int(selected_tmdb_id)
+                            ),
+                            None,
                         )
-                    except TypeError:
-                        selected = choose(results)
+                    else:
+                        choose = choose_func or choose_best_tmdb_result
+                        try:
+                            selected = choose(
+                                results,
+                                title=search_title,
+                                year=_query_year(query),
+                                country=_query_country(query),
+                            )
+                        except TypeError:
+                            selected = choose(results)
                     if selected is None:
                         last_error = _tmdb_error("not_found", f"TMDb не нашёл объект: {title}")
                         continue
@@ -307,6 +318,8 @@ def search_tmdb_defaults_data(
                         ),
                         "error": None,
                         "status": "найдено",
+                        "search_results": [dict(item) for item in results if isinstance(item, dict)],
+                        "selected_tmdb_id": int(selected["id"]),
                     }
                 except Exception as error:  # noqa: BLE001 - внешний API не должен ронять ручное добавление.
                     last_error = _tmdb_error("network_error", str(error))
@@ -317,4 +330,6 @@ def search_tmdb_defaults_data(
         "data": None,
         "error": last_error,
         "status": "не найдено" if last_error.get("error") == "not_found" else "ошибка",
+        "search_results": [],
+        "selected_tmdb_id": selected_tmdb_id,
     }

@@ -13,6 +13,41 @@ from storage.data import load_dataset, load_meta, save_dataset_and_meta
 from storage.normalize import normalize_main_info, normalize_raw_scores
 
 
+def _tmdb_id_from_meta(meta_obj: dict | None) -> int | None:
+    if not isinstance(meta_obj, dict):
+        return None
+    raw_scores = meta_obj.get("raw_scores")
+    values = (
+        meta_obj.get("tmdb_id"),
+        raw_scores.get("tmdb_id") if isinstance(raw_scores, dict) else None,
+    )
+    for value in values:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _find_tmdb_duplicate(
+    data: dict,
+    meta: dict,
+    *,
+    tmdb_id: int | None,
+    media_type: str,
+) -> str | None:
+    if tmdb_id is None:
+        return None
+    for dataset_key, record in data.items():
+        main_info = record.get("main_info") if isinstance(record, dict) else None
+        existing_media_type = normalize_main_info(main_info or {}).get("media_type")
+        if existing_media_type != media_type:
+            continue
+        if _tmdb_id_from_meta(meta.get(dataset_key)) == tmdb_id:
+            return str(dataset_key)
+    return None
+
+
 def _build_meta_obj(main_info: dict, raw: dict, extra_meta: dict | None = None) -> dict | None:
     title = str(main_info["title"]).strip()
 
@@ -46,6 +81,7 @@ def add_dataset_record(
 ) -> AddRecordResult:
     """Adds a new record to dataset using the current add_movie behavior."""
     data = load_dataset()
+    meta = load_meta()
     validated = validate_add_record_payload(record_payload, data=data)
     if isinstance(validated, AddRecordResult):
         return validated
@@ -56,10 +92,22 @@ def add_dataset_record(
     input_raw_scores = parsed.input_raw_scores
     year = parsed.year
     media_type = parsed.media_type
+    duplicate_key = _find_tmdb_duplicate(
+        data,
+        meta,
+        tmdb_id=_tmdb_id_from_meta(meta_payload),
+        media_type=media_type,
+    )
+    if duplicate_key is not None:
+        return AddRecordResult(
+            ok=False,
+            title=duplicate_key,
+            message="This TMDb title is already in the watched collection.",
+            reason="duplicate_tmdb_identity",
+        )
     dataset_key = build_dataset_record_key(data, title, year=year, media_type=media_type)
 
     extra_meta = extract_extra_meta(meta_payload)
-    meta = load_meta()
     existing_meta_key = find_case_insensitive_key(meta, dataset_key)
     if existing_meta_key is None and dataset_key == title:
         existing_meta_key = find_case_insensitive_key(meta, title)

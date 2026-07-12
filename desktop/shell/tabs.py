@@ -101,11 +101,6 @@ def build_main_tabs(
     brand_layout.addWidget(symbol, alignment=Qt.AlignmentFlag.AlignVCenter)
     tabs.setCornerWidget(brand, Qt.Corner.TopLeftCorner)
 
-    watched_tab_view = WatchedTabView(
-        parent=parent,
-        on_status_message=on_status_message,
-    )
-
     candidate_session = CandidateSearchSession()
 
     def on_candidate_moved_to_watched(result) -> None:
@@ -126,6 +121,17 @@ def build_main_tabs(
             "request_recommendation_refill",
             None,
         ),
+    )
+
+    def on_watched_entries_changed(_entries) -> None:
+        candidate_session.reload_from_pool(force=True)
+        candidate_list_view.refresh()
+        candidate_filters_view.reload_filter_options()
+
+    watched_tab_view = WatchedTabView(
+        parent=parent,
+        on_status_message=on_status_message,
+        on_entries_changed=on_watched_entries_changed,
     )
     set_replenish_state_listener = getattr(
         candidate_filters_view,

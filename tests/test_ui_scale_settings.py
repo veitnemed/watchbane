@@ -743,7 +743,6 @@ def test_settings_tab_uses_slider_scale_control() -> None:
     assert "SettingsTabView" in factory_source
     assert '"Информация"' not in factory_source
     assert "AnalyticsView" not in factory_source
-    assert "on_watched_entries_changed" not in factory_source
 
 
 def test_settings_tab_contains_language_controls(monkeypatch, tmp_path, qapp) -> None:

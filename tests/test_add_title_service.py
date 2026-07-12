@@ -328,6 +328,89 @@ def test_save_add_title_record_preserves_movie_media_type(monkeypatch) -> None:
     assert captured["movie"]["main_info"]["media_type"] == "movie"
 
 
+def test_add_title_rejects_same_media_and_tmdb_id_under_localized_title(monkeypatch) -> None:
+    from dataset.records import add as records_add
+
+    existing = {
+        "The Office": {
+            "main_info": {
+                "title": "The Office",
+                "year": 2005,
+                "country": "US",
+                "media_type": "tv",
+                "user_score": 3,
+            }
+        }
+    }
+    meta = {"The Office": {"tmdb_id": 2316}}
+    saved = {"called": False}
+    monkeypatch.setattr(records_add, "load_dataset", lambda: existing)
+    monkeypatch.setattr(records_add, "load_meta", lambda: meta)
+    monkeypatch.setattr(
+        records_add,
+        "save_dataset_and_meta",
+        lambda *_args: saved.update(called=True),
+    )
+
+    defaults = {
+        scheme.MAIN_INFO: {
+            "title": "Офис",
+            "year": 2005,
+            "country": "US",
+            "media_type": "tv",
+        },
+        scheme.RAW_SCORES: {"tmdb_score": 8.0},
+    }
+    result = save_add_title_record(defaults, 3, meta_payload={"tmdb_id": 2316})
+
+    assert result.ok is False
+    assert result.reason == "duplicate_tmdb_identity"
+    assert saved["called"] is False
+
+
+def test_add_title_keeps_movie_and_tv_with_same_tmdb_id_distinct(monkeypatch) -> None:
+    from dataset.records import add as records_add
+
+    existing = {
+        "Shared": {
+            "main_info": {
+                "title": "Shared",
+                "year": 2020,
+                "country": "US",
+                "media_type": "tv",
+                "user_score": 2,
+            }
+        }
+    }
+    meta = {"Shared": {"tmdb_id": 42}}
+    saved = {}
+    monkeypatch.setattr(records_add, "load_dataset", lambda: existing)
+    monkeypatch.setattr(records_add, "load_meta", lambda: meta)
+    monkeypatch.setattr(
+        records_add,
+        "save_dataset_and_meta",
+        lambda data, _meta: saved.update(data),
+    )
+    monkeypatch.setattr(records_add, "run_after_add_side_effects", lambda **_kwargs: [])
+
+    defaults = {
+        scheme.MAIN_INFO: {
+            "title": "Shared",
+            "year": 2020,
+            "country": "US",
+            "media_type": "movie",
+        },
+        scheme.RAW_SCORES: {"tmdb_score": 7.5},
+    }
+    result = save_add_title_record(defaults, 3, meta_payload={"tmdb_id": 42})
+
+    assert result.ok is True
+    assert any(
+        record["main_info"]["media_type"] == "movie"
+        for record in saved.values()
+    )
+
+
 def test_request_user_score_builds_payload_without_other_edits(monkeypatch) -> None:
     from ui.console import request as request_module
 

@@ -288,7 +288,12 @@ class AddTitlePreviewDialog(QDialog):
         if result.ok is False:
             self._confirm_button.setEnabled(True)
             log_event("add_title.preview.save_failed", message=result.message)
-            QMessageBox.warning(self, dialog_title, result.message)
+            message = (
+                tr("add_title.error.duplicate")
+                if result.reason in {"duplicate_title", "duplicate_tmdb_identity"}
+                else result.message
+            )
+            QMessageBox.warning(self, dialog_title, message)
             return
 
         self._save_result = result

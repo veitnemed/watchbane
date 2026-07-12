@@ -6496,18 +6496,27 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
             return None
 
     class FakeCandidateSearchSession:
-        pass
+        def __init__(self) -> None:
+            self.reload_count = 0
+
+        def reload_from_pool(self, *, force: bool = False) -> None:
+            assert force is True
+            self.reload_count += 1
 
     class FakeCandidateListView:
         def __init__(self, *args, **kwargs) -> None:
             self.widget = QWidget()
             self.activation_count = 0
+            self.refresh_count = 0
 
         def on_tab_activated(self) -> None:
             self.activation_count += 1
 
         def on_replenish_state_changed(self, _state: str) -> None:
             return None
+
+        def refresh(self) -> None:
+            self.refresh_count += 1
 
     class FakeSimpleTabView:
         def __init__(self, *args, **kwargs) -> None:
@@ -6517,9 +6526,13 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
         def __init__(self, *args, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             self.replenish_state_listener = None
+            self.reload_count = 0
 
         def set_replenish_state_listener(self, callback) -> None:
             self.replenish_state_listener = callback
+
+        def reload_filter_options(self) -> None:
+            self.reload_count += 1
 
     monkeypatch.setattr(tabs_module, "WatchedTabView", FakeWatchedTabView)
     monkeypatch.setattr(tabs_module, "CandidateSearchSession", FakeCandidateSearchSession)
@@ -6561,6 +6574,11 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     brand = tabs.cornerWidget(Qt.Corner.TopLeftCorner)
     assert brand is not None
     assert brand.findChild(QWidget, "watchbaneShellSymbol") is not None
+
+    context.watched_tab_view._on_entries_changed([])
+    assert context.candidate_session.reload_count == 1
+    assert context.candidate_list_view.refresh_count == 1
+    assert registry._specs["filters"].view.reload_count == 1
 
     for index in range(tabs.count()):
         registry.on_current_changed(index)
@@ -6610,6 +6628,33 @@ def test_onboarding_dialog_stays_within_available_screen(qapp) -> None:
     assert dialog._page_scroll.horizontalScrollBar().maximum() == 0
     assert dialog._next_button.isVisible() is True
 
+    dialog.close()
+
+
+def test_add_title_duplicate_message_uses_interface_language(qapp, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
+
+    dialog = AddTitlePreviewDialog(_make_add_title_preview_bundle())
+    dialog._score_input.setValue(3)
+    monkeypatch.setattr(
+        "desktop.watched.add_title.preview_dialog.service.save_add_title_record",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            ok=False,
+            reason="duplicate_tmdb_identity",
+            message="backend message",
+        ),
+    )
+    warnings = []
+    monkeypatch.setattr(
+        "desktop.watched.add_title.preview_dialog.QMessageBox.warning",
+        lambda _parent, _title, message: warnings.append(message),
+    )
+
+    dialog._confirm_add()
+
+    assert warnings == ["Этот фильм или сериал уже есть в коллекции просмотренного."]
     dialog.close()
 
 
