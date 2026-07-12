@@ -6,12 +6,14 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import sqlite3
+from threading import RLock
 
 from storage.sqlite.connection import connect
 from storage.sqlite.schema import apply_v1, apply_v2, apply_v3, apply_v4, apply_v5, apply_v6
 
 
 MigrationFunc = Callable[[sqlite3.Connection], None]
+_MIGRATION_LOCK = RLock()
 
 
 @dataclass(frozen=True)
@@ -77,7 +79,7 @@ def get_current_schema_version(conn: sqlite3.Connection | None = None) -> int:
             active_conn.close()
 
 
-def apply_migrations(
+def _apply_migrations_unlocked(
     conn: sqlite3.Connection | None = None,
     *,
     migrations: Iterable[Migration] | None = None,
@@ -136,3 +138,13 @@ def apply_migrations(
     finally:
         if owned:
             active_conn.close()
+
+
+def apply_migrations(
+    conn: sqlite3.Connection | None = None,
+    *,
+    migrations: Iterable[Migration] | None = None,
+) -> int:
+    """Apply pending migrations once, serialized across in-process workers."""
+    with _MIGRATION_LOCK:
+        return _apply_migrations_unlocked(conn, migrations=migrations)

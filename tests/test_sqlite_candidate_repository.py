@@ -9,6 +9,7 @@ def test_candidate_repository_facade_exports_public_api() -> None:
         "get_worst_candidate_records",
         "load_candidate_criteria_dict",
         "load_candidate_pool_dict",
+        "merge_candidate_pool_dict",
         "query_candidate_records",
         "save_candidate_criteria_dict",
         "save_candidate_pool_dict",
