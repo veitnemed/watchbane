@@ -162,6 +162,10 @@ def test_library_sections_restore_expanded_filters_only_for_watched(qtbot, monke
 
 def test_hidden_restore_removes_hidden_state(qtbot, monkeypatch) -> None:
     view, state = _build_library(qtbot, monkeypatch)
+    changed = []
+    statuses = []
+    view._on_entries_changed = lambda entries: changed.append(list(entries))
+    view._on_status_message = lambda message, timeout: statuses.append((message, timeout))
     tabs = view.widget.findChild(QTabBar, "librarySectionTabs")
     listing = view.widget.findChild(QListWidget, "watchedList")
     tabs.setCurrentIndex(2)
@@ -172,6 +176,8 @@ def test_hidden_restore_removes_hidden_state(qtbot, monkeypatch) -> None:
 
     assert state.calls[-1] == ("restore", "Hidden Gamma")
     assert _listed_titles(listing) == []
+    assert len(changed) == 1
+    assert statuses[-1] == ("Тайтл снова доступен для рекомендаций.", 4000)
 
 
 def test_saved_to_watched_moves_between_sections(qtbot, monkeypatch) -> None:

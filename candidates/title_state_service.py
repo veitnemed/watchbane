@@ -16,7 +16,7 @@ from dataset.models.identity import (
 from dataset.models.media_type import normalize_media_type
 from dataset.models.user_rating import normalize_user_rating
 from dataset.transfer.candidate import build_candidate_transfer_payload
-from storage.sqlite import action_repository
+from storage.sqlite import action_repository, impression_repository
 from storage.sqlite.connection import connect
 from storage.sqlite.json_codec import loads_json
 from storage.sqlite.migrations import apply_migrations
@@ -158,6 +158,7 @@ def restore_candidate(candidate: dict, *, path: str | Path | None = None) -> dic
         apply_migrations(conn)
         with conn:
             _clear_candidate_actions(conn, normalized)
+            impression_repository.forget_impressions([normalized], conn=conn)
             state = _state_in_connection(conn, normalized)
         return {"ok": True, "identity": candidate_state_identity_key(normalized), "state": state}
     finally:

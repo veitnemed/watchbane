@@ -394,8 +394,9 @@ class WatchedTabView(WatchedTabActionsMixin):
         else:
             self._state_service.restore_candidate(candidate)
             message = tr("library.status.restored")
-        self._show_status(message, 4000)
+        self._notify_entries_changed()
         self._on_section_changed(self._section_tabs.currentIndex())
+        self._show_status(message, 4000)
 
     def _reload_watched_search_index(self) -> None:
         self._watched_search_index = build_watched_search_index(self._entries)

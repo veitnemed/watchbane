@@ -12,6 +12,7 @@ from storage.sqlite.action_repository import (
 from storage.sqlite.candidate_pool_repository import save_candidate_pool_dict
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
+from storage.sqlite import impression_repository
 
 
 def _candidate(*, media_type: str = "tv", tmdb_id: int = 101) -> dict:
@@ -97,12 +98,18 @@ def test_restore_returns_candidate_to_available_without_deleting_metadata(tmp_pa
         path=db_path,
         purge_watched=False,
     )
+    impression_repository.record_impressions([candidate], deck_id="deck-before-hide", path=db_path)
     states.hide_candidate(candidate, path=db_path)
 
     result = states.restore_candidate(candidate, path=db_path)
 
     assert result["state"] == states.STATE_AVAILABLE
     assert states.get_title_state(candidate, path=db_path) == states.STATE_AVAILABLE
+    assert impression_repository.get_impression(
+        "shared title|2024",
+        "tv",
+        path=db_path,
+    ) is None
     assert candidate["title"] == "Shared Title"
     conn = connect(db_path)
     try:
