@@ -153,6 +153,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_build_in_progress = False
         self._deck_build_failed = False
         self._deck_replenishing_active = False
+        self._deck_refill_failed = False
 
         self._widget = _CandidateListRoot()
         self._widget.setObjectName("candidateListRoot")
@@ -491,20 +492,23 @@ class CandidateListView(CandidateListActionsMixin):
             replenishing_for_deck=self._is_deck_replenishing(),
             build_failed=self._deck_build_failed,
             offline=bool(self._session.last_error),
+            refill_failed=self._deck_refill_failed,
         )
         indicator.apply_presentation(presentation)
         self._deck_reserve_label.setVisible(presentation.mode != "idle")
         snapshot = presentation.snapshot
         retry_build = presentation.mode == "error"
+        retry_refill = presentation.mode == "offline" and self._deck_refill_failed
         self._deck_refill_button.setText(
             tr(
                 "recommendations.deck_reserve.retry"
-                if retry_build
+                if retry_build or retry_refill
                 else "recommendations.deck_reserve.refresh"
             )
         )
         self._deck_refill_button.setVisible(
             retry_build
+            or retry_refill
             or (
                 presentation.mode == "ready"
                 and snapshot is not None
@@ -522,6 +526,7 @@ class CandidateListView(CandidateListActionsMixin):
         if deck_id:
             self._refill_requested_deck_ids.discard(deck_id)
             self._refill_last_attempt = None
+        self._deck_refill_failed = False
         self._maybe_request_recommendation_refill()
 
     def on_tab_activated(self) -> None:
@@ -595,12 +600,22 @@ class CandidateListView(CandidateListActionsMixin):
 
     def on_replenish_state_changed(self, state: str) -> None:
         """Reflect filter-worker lifecycle only when there is no usable list content."""
+        if state == "loading":
+            self._deck_replenishing_active = True
+            self._deck_refill_failed = False
+        elif state == "error":
+            self._deck_replenishing_active = False
+            self._deck_refill_failed = True
+        elif state == "finished":
+            self._deck_replenishing_active = False
+            self._deck_refill_failed = False
         deck_id = str((self._deck or {}).get("deck_id") or "")
         if state in {"error", "finished"} and deck_id:
             self._refill_requested_deck_ids.discard(deck_id)
             self._refill_last_attempt = (deck_id, perf_counter())
         if state == "finished" and self._recommendations_active:
             QTimer.singleShot(0, self.refresh)
+        self._update_deck_reserve_indicator()
         if self._candidates:
             return
         if state == "loading":
@@ -1116,13 +1131,27 @@ class CandidateListView(CandidateListActionsMixin):
                 )
             except Exception:
                 logger.exception("local recommendation deck top-up failed")
+        target_row = min(max(0, current_row), len(updated.get("active") or []) - 1)
+        target_candidate = (
+            (updated.get("active") or [])[target_row]
+            if target_row >= 0 and updated.get("active")
+            else None
+        )
         self._selected_candidate = None
-        self._selected_identity = None
+        self._selected_identity = (
+            candidate_detail_identity(target_candidate)
+            if isinstance(target_candidate, dict)
+            else None
+        )
         self._candidate_rating_selector.clear()
         self._present_recommendation_deck(updated)
         if self._candidates:
             row = min(max(0, current_row), len(self._candidates) - 1)
-            self._results_list.setCurrentIndex(self._model.index(row, 0))
+            index = self._model.index(row, 0)
+            self._results_list.blockSignals(True)
+            self._results_list.setCurrentIndex(index)
+            self._results_list.blockSignals(False)
+            self._on_result_selected(index, QModelIndex())
         else:
             self._clear_detail(show_filters_hint=False)
         self._update_deck_status()

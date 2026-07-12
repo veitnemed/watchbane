@@ -487,6 +487,12 @@ def test_candidate_list_first_activation_requests_underfilled_refill(qtbot, monk
     assert len(refill_calls) == 1
     assert _intent_countries(refill_calls[0]) == {"RU"}
 
+    view.on_replenish_state_changed("loading")
+    assert view._deck_reserve_indicator._mode == "replenishing"
+    view.on_replenish_state_changed("error")
+    assert view._deck_reserve_indicator._mode == "offline"
+    assert view._deck_refill_button.isVisible()
+
 
 def test_candidate_list_requests_refill_after_action_exhausts_reserve(qtbot, monkeypatch) -> None:
     candidate = _candidate(1, country="RU", genres=["Crime"])

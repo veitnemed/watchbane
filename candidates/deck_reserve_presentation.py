@@ -30,6 +30,7 @@ def resolve_deck_reserve_presentation(
     replenishing_for_deck: bool,
     build_failed: bool,
     offline: bool = False,
+    refill_failed: bool = False,
 ) -> DeckReservePresentation:
     if not recommendations_active:
         return DeckReservePresentation(mode="idle")
@@ -60,6 +61,13 @@ def resolve_deck_reserve_presentation(
         )
 
     snapshot = compute_deck_reserve_snapshot(deck)
+    if refill_failed:
+        return DeckReservePresentation(
+            mode="offline",
+            snapshot=snapshot,
+            tooltip_key="recommendations.deck_reserve.refill_failed",
+            tooltip_kwargs={"remaining": snapshot.remaining},
+        )
     if offline:
         return DeckReservePresentation(
             mode="offline",

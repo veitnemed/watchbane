@@ -372,6 +372,11 @@ def test_recommendation_action_promotes_reserve_item(qtbot) -> None:
     updated_titles = set(_listed_titles(list_widget))
     assert _listed_count(list_widget) == 25
     assert updated_titles - initial_titles == {"Recommendation 025"}
+    current_row = list_widget.currentIndex().row()
+    assert list_view._selected_candidate == list_view._candidates[current_row]
+    assert list_view._selected_identity == candidate_detail_identity(
+        list_view._candidates[current_row]
+    )
 
 
 def test_empty_recommendation_deck_shows_stable_empty_state(qtbot) -> None:
