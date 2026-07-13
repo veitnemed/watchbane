@@ -41,6 +41,49 @@ def rebuild_fts_index(conn: sqlite3.Connection, *, data_language: str = "ru") ->
     return len(payload_rows)
 
 
+def inspect_fts_index(conn: sqlite3.Connection, *, data_language: str = "ru") -> dict:
+    """Compare FTS rows with canonical pool documents without mutating storage."""
+    try:
+        fts_rows = conn.execute("SELECT pool_key, document FROM candidate_fts").fetchall()
+    except sqlite3.OperationalError:
+        return {
+            "ok": False,
+            "reason": "unavailable",
+            "pool_total": 0,
+            "fts_total": 0,
+            "missing": 0,
+            "orphaned": 0,
+            "stale": 0,
+        }
+
+    expected: dict[str, str] = {}
+    for row in conn.execute("SELECT pool_key, payload_json FROM candidate_records"):
+        candidate = loads_json(row["payload_json"], {})
+        if isinstance(candidate, dict):
+            expected[str(row["pool_key"])] = build_search_document(
+                candidate,
+                data_language=data_language,
+            )
+    actual = {str(row["pool_key"]): str(row["document"] or "") for row in fts_rows}
+    missing_keys = expected.keys() - actual.keys()
+    orphaned_keys = actual.keys() - expected.keys()
+    stale_keys = {
+        pool_key
+        for pool_key in expected.keys() & actual.keys()
+        if expected[pool_key] != actual[pool_key]
+    }
+    ok = not missing_keys and not orphaned_keys and not stale_keys
+    return {
+        "ok": ok,
+        "reason": None if ok else "inconsistent",
+        "pool_total": len(expected),
+        "fts_total": len(actual),
+        "missing": len(missing_keys),
+        "orphaned": len(orphaned_keys),
+        "stale": len(stale_keys),
+    }
+
+
 def upsert_fts_rows(
     conn: sqlite3.Connection,
     rows: list[tuple[str, dict]],

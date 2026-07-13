@@ -42,6 +42,10 @@ def test_export_sqlite_to_legacy_json_preserves_file_names(tmp_path) -> None:
         "cache/posters/posters.json",
     ):
         assert (output_dir / relative_path).is_file()
+    assert _read_json(output_dir / "_watchbane_export.json") == {
+        "format": "watchbane-legacy-json",
+        "schema_version": 1,
+    }
 
 
 def test_export_sqlite_to_legacy_json_writes_complete_json_files(tmp_path) -> None:
@@ -101,3 +105,25 @@ def test_import_then_export_matches_canonicalized_legacy_data(tmp_path) -> None:
     assert _read_json(output_dir / "candidates" / "watchlist.json") == payloads[base / "candidates" / "watchlist.json"]
     assert _read_json(output_dir / "settings.json") == {"ui_scale": 1.25}
     assert _read_json(output_dir / "cache" / "posters" / "posters.json") == payloads[base / "cache" / "posters" / "posters.json"]
+
+
+def test_export_modify_import_and_restore_round_trip(tmp_path) -> None:
+    from storage.sqlite import watched_repository
+    from storage.sqlite.backup import restore_sqlite_database
+
+    db_path = tmp_path / "watchbane.sqlite3"
+    export_dir = tmp_path / "export"
+    alpha = {"Alpha": {"main_info": {"title": "Alpha", "year": 2020}}}
+    beta = {"Beta": {"main_info": {"title": "Beta", "year": 2021}}}
+    watched_repository.save_dataset_dict(alpha, path=db_path)
+    export_sqlite_to_legacy_json(output_dir=export_dir, db_path=db_path)
+
+    watched_repository.save_dataset_dict(beta, path=db_path)
+    report = import_legacy_json_to_sqlite(base_dir=export_dir, db_path=db_path)
+
+    assert list(watched_repository.load_dataset_dict(path=db_path)) == ["Alpha"]
+    recovery_backup = Path(report["runtime_backup"])
+    assert recovery_backup.is_file()
+
+    restore_sqlite_database(recovery_backup, db_path=db_path)
+    assert list(watched_repository.load_dataset_dict(path=db_path)) == ["Beta"]

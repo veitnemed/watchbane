@@ -1,18 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-from PyInstaller.utils.hooks import collect_all
-
-
-webengine_datas, webengine_binaries, webengine_hiddenimports = collect_all(
-    "PyQt6.QtWebEngineCore"
-)
-
 a = Analysis(
     ["start_app.py"],
     pathex=[],
-    binaries=webengine_binaries,
-    datas=[("desktop/images", "desktop/images"), *webengine_datas],
-    hiddenimports=webengine_hiddenimports,
+    binaries=[],
+    datas=[
+        ("desktop/images/logos", "desktop/images/logos"),
+        (
+            "desktop/images/logos_for_start_select_menu",
+            "desktop/images/logos_for_start_select_menu",
+        ),
+        ("desktop/images/user_rating_not_for_me.svg", "desktop/images"),
+        ("desktop/images/user_rating_ok.svg", "desktop/images"),
+        ("desktop/images/user_rating_top.svg", "desktop/images"),
+    ],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -35,7 +37,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
-    disable_windowed_traceback=False,
+    disable_windowed_traceback=True,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,

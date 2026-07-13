@@ -6,12 +6,14 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import sqlite3
+from threading import RLock
 
 from storage.sqlite.connection import connect
-from storage.sqlite.schema import apply_v1, apply_v2, apply_v3, apply_v4, apply_v5
+from storage.sqlite.schema import apply_v1, apply_v2, apply_v3, apply_v4, apply_v5, apply_v6
 
 
 MigrationFunc = Callable[[sqlite3.Connection], None]
+_MIGRATION_LOCK = RLock()
 
 
 @dataclass(frozen=True)
@@ -28,6 +30,7 @@ MIGRATIONS: tuple[Migration, ...] = (
     Migration(3, "candidate_fts_v3", apply_v3),
     Migration(4, "candidate_impressions_v4", apply_v4),
     Migration(5, "user_rating_scale_v5", apply_v5, backup_before=True),
+    Migration(6, "recommendation_deck_state_v6", apply_v6),
 )
 
 
@@ -76,7 +79,7 @@ def get_current_schema_version(conn: sqlite3.Connection | None = None) -> int:
             active_conn.close()
 
 
-def apply_migrations(
+def _apply_migrations_unlocked(
     conn: sqlite3.Connection | None = None,
     *,
     migrations: Iterable[Migration] | None = None,
@@ -91,6 +94,13 @@ def apply_migrations(
             int(row["version"]): str(row["name"])
             for row in active_conn.execute("SELECT version, name FROM schema_migrations")
         }
+        supported_versions = {migration.version for migration in migration_list}
+        unsupported_versions = sorted(set(applied) - supported_versions)
+        if unsupported_versions:
+            raise MigrationError(
+                "SQLite schema is newer than this Watchbane build: "
+                + ", ".join(str(version) for version in unsupported_versions)
+            )
         for migration in sorted(migration_list, key=lambda item: item.version):
             applied_name = applied.get(migration.version)
             if applied_name is not None:
@@ -117,7 +127,9 @@ def apply_migrations(
                         db_path=target,
                         backup_dir=target.parent / "backups" / "migrations",
                     )
-            with active_conn:
+            savepoint = f"watchbane_migration_{migration.version}"
+            active_conn.execute(f"SAVEPOINT {savepoint}")
+            try:
                 migration.apply(active_conn)
                 active_conn.execute(
                     """
@@ -130,8 +142,23 @@ def apply_migrations(
                         datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     ),
                 )
+                active_conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+            except Exception:
+                active_conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                active_conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+                raise
             applied[migration.version] = migration.name
         return get_current_schema_version(active_conn)
     finally:
         if owned:
             active_conn.close()
+
+
+def apply_migrations(
+    conn: sqlite3.Connection | None = None,
+    *,
+    migrations: Iterable[Migration] | None = None,
+) -> int:
+    """Apply pending migrations once, serialized across in-process workers."""
+    with _MIGRATION_LOCK:
+        return _apply_migrations_unlocked(conn, migrations=migrations)

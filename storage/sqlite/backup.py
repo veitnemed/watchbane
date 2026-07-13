@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from pathlib import Path
+import shutil
 import sqlite3
 
 from config import constant
@@ -96,15 +98,39 @@ def restore_sqlite_database(
     target.parent.mkdir(parents=True, exist_ok=True)
 
     source_conn = sqlite3.connect(source)
+    temp_target = target.with_suffix(target.suffix + ".restoring")
     try:
         _validate_backup_source(source_conn, source)
 
-        target_conn = sqlite3.connect(target)
+        # A valid restore is intentionally destructive. Preserve the current
+        # runtime first so the user can recover even if the chosen backup is
+        # valid but not the state they intended to restore.
+        if target.is_file():
+            try:
+                backup_sqlite_database(db_path=target)
+            except sqlite3.DatabaseError:
+                stamp = datetime.now().strftime("%d-%m-%Y %H-%M-%S-%f")
+                preserved_dir = Path(constant.BACKUP_DIR) / "diagnostics" / f"pre_restore_{stamp}"
+                preserved_dir.mkdir(parents=True, exist_ok=False)
+                shutil.copy2(target, preserved_dir / target.name)
+                for suffix in ("-wal", "-shm"):
+                    sidecar = Path(str(target) + suffix)
+                    if sidecar.is_file():
+                        shutil.copy2(sidecar, preserved_dir / sidecar.name)
+
+        temp_target.unlink(missing_ok=True)
+        target_conn = sqlite3.connect(temp_target)
         try:
             source_conn.backup(target_conn)
+            _validate_backup_source(target_conn, temp_target)
             row = target_conn.execute("SELECT COUNT(*) FROM watched_records").fetchone()
-            return int(row[0])
+            restored_count = int(row[0])
         finally:
             target_conn.close()
+        os.replace(temp_target, target)
+        for suffix in ("-wal", "-shm"):
+            Path(str(target) + suffix).unlink(missing_ok=True)
+        return restored_count
     finally:
         source_conn.close()
+        temp_target.unlink(missing_ok=True)

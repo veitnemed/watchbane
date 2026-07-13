@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from candidates.pool_service import get_search_overview_view
+from candidates.onboarding_service import replenish_candidate_pool_for_filters
 from candidates.search_service import (
     DEFAULT_SEARCH_SORT_MODE,
     SEARCH_SORT_MODES,

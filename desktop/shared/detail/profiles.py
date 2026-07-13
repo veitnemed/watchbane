@@ -168,6 +168,7 @@ DETAIL_COMPACT_UI_SCALE = 1.10
 DETAIL_STACKED_UI_SCALE = 1.25
 DETAIL_STACKED_INFO_UI_SCALE = 1.00
 DETAIL_COMPACT_POSTER_WIDTH = 300
+DETAIL_STACKED_POSTER_WIDTH = 245
 
 
 def use_compact_detail_content() -> bool:
@@ -190,7 +191,12 @@ def detail_poster_px(value: int | float) -> int:
     scaled = poster_px(value)
     if not use_compact_detail_content():
         return scaled
-    compact_ratio = DETAIL_COMPACT_POSTER_WIDTH / DETAIL_POSTER_WIDTH
+    target_width = (
+        DETAIL_STACKED_POSTER_WIDTH
+        if use_stacked_detail_layout()
+        else DETAIL_COMPACT_POSTER_WIDTH
+    )
+    compact_ratio = target_width / DETAIL_POSTER_WIDTH
     compact_base = float(value) * compact_ratio
     return max(1, int(round(poster_px(compact_base) / get_ui_scale())))
 
@@ -245,6 +251,7 @@ class DetailCardLayoutProfile:
     rating_value_font_point: int
     rating_label_font_point: int
     show_user_score: bool = True
+    show_recommendation_strength: bool = False
     show_mark_watched_button: bool = False
     show_hide_candidate_button: bool = False
     include_bottom_stretch: bool = True
@@ -362,6 +369,7 @@ ADD_TITLE_PREVIEW_CARD_PROFILE = DetailCardLayoutProfile(
 CANDIDATE_DETAIL_CARD_PROFILE = replace(
     DETAIL_CARD_LAYOUT_PROFILE,
     show_user_score=False,
+    show_recommendation_strength=True,
     show_mark_watched_button=False,
     show_hide_candidate_button=False,
 )

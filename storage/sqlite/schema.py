@@ -8,9 +8,18 @@ import json
 from dataset.models.user_rating import legacy_score_to_user_rating
 
 
+def _execute_script_transactionally(conn: sqlite3.Connection, script: str) -> None:
+    """Execute static DDL without ``executescript`` implicitly committing it."""
+    for statement in script.split(";"):
+        sql = statement.strip()
+        if sql:
+            conn.execute(sql)
+
+
 def apply_v1(conn: sqlite3.Connection) -> None:
     """Create the initial hybrid SQLite schema."""
-    conn.executescript(
+    _execute_script_transactionally(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS watched_records (
           dataset_key TEXT PRIMARY KEY,
@@ -121,7 +130,8 @@ def _add_column_if_missing(conn: sqlite3.Connection, table: str, column: str, de
 
 def apply_v2(conn: sqlite3.Connection) -> None:
     """Add deterministic onboarding candidate-autofill storage."""
-    conn.executescript(
+    _execute_script_transactionally(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS onboarding_profiles (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,7 +175,8 @@ def apply_v2(conn: sqlite3.Connection) -> None:
     _add_column_if_missing(conn, "candidate_records", "candidate_score", "REAL")
     _add_column_if_missing(conn, "candidate_records", "fetch_rank", "INTEGER")
 
-    conn.executescript(
+    _execute_script_transactionally(
+        conn,
         """
         CREATE INDEX IF NOT EXISTS idx_candidate_source
           ON candidate_records(source);
@@ -179,7 +190,8 @@ def apply_v2(conn: sqlite3.Connection) -> None:
 
 def apply_v3(conn: sqlite3.Connection) -> None:
     """Add FTS5 search index over deterministic candidate documents."""
-    conn.executescript(
+    _execute_script_transactionally(
+        conn,
         """
         CREATE VIRTUAL TABLE IF NOT EXISTS candidate_fts USING fts5(
           pool_key UNINDEXED,
@@ -192,7 +204,8 @@ def apply_v3(conn: sqlite3.Connection) -> None:
 
 def apply_v4(conn: sqlite3.Connection) -> None:
     """Add recommendation impression history independent from user actions."""
-    conn.executescript(
+    _execute_script_transactionally(
+        conn,
         """
         CREATE TABLE IF NOT EXISTS candidate_impressions (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -237,7 +250,8 @@ def apply_v5(conn: sqlite3.Connection) -> None:
             "UPDATE watched_records SET user_score = ?, payload_json = ? WHERE dataset_key = ?",
             (rating, payload_json, row["dataset_key"]),
         )
-    conn.executescript(
+    _execute_script_transactionally(
+        conn,
         """
         CREATE TABLE watched_records_v5 (
           dataset_key TEXT PRIMARY KEY,
@@ -271,6 +285,21 @@ def apply_v5(conn: sqlite3.Connection) -> None:
         CREATE INDEX idx_watched_media_year ON watched_records(media_type, year);
         CREATE INDEX idx_watched_tmdb ON watched_records(media_type, tmdb_id);
         CREATE INDEX idx_watched_imdb ON watched_records(imdb_id);
+        """
+    )
+
+
+def apply_v6(conn: sqlite3.Connection) -> None:
+    """Persist the single current recommendation deck across app restarts."""
+    _execute_script_transactionally(
+        conn,
+        """
+        CREATE TABLE IF NOT EXISTS recommendation_deck_state (
+          singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+          deck_id TEXT NOT NULL,
+          state_json TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
         """
     )
 

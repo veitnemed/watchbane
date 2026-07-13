@@ -101,5 +101,22 @@ def test_ready_returns_snapshot() -> None:
     )
     assert presentation.mode == "ready"
     assert presentation.snapshot is not None
-    assert presentation.snapshot.percent == 28
+    assert presentation.snapshot.percent == 16
+
+
+def test_offline_keeps_local_supply_visible() -> None:
+    presentation = resolve_deck_reserve_presentation(
+        recommendations_active=True,
+        deck=_ready_deck(active_count=7),
+        deck_build_in_progress=False,
+        deck_load_scheduled=False,
+        deck_prepare_active=False,
+        session_loading=False,
+        replenishing_for_deck=False,
+        build_failed=False,
+        offline=True,
+    )
+    assert presentation.mode == "offline"
+    assert presentation.snapshot is not None
+    assert presentation.snapshot.remaining == 7
     assert presentation.tooltip_kwargs["remaining"] == 7

@@ -22,6 +22,8 @@ class AddTitleResolveBundle:
     found: bool
     statuses: dict
     pool_candidate: dict | None = None
+    search_results: tuple[dict, ...] = ()
+    selected_tmdb_id: int | None = None
 
 
 def resolve_title_for_add(
@@ -31,6 +33,7 @@ def resolve_title_for_add(
     on_progress=None,
     data_language: str = "ru",
     media_type: str = "tv",
+    selected_tmdb_id: int | None = None,
 ) -> AddTitleResolveBundle:
     """Resolve title through SQL/KP/TMDb and build preview card data."""
     resolved = title_resolve.resolve_title_data_for_add(
@@ -39,6 +42,7 @@ def resolve_title_for_add(
         on_progress=on_progress,
         data_language=data_language,
         media_type=media_type,
+        selected_tmdb_id=selected_tmdb_id,
     )
     return build_add_title_resolve_bundle(resolved, data_language=data_language)
 
@@ -76,4 +80,10 @@ def build_add_title_resolve_bundle(resolved: dict, data_language: str = "ru") ->
         preview_card=preview_card,
         found=bool(resolved.get("found")),
         statuses=dict(resolved.get("statuses") or {}),
+        search_results=tuple(
+            dict(item)
+            for item in (resolved.get("search_results") or [])
+            if isinstance(item, dict)
+        ),
+        selected_tmdb_id=resolved.get("selected_tmdb_id"),
     )

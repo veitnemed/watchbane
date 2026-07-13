@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QCheckBox, QComboBox, QProgressBar, QPushButton
 
 from desktop.candidates.filters_view import CandidateFiltersView, clamp_filter_replenish_batch_size
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.i18n import tr
 
 
 class FakeReplenishService:
@@ -118,6 +119,115 @@ def _build_view(qtbot, service: FakeReplenishService | None = None):
     return service, session, view
 
 
+def test_default_candidate_search_service_exposes_filter_replenish() -> None:
+    session = CandidateSearchSession()
+
+    assert callable(getattr(session.service, "replenish_candidate_pool_for_filters", None))
+
+
+def test_filter_layout_stacks_without_hidden_horizontal_overflow(qtbot) -> None:
+    _service, _session, view = _build_view(qtbot)
+
+    view.widget.resize(900, 700)
+    qtbot.waitUntil(lambda: view._content_stacked is True)
+
+    assert abs(view._form.scroll.width() - view._summary_scroll.width()) <= 4
+
+    view.widget.resize(1280, 700)
+    qtbot.waitUntil(lambda: view._content_stacked is False)
+
+    assert view._form.scroll.width() > view._summary_scroll.width()
+
+
+def test_filter_intro_stats_are_visible_when_copy_is_nonempty(qtbot) -> None:
+    _service, _session, view = _build_view(qtbot)
+
+    assert view._intro_stats.text().strip()
+    assert view._intro_stats.isVisible()
+
+
+def test_changed_filter_is_marked_pending_until_apply(qtbot) -> None:
+    _service, session, view = _build_view(qtbot)
+
+    view._media_type_combo.setCurrentIndex(1)
+
+    assert view._filters_dirty is True
+    assert view._apply_button.text() == tr("candidates.filters.summary.apply_pending")
+
+    view._apply_filters()
+    qtbot.waitUntil(lambda: session.filters is not None)
+    assert view._filters_dirty is False
+    assert view._apply_button.text() == tr("candidates.filters.summary.apply")
+
+
+def test_filter_state_refreshes_when_pool_becomes_empty(qtbot) -> None:
+    _service, session, view = _build_view(qtbot)
+    session.last_error = "previous failure"
+    session.filters = dict(DEFAULT_BROWSE_FILTERS)
+    session.filtered_candidates = [{"title": "Before"}]
+    session.filtered_count = 1
+    session._notify_listeners()
+
+    session._apply_search_result(
+        dict(DEFAULT_BROWSE_FILTERS),
+        {
+            "is_empty_pool": True,
+            "overview": {"is_empty": True, "candidates": [], "stats": {}},
+        },
+    )
+
+    assert view._intro_lead.text() == tr("candidates.filters.empty.lead")
+    assert view._intro_stats.text() == tr("candidates.filters.empty.stats")
+    assert view._intro_stats.isVisible()
+    assert view._apply_button.isEnabled() is False
+    assert session.last_error is None
+
+
+def test_filter_error_hides_raw_service_details(qtbot) -> None:
+    _service, session, view = _build_view(qtbot)
+    raw_error = "token=secret-token path D:\\runtime\\watchbane.sqlite3"
+
+    session.last_error = raw_error
+    session._notify_listeners()
+
+    assert view._intro_lead.text() == tr("candidates.filters.error.lead")
+    assert view._intro_stats.text() == tr("candidates.filters.error.stats")
+    assert raw_error not in view._intro_stats.text()
+
+
+def test_async_error_does_not_retry_failed_overview_on_ui_thread(qtbot) -> None:
+    _service, session, view = _build_view(qtbot)
+
+    class BrokenOverviewService:
+        calls = 0
+
+        def get_search_overview_view(self):
+            self.calls += 1
+            raise RuntimeError("database unavailable")
+
+    broken = BrokenOverviewService()
+    session.service = broken
+    session._overview_cache = None
+    session._request_id = 1
+    session._set_loading(True)
+
+    session._on_async_result(
+        1,
+        dict(DEFAULT_BROWSE_FILTERS),
+        {
+            "ok": False,
+            "is_empty_pool": False,
+            "error": "database unavailable",
+            "candidates": [],
+        },
+    )
+
+    assert broken.calls == 0
+    assert session.is_loading is False
+    assert session.last_error == "database unavailable"
+    assert view._intro_stats.text() == tr("candidates.filters.error.stats")
+
+
 def test_summary_sidebar_yields_width_to_filters_on_narrow_window(qtbot) -> None:
     _service, _session, view = _build_view(qtbot)
     view.widget.resize(1100, 800)
@@ -134,6 +244,7 @@ def test_apply_with_replenish_unchecked_keeps_old_behavior(qtbot) -> None:
     assert apply_button is not None
     assert checkbox is not None
     assert progress is not None
+    assert progress.accessibleName()
     assert checkbox.isChecked() is False
 
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)

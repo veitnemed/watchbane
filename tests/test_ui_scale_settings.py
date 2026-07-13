@@ -1,5 +1,6 @@
 import importlib
 import re
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +12,8 @@ from desktop.settings.app_settings import (
     APP_DATA_LANGUAGE_ENV,
     APP_INTERFACE_LANGUAGE_ENV,
     APP_LANGUAGE_DEFAULT,
+    APP_SETTINGS_SCHEMA_KEY,
+    APP_SETTINGS_SCHEMA_VERSION,
     APP_UI_SCALE_DEFAULT,
     APP_UI_SCALE_MAX,
     APP_UI_SCALE_MIN,
@@ -38,6 +41,21 @@ DEFAULT_TUNING = {
 }
 
 SCALE_ANCHORS = (0.75, 1.0, 1.50)
+
+
+def test_shell_package_does_not_eager_import_scaled_tab_modules() -> None:
+    source = (
+        "import sys; import desktop.shell; "
+        "assert 'desktop.shell.tabs' not in sys.modules; "
+        "assert 'desktop.candidates.list_view' not in sys.modules; "
+        "assert 'desktop.watched.tab' not in sys.modules"
+    )
+
+    subprocess.run(
+        [sys.executable, "-c", source],
+        cwd=Path(__file__).resolve().parents[1],
+        check=True,
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -145,6 +163,71 @@ def test_invalid_persisted_language_values_default_to_ru(monkeypatch, tmp_path) 
     assert settings.interface_language == "ru"
     assert settings.data_language == "ru"
 
+    persisted = settings_repository.load_settings_dict(path=db_path)
+    assert persisted["interface_language"] == "ru"
+    assert persisted["data_language"] == "ru"
+    assert persisted[APP_SETTINGS_SCHEMA_KEY] == APP_SETTINGS_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [(-50, APP_UI_SCALE_MIN), (50, APP_UI_SCALE_MAX), ("broken", APP_UI_SCALE_DEFAULT)],
+)
+def test_invalid_persisted_scale_is_normalized_and_saved(monkeypatch, tmp_path, stored, expected) -> None:
+    db_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_repository.save_settings_dict(
+        {"ui_scale": stored, "future_setting": {"keep": True}},
+        path=db_path,
+    )
+
+    assert load_app_settings().ui_scale == expected
+
+    persisted = settings_repository.load_settings_dict(path=db_path)
+    assert persisted["ui_scale"] == expected
+    assert persisted["future_setting"] == {"keep": True}
+    assert persisted[APP_SETTINGS_SCHEMA_KEY] == APP_SETTINGS_SCHEMA_VERSION
+
+
+def test_legacy_settings_payload_is_upgraded_without_dropping_unknown_keys(monkeypatch, tmp_path) -> None:
+    db_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_repository.save_settings_dict(
+        {
+            "interface_language": "en",
+            "unknown_tab": "future-screen",
+            "future_payload": {"version": 9},
+        },
+        path=db_path,
+    )
+
+    settings = load_app_settings()
+
+    assert settings.interface_language == "en"
+    persisted = settings_repository.load_settings_dict(path=db_path)
+    assert persisted["data_language"] == APP_LANGUAGE_DEFAULT
+    assert persisted["ui_scale"] == APP_UI_SCALE_DEFAULT
+    assert persisted["unknown_tab"] == "future-screen"
+    assert persisted["future_payload"] == {"version": 9}
+
+
+def test_ui_settings_repair_does_not_replace_persisted_recommendation_deck(monkeypatch, tmp_path) -> None:
+    from storage.sqlite import recommendation_deck_repository
+
+    db_path = _use_settings_path(monkeypatch, tmp_path)
+    original_deck = {
+        "deck_id": "keep-this-deck",
+        "active": [{"title": "Existing", "media_type": "movie", "tmdb_id": 1}],
+        "reserve": [],
+    }
+    recommendation_deck_repository.save_current_deck(original_deck, path=db_path)
+    settings_repository.set_setting("ui_scale", "invalid", path=db_path)
+    settings_repository.set_setting("interface_language", "unknown", path=db_path)
+
+    settings = load_app_settings()
+
+    assert settings.ui_scale == APP_UI_SCALE_DEFAULT
+    assert settings.interface_language == APP_LANGUAGE_DEFAULT
+    assert recommendation_deck_repository.load_current_deck(path=db_path) == original_deck
+
 
 def test_save_then_load_ui_scale(monkeypatch, tmp_path) -> None:
     db_path = _use_settings_path(monkeypatch, tmp_path)
@@ -175,6 +258,7 @@ def test_save_then_load_languages(monkeypatch, tmp_path) -> None:
         "data_language": "ru",
         "auto_pool_refill": True,
         "fts_search_enabled": True,
+        APP_SETTINGS_SCHEMA_KEY: APP_SETTINGS_SCHEMA_VERSION,
     }
     assert settings.interface_language == "en"
     assert settings.data_language == "ru"
@@ -461,17 +545,69 @@ def test_ensure_scaled_ui_modules_reloads_early_imported_profiles() -> None:
 
     import desktop.shared.detail.profiles as profiles
     import desktop.theme.scaling as scaling
+    import desktop.theme.shell_layout as shell_layout
+    import desktop.theme.styles.shell as shell_style
     from desktop.theme.ui_modules import ensure_scaled_ui_modules
 
     scaling.set_ui_scale(1.0)
     scaling._scale_tuning = dict(DEFAULT_TUNING)
-    importlib.import_module("desktop.shared.detail.profiles")
+    profiles = importlib.reload(profiles)
     assert profiles.LIST_ITEM_HEIGHT == 84
 
     scaling.set_ui_scale(0.75)
     ensure_scaled_ui_modules()
 
     assert profiles.LIST_ITEM_HEIGHT == 63
+    assert f"top: -{shell_layout.MAIN_TAB_PANE_TOP_LIFT_PX}px;" in shell_style.build_shell_style()
+
+
+def test_ensure_scaled_main_tab_modules_refreshes_loaded_consumers() -> None:
+    import desktop.candidates as candidates_package
+    import desktop.candidates.filters_view as filters_view
+    import desktop.candidates.list_view as list_view
+    import desktop.settings.tab_view as settings_tab_view
+    import desktop.shell.tabs as shell_tabs
+    import desktop.theme.scaling as scaling
+    import desktop.theme.shell_layout as shell_layout
+    import desktop.theme.styles.shell as shell_style
+    import desktop.watched.sidebar as watched_sidebar
+    import desktop.watched.tab as watched_tab
+    from desktop.theme.ui_modules import ensure_scaled_main_tab_modules
+
+    scaling.set_ui_scale(1.0)
+    scaling._scale_tuning = dict(DEFAULT_TUNING)
+    ensure_scaled_main_tab_modules()
+    initial_metrics = (
+        list_view.CANDIDATE_LIST_MAX_WIDTH_PX,
+        filters_view.APPLY_BUTTON_HEIGHT,
+        watched_sidebar.SIDEBAR_MAX_WIDTH_PX,
+        watched_tab.WATCHED_TAB_MARGIN_PX,
+        settings_tab_view.WATCHED_TAB_MARGIN_PX,
+    )
+
+    try:
+        scaling.set_ui_scale(1.3)
+        ensure_scaled_main_tab_modules()
+
+        assert list_view.CANDIDATE_LIST_MAX_WIDTH_PX == shell_layout.CANDIDATE_LIST_MAX_WIDTH_PX
+        assert filters_view.APPLY_BUTTON_HEIGHT == scaling.control_px(40)
+        assert watched_sidebar.SIDEBAR_MAX_WIDTH_PX == shell_layout.SIDEBAR_MAX_WIDTH_PX
+        assert watched_tab.WATCHED_TAB_MARGIN_PX == shell_layout.WATCHED_TAB_MARGIN_PX
+        assert settings_tab_view.WATCHED_TAB_MARGIN_PX == shell_layout.WATCHED_TAB_MARGIN_PX
+        assert shell_tabs.CandidateListView is list_view.CandidateListView
+        assert candidates_package.CandidateListView is list_view.CandidateListView
+        assert f"top: -{shell_layout.MAIN_TAB_PANE_TOP_LIFT_PX}px;" in shell_style.build_shell_style()
+        assert (
+            list_view.CANDIDATE_LIST_MAX_WIDTH_PX,
+            filters_view.APPLY_BUTTON_HEIGHT,
+            watched_sidebar.SIDEBAR_MAX_WIDTH_PX,
+            watched_tab.WATCHED_TAB_MARGIN_PX,
+            settings_tab_view.WATCHED_TAB_MARGIN_PX,
+        ) != initial_metrics
+    finally:
+        scaling.set_ui_scale(1.0)
+        scaling._scale_tuning = dict(DEFAULT_TUNING)
+        ensure_scaled_main_tab_modules()
 
 
 def test_bootstrap_uses_app_scale_without_qt_scale_factor() -> None:
@@ -675,7 +811,6 @@ def test_settings_tab_uses_slider_scale_control() -> None:
     assert "SettingsTabView" in factory_source
     assert '"Информация"' not in factory_source
     assert "AnalyticsView" not in factory_source
-    assert "on_watched_entries_changed" not in factory_source
 
 
 def test_settings_tab_contains_language_controls(monkeypatch, tmp_path, qapp) -> None:
@@ -814,6 +949,9 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
     assert shell_layout.CANDIDATE_LIST_MIN_WIDTH_PX < shell_layout.CANDIDATE_LIST_MAX_WIDTH_PX
     assert shell_layout.CANDIDATE_SPLITTER_LIST_DEFAULT_PX == shell_layout.SPLITTER_SIDEBAR_DEFAULT_PX
     assert shell_layout.CANDIDATE_SPLITTER_DETAIL_DEFAULT_PX == shell_layout.SPLITTER_DETAIL_DEFAULT_PX
+    assert shell_layout.WATCHED_DETAIL_COLLAPSE_WIDTH_PX == layout.DETAIL_SPLIT_COLLAPSE_WIDTH
+    assert shell_layout.CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX == layout.DETAIL_SPLIT_COLLAPSE_WIDTH
+    assert layout.DETAIL_SPLIT_COLLAPSE_WIDTH < 1280
 
     watched_profile = profiles.DETAIL_CARD_LAYOUT_PROFILE
     candidate_profile = profiles.CANDIDATE_DETAIL_CARD_PROFILE
@@ -826,6 +964,13 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
     )
     assert watched_profile.detail_poster_width >= 240
     assert watched_profile.detail_poster_height >= 360
+    if profiles.use_stacked_detail_layout():
+        first_fold_height = (
+            watched_profile.detail_poster_height
+            + watched_profile.detail_poster_right_gap
+            + watched_profile.detail_title_min_height
+        )
+        assert first_fold_height < 520
     assert candidate_profile.detail_poster_width == watched_profile.detail_poster_width
     assert candidate_profile.detail_poster_height == watched_profile.detail_poster_height
     assert candidate_profile.detail_content_max_width == watched_profile.detail_content_max_width
@@ -917,8 +1062,10 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
 
     watched_filters = WatchedFiltersPanel([], on_filters_changed=lambda: None)
     assert watched_filters.panel.isHidden() is True
+    assert watched_filters.scroll.isHidden() is True
     watched_filters.toggle_panel()
     assert watched_filters.panel.isHidden() is False
+    assert watched_filters.scroll.isHidden() is False
     assert set(watched_filters._score_buttons) == {1, 2, 3}
     assert all(button.sizeHint().height() >= 20 for button in watched_filters._score_buttons.values())
     assert watched_filters._year_slider.minimumHeight() >= 34
@@ -936,6 +1083,17 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
     assert filters_view._form.scroll.widgetResizable() is True
     assert filters_view._tmdb_score_slider.minimumHeight() >= 34
     assert filters_view._tmdb_votes_slider.minimumHeight() >= 34
+    filters_view.widget.resize(900, 700)
+    filters_view.widget.show()
+    qapp.processEvents()
+    assert filters_view._content_stacked is True
+    assert abs(filters_view._form.scroll.width() - filters_view._summary_scroll.width()) <= 4
+    assert filters_view.widget.minimumSizeHint().width() <= 900
+    assert filters_view.widget.minimumSizeHint().height() <= 700
+    filters_view.widget.resize(1280, 700)
+    qapp.processEvents()
+    assert filters_view._content_stacked is False
+    assert filters_view._form.scroll.width() > filters_view._summary_scroll.width()
     for row in filters_view.widget.findChildren(QFrame, "candidateFiltersSummaryRow"):
         row_layout = row.layout()
         assert isinstance(row_layout, QHBoxLayout)
@@ -995,8 +1153,80 @@ def test_scale_anchor_widget_contract_properties(qapp, ui_scale) -> None:
 
 
 @pytest.mark.parametrize("ui_scale", SCALE_ANCHORS)
+def test_scale_anchor_watched_filter_surface_is_bounded(qapp, ui_scale) -> None:
+    from PyQt6.QtCore import QPoint, QRect, Qt
+    from PyQt6.QtWidgets import QAbstractScrollArea, QListWidget, QSizePolicy
+
+    _set_anchor_ui_scale(ui_scale)
+
+    import desktop.watched.filters_panel as filters_panel_module
+    import desktop.watched.sidebar as sidebar_module
+
+    importlib.reload(filters_panel_module)
+    sidebar_module = importlib.reload(sidebar_module)
+
+    sidebar, handles = sidebar_module.build_watched_sidebar(
+        entries=[],
+        on_add_title=lambda: None,
+        on_filters_changed=lambda: None,
+        on_selection_changed=lambda _row: None,
+        on_context_menu=lambda _position: None,
+        on_section_changed=lambda _index: None,
+    )
+    sidebar.resize(sidebar.maximumWidth(), 700)
+    sidebar.show()
+    qapp.processEvents()
+
+    filters = handles["filters"]
+    listing = handles["list_widget"]
+    counter = handles["list_counter_label"]
+    scroll = filters.scroll
+
+    assert isinstance(listing, QListWidget)
+    assert listing.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Ignored
+    assert scroll.widgetResizable() is True
+    assert scroll.sizeAdjustPolicy() == QAbstractScrollArea.SizeAdjustPolicy.AdjustIgnored
+    assert scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert scroll.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Ignored
+    assert scroll.isHidden() is True
+    assert listing.isVisible() is True
+    assert counter.isVisible() is True
+
+    filters.toggle.click()
+    qapp.processEvents()
+
+    assert scroll.isVisible() is True
+    assert filters.panel.isVisible() is True
+    assert listing.isHidden() is True
+    assert counter.isHidden() is True
+    assert sidebar.height() <= 700
+    assert sidebar.minimumSizeHint().height() <= 700
+    if ui_scale == max(SCALE_ANCHORS):
+        assert scroll.verticalScrollBar().maximum() > 0
+
+    scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum())
+    qapp.processEvents()
+    reset = filters.panel.findChild(filters_panel_module.QPushButton, "watchedFilterResetAll")
+    assert reset is not None
+    reset_top_left = reset.mapTo(scroll.viewport(), QPoint(0, 0))
+    assert scroll.viewport().rect().intersects(QRect(reset_top_left, reset.size()))
+
+    filters.toggle.click()
+    qapp.processEvents()
+
+    assert scroll.isHidden() is True
+    assert filters.panel.isHidden() is True
+    assert listing.isVisible() is True
+    assert counter.isVisible() is True
+    assert sidebar.height() <= 700
+    assert sidebar.minimumSizeHint().height() <= 700
+    sidebar.close()
+
+
+@pytest.mark.parametrize("ui_scale", SCALE_ANCHORS)
 def test_scale_anchor_add_title_dialog_contract_properties(qapp, ui_scale) -> None:
-    from PyQt6.QtWidgets import QLabel, QLineEdit, QPushButton
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QLabel, QLineEdit, QPushButton, QScrollArea
 
     _set_anchor_ui_scale(ui_scale)
 
@@ -1050,8 +1280,19 @@ def test_scale_anchor_add_title_dialog_contract_properties(qapp, ui_scale) -> No
     confirm_hint = preview_dialog.findChild(QLabel, "addTitleConfirmHint")
     confirm_button = preview_dialog.findChild(QPushButton, "addTitleConfirmButton")
     back_button = preview_dialog.findChild(QPushButton, "addTitleSecondaryButton")
+    preview_scroll = preview_dialog.findChild(QScrollArea, "addTitlePreviewScroll")
+    screen = qapp.primaryScreen()
+    safe_height = (
+        max(1, screen.availableGeometry().height() - preview_dialog_module.layout_px(48))
+        if screen is not None
+        else PREVIEW_DIALOG_HEIGHT
+    )
     assert preview_dialog.minimumWidth() == PREVIEW_DIALOG_WIDTH
-    assert preview_dialog.height() == PREVIEW_DIALOG_HEIGHT
+    assert preview_dialog.height() == min(PREVIEW_DIALOG_HEIGHT, safe_height)
+    assert preview_dialog.maximumHeight() == min(PREVIEW_DIALOG_HEIGHT, safe_height)
+    assert preview_scroll is not None
+    assert preview_scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert preview_scroll.isAncestorOf(confirm_button) is False
     assert warning is not None and warning.wordWrap() is True
     assert confirm_hint is not None and confirm_hint.wordWrap() is True
     assert confirm_button is not None and confirm_button.sizeHint().height() >= 24

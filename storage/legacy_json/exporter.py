@@ -14,6 +14,10 @@ from storage.sqlite import watched_repository
 from storage.sqlite.connection import get_db_path
 
 
+LEGACY_EXPORT_SCHEMA_VERSION = 1
+LEGACY_EXPORT_MANIFEST = "_watchbane_export.json"
+
+
 def _dump_mapping(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = path.with_name(f"{path.name}.tmp")
@@ -58,10 +62,18 @@ def export_sqlite_to_legacy_json(
 
     for relative_path, payload in payloads.items():
         _dump_mapping(target_dir / relative_path, payload)
+    _dump_mapping(
+        target_dir / LEGACY_EXPORT_MANIFEST,
+        {
+            "format": "watchbane-legacy-json",
+            "schema_version": LEGACY_EXPORT_SCHEMA_VERSION,
+        },
+    )
 
     return {
         "ok": True,
         "db_path": str(source_db),
         "output_dir": str(target_dir),
         "counts": {relative_path: len(payload) for relative_path, payload in payloads.items()},
+        "schema_version": LEGACY_EXPORT_SCHEMA_VERSION,
     }

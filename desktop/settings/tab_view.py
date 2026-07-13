@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from desktop.i18n import tr
 from desktop.settings.pool_ops_panel import PoolOpsPanel
+from desktop.settings.tmdb_credentials_panel import TmdbCredentialsPanel
 from desktop.settings.ui_scale_control import UiScaleControlPanel
 from desktop.theme.scaling import layout_px
 from desktop.theme.shell_layout import (
@@ -57,6 +58,9 @@ class SettingsTabView:
         self._scale_panel.settingsSaved.connect(self._on_settings_saved)
         layout.addWidget(self._scale_panel)
 
+        self._tmdb_credentials_panel = TmdbCredentialsPanel(content)
+        layout.addWidget(self._tmdb_credentials_panel)
+
         self._pool_ops_panel = PoolOpsPanel(
             content,
             on_status_message=on_status_message,
@@ -74,6 +78,7 @@ class SettingsTabView:
 
     def on_tab_activated(self) -> None:
         self._scale_panel.load_from_settings()
+        self._tmdb_credentials_panel.refresh_state()
         self._pool_ops_panel.refresh_stats()
 
     def _on_pool_changed_signal(self) -> None:

@@ -7,6 +7,7 @@ from typing import Callable
 
 from PyQt6.QtCore import QSize, QTimer, Qt
 from PyQt6.QtWidgets import (
+    QBoxLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -68,6 +69,8 @@ from desktop.theme.shell_layout import (
 
 APPLY_BUTTON_HEIGHT = control_px(40)
 SUMMARY_CARD_WIDTH = layout_px(348)
+FILTERS_STACK_BREAKPOINT = 1100
+FILTERS_STACK_SUMMARY_MAX_HEIGHT = control_px(200)
 FILTER_REPLENISH_DEFAULT_BATCH_SIZE = 30
 FILTER_REPLENISH_MAX_BATCH_SIZE = 30
 
@@ -113,11 +116,13 @@ class CandidateFiltersView:
         service=None,
         on_applied: Callable[[], None] | None = None,
         on_before_apply: Callable[[dict], dict] | None = None,
+        on_replenish_state_changed: Callable[[str], None] | None = None,
     ) -> None:
         self._session = session
         self._service = service or session.service
         self._on_applied = on_applied
         self._on_before_apply = on_before_apply
+        self._on_replenish_state_changed = on_replenish_state_changed
         self._interface_language = get_persisted_interface_language()
         self._data_language = get_persisted_data_language()
         self._genre_options: list[str] = []
@@ -125,6 +130,8 @@ class CandidateFiltersView:
         self._is_replenishing = False
         self._replenish_worker: FilterReplenishWorker | None = None
         self._last_replenish_result: dict | None = None
+        self._filters_dirty = False
+        self._restoring_filter_controls = False
         self._pending_replenish_intent: dict | None = None
         self._pending_replenish_generation: int | None = None
         self._replenish_local_count_before: int | None = None
@@ -143,7 +150,7 @@ class CandidateFiltersView:
         class CandidateFiltersRootWidget(QWidget):
             def resizeEvent(self, event) -> None:
                 super().resizeEvent(event)
-                view._update_summary_card_width()
+                view._update_responsive_layout()
                 view._update_apply_button_width()
 
         self._widget = CandidateFiltersRootWidget()
@@ -231,6 +238,9 @@ class CandidateFiltersView:
 
         self._replenish_progress_bar = QProgressBar()
         self._replenish_progress_bar.setObjectName("candidateReplenishProgressBar")
+        self._replenish_progress_bar.setAccessibleName(
+            tr("candidates.filters.replenish.title")
+        )
         self._replenish_progress_bar.setRange(0, FILTER_REPLENISH_DEFAULT_BATCH_SIZE)
         self._replenish_progress_bar.setValue(0)
         self._replenish_progress_bar.setFormat(f"0 / {FILTER_REPLENISH_DEFAULT_BATCH_SIZE}")
@@ -315,15 +325,20 @@ class CandidateFiltersView:
         content_layout.setSpacing(layout_px(16))
         content_layout.addWidget(self._form.scroll, stretch=1)
         content_layout.addWidget(self._summary_scroll, alignment=Qt.AlignmentFlag.AlignTop)
+        self._content_layout = content_layout
+        self._content_stacked: bool | None = None
         root_layout.addLayout(content_layout, stretch=1)
 
-        self._update_summary_card_width()
+        self._update_responsive_layout()
         self._update_apply_button_width()
         self._update_year_range_label()
         self._refresh_threshold_labels()
         self._apply_filter_defaults()
         self._set_discovery_controls(self._discovery_preferences)
         self._set_vector_controls(self._recommendation_vector)
+        self._session.startup_filters = self._discovery_preferences.to_candidate_filters(
+            DEFAULT_BROWSE_FILTERS
+        )
         self._session.recommendation_vector = self._recommendation_vector.to_dict()
         self._connect_summary_updates()
         self._connect_recommendation_controls()
@@ -340,12 +355,17 @@ class CandidateFiltersView:
         selected_countries = self._effective_country_codes()
         selected_include = self._include_genre_selector.selected_genres()
         selected_exclude = self._exclude_genre_selector.selected_genres()
-        self._apply_filter_defaults(
-            selected_countries=selected_countries,
-            selected_include_genres=selected_include,
-            selected_exclude_genres=selected_exclude,
-            preserve_non_chip_filters=True,
-        )
+        self._restoring_filter_controls = True
+        try:
+            self._apply_filter_defaults(
+                selected_countries=selected_countries,
+                selected_include_genres=selected_include,
+                selected_exclude_genres=selected_exclude,
+                preserve_non_chip_filters=True,
+            )
+        finally:
+            self._restoring_filter_controls = False
+        self._update_summary_rows()
 
     @property
     def _country_selector(self):
@@ -432,7 +452,7 @@ class CandidateFiltersView:
         return self._form.replenish_advanced_override_check
 
     def _connect_summary_updates(self) -> None:
-        self._summary_update_callback = lambda *_args: self._update_summary_rows()
+        self._summary_update_callback = lambda *_args: self._on_filter_controls_changed()
         update = self._summary_update_callback
         self._country_selector.selection_changed.connect(update)
         self._media_type_combo.currentIndexChanged.connect(update)
@@ -446,7 +466,35 @@ class CandidateFiltersView:
         self._form.simple_collection_combo.currentIndexChanged.connect(update)
         self._form.simple_origin_combo.currentIndexChanged.connect(update)
         self._form.simple_mood_combo.currentIndexChanged.connect(update)
-        self._advanced_mode_toggle.toggled.connect(update)
+        self._advanced_mode_toggle.toggled.connect(self._update_summary_rows)
+        self._include_genre_selector.selection_changed.connect(update)
+        self._exclude_genre_selector.selection_changed.connect(update)
+        self._tmdb_score_slider.rangeChanged.connect(update)
+        self._tmdb_votes_slider.rangeChanged.connect(update)
+        self._only_complete_check.toggled.connect(update)
+        self._only_unwatched_check.toggled.connect(update)
+        self._hide_hidden_check.toggled.connect(update)
+        self._replenish_animation_mode_combo.currentIndexChanged.connect(update)
+        self._replenish_advanced_override_check.toggled.connect(update)
+
+    def _on_filter_controls_changed(self) -> None:
+        self._update_summary_rows()
+        if self._restoring_filter_controls:
+            return
+        self._set_filters_dirty(True)
+
+    def _set_filters_dirty(self, dirty: bool) -> None:
+        self._filters_dirty = bool(dirty)
+        self._apply_button.setProperty("pendingChanges", self._filters_dirty)
+        self._apply_button.setText(
+            tr(
+                "candidates.filters.summary.apply_pending"
+                if self._filters_dirty
+                else "candidates.filters.summary.apply"
+            )
+        )
+        self._apply_button.style().unpolish(self._apply_button)
+        self._apply_button.style().polish(self._apply_button)
 
     def _connect_recommendation_controls(self) -> None:
         update = self._summary_update_callback
@@ -538,7 +586,7 @@ class CandidateFiltersView:
                 self._genre_options,
                 _genre_labels_for_language(preset.include_genres, self._data_language),
             )
-        self._update_summary_rows()
+        self._on_filter_controls_changed()
 
     def _summary_countries_text(self) -> str:
         country_codes = self._effective_country_codes()
@@ -724,7 +772,7 @@ class CandidateFiltersView:
         )
         self._intro_lead.setText(lead)
         self._intro_stats.setText(stats)
-        self._intro_stats.setVisible(False)
+        self._intro_stats.setVisible(bool(str(stats or "").strip()))
         self._update_summary_rows()
         enabled = apply_enabled and self._session.is_loading is False and self._is_replenishing is False
         self._apply_button.setEnabled(enabled)
@@ -738,19 +786,21 @@ class CandidateFiltersView:
             self._intro_stats.setText(tr("candidates.filters.loading.stats"))
             self._intro_stats.setVisible(True)
             return
-        self._update_intro()
+        self._on_session_updated()
 
     def _on_session_updated(self) -> None:
         if self._session.is_loading:
             return
         local_apply_completed = self._local_apply_requested
         if self._session.last_error:
+            if local_apply_completed:
+                self._set_filters_dirty(True)
             self._pending_replenish_intent = None
             self._pending_replenish_generation = None
             self._replenish_local_count_before = None
             self._local_apply_requested = False
             self._intro_lead.setText(tr("candidates.filters.error.lead"))
-            self._intro_stats.setText(self._session.last_error)
+            self._intro_stats.setText(tr("candidates.filters.error.stats"))
             self._intro_stats.setVisible(True)
             self._apply_button.setEnabled(self._is_replenishing is False)
             self._reset_button.setEnabled(self._is_replenishing is False)
@@ -766,6 +816,8 @@ class CandidateFiltersView:
                 and self._is_replenishing is False
             ):
                 self._intro_lead.setText(tr("recommendations.discovery.status.local_applied"))
+        else:
+            self._update_intro()
         if self._pending_replenish_intent is not None and self._replenish_worker is None:
             intent = self._pending_replenish_intent
             generation = self._pending_replenish_generation
@@ -798,18 +850,40 @@ class CandidateFiltersView:
         self._apply_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
         self._reset_button.setFixedHeight(APPLY_BUTTON_HEIGHT)
 
+    def _update_responsive_layout(self) -> None:
+        if not hasattr(self, "_content_layout"):
+            return
+        stacked = self._widget.width() < FILTERS_STACK_BREAKPOINT
+        if stacked != self._content_stacked:
+            self._content_stacked = stacked
+            self._content_layout.setDirection(
+                QBoxLayout.Direction.TopToBottom
+                if stacked
+                else QBoxLayout.Direction.LeftToRight
+            )
+            self._summary_scroll.setSizePolicy(
+                QSizePolicy.Policy.Expanding if stacked else QSizePolicy.Policy.Fixed,
+                QSizePolicy.Policy.Preferred,
+            )
+        self._update_summary_card_width()
+        QTimer.singleShot(0, self._update_summary_card_height)
+
     def _update_summary_card_width(self) -> None:
         if not hasattr(self, "_intro_card"):
             return
-        available_width = max(
-            0,
-            self._widget.width() - (2 * CANDIDATE_ROOT_MARGIN_PX) - layout_px(16),
-        )
-        proportional_width = int(available_width * 0.32)
-        target_width = min(
-            SUMMARY_CARD_WIDTH,
-            max(layout_px(240), proportional_width),
-        )
+        content_width = max(0, self._widget.width() - (2 * CANDIDATE_ROOT_MARGIN_PX))
+        if self._content_stacked:
+            self._summary_scroll.setMinimumWidth(control_px(0))
+            self._summary_scroll.setMaximumWidth(self._widget.maximumWidth())
+            QTimer.singleShot(0, self._update_summary_card_height)
+            return
+        else:
+            available_width = max(0, content_width - layout_px(16))
+            proportional_width = int(available_width * 0.32)
+            target_width = min(
+                SUMMARY_CARD_WIDTH,
+                max(layout_px(240), proportional_width),
+            )
         if hasattr(self, "_summary_scroll"):
             self._summary_scroll.setFixedWidth(target_width)
             QTimer.singleShot(0, self._update_summary_card_height)
@@ -830,11 +904,17 @@ class CandidateFiltersView:
             self._intro_card.sizeHint().height(),
             self._intro_card.minimumSizeHint().height(),
         )
-        target_height = min(
-            available_height,
-            max(control_px(180), desired_height + control_px(24)),
+        height_cap = (
+            FILTERS_STACK_SUMMARY_MAX_HEIGHT
+            if self._content_stacked
+            else available_height
         )
-        self._summary_scroll.setFixedHeight(target_height)
+        target_height = min(
+            height_cap,
+            max(control_px(120), desired_height + control_px(24)),
+        )
+        self._summary_scroll.setMinimumHeight(control_px(0))
+        self._summary_scroll.setMaximumHeight(max(1, target_height))
         QTimer.singleShot(0, self._update_apply_button_width)
 
     def _ui_is_available(self) -> bool:
@@ -1053,6 +1133,7 @@ class CandidateFiltersView:
             self._hide_replenish_progress()
         self._replenish_local_count_before = None
         self._local_apply_requested = True
+        self._set_filters_dirty(False)
         self._session.apply_filters_async(filters, parent=self._widget)
 
         if self._on_applied is not None:
@@ -1063,12 +1144,38 @@ class CandidateFiltersView:
         self._apply_button.setEnabled(not self._is_replenishing and not self._session.is_loading)
         self._reset_button.setEnabled(not self._is_replenishing and not self._session.is_loading)
 
+    def set_replenish_state_listener(self, callback: Callable[[str], None] | None) -> None:
+        """Connect the worker lifecycle to another tab without coupling their widgets."""
+        self._on_replenish_state_changed = callback
+
+    def prepare_for_shutdown(self) -> None:
+        """Prevent a queued filter intent from spawning a worker during app teardown."""
+        self._replenish_generation += 1
+        self._pending_replenish_intent = None
+        self._pending_replenish_generation = None
+        worker = self._replenish_worker
+        if worker is not None:
+            worker.cancel()
+            worker.requestInterruption()
+
+    def _notify_replenish_state(self, state: str) -> None:
+        callback = self._on_replenish_state_changed
+        if callback is not None:
+            callback(state)
+
     def _set_replenish_progress(self, value: int, maximum: int) -> None:
         maximum = max(1, int(maximum or FILTER_REPLENISH_DEFAULT_BATCH_SIZE))
         value = max(0, min(maximum, int(value or 0)))
         self._replenish_progress_bar.setRange(0, maximum)
         self._replenish_progress_bar.setValue(value)
         self._replenish_progress_bar.setFormat(f"{value} / {maximum}")
+        self._replenish_progress_bar.setAccessibleDescription(
+            tr(
+                "candidates.filters.replenish.status.progress",
+                current=value,
+                total=maximum,
+            )
+        )
         self._replenish_progress_bar.setVisible(True)
 
     def _hide_replenish_progress(self) -> None:
@@ -1131,6 +1238,7 @@ class CandidateFiltersView:
         request_generation = self._replenish_generation if generation is None else int(generation)
         self._replenish_local_count_before = 0 if local_count_before is None else int(local_count_before)
         self._set_replenish_running(True)
+        self._notify_replenish_state("loading")
         target = clamp_filter_replenish_batch_size(intent.get("target_add_count", FILTER_REPLENISH_DEFAULT_BATCH_SIZE))
         self._set_replenish_progress(0, target)
         self._intro_lead.setText(tr("candidates.filters.replenish.status.started"))
@@ -1193,12 +1301,14 @@ class CandidateFiltersView:
             self._intro_lead.setText(tr("recommendations.discovery.status.conflict"))
             self._intro_stats.setText(tr("recommendations.discovery.status.conflict_detail"))
             self._intro_stats.setVisible(True)
+            self._notify_replenish_state("error")
             return
         if payload.get("ok") is not True:
             self._hide_replenish_progress()
             self._intro_lead.setText(tr("recommendations.discovery.status.failed"))
-            self._intro_stats.setText(str(payload.get("error") or payload.get("message") or tr("common.unknown_error")))
+            self._intro_stats.setText(tr("candidates.filters.error.stats"))
             self._intro_stats.setVisible(True)
+            self._notify_replenish_state("error")
             return
         added = int(payload.get("saved_count") or payload.get("created_count") or 0)
         requested = int(payload.get("requested_count") or 30)
@@ -1214,6 +1324,7 @@ class CandidateFiltersView:
             else tr("recommendations.discovery.status.complete_full", before=local_before, added=added, visible=visible_after)
         )
         self._intro_stats.setVisible(True)
+        self._notify_replenish_state("finished")
 
     def _on_replenish_failed(self, message: str, generation: int | None = None) -> None:
         if self._ui_is_available() is False:
@@ -1225,8 +1336,9 @@ class CandidateFiltersView:
         self._set_replenish_running(False)
         self._hide_replenish_progress()
         self._intro_lead.setText(tr("recommendations.discovery.status.failed"))
-        self._intro_stats.setText(str(message or tr("common.unknown_error")))
+        self._intro_stats.setText(tr("candidates.filters.error.stats"))
         self._intro_stats.setVisible(True)
+        self._notify_replenish_state("error")
 
     def _remove_replenish_worker(self, worker: FilterReplenishWorker) -> None:
         if self._replenish_worker is worker:

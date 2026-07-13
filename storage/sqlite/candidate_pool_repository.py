@@ -7,6 +7,7 @@ import sqlite3
 
 from candidates.pool.normalization import normalize_storage_pool
 from candidates.pool.watched_cleanup import purge_watched_from_pool
+from candidates.models.keys import candidate_state_identity_key
 from candidates.search.fts_index import rebuild_fts_index
 from storage.sqlite.candidate_write import insert_candidate_record
 from storage.sqlite.json_codec import loads_json
@@ -58,6 +59,98 @@ def save_candidate_pool_dict(
                     timestamp=timestamp,
                 )
             rebuild_fts_index(active)
+    finally:
+        if owned:
+            active.close()
+
+
+def merge_candidate_pool_dict(
+    data: dict,
+    *,
+    conn: sqlite3.Connection | None = None,
+    path: str | Path | None = None,
+    max_records: int = 1000,
+) -> dict[str, int]:
+    """Atomically upsert an incremental refill and evict only unprotected low-value rows."""
+    active, owned = connection(conn, path)
+    incoming = normalize_storage_pool(data)
+    cap = max(1, int(max_records))
+    try:
+        with transaction(active, owned):
+            timestamp = utc_now()
+            for pool_key, candidate in incoming.items():
+                media_type = str(candidate.get("media_type") or "tv").strip().casefold()
+                tmdb_id = candidate.get("tmdb_id")
+                active.execute("DELETE FROM candidate_records WHERE pool_key = ?", (pool_key,))
+                if tmdb_id not in (None, ""):
+                    active.execute(
+                        "DELETE FROM candidate_records WHERE media_type = ? AND tmdb_id = ?",
+                        (media_type, int(tmdb_id)),
+                    )
+                insert_candidate_record(
+                    active,
+                    pool_key=pool_key,
+                    candidate=candidate,
+                    timestamp=timestamp,
+                )
+
+            protected_identities = {
+                str(row["identity_key"])
+                for row in active.execute("SELECT identity_key FROM candidate_actions")
+            }
+            for row in active.execute(
+                "SELECT title, year, media_type FROM watched_records WHERE payload_json != '{}'"
+            ):
+                protected_identities.add(
+                    candidate_state_identity_key(
+                        {
+                            "title": row["title"],
+                            "year": row["year"],
+                            "media_type": row["media_type"],
+                        }
+                    )
+                )
+            deck_row = active.execute(
+                "SELECT state_json FROM recommendation_deck_state WHERE singleton_id = 1"
+            ).fetchone()
+            if deck_row is not None:
+                deck = loads_json(deck_row["state_json"], {})
+                if isinstance(deck, dict):
+                    for candidate in list(deck.get("active") or []) + list(deck.get("reserve") or []):
+                        if isinstance(candidate, dict):
+                            protected_identities.add(candidate_state_identity_key(candidate))
+
+            rows = active.execute(
+                """
+                SELECT pool_key, payload_json
+                FROM candidate_records
+                ORDER BY final_score ASC, quality_score ASC, tmdb_score ASC,
+                         title_normalized ASC, pool_key ASC
+                """
+            ).fetchall()
+            overflow = max(0, len(rows) - cap)
+            evicted_keys: list[str] = []
+            if overflow:
+                for row in rows:
+                    pool_key = str(row["pool_key"])
+                    candidate = loads_json(row["payload_json"], {})
+                    if isinstance(candidate, dict) and candidate_state_identity_key(candidate) in protected_identities:
+                        continue
+                    evicted_keys.append(pool_key)
+                    if len(evicted_keys) >= overflow:
+                        break
+                if evicted_keys:
+                    active.executemany(
+                        "DELETE FROM candidate_records WHERE pool_key = ?",
+                        [(key,) for key in evicted_keys],
+                    )
+            rebuild_fts_index(active)
+            count = int(active.execute("SELECT COUNT(*) AS count FROM candidate_records").fetchone()["count"])
+        return {
+            "merged": len(incoming),
+            "evicted": len(evicted_keys),
+            "pool_size": count,
+        }
     finally:
         if owned:
             active.close()

@@ -69,6 +69,54 @@ def test_legacy_preferences_migrate_once_to_separate_settings(monkeypatch) -> No
     assert again_vector == vector
 
 
+def test_corrupt_preferences_are_normalized_persisted_and_keep_future_fields(monkeypatch) -> None:
+    from desktop.settings import recommendation_preferences as store
+
+    settings = {
+        store.DISCOVERY_SETTINGS_KEY: {
+            "preset_id": "removed-preset",
+            "media_type": "unknown",
+            "year_min": 2030,
+            "year_max": 1990,
+            "include_genres": ["Drama", "Comedy"],
+            "exclude_genres": ["Drama"],
+            "future_filter": {"keep": True},
+        },
+        store.VECTOR_SETTINGS_KEY: {
+            "openness_level": 999,
+            "mood": "unknown",
+            "future_vector": "keep",
+        },
+        "unknown_global_setting": {"keep": True},
+    }
+    writes = []
+    monkeypatch.setattr(store.app_settings_store, "load_sqlite_settings_dict", lambda: dict(settings))
+    monkeypatch.setattr(
+        store.app_settings_store,
+        "save_sqlite_settings_dict",
+        lambda payload: writes.append(dict(payload)) or settings.update(payload),
+    )
+    monkeypatch.setattr(
+        RecommendationDeckService,
+        "refresh_deck",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("settings repair rebuilt deck")),
+    )
+
+    discovery, vector = store.load_recommendation_preferences()
+
+    assert discovery.preset_id == "manual"
+    assert discovery.media_type == "both"
+    assert (discovery.year_min, discovery.year_max) == (1990, 2030)
+    assert discovery.include_genres == ("comedy",)
+    assert discovery.exclude_genres == ("drama",)
+    assert vector.openness_level == 2
+    assert vector.mood == "any"
+    assert writes
+    assert settings[store.DISCOVERY_SETTINGS_KEY]["future_filter"] == {"keep": True}
+    assert settings[store.VECTOR_SETTINGS_KEY]["future_vector"] == "keep"
+    assert settings["unknown_global_setting"] == {"keep": True}
+
+
 def _candidate(index: int, *, score: float = 0.8, hidden: float = 0.5) -> dict:
     return {
         "title": f"Title {index}",

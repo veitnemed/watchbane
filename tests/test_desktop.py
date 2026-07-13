@@ -96,11 +96,95 @@ def test_brand_assets_are_available(qapp) -> None:
     assert watchbane_symbol_label(27).pixmap().isNull() is False
 
 
+def test_bright_primary_controls_use_accessible_inverted_text() -> None:
+    from desktop.onboarding.wizard import _wizard_style
+    from desktop.theme import (
+        COLOR_ACCENT,
+        COLOR_ACCENT_HOVER,
+        COLOR_ADD_BUTTON_TOP,
+        COLOR_TEXT_INVERTED,
+        build_add_title_dialog_style,
+        build_score_edit_dialog_style,
+    )
+    from desktop.theme.styles.candidates_shell import build_candidates_shell_style
+
+    def rule(style: str, selector: str) -> str:
+        start = style.index(selector)
+        return style[start : style.index("}", start)]
+
+    expected_color = f"color: {COLOR_TEXT_INVERTED};"
+    rules = (
+        rule(build_score_edit_dialog_style(), "QPushButton#scoreEditSaveButton"),
+        rule(build_add_title_dialog_style(), "QPushButton#addTitleConfirmButton"),
+        rule(build_candidates_shell_style(), "QPushButton#recommendationWatchedButton {"),
+        rule(_wizard_style(), "QPushButton#onboardingNext"),
+        rule(_wizard_style(), "QPushButton#onboardingScalePreviewAction"),
+    )
+    assert all(expected_color in item for item in rules)
+
+    def relative_luminance(color: str) -> float:
+        channels = [int(color[index : index + 2], 16) / 255 for index in (1, 3, 5)]
+        linear = [
+            value / 12.92
+            if value <= 0.04045
+            else ((value + 0.055) / 1.055) ** 2.4
+            for value in channels
+        ]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    foreground = relative_luminance(COLOR_TEXT_INVERTED)
+    for background in (
+        COLOR_ACCENT,
+        COLOR_ACCENT_HOVER,
+        COLOR_ADD_BUTTON_TOP,
+        "#25C6FF",
+        "#159FE3",
+    ):
+        luminances = sorted((foreground, relative_luminance(background)), reverse=True)
+        assert (luminances[0] + 0.05) / (luminances[1] + 0.05) >= 4.5
+
+
 def test_i18n_catalogs_have_same_keys() -> None:
     from desktop.i18n import SUPPORTED_LANGUAGES, TRANSLATIONS
 
     key_sets = {language: set(TRANSLATIONS[language]) for language in SUPPORTED_LANGUAGES}
     assert key_sets["ru"] == key_sets["en"]
+
+
+def test_primary_navigation_and_recommendation_terms_follow_glossary() -> None:
+    from desktop.i18n import TRANSLATIONS
+
+    assert {
+        key: TRANSLATIONS["ru"][key]
+        for key in (
+            "tabs.watched",
+            "tabs.candidates",
+            "tabs.filters",
+            "recommendations.deck_reserve.label",
+            "recommendations.action.watched",
+            "recommendations.action.watchlist",
+            "recommendations.action.hidden",
+            "recommendations.discovery.module",
+            "recommendations.vector.module",
+            "media_type.movie",
+            "media_type.tv",
+        )
+    } == {
+        "tabs.watched": "Коллекция",
+        "tabs.candidates": "Рекомендации",
+        "tabs.filters": "Настройки поиска",
+        "recommendations.deck_reserve.label": "Запас колоды",
+        "recommendations.action.watched": "✓ Смотрел",
+        "recommendations.action.watchlist": "+ Запомнить",
+        "recommendations.action.hidden": "× Не показывать",
+        "recommendations.discovery.module": "ИСТОЧНИК",
+        "recommendations.vector.module": "МИКС",
+        "media_type.movie": "Фильм",
+        "media_type.tv": "Сериал",
+    }
+    assert TRANSLATIONS["en"]["tabs.filters"] == "Search settings"
+    assert TRANSLATIONS["en"]["recommendations.action.hidden"] == "× Don't show"
+    assert all("�" not in value for catalog in TRANSLATIONS.values() for value in catalog.values())
 
 
 def test_i18n_translator_defaults_and_fallbacks(monkeypatch) -> None:
@@ -207,7 +291,7 @@ def test_english_data_language_formats_detail_values() -> None:
         data_language="en",
     )
 
-    assert {"label": "Type", "value": "Series"} in items
+    assert not any(item["label"] == "Type" for item in items)
     assert {"label": "Country", "value": "United States"} in items
     assert {"label": "Premiere", "value": "8 Feb 2015"} in items
     assert {"label": "Last episode", "value": "15 Aug 2022"} in items
@@ -250,6 +334,7 @@ def test_english_country_display_and_add_title_country_combo(qapp) -> None:
 
     assert dialog._country_combo.itemText(0) == "Any country"
     assert dialog._country_combo.currentText() == "United States"
+    assert dialog._progress.accessibleName() == "Searching…"
 
 
 def test_add_title_resolve_uses_data_language_for_tmdb_locale() -> None:
@@ -1030,7 +1115,7 @@ def test_add_title_compact_preview_dialog_centers_card_shell(qapp) -> None:
     shell = dialog.findChild(QFrame, "addTitlePreviewCard")
     assert shell is not None
     dialog_center_x = dialog.rect().center().x()
-    shell_center_x = shell.geometry().center().x()
+    shell_center_x = shell.mapTo(dialog, shell.rect().center()).x()
 
     assert abs(shell_center_x - dialog_center_x) <= 2
     assert shell.width() < dialog.width() - 20
@@ -2002,7 +2087,7 @@ def test_build_detail_info_pill_labels_keeps_only_genres() -> None:
     ]
 
 
-def test_build_main_info_items_formats_type_and_country_only() -> None:
+def test_build_main_info_items_omits_redundant_type_and_formats_country() -> None:
     import desktop.settings.app_settings  # noqa: F401
     from desktop.shared.detail.main_info import build_main_info_items
 
@@ -2018,7 +2103,6 @@ def test_build_main_info_items_formats_type_and_country_only() -> None:
             "kp_votes": 128536,
         }
     ) == [
-        {"label": "Тип", "value": "Сериал"},
         {"label": "Страна", "value": "Россия"},
         {"label": "Где смотреть", "value": "Неизвестно"},
         {"label": "Голоса TMDb", "value": "3.5к"},
@@ -2092,17 +2176,16 @@ def test_build_title_meta_text_formats_movie_runtime_next_to_year() -> None:
 def test_build_main_info_items_displays_normalized_country_value() -> None:
     from desktop.watched import build_main_info_items
 
-    assert build_main_info_items({"country": "RU, Russia", "object_type": "series"})[1] == {
+    assert build_main_info_items({"country": "RU, Russia", "object_type": "series"})[0] == {
         "label": "Страна",
         "value": "Россия",
     }
 
 
-def test_build_main_info_items_hides_empty_votes_and_defaults_type() -> None:
+def test_build_main_info_items_hides_empty_votes_and_omits_type() -> None:
     from desktop.watched import build_main_info_items
 
     assert build_main_info_items({"imdb_votes": None, "kp_votes": 0}) == [
-        {"label": "Тип", "value": "Неизвестно"},
         {"label": "Где смотреть", "value": "Неизвестно"},
     ]
 
@@ -2785,12 +2868,45 @@ def test_detail_card_builds_layout_for_supported_profiles(qapp, profile_name) ->
     hide_button = hero.findChild(QPushButton, "candidateHideButton")
     if profile.show_mark_watched_button:
         assert mark_button is not None
+        assert mark_button.accessibleName() == mark_button.toolTip()
     else:
         assert mark_button is None
     if profile.show_hide_candidate_button:
         assert hide_button is not None
+        assert hide_button.accessibleName() == hide_button.toolTip()
     else:
         assert hide_button is None
+
+
+def test_detail_card_elides_extreme_title_and_keeps_full_tooltip(qapp) -> None:
+    from PyQt6.QtWidgets import QLabel
+
+    from desktop.shared.detail import DetailCard
+
+    full_title = ("Long Unicode Ω title " * 40).strip()
+    detail = DetailCard()
+    detail.widget.resize(1000, 720)
+    detail.widget.show()
+    detail.show_entry(("long", {}, {"title": full_title, "media_type": "movie"}))
+    qapp.processEvents()
+
+    title = detail.widget.findChild(QLabel, "detailTitle")
+    assert title is not None
+    assert title.text().endswith("…")
+    assert len(title.text()) < len(full_title)
+    assert title.toolTip() == full_title
+
+    larger_font = title.font()
+    larger_font.setPointSize(max(1, larger_font.pointSize() + 8))
+    title.setFont(larger_font)
+    qapp.processEvents()
+    assert title.text().endswith("…")
+    assert title.toolTip() == full_title
+
+    detail.show_entry(("short", {}, {"title": "Short title", "media_type": "movie"}))
+    qapp.processEvents()
+    assert title.text() == "Short title"
+    assert title.toolTip() == ""
 
 
 def test_detail_hero_layout_skeleton(qapp) -> None:
@@ -3054,18 +3170,21 @@ def test_detail_chips_container_height_matches_visible_rows(qapp) -> None:
     assert chips.height() == expected_height
 
 
-def test_watched_detail_card_hides_overview_without_text() -> None:
-    import inspect
+def test_watched_detail_card_hides_overview_without_text(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame, QWidget
 
-    import desktop.shared.detail.card_layout as card_layout_module
-    import desktop.shared.detail.card as watched_view_module
+    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
 
-    source = inspect.getsource(watched_view_module.WatchedDetailCard.show_entry)
-    layout_source = inspect.getsource(card_layout_module.build_detail_card_layout)
-    assert "has_overview_text(card)" in source
-    assert "_overview_frame.setVisible(False)" in source
-    assert "detailOverviewDivider" in layout_source
-    assert "detail_overview_top_gap" in layout_source
+    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail.show_entry(("Alpha", {}, {"title": "Alpha", "overview": ""}))
+    qapp.processEvents()
+
+    overview = detail.widget.findChild(QFrame, "detailOverviewSection")
+    overview_gap = detail.widget.findChild(QWidget, "detailOverviewTopGap")
+
+    assert overview is not None and overview.isHidden()
+    assert overview_gap is not None and overview_gap.isHidden()
+    assert detail.widget.findChild(QFrame, "detailOverviewDivider") is not None
 
 
 def test_detail_overview_section_renders_description(qapp) -> None:
@@ -3321,8 +3440,7 @@ def test_detail_main_info_panel_renders_known_rows(qapp) -> None:
     assert len(icons) == len(labels)
     assert len(row_dividers) == len(labels) - 1
     assert all(icon.pixmap() is not None for icon in icons)
-    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
-    assert "Сериал" in values
+    assert labels == ["Страна", "Где смотреть", "Голоса TMDb"]
     assert "США" in values
     assert "12.9к" in values
 
@@ -3345,6 +3463,7 @@ def test_detail_main_info_header_does_not_share_row_with_toggle(qapp) -> None:
                 "watch_providers": None,
                 "tmdb_votes": 2600,
                 "status": "Released",
+                "first_air_date": "2024-01-15",
             },
         )
     )
@@ -3416,6 +3535,7 @@ def test_detail_main_info_panel_renders_former_additional_rows(qapp) -> None:
                 "runtime_status": "watched",
                 "number_of_seasons": 2,
                 "number_of_episodes": 32,
+                "country": "RU",
                 "watch_providers": ["Kinopoisk"],
                 "status": "Ended",
                 "episode_run_time": [52],
@@ -3474,7 +3594,7 @@ def test_detail_main_info_toggle_is_hidden_for_four_or_fewer_rows(qapp) -> None:
     toggle = detail.widget.findChild(QPushButton, "detailMainInfoToggleButton")
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
 
-    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert labels == ["Страна", "Где смотреть", "Голоса TMDb"]
     assert toggle is not None
     assert toggle.isHidden() is True
 
@@ -3539,7 +3659,7 @@ def test_detail_main_info_toggle_collapses_and_expands_rows(qapp) -> None:
     toggle = detail.widget.findChild(QPushButton, "detailMainInfoToggleButton")
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
 
-    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert labels == ["Страна", "Где смотреть", "Голоса TMDb", "Статус"]
     assert toggle is not None
     assert toggle.text() == "Показать больше"
 
@@ -3548,7 +3668,6 @@ def test_detail_main_info_toggle_collapses_and_expands_rows(qapp) -> None:
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
 
     assert labels == [
-        "Тип",
         "Страна",
         "Где смотреть",
         "Голоса TMDb",
@@ -3561,7 +3680,7 @@ def test_detail_main_info_toggle_collapses_and_expands_rows(qapp) -> None:
     _flush_qt_deferred_deletes(qapp)
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
 
-    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert labels == ["Страна", "Где смотреть", "Голоса TMDb", "Статус"]
     assert toggle.text() == "Показать больше"
 
 
@@ -3604,7 +3723,7 @@ def test_detail_main_info_resets_to_collapsed_for_new_entry(qapp) -> None:
     panel = detail.widget.findChild(QFrame, "detailMainInfoPanel")
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
 
-    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert labels == ["Страна", "Где смотреть", "Голоса TMDb", "Статус"]
     assert toggle.text() == "Показать больше"
 
 
@@ -3687,7 +3806,7 @@ def test_watched_detail_card_does_not_render_my_score_ring() -> None:
     assert "owner._score_summary_row.addWidget" in layout_source
 
 
-def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
+def test_watched_score_summary_row_hides_recommendation_strength(qapp) -> None:
     from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QFrame, QLabel, QWidget
 
@@ -3723,25 +3842,24 @@ def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
     assert stars_label is not None
     assert top_divider is not None
     assert bottom_divider is not None
-    assert stars_label.text() == "Рекомендация: Сильный выбор"
     assert stars_label.wordWrap() is True
     assert stars_label.alignment() & Qt.AlignmentFlag.AlignLeft
     assert tmdb_ring.parent() is not stars_block
-    assert stars_block.isHidden() is False
+    assert stars_block.isHidden() is True
     assert getattr(tmdb_ring, "_display_label") == "TMDb"
     assert getattr(tmdb_ring, "_display_value") == "7.4"
     assert getattr(tmdb_ring, "_ring_progress") == 0.74
     assert not any(getattr(child, "_display_label", "") == "моя" for child in score_row.findChildren(QWidget))
 
 
-def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
+def test_candidate_recommendation_keeps_position_when_main_info_expands(qapp) -> None:
     import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
     from PyQt6.QtCore import QPoint
     from PyQt6.QtWidgets import QPushButton, QWidget
 
-    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+    from desktop.shared.detail import CANDIDATE_DETAIL_CARD_PROFILE, WatchedDetailCard
 
-    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail = WatchedDetailCard(profile=CANDIDATE_DETAIL_CARD_PROFILE)
     frame = detail.widget
     frame.show()
     frame.resize(1200, 800)
@@ -3751,7 +3869,7 @@ def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
             {},
             {
                 "title": "Alpha",
-                "runtime_status": "watched",
+                "runtime_status": "candidate",
                 "tmdb_score": 7.8,
                 "final_score": 0.78,
                 "country": "RU",
@@ -3778,7 +3896,7 @@ def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
     assert toggle is not None
     assert toggle.isHidden() is False
     assert toggle.minimumWidth() >= toggle.fontMetrics().horizontalAdvance(toggle.text())
-    assert content.width() <= DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width
+    assert content.width() <= CANDIDATE_DETAIL_CARD_PROFILE.detail_content_max_width
     assert content.width() >= content.minimumSizeHint().width()
 
     def right_edge(widget: QWidget) -> int:
@@ -3793,7 +3911,7 @@ def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
     stars_left_before = left_edge(stars)
     gap_before = stars_left_before - ring_right
 
-    assert abs(gap_before - DETAIL_CARD_LAYOUT_PROFILE.detail_stars_left_gap) <= 2
+    assert abs(gap_before - CANDIDATE_DETAIL_CARD_PROFILE.detail_stars_left_gap) <= 2
 
     toggle.click()
     _flush_qt_deferred_deletes(qapp)
@@ -4918,6 +5036,40 @@ def test_watched_delete_dialog_contract() -> None:
     assert "is_delete_confirmation_valid" in source
     assert "setEnabled(False)" in source
     assert "dialog.exec()" not in source
+
+
+def test_watched_delete_dialog_keeps_confirmation_outside_preview_scroll(qapp) -> None:
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtWidgets import QDialogButtonBox, QLineEdit, QScrollArea
+
+    from desktop.watched.dialogs.delete_dialog import WatchedDeleteDialog
+
+    preview = {
+        "title": "A very long title " * 20,
+        "year": 2024,
+        "user_score": 2,
+        "tmdb_score": 8.1,
+        "has_meta": True,
+        "has_poster_cache": True,
+        "poster_local_path": "posters/" + ("nested/" * 30) + "poster.jpg",
+    }
+    dialog = WatchedDeleteDialog(preview)
+    dialog.show()
+    qapp.processEvents()
+
+    preview_scroll = dialog.findChild(QScrollArea, "deleteRecordPreviewScroll")
+    confirm_input = dialog.findChild(QLineEdit, "deleteRecordConfirmInput")
+    buttons = dialog.findChild(QDialogButtonBox)
+
+    assert preview_scroll is not None
+    assert confirm_input is not None and confirm_input.isVisible() is True
+    assert buttons is not None and buttons.isVisible() is True
+    assert preview_scroll.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+    assert preview_scroll.isAncestorOf(confirm_input) is False
+    assert preview_scroll.isAncestorOf(buttons) is False
+    assert dialog.height() <= dialog.maximumHeight()
+
+    dialog.close()
 
 
 def test_watched_delete_dialog_button_state_logic() -> None:
@@ -6136,6 +6288,195 @@ def test_candidate_filters_view_places_apply_button_in_summary_card() -> None:
     assert "form.addWidget(self._apply_button)" not in source
 
 
+@pytest.mark.parametrize("maximized", (False, True))
+def test_main_window_restores_saved_geometry_inside_available_screen(qapp, maximized) -> None:
+    from config import app_settings_store
+    from desktop.shell.main_window import (
+        WINDOW_GEOMETRY_SETTINGS_KEY,
+        WatchedMoviesWindow,
+    )
+
+    available = qapp.primaryScreen().availableGeometry()
+    saved_width = min(700, available.width())
+    saved_height = min(500, available.height())
+    app_settings_store.save_sqlite_settings_dict(
+        {
+            WINDOW_GEOMETRY_SETTINGS_KEY: {
+                "x": available.right() + 500,
+                "y": available.bottom() + 500,
+                "width": saved_width,
+                "height": saved_height,
+                "maximized": maximized,
+            }
+        }
+    )
+
+    window = WatchedMoviesWindow()
+    restored = window.geometry()
+    assert available.contains(restored)
+    window.show()
+    qapp.processEvents()
+
+    assert window.isMaximized() is maximized
+    if maximized is False:
+        assert available.contains(window.frameGeometry())
+
+    window.close()
+
+
+@pytest.mark.parametrize(
+    "invalid_geometry",
+    (
+        "not-a-geometry",
+        {"x": "bad", "y": None, "width": -5, "height": 0, "maximized": "yes"},
+    ),
+)
+def test_invalid_main_window_geometry_falls_back_and_is_repaired_on_close(qapp, invalid_geometry) -> None:
+    from config import app_settings_store
+    from desktop.shell.main_window import WINDOW_GEOMETRY_SETTINGS_KEY, WatchedMoviesWindow
+
+    app_settings_store.save_sqlite_settings_dict(
+        {
+            WINDOW_GEOMETRY_SETTINGS_KEY: invalid_geometry,
+            "desktop_main_tab_v1": "removed-tab",
+            "future_setting": {"keep": True},
+        }
+    )
+
+    window = WatchedMoviesWindow()
+    assert window._main_tabs.currentIndex() == 0
+    assert window.geometry().isValid() is True
+    window.show()
+    qapp.processEvents()
+    window.close()
+    qapp.processEvents()
+
+    persisted = app_settings_store.load_sqlite_settings_dict()
+    repaired = persisted[WINDOW_GEOMETRY_SETTINGS_KEY]
+    assert all(isinstance(repaired[key], int) for key in ("x", "y", "width", "height"))
+    assert isinstance(repaired["maximized"], bool)
+    assert persisted["desktop_main_tab_v1"] == "removed-tab"
+    assert persisted["future_setting"] == {"keep": True}
+
+
+def test_main_window_persists_normal_geometry_on_close(qapp) -> None:
+    import inspect
+
+    from config import app_settings_store
+    from desktop.shell import bootstrap
+    from desktop.shell.main_window import (
+        WINDOW_GEOMETRY_SETTINGS_KEY,
+        WatchedMoviesWindow,
+    )
+
+    available = qapp.primaryScreen().availableGeometry()
+    window = WatchedMoviesWindow()
+    window.show()
+    target = available.adjusted(40, 30, -80, -90)
+    window.setGeometry(target)
+    qapp.processEvents()
+    expected = window.geometry()
+    window.close()
+    qapp.processEvents()
+
+    payload = app_settings_store.load_sqlite_settings_dict()[WINDOW_GEOMETRY_SETTINGS_KEY]
+    assert payload == {
+        "x": expected.x(),
+        "y": expected.y(),
+        "width": expected.width(),
+        "height": expected.height(),
+        "maximized": False,
+    }
+    assert "WatchedMoviesWindow()" in inspect.getsource(bootstrap.main)
+
+
+def test_main_window_shutdown_cancels_and_joins_child_threads(qapp) -> None:
+    from threading import Event
+    from time import monotonic
+
+    from PyQt6.QtCore import QThread
+
+    from desktop.shell.main_window import WatchedMoviesWindow
+
+    class CooperativeWorker(QThread):
+        def __init__(self, parent) -> None:
+            super().__init__(parent)
+            self.started_running = Event()
+            self.release = Event()
+            self.interruption_observed = Event()
+            self.cancel_called = False
+
+        def cancel(self) -> None:
+            self.cancel_called = True
+
+        def run(self) -> None:
+            self.started_running.set()
+            deadline = monotonic() + 2.0
+            while monotonic() < deadline and self.release.wait(0.01) is False:
+                if self.isInterruptionRequested():
+                    self.interruption_observed.set()
+                    return
+
+    window = WatchedMoviesWindow(initial_size=(900, 600))
+    worker = CooperativeWorker(window)
+    try:
+        worker.start()
+        assert worker.started_running.wait(1.0)
+        assert window._pool_refill_timer.isActive() is True
+
+        window.shutdown_background_workers()
+
+        assert worker.cancel_called is True
+        assert worker.interruption_observed.is_set() is True
+        assert worker.isRunning() is False
+        assert window._pool_refill_timer.isActive() is False
+    finally:
+        worker.release.set()
+        worker.wait(1000)
+        window.close()
+
+
+def test_bootstrap_drains_workers_before_process_exit() -> None:
+    import inspect
+
+    from desktop.shell import bootstrap
+
+    source = inspect.getsource(bootstrap.main)
+    event_loop = source.index("exit_code = app.exec()")
+    drain = source.index("window.shutdown_background_workers()")
+    process_exit = source.index("sys.exit(exit_code)")
+
+    assert event_loop < drain < process_exit
+
+
+def test_explicit_main_window_size_bypasses_persisted_geometry() -> None:
+    from config import app_settings_store
+    from desktop.shell.main_window import (
+        WINDOW_GEOMETRY_SETTINGS_KEY,
+        WatchedMoviesWindow,
+    )
+
+    persisted = {
+        "x": 111,
+        "y": 122,
+        "width": 700,
+        "height": 500,
+        "maximized": False,
+    }
+    app_settings_store.save_sqlite_settings_dict(
+        {WINDOW_GEOMETRY_SETTINGS_KEY: persisted}
+    )
+
+    window = WatchedMoviesWindow(initial_size=(900, 600))
+    assert (window.width(), window.height()) == (900, 600)
+    window.close()
+
+    assert (
+        app_settings_store.load_sqlite_settings_dict()[WINDOW_GEOMETRY_SETTINGS_KEY]
+        == persisted
+    )
+
+
 def test_watched_window_includes_candidate_tabs() -> None:
     import inspect
 
@@ -6190,23 +6531,47 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
             return None
 
     class FakeCandidateSearchSession:
-        pass
+        def __init__(self) -> None:
+            self.reload_count = 0
+
+        def reload_from_pool(self, *, force: bool = False) -> None:
+            assert force is True
+            self.reload_count += 1
 
     class FakeCandidateListView:
         def __init__(self, *args, **kwargs) -> None:
             self.widget = QWidget()
             self.activation_count = 0
+            self.refresh_count = 0
 
         def on_tab_activated(self) -> None:
             self.activation_count += 1
+
+        def on_replenish_state_changed(self, _state: str) -> None:
+            return None
+
+        def refresh(self) -> None:
+            self.refresh_count += 1
 
     class FakeSimpleTabView:
         def __init__(self, *args, **kwargs) -> None:
             self.widget = QWidget()
 
+    class FakeCandidateFiltersView(FakeSimpleTabView):
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            self.replenish_state_listener = None
+            self.reload_count = 0
+
+        def set_replenish_state_listener(self, callback) -> None:
+            self.replenish_state_listener = callback
+
+        def reload_filter_options(self) -> None:
+            self.reload_count += 1
+
     monkeypatch.setattr(tabs_module, "WatchedTabView", FakeWatchedTabView)
     monkeypatch.setattr(tabs_module, "CandidateSearchSession", FakeCandidateSearchSession)
-    monkeypatch.setattr(tabs_module, "CandidateFiltersView", FakeSimpleTabView)
+    monkeypatch.setattr(tabs_module, "CandidateFiltersView", FakeCandidateFiltersView)
     monkeypatch.setattr(tabs_module, "CandidateListView", FakeCandidateListView)
     monkeypatch.setattr(tabs_module, "SettingsTabView", FakeSimpleTabView)
     monkeypatch.setattr(
@@ -6228,7 +6593,7 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     assert [tabs.tabText(index) for index in range(tabs.count())] == [
         "Рекомендации",
         "Коллекция",
-        "Поиск",
+        "Настройки поиска",
         "Настройки",
     ]
     assert hasattr(context, "analytics_tab_view") is False
@@ -6237,9 +6602,18 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
     assert all(hasattr(spec.view, "widget") for spec in registry._specs.values())
     assert registry._specs["candidates"].view.activation_count == 1
+    assert (
+        registry._specs["filters"].view.replenish_state_listener.__self__
+        is registry._specs["candidates"].view
+    )
     brand = tabs.cornerWidget(Qt.Corner.TopLeftCorner)
     assert brand is not None
     assert brand.findChild(QWidget, "watchbaneShellSymbol") is not None
+
+    context.watched_tab_view._on_entries_changed([])
+    assert context.candidate_session.reload_count == 1
+    assert context.candidate_list_view.refresh_count == 1
+    assert registry._specs["filters"].view.reload_count == 1
 
     for index in range(tabs.count()):
         registry.on_current_changed(index)
@@ -6268,10 +6642,55 @@ def test_main_tab_registry_focus_activates_current_view(qapp) -> None:
     registry.register(ShellTabSpec("candidates", "Candidates", candidate_view))
 
     registry.focus("candidates")
+    assert candidate_view.activation_count == 1
+
     registry.focus("candidates")
 
     assert tabs.currentWidget() is candidate_view.widget
     assert candidate_view.activation_count == 2
+
+
+def test_onboarding_dialog_stays_within_available_screen(qapp) -> None:
+    from desktop.onboarding.wizard import OnboardingAutofillDialog
+
+    dialog = OnboardingAutofillDialog(ui_language="ru")
+    dialog.show()
+    qapp.processEvents()
+    available = dialog.screen().availableGeometry()
+
+    assert dialog.width() <= available.width()
+    assert dialog.height() <= available.height()
+    assert dialog._page_scroll.horizontalScrollBar().maximum() == 0
+    assert dialog._next_button.isVisible() is True
+
+    dialog.close()
+
+
+def test_add_title_duplicate_message_uses_interface_language(qapp, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from desktop.watched.add_title.preview_dialog import AddTitlePreviewDialog
+
+    dialog = AddTitlePreviewDialog(_make_add_title_preview_bundle())
+    dialog._score_input.setValue(3)
+    monkeypatch.setattr(
+        "desktop.watched.add_title.preview_dialog.service.save_add_title_record",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            ok=False,
+            reason="duplicate_tmdb_identity",
+            message="backend message",
+        ),
+    )
+    warnings = []
+    monkeypatch.setattr(
+        "desktop.watched.add_title.preview_dialog.QMessageBox.warning",
+        lambda _parent, _title, message: warnings.append(message),
+    )
+
+    dialog._confirm_add()
+
+    assert warnings == ["Этот фильм или сериал уже есть в коллекции просмотренного."]
+    dialog.close()
 
 
 def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch, qapp) -> None:
@@ -6349,6 +6768,201 @@ def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch,
         window.close()
 
 
+def test_onboarding_language_change_rebuilds_main_tabs(monkeypatch, qapp) -> None:
+    from types import SimpleNamespace
+
+    from PyQt6.QtCore import pyqtSignal
+    from PyQt6.QtWidgets import QWidget
+
+    import desktop.shell.main_window as main_window_module
+
+    class FakeOnboarding(QWidget):
+        completed = pyqtSignal(object)
+        finished = pyqtSignal(int)
+
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(kwargs.get("parent"))
+
+        def setModal(self, _value: bool) -> None:
+            return None
+
+        def setWindowFlag(self, *_args, **_kwargs) -> None:
+            return None
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.invalidate_calls = 0
+
+        def invalidate_pool_cache(self) -> None:
+            self.invalidate_calls += 1
+
+    language = {"value": "ru"}
+    build_calls: list[str] = []
+    contexts = []
+
+    def fake_build_main_tabs(tabs, parent, *, on_status_message):
+        del parent, on_status_message
+        current_language = language["value"]
+        build_calls.append(current_language)
+        labels = (
+            ["Recommendations", "Collection", "Search settings", "Settings"]
+            if current_language == "en"
+            else ["Рекомендации", "Коллекция", "Настройки поиска", "Настройки"]
+        )
+        for label in labels:
+            tabs.addTab(QWidget(), label)
+
+        calls = {"refresh": 0, "focus": 0}
+        context = SimpleNamespace(
+            candidate_session=FakeSession(),
+            refresh_candidate_filters=lambda: calls.__setitem__(
+                "refresh", calls["refresh"] + 1
+            ),
+            focus_candidates=lambda: calls.__setitem__("focus", calls["focus"] + 1),
+            calls=calls,
+        )
+        contexts.append(context)
+        return object(), context
+
+    monkeypatch.setattr(
+        main_window_module,
+        "get_persisted_interface_language",
+        lambda: language["value"],
+    )
+    monkeypatch.setattr(
+        main_window_module.candidate_service,
+        "should_show_onboarding_autofill",
+        lambda: True,
+    )
+    monkeypatch.setattr(main_window_module, "build_main_tabs", fake_build_main_tabs)
+    monkeypatch.setattr(main_window_module, "OnboardingAutofillDialog", FakeOnboarding)
+
+    window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
+    window._tmdb_gate_passed = True
+    old_tabs = window._main_tabs
+    try:
+        window.maybe_show_onboarding_autofill()
+        onboarding = window._onboarding_view
+        assert onboarding is not None
+
+        language["value"] = "en"
+        onboarding.finished.emit(1)
+
+        assert build_calls == ["ru", "en"]
+        assert window._main_tabs is not old_tabs
+        assert old_tabs.isHidden() is True
+        assert window._root_stack.indexOf(old_tabs) == -1
+        assert window._root_stack.currentWidget() is window._main_tabs
+        assert [
+            window._main_tabs.tabText(index)
+            for index in range(window._main_tabs.count())
+        ] == ["Recommendations", "Collection", "Search settings", "Settings"]
+        assert contexts[-1].candidate_session.invalidate_calls == 1
+        assert contexts[-1].calls == {"refresh": 1, "focus": 1}
+    finally:
+        window.close()
+
+
+def test_onboarding_scale_change_rebuilds_main_tabs_same_process(monkeypatch, qapp) -> None:
+    from types import SimpleNamespace
+
+    from PyQt6.QtCore import pyqtSignal
+    from PyQt6.QtGui import QFont
+    from PyQt6.QtWidgets import QWidget
+
+    import desktop.shell.main_window as main_window_module
+
+    class FakeOnboarding(QWidget):
+        completed = pyqtSignal(object)
+        finished = pyqtSignal(int)
+
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(kwargs.get("parent"))
+
+        def setModal(self, _value: bool) -> None:
+            return None
+
+        def setWindowFlag(self, *_args, **_kwargs) -> None:
+            return None
+
+    class FakeSession:
+        def __init__(self) -> None:
+            self.invalidate_calls = 0
+
+        def invalidate_pool_cache(self) -> None:
+            self.invalidate_calls += 1
+
+    scale = {"value": 1.0}
+    build_calls: list[float] = []
+    contexts = []
+    refresh_calls: list[float] = []
+    style_calls: list[str] = []
+
+    def fake_build_main_tabs(tabs, parent, *, on_status_message):
+        del tabs, parent, on_status_message
+        build_calls.append(scale["value"])
+        calls = {"refresh": 0, "focus": 0}
+        context = SimpleNamespace(
+            candidate_session=FakeSession(),
+            refresh_candidate_filters=lambda: calls.__setitem__(
+                "refresh", calls["refresh"] + 1
+            ),
+            focus_candidates=lambda: calls.__setitem__("focus", calls["focus"] + 1),
+            calls=calls,
+        )
+        contexts.append(context)
+        return object(), context
+
+    def fake_build_app_style() -> str:
+        style = f"style-{len(style_calls) + 1}"
+        style_calls.append(style)
+        return style
+
+    original_font = QFont(qapp.font())
+    monkeypatch.setattr(main_window_module, "get_ui_scale", lambda: scale["value"])
+    monkeypatch.setattr(main_window_module, "get_persisted_interface_language", lambda: "ru")
+    monkeypatch.setattr(main_window_module, "font_px", lambda _value: 19)
+    monkeypatch.setattr(main_window_module, "build_app_style", fake_build_app_style)
+    monkeypatch.setattr(
+        main_window_module,
+        "ensure_scaled_main_tab_modules",
+        lambda: refresh_calls.append(scale["value"]),
+    )
+    monkeypatch.setattr(
+        main_window_module.candidate_service,
+        "should_show_onboarding_autofill",
+        lambda: True,
+    )
+    monkeypatch.setattr(main_window_module, "build_main_tabs", fake_build_main_tabs)
+    monkeypatch.setattr(main_window_module, "OnboardingAutofillDialog", FakeOnboarding)
+
+    window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
+    window._tmdb_gate_passed = True
+    old_tabs = window._main_tabs
+    try:
+        window.maybe_show_onboarding_autofill()
+        onboarding = window._onboarding_view
+        assert onboarding is not None
+
+        scale["value"] = 1.3
+        onboarding.finished.emit(1)
+
+        assert build_calls == [1.0, 1.3]
+        assert refresh_calls == [1.3]
+        assert window._main_tabs is not old_tabs
+        assert old_tabs.isHidden() is True
+        assert window._root_stack.indexOf(old_tabs) == -1
+        assert window._root_stack.currentWidget() is window._main_tabs
+        assert window._main_tabs_ui_scale == 1.3
+        assert window.styleSheet() == "style-2"
+        assert qapp.font().pointSize() == 19
+        assert contexts[-1].candidate_session.invalidate_calls == 1
+        assert contexts[-1].calls == {"refresh": 1, "focus": 1}
+    finally:
+        window.close()
+        qapp.setFont(original_font)
+
+
 def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> None:
     from PyQt6.QtWidgets import QTabWidget, QWidget
 
@@ -6390,7 +7004,7 @@ def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> N
     assert [tabs.tabText(index) for index in range(tabs.count())] == [
         "Recommendations",
         "Collection",
-        "Search",
+        "Search settings",
         "Settings",
     ]
     assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
@@ -6837,6 +7451,20 @@ def test_poster_pixmap_caches_are_bounded(qapp, tmp_path) -> None:
     assert len(list_delegate._thumb_pixmap_cache) <= list_delegate.LIST_THUMB_PIXMAP_CACHE_LIMIT
 
 
+def test_corrupt_local_poster_falls_back_without_exception(qapp, tmp_path) -> None:
+    from desktop.shared.detail import card_poster, list_delegate
+
+    path = tmp_path / "corrupt-poster.jpg"
+    path.write_bytes(b"not an image")
+    card_poster.clear_detail_poster_source_cache()
+    list_delegate.clear_list_thumb_pixmap_cache()
+
+    assert card_poster.load_detail_poster_source_pixmap(str(path)) is None
+    assert list_delegate._load_list_thumb_pixmap(str(path)) is None
+    assert card_poster.load_detail_poster_source_pixmap(str(path)) is None
+    assert list_delegate._load_list_thumb_pixmap(str(path)) is None
+
+
 def test_startup_gate_labels_and_simple_preferences_have_explicit_surfaces() -> None:
     from desktop.theme.styles.candidates_shell import build_candidates_shell_style
     from desktop.theme.styles.startup import build_startup_gate_style
@@ -6883,6 +7511,8 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
     assert CANDIDATE_DETAIL_CARD_PROFILE.detail_info_min_width == DETAIL_CARD_LAYOUT_PROFILE.detail_info_min_width
     assert CANDIDATE_DETAIL_CARD_PROFILE.detail_section_max_width == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_user_score is False
+    assert CANDIDATE_DETAIL_CARD_PROFILE.show_recommendation_strength is True
+    assert DETAIL_CARD_LAYOUT_PROFILE.show_recommendation_strength is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_mark_watched_button is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_hide_candidate_button is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.include_bottom_stretch == DETAIL_CARD_LAYOUT_PROFILE.include_bottom_stretch

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from candidates.search.fts_index import rebuild_fts_index, search_fts
+from candidates.search.fts_index import inspect_fts_index, rebuild_fts_index, search_fts
 from storage.sqlite import candidate_repository
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations, get_current_schema_version
@@ -20,7 +20,7 @@ def test_migration_v3_creates_candidate_fts(tmp_path) -> None:
         row = conn.execute(
             "SELECT name FROM sqlite_master WHERE name = 'candidate_fts'"
         ).fetchone()
-        assert version == 5
+        assert version == 6
         assert row is not None
     finally:
         conn.close()
@@ -105,9 +105,56 @@ def test_save_candidate_pool_rebuilds_fts_index(tmp_path, monkeypatch) -> None:
     )
     conn = connect(db_path)
     try:
-        assert get_current_schema_version(conn) == 5
+        assert get_current_schema_version(conn) == 6
         hits = search_fts(conn, "dark")
         assert hits and hits[0][0] == "dark|2017"
+    finally:
+        conn.close()
+
+
+def test_inspect_fts_index_reports_missing_orphaned_and_stale_rows(tmp_path, monkeypatch) -> None:
+    db_path = _save_pool(
+        tmp_path,
+        monkeypatch,
+        {
+            "one|2020": {"title": "One", "year": 2020},
+            "two|2021": {"title": "Two", "year": 2021},
+        },
+    )
+    conn = connect(db_path)
+    try:
+        assert inspect_fts_index(conn)["ok"] is True
+        conn.execute("DELETE FROM candidate_fts WHERE pool_key = ?", ("one|2020",))
+        conn.execute(
+            "INSERT INTO candidate_fts(pool_key, document) VALUES (?, ?)",
+            ("ghost|1999", "ghost"),
+        )
+        conn.execute(
+            "UPDATE candidate_fts SET document = ? WHERE pool_key = ?",
+            ("outdated document", "two|2021"),
+        )
+        health = inspect_fts_index(conn)
+        assert health == {
+            "ok": False,
+            "reason": "inconsistent",
+            "pool_total": 2,
+            "fts_total": 2,
+            "missing": 1,
+            "orphaned": 1,
+            "stale": 1,
+        }
+    finally:
+        conn.close()
+
+
+def test_inspect_fts_index_reports_missing_table(tmp_path) -> None:
+    conn = connect(tmp_path / "watchbane.sqlite3")
+    try:
+        apply_migrations(conn)
+        conn.execute("DROP TABLE candidate_fts")
+        health = inspect_fts_index(conn)
+        assert health["ok"] is False
+        assert health["reason"] == "unavailable"
     finally:
         conn.close()
 

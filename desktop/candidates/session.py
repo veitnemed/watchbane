@@ -36,6 +36,7 @@ class CandidateSearchSession:
     def __init__(self, service=None) -> None:
         self.service = service or candidate_search
         self.filters: dict | None = None
+        self.startup_filters: dict | None = None
         self.filtered_candidates: list[dict] = []
         self.filtered_count: int = 0
         self.hidden_duplicates: int = 0
@@ -154,6 +155,7 @@ class CandidateSearchSession:
         if result.get("overview") is not None:
             self._overview_cache = result.get("overview")
         if result.get("is_empty_pool"):
+            self.last_error = None
             self.filters = None
             self.filtered_candidates = []
             self.filtered_count = 0
@@ -196,6 +198,7 @@ class CandidateSearchSession:
 
     def apply_filters(self, filters: dict, *, text_query: str | None = None) -> dict:
         """Filter saved pool candidates without sorting."""
+        self.startup_filters = dict(filters)
         search_id = uuid.uuid4().hex
         started = perf_counter()
         overview = self._get_overview()
@@ -248,6 +251,7 @@ class CandidateSearchSession:
         parent=None,
     ) -> int:
         """Filter candidates in a worker and ignore stale results."""
+        self.startup_filters = dict(filters)
         self._request_id += 1
         request_id = self._request_id
         self.last_error = None
@@ -296,8 +300,8 @@ class CandidateSearchSession:
             self._request_started_at.pop(request_id, None)
             return
         started = self._request_started_at.pop(request_id, None)
-        self._set_loading(False)
         applied = self._apply_search_result(filters, result)
+        self._set_loading(False)
         elapsed_ms = None if started is None else round((perf_counter() - started) * 1000, 1)
         worker_latency = result.get("latency_ms")
         self._record_search_context(

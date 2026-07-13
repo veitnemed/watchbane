@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from pathlib import Path
 import sqlite3
+import time
 from typing import Iterator
 
 from config import constant
@@ -30,7 +31,16 @@ def connect(path: str | Path | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute(f"PRAGMA busy_timeout={DEFAULT_BUSY_TIMEOUT_MS}")
-    conn.execute("PRAGMA journal_mode=WAL")
+    deadline = time.monotonic() + DEFAULT_BUSY_TIMEOUT_MS / 1000
+    while True:
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+            break
+        except sqlite3.OperationalError as error:
+            if "locked" not in str(error).casefold() or time.monotonic() >= deadline:
+                conn.close()
+                raise
+            time.sleep(0.05)
     return conn
 
 

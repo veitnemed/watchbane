@@ -47,6 +47,7 @@ class DeckReserveIndicator(QWidget):
         super().__init__(parent)
         self.setObjectName("recommendationsDeckReserveIndicator")
         self.setStyleSheet(TRANSPARENT_STYLE)
+        self.setAccessibleName(tr("recommendations.deck_reserve.label"))
         self._mode = "idle"
         self._progress = 0.0
         self._center_text = ""
@@ -64,19 +65,22 @@ class DeckReserveIndicator(QWidget):
         self._stop_spinner()
         self._mode = presentation.mode
         if presentation.tooltip_key:
-            self.setToolTip(tr(presentation.tooltip_key, **presentation.tooltip_kwargs))
+            description = tr(presentation.tooltip_key, **presentation.tooltip_kwargs)
+            self.setToolTip(description)
+            self.setAccessibleDescription(description)
         else:
             self.setToolTip("")
+            self.setAccessibleDescription("")
 
         if presentation.mode == "idle":
             self.hide()
             return
 
         self.show()
-        if presentation.mode == "ready" and presentation.snapshot is not None:
+        if presentation.mode in {"ready", "offline"} and presentation.snapshot is not None:
             snapshot = presentation.snapshot
             self._progress = snapshot.ratio
-            self._center_text = f"{snapshot.percent}%"
+            self._center_text = "45+" if snapshot.remaining >= 45 else str(snapshot.remaining)
             self.update()
             return
 
@@ -143,7 +147,7 @@ class DeckReserveIndicator(QWidget):
                 (90 - self._spinner_angle) * 16,
                 -_SPINNER_ARC_DEGREES * 16,
             )
-        elif self._mode == "ready" and self._progress > 0:
+        elif self._mode in {"ready", "offline"} and self._progress > 0:
             fill_pen = QPen(_progress_color(self._progress), self._ring_pen_width)
             fill_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(fill_pen)

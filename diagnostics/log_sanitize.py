@@ -18,6 +18,10 @@ _SENSITIVE_KEY_RE = re.compile(
     r"(api[_-]?key|authorization|bearer|credential|password|secret|token)",
     re.IGNORECASE,
 )
+_PRIVATE_COLLECTION_KEY_RE = re.compile(
+    r"(full[_-]?(collection|dataset|library)|watched[_-]?(records|list))",
+    re.IGNORECASE,
+)
 _SENSITIVE_TEXT_RE = re.compile(
     r"\b(api[_-]?key|authorization|bearer|credential|password|secret|token)\s*[:=]\s*[^\s,;]+",
     re.IGNORECASE,
@@ -42,6 +46,9 @@ def _sanitize_value(value: Any) -> Any:
         for key, item in value.items():
             key_text = _sanitize_text(str(key))
             if _SENSITIVE_KEY_RE.search(key_text):
+                continue
+            if _PRIVATE_COLLECTION_KEY_RE.search(key_text):
+                sanitized[key_text] = "<redacted_collection>"
                 continue
             sanitized[key_text] = _sanitize_value(item)
         return sanitized

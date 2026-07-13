@@ -103,7 +103,7 @@ def test_watched_tab_hides_detail_panel_in_compact_layout(qtbot, monkeypatch) ->
         width = (
             WATCHED_DETAIL_COLLAPSE_WIDTH_PX - 1
             if compact
-            else WATCHED_DETAIL_COLLAPSE_WIDTH_PX + 200
+            else 1280
         )
         view.widget.resize(width, 800)
 
@@ -122,7 +122,7 @@ def test_library_sections_show_watched_saved_and_hidden(qtbot, monkeypatch) -> N
     listing = view.widget.findChild(QListWidget, "watchedList")
 
     assert tabs is not None and listing is not None
-    assert [tabs.tabText(index) for index in range(tabs.count())] == ["Просмотрено", "Отложено", "Скрыто"]
+    assert [tabs.tabText(index) for index in range(tabs.count())] == ["Смотрел", "Запомнено", "Не показывать"]
     assert _listed_titles(listing) == ["Watched Alpha"]
     tabs.setCurrentIndex(1)
     assert _listed_titles(listing) == ["Saved Beta"]
@@ -130,8 +130,42 @@ def test_library_sections_show_watched_saved_and_hidden(qtbot, monkeypatch) -> N
     assert _listed_titles(listing) == ["Hidden Gamma"]
 
 
+def test_library_sections_restore_expanded_filters_only_for_watched(qtbot, monkeypatch) -> None:
+    view, _state = _build_library(qtbot, monkeypatch)
+    tabs = view.widget.findChild(QTabBar, "librarySectionTabs")
+    listing = view.widget.findChild(QListWidget, "watchedList")
+    counter = view._list_counter_label
+    filters = view._filters
+
+    filters.toggle.click()
+    assert filters.scroll.isVisible() is True
+    assert listing.isHidden() is True
+    assert counter.isHidden() is True
+
+    tabs.setCurrentIndex(1)
+    assert filters.toggle.isHidden() is True
+    assert filters.scroll.isHidden() is True
+    assert listing.isVisible() is True
+    assert counter.isVisible() is True
+
+    tabs.setCurrentIndex(0)
+    assert filters.toggle.isVisible() is True
+    assert filters.scroll.isVisible() is True
+    assert listing.isHidden() is True
+    assert counter.isHidden() is True
+
+    filters.toggle.click()
+    assert filters.scroll.isHidden() is True
+    assert listing.isVisible() is True
+    assert counter.isVisible() is True
+
+
 def test_hidden_restore_removes_hidden_state(qtbot, monkeypatch) -> None:
     view, state = _build_library(qtbot, monkeypatch)
+    changed = []
+    statuses = []
+    view._on_entries_changed = lambda entries: changed.append(list(entries))
+    view._on_status_message = lambda message, timeout: statuses.append((message, timeout))
     tabs = view.widget.findChild(QTabBar, "librarySectionTabs")
     listing = view.widget.findChild(QListWidget, "watchedList")
     tabs.setCurrentIndex(2)
@@ -142,6 +176,8 @@ def test_hidden_restore_removes_hidden_state(qtbot, monkeypatch) -> None:
 
     assert state.calls[-1] == ("restore", "Hidden Gamma")
     assert _listed_titles(listing) == []
+    assert len(changed) == 1
+    assert statuses[-1] == ("Тайтл снова доступен для рекомендаций.", 4000)
 
 
 def test_saved_to_watched_moves_between_sections(qtbot, monkeypatch) -> None:
@@ -189,7 +225,7 @@ def test_library_section_labels_are_localized_without_mojibake() -> None:
     from desktop.i18n import translate
 
     for language, expected in (
-        ("ru", ("Просмотрено", "Отложено", "Скрыто")),
+        ("ru", ("Смотрел", "Запомнено", "Не показывать")),
         ("en", ("Watched", "Saved", "Hidden")),
     ):
         actual = tuple(

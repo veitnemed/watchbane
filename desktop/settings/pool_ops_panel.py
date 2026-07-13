@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 
 from candidates import service as candidate_service
 from desktop.i18n import tr
+from desktop.storage_errors import is_storage_write_error, storage_write_error_message
 from desktop.settings.pool_clear_dialog import PoolClearDialog
 from desktop.settings.pool_ops_worker import (
     ACTION_CLEAR,
@@ -211,14 +212,10 @@ class PoolOpsPanel(QWidget):
             self._show_status(tr("settings.pool.ops.dedupe.nothing"), 5000)
             return
 
-        answer = QMessageBox.question(
-            self,
+        if not self._ask_confirmation(
             tr("settings.pool.ops.dedupe.confirm.title"),
             tr("settings.pool.ops.dedupe.confirm.text"),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
+        ):
             return
         self._start_worker(ACTION_DEDUPE)
 
@@ -229,14 +226,10 @@ class PoolOpsPanel(QWidget):
             return
 
         match_count = int(preview.get("match_count") or 0)
-        answer = QMessageBox.question(
-            self,
+        if not self._ask_confirmation(
             tr("settings.pool.ops.purge.confirm.title"),
             tr("settings.pool.ops.purge.confirm.text", count=match_count),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
+        ):
             return
         self._start_worker(ACTION_PURGE_WATCHED)
 
@@ -264,7 +257,33 @@ class PoolOpsPanel(QWidget):
         )
         if not path:
             return
+        stats_view = candidate_service.get_pool_stats_view()
+        stats = stats_view.get("stats") or {}
+        unique_total = int(stats.get("unique_total") or stats.get("storage_total") or 0)
+        if unique_total > 0:
+            if not self._ask_confirmation(
+                tr("settings.pool.ops.import.confirm.title"),
+                tr("settings.pool.ops.import.confirm.text", count=unique_total),
+            ):
+                return
         self._start_worker(ACTION_IMPORT_JSON, import_path=path)
+
+    def _ask_confirmation(self, title: str, text: str) -> bool:
+        dialog = QMessageBox(
+            QMessageBox.Icon.Question,
+            title,
+            text,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            self,
+        )
+        continue_button = dialog.button(QMessageBox.StandardButton.Yes)
+        cancel_button = dialog.button(QMessageBox.StandardButton.No)
+        if continue_button is not None:
+            continue_button.setText(tr("common.continue"))
+        if cancel_button is not None:
+            cancel_button.setText(tr("common.cancel"))
+            dialog.setDefaultButton(cancel_button)
+        return dialog.exec() == QMessageBox.StandardButton.Yes
 
     def _on_build_clicked(self) -> None:
         if self._worker is not None and self._worker.isRunning():
@@ -329,8 +348,14 @@ class PoolOpsPanel(QWidget):
         self.refresh_stats()
 
         if payload.get("ok") is False:
-            error = payload.get("error") or tr("settings.pool.ops.error.generic")
-            self._show_status(tr("settings.pool.ops.error.action", error=error), 8000)
+            if action == ACTION_IMPORT_JSON:
+                self._show_status(tr("settings.pool.ops.import.error.invalid_file"), 8000)
+                return
+            error = payload.get("error")
+            if error is not None and is_storage_write_error(error):
+                self._show_status(storage_write_error_message(), 8000)
+            else:
+                self._show_status(tr("settings.pool.ops.error.generic"), 8000)
             return
 
         self.poolChanged.emit()
@@ -341,7 +366,12 @@ class PoolOpsPanel(QWidget):
         self._hide_progress()
         self._worker = None
         self._set_busy(False)
-        self._show_status(tr("settings.pool.ops.error.action", error=message), 8000)
+        self._show_status(
+            storage_write_error_message()
+            if is_storage_write_error(message)
+            else tr("settings.pool.ops.error.generic"),
+            8000,
+        )
 
     def _success_message(self, action: str, payload: dict) -> str:
         result = payload.get("result") or {}

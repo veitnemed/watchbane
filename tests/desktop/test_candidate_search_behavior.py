@@ -3,7 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 import pytest
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QModelIndex, Qt
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
 )
 
 from desktop.candidates.list_model import CandidateListModel, CandidateListRoles
+from desktop.candidates.empty_state import RecommendationEmptyState
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.list_view import CandidateListView
 from desktop.candidates.presenters import candidate_detail_identity
@@ -225,7 +226,7 @@ def _build_views(
     qtbot.addWidget(filters_view.widget)
     qtbot.addWidget(list_view.widget)
     filters_view.widget.show()
-    list_view.widget.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200, 800)
+    list_view.widget.resize(1280, 800)
     list_view.widget.show()
     list_view.on_tab_activated()
     qtbot.waitUntil(lambda: list_view._deck is not None)
@@ -286,7 +287,7 @@ def test_recommendations_hide_detail_panel_in_compact_layout(qtbot) -> None:
         width = (
             CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX - 1
             if compact
-            else CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200
+            else 1280
         )
         list_view.widget.resize(width, 800)
 
@@ -371,17 +372,190 @@ def test_recommendation_action_promotes_reserve_item(qtbot) -> None:
     updated_titles = set(_listed_titles(list_widget))
     assert _listed_count(list_widget) == 25
     assert updated_titles - initial_titles == {"Recommendation 025"}
+    current_row = list_widget.currentIndex().row()
+    assert list_view._selected_candidate == list_view._candidates[current_row]
+    assert list_view._selected_identity == candidate_detail_identity(
+        list_view._candidates[current_row]
+    )
+
+
+def test_rapid_repeated_recommendation_action_is_applied_once(qtbot) -> None:
+    service = FakeCandidateService(_candidate_set(31))
+    deck_service = FakeRecommendationDeckService(service)
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service, deck_service)
+    listing = _candidate_list(list_view)
+    listing.setCurrentIndex(listing.model().index(0, 0))
+
+    list_view._apply_recommendation_action("hidden")
+    list_view._apply_recommendation_action("hidden")
+
+    assert len(deck_service.action_calls) == 1
+    assert list_view._hidden_action_button.isEnabled() is False
+    qtbot.waitUntil(lambda: list_view._hidden_action_button.isEnabled())
 
 
 def test_empty_recommendation_deck_shows_stable_empty_state(qtbot) -> None:
+    from desktop.i18n import tr
+
     service = FakeCandidateService([])
     service.candidates = []
     _service, _session, _filters_view, list_view = _build_views(qtbot, service)
     status = list_view.widget.findChild(QLabel, "recommendationsDeckStatus")
 
     assert _listed_count(_candidate_list(list_view)) == 0
-    assert status is not None and status.text()
+    assert status is not None and status.isHidden()
+    assert list_view._workspace_state.state == "pool_empty"
+    assert list_view._workspace_state.title_label.text() == tr(
+        "recommendations.empty_state.pool_empty.title"
+    )
+    assert list_view._workspace_state.isVisible()
+    assert list_view._detail_panel.isAncestorOf(list_view._workspace_state)
     assert list_view.widget.findChild(QFrame, "recommendationActionPanel").isHidden()
+
+
+def test_recommendation_header_keeps_status_and_reserve_controls_in_bounds(qtbot) -> None:
+    service = FakeCandidateService(_candidate_set(31))
+    deck_service = FakeRecommendationDeckService(service)
+    _service, _session, _filters_view, list_view = _build_views(
+        qtbot, service, deck_service
+    )
+    header = list_view.widget.findChild(QWidget, "recommendationsFeedHeader")
+    title = list_view.widget.findChild(QLabel, "recommendationsFeedTitle")
+    reserve = list_view.widget.findChild(QLabel, "recommendationsDeckReserveLabel")
+    status = list_view.widget.findChild(QLabel, "recommendationsDeckStatus")
+    retry = list_view.widget.findChild(QPushButton, "recommendationsDeckRefillButton")
+    assert header is not None and title is not None and reserve is not None
+    assert status is not None and retry is not None
+
+    status.setText("25 рекомендаций")
+    status.show()
+    retry.setText("Повторить")
+    retry.show()
+    list_view.widget.resize(1280, 800)
+    qtbot.wait(50)
+
+    assert status.y() == title.y()
+    assert reserve.y() > title.y()
+    assert status.geometry().right() <= header.contentsRect().right()
+    assert retry.geometry().right() <= header.contentsRect().right()
+
+
+def test_compact_recommendations_show_visible_loading_state(qtbot) -> None:
+    from desktop.i18n import tr
+
+    service = FakeCandidateService([])
+    service.candidates = []
+    _service, session, _filters_view, list_view = _build_views(qtbot, service)
+    list_view.widget.resize(900, 700)
+    qtbot.waitUntil(lambda: list_view._is_compact_layout is True)
+
+    session._set_loading(True)
+
+    assert list_view._deck_status_label.isHidden()
+    assert list_view._active_workspace_state == "loading"
+    assert list_view._list_body_stack.currentWidget() is list_view._compact_workspace_state
+    assert list_view._compact_workspace_state.isVisible()
+    assert list_view._compact_workspace_state.title_label.text() == tr(
+        "recommendations.empty_state.loading.title"
+    )
+    assert list_view._decision_cluster.isHidden()
+
+
+def test_compact_recommendations_keep_non_empty_list_without_selection(qtbot) -> None:
+    _service, _session, _filters_view, list_view = _build_views(qtbot)
+    list_view.widget.resize(900, 700)
+    qtbot.waitUntil(lambda: list_view._is_compact_layout)
+
+    list_view._results_list.clearSelection()
+    list_view._results_list.setCurrentIndex(QModelIndex())
+    list_view._clear_detail(show_filters_hint=False)
+
+    assert list_view._candidates
+    assert list_view._active_workspace_state == "idle"
+    assert list_view._list_body_stack.currentWidget() is list_view._results_list
+    assert list_view._results_list.isVisible()
+
+
+def test_recommendation_workspace_uses_no_results_and_hides_for_card(qtbot) -> None:
+    from desktop.i18n import tr
+
+    _service, _session, _filters_view, list_view = _build_views(qtbot)
+    list_view._search_input.setText("definitely missing")
+    list_view._apply_visible_candidates()
+
+    assert list_view._workspace_state.state == "no_results"
+    assert list_view._workspace_state.title_label.text() == tr(
+        "recommendations.empty_state.no_results.title"
+    )
+    assert list_view._deck_status_label.isHidden()
+
+    list_view._search_input.clear()
+    list_view._apply_visible_candidates()
+    listing = _candidate_list(list_view)
+    listing.setCurrentIndex(listing.model().index(0, 0))
+
+    assert list_view._active_workspace_state is None
+    assert list_view._workspace_state.isHidden()
+    assert list_view._detail_scroll.isVisible()
+
+
+def test_recommendation_deck_error_uses_non_modal_workspace_state(qtbot) -> None:
+    from desktop.i18n import tr
+
+    class ErrorDeckService:
+        def refresh_deck(self, *_args, **_kwargs):
+            raise RuntimeError("network unavailable")
+
+    service = FakeCandidateService([])
+    service.candidates = []
+    session = CandidateSearchSession(service=service)
+    list_view = CandidateListView(session, service=service, deck_service=ErrorDeckService())
+    qtbot.addWidget(list_view.widget)
+    list_view.widget.resize(1280, 800)
+    list_view.widget.show()
+    list_view.on_tab_activated()
+    qtbot.waitUntil(lambda: list_view._active_workspace_state == "error")
+
+    assert list_view._workspace_state.isVisible()
+    assert list_view._workspace_state.title_label.text() == tr(
+        "recommendations.empty_state.error.title"
+    )
+    assert list_view._deck_status_label.isHidden()
+    assert list_view._deck_refill_button.isVisible()
+    assert list_view._deck_refill_button.text() == tr("recommendations.deck_reserve.retry")
+
+
+def test_filter_replenish_lifecycle_updates_empty_recommendation_workspace(qtbot) -> None:
+    service = FakeCandidateService([])
+    service.candidates = []
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service)
+
+    list_view.on_replenish_state_changed("loading")
+    assert list_view._active_workspace_state == "loading"
+
+    list_view.on_replenish_state_changed("error")
+    assert list_view._active_workspace_state == "error"
+    assert list_view._deck_stack.currentWidget() is list_view._deck_content_page
+
+    list_view._deck = {"active": [], "reserve": [], "excluded": {"pool_total": 0}}
+    list_view.on_replenish_state_changed("finished")
+    assert list_view._active_workspace_state == "pool_empty"
+
+
+def test_recommendation_empty_state_accepts_custom_presentation(qtbot) -> None:
+    state = RecommendationEmptyState(
+        "idle",
+        title="Custom title",
+        subtitle="Custom subtitle",
+        icon="search",
+        compact=True,
+    )
+    qtbot.addWidget(state)
+
+    assert state.state == "idle"
+    assert state.title_label.text() == "Custom title"
+    assert state.subtitle_label.text() == "Custom subtitle"
+    assert state._icon_label.pixmap().isNull() is False
 
 
 def test_recommendation_copy_is_available_in_ru_and_en() -> None:
@@ -394,6 +568,16 @@ def test_recommendation_copy_is_available_in_ru_and_en() -> None:
         "recommendations.preparing.title",
         "recommendations.preparing.detail",
         "recommendations.preparing.progress",
+        "recommendations.empty_state.loading.title",
+        "recommendations.empty_state.loading.subtitle",
+        "recommendations.empty_state.pool_empty.title",
+        "recommendations.empty_state.pool_empty.subtitle",
+        "recommendations.empty_state.no_results.title",
+        "recommendations.empty_state.no_results.subtitle",
+        "recommendations.empty_state.error.title",
+        "recommendations.empty_state.error.subtitle",
+        "recommendations.empty_state.idle.title",
+        "recommendations.empty_state.idle.subtitle",
         "recommendations.new_deck",
         "recommendations.reasons.title",
         "recommendations.action.watched",
@@ -406,11 +590,11 @@ def test_recommendation_copy_is_available_in_ru_and_en() -> None:
 
 
 def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> None:
-    from desktop.theme.shell_layout import CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX
+    from desktop.theme.shell_layout import LEFT_PANEL_TOP_COMPENSATION_PX
 
     service = FakeCandidateService(_candidate_set(1, long_overview=True))
     _service, _session, _filters_view, list_view = _build_views(qtbot, service)
-    list_view.widget.resize(CANDIDATE_DETAIL_COLLAPSE_WIDTH_PX + 200, 720)
+    list_view.widget.resize(1280, 720)
     list_widget = _candidate_list(list_view)
     list_widget.setCurrentIndex(list_widget.model().index(0, 0))
     qtbot.wait(10)
@@ -419,18 +603,135 @@ def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> Non
     decision_cluster = list_view.widget.findChild(QWidget, "recommendationDecisionCluster")
     detail_scroll = list_view.widget.findChild(QScrollArea, "candidateSearchDetailScroll")
     main_info_panel = list_view.widget.findChild(QFrame, "detailMainInfoPanel")
+    overview_section = list_view.widget.findChild(QFrame, "detailOverviewSection")
+    overview_footer = list_view.widget.findChild(QWidget, "detailOverviewFooter")
+    overview_text = list_view.widget.findChild(QLabel, "detailOverviewText")
+    watchlist_button = list_view.widget.findChild(QPushButton, "recommendationWatchlistButton")
+    hidden_button = list_view.widget.findChild(QPushButton, "recommendationHiddenButton")
+    rating_buttons = list(list_view._candidate_rating_selector.buttons())
 
     assert panel is not None and panel.isVisible()
     assert reasons_panel is not None and reasons_panel.isVisible()
     assert decision_cluster is not None and decision_cluster.isVisible()
     assert detail_scroll is not None
     assert main_info_panel is not None
+    assert overview_section is not None and overview_section.isVisible()
+    assert overview_footer is not None and overview_footer.isVisible()
+    assert overview_text is not None and overview_text.isVisible()
     assert detail_scroll.widget().isAncestorOf(panel)
     assert panel.parentWidget() is decision_cluster
-    assert reasons_panel.parentWidget() is decision_cluster
-    assert reasons_panel.geometry().bottom() < panel.geometry().top()
+    assert reasons_panel.parentWidget() is overview_footer
+    assert overview_footer.parentWidget() is overview_section
+    assert overview_text.geometry().bottom() <= overview_footer.geometry().top()
+    assert decision_cluster.layout().count() == 1
     assert decision_cluster.parentWidget().objectName() == "detailMainInfoSection"
     assert decision_cluster.geometry().top() >= main_info_panel.geometry().bottom()
+    assert list_view._detail_panel.layout().contentsMargins().top() == LEFT_PANEL_TOP_COMPENSATION_PX
+    rating_widths = [button.width() for button in rating_buttons]
+    assert max(rating_widths) - min(rating_widths) <= 1
+    assert len({button.height() for button in rating_buttons}) == 1
+    assert watchlist_button is not None and hidden_button is not None
+    assert watchlist_button.size() == hidden_button.size()
+    assert detail_scroll.verticalScrollBar().maximum() > 0
+
+
+def test_recommendation_reason_remains_visible_without_overview(qtbot) -> None:
+    from PyQt6.QtCore import QPoint
+
+    candidates = _candidate_set(1)
+    candidates[0]["overview"] = ""
+    service = FakeCandidateService(candidates)
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service)
+    list_view.widget.resize(1280, 720)
+    list_widget = _candidate_list(list_view)
+    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+    qtbot.wait(10)
+
+    overview_section = list_view.widget.findChild(QFrame, "detailOverviewSection")
+    overview_title = list_view.widget.findChild(QLabel, "detailOverviewHeader")
+    overview_text = list_view.widget.findChild(QLabel, "detailOverviewText")
+    reasons_panel = list_view.widget.findChild(QFrame, "recommendationReasonsPanel")
+
+    assert overview_section is not None and overview_section.isVisible()
+    assert overview_title is not None and overview_title.isHidden()
+    assert overview_text is not None and overview_text.isHidden()
+    assert reasons_panel is not None and reasons_panel.isVisible()
+    assert reasons_panel.mapTo(overview_section, QPoint(0, 0)).y() <= 1
+
+
+def test_recommendation_reason_label_replaces_previous_intent(qtbot) -> None:
+    candidates = _candidate_set(2)
+    candidates[0].update({"year": 2010, "tmdb_popularity": 90, "tmdb_score": None})
+    candidates[1].update({"year": 2011, "tmdb_popularity": 8, "tmdb_score": None})
+    service = FakeCandidateService(candidates)
+    _service, session, _filters_view, list_view = _build_views(qtbot, service)
+    list_widget = _candidate_list(list_view)
+
+    session.set_recommendation_vector(
+        {"mood": "any", "rarity_level": 0, "diversity_level": 2, "openness_level": 2}
+    )
+    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+    qtbot.wait(10)
+    first_text = list_view._reason_label.text()
+
+    session.set_recommendation_vector(
+        {"mood": "any", "rarity_level": 4, "diversity_level": 2, "openness_level": 2}
+    )
+    list_widget.setCurrentIndex(list_widget.model().index(1, 0))
+    qtbot.wait(10)
+    second_text = list_view._reason_label.text()
+
+    assert "Популярный выбор" in first_text
+    assert "Менее известный выбор" in second_text
+    assert "Популярный выбор" not in second_text
+    assert all(line.strip("• ") for line in second_text.splitlines())
+    assert len(second_text.splitlines()) == len(set(second_text.splitlines()))
+
+
+def test_settings_tab_does_not_overlap_recommendation_poster(qtbot) -> None:
+    from PyQt6.QtCore import QPoint, QRect
+    from PyQt6.QtWidgets import QTabWidget
+
+    from desktop.theme import build_app_style
+
+    service = FakeCandidateService(_candidate_set(1))
+    session = CandidateSearchSession(service=service)
+    list_view = CandidateListView(
+        session,
+        service=service,
+        deck_service=FakeRecommendationDeckService(service),
+    )
+    list_view._results_list.setUpdatesEnabled(False)
+    tabs = QTabWidget()
+    tabs.setObjectName("mainTabs")
+    tabs.setStyleSheet(build_app_style())
+    tabs.addTab(list_view.widget, "Recommendations")
+    tabs.addTab(QWidget(), "Collection")
+    tabs.addTab(QWidget(), "Search")
+    settings_index = tabs.addTab(QWidget(), "Settings")
+    qtbot.addWidget(tabs)
+    tabs.resize(1280, 720)
+    tabs.show()
+    list_view.on_tab_activated()
+    qtbot.waitUntil(lambda: list_view._deck is not None)
+    qtbot.waitUntil(
+        lambda: list_view._deck_stack.currentWidget() is list_view._deck_content_page
+    )
+
+    list_widget = _candidate_list(list_view)
+    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+    qtbot.wait(10)
+
+    tab_bar = tabs.tabBar()
+    settings_rect = tab_bar.tabRect(settings_index)
+    settings_rect = QRect(
+        tab_bar.mapTo(tabs, settings_rect.topLeft()),
+        settings_rect.size(),
+    )
+    poster = list_view._detail_card._poster_shell
+    poster_rect = QRect(poster.mapTo(tabs, QPoint(0, 0)), poster.size())
+
+    assert settings_rect.intersects(poster_rect) is False
 
 
 def test_filters_view_reload_filter_options_uses_new_pool_genres(qtbot) -> None:
@@ -670,6 +971,37 @@ def test_session_ignores_stale_async_result(qtbot) -> None:
 
     assert session.has_results is False
     assert session.sorted_total_count() == 0
+
+
+def test_candidate_search_worker_logs_service_error(monkeypatch, qapp) -> None:
+    from desktop.candidates.workers import search_worker as worker_module
+
+    class BrokenService:
+        def get_search_overview_view(self):
+            raise RuntimeError("service failed")
+
+    logged = []
+    completed = []
+    monkeypatch.setattr(
+        worker_module,
+        "log_exception",
+        lambda event, error, **fields: logged.append((event, str(error), fields)),
+    )
+    worker = worker_module.CandidateSearchWorker(
+        request_id=7,
+        service=BrokenService(),
+        filters={},
+        sort_mode="final_score",
+    )
+    worker.completed.connect(lambda request_id, result: completed.append((request_id, result)))
+
+    worker.run()
+
+    assert logged == [
+        ("candidates.search.worker.error", "service failed", {"request_id": 7})
+    ]
+    assert completed[0][0] == 7
+    assert completed[0][1]["ok"] is False
 
 
 def test_fts_disabled_falls_back_to_substring_filter(qtbot) -> None:

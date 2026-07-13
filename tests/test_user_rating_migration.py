@@ -38,13 +38,13 @@ def test_user_rating_migration_updates_column_and_payload_once(tmp_path) -> None
             )
         conn.commit()
 
-        assert apply_migrations(conn) == 5
+        assert apply_migrations(conn) == 6
         row = conn.execute("SELECT user_score, payload_json FROM watched_records").fetchone()
         assert row["user_score"] == 2
         assert isinstance(row["user_score"], int)
         assert json.loads(row["payload_json"])["main_info"]["user_score"] == 2
-        assert get_current_schema_version(conn) == 5
-        assert apply_migrations(conn) == 5
+        assert get_current_schema_version(conn) == 6
+        assert apply_migrations(conn) == 6
         assert list((tmp_path / "backups" / "migrations").glob("*.sqlite3"))
     finally:
         conn.close()

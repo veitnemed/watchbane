@@ -135,6 +135,36 @@ def test_background_process_is_detached_from_console(tmp_path) -> None:
         assert kwargs["creationflags"] & download_job.subprocess.CREATE_NO_WINDOW
 
 
+def test_status_write_failure_removes_temporary_file(monkeypatch, tmp_path) -> None:
+    import pytest
+
+    target = tmp_path / "status.json"
+    monkeypatch.setattr(
+        download_job.json,
+        "dump",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    with pytest.raises(OSError, match="disk full"):
+        download_job._safe_json_dump(target, {"status": "running"})
+
+    assert target.is_file() is False
+    assert target.with_suffix(".tmp").is_file() is False
+
+
+def test_poster_job_reports_unavailable_storage_without_crashing(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(download_job, "DEFAULT_JOBS_DIR", tmp_path / "jobs")
+    monkeypatch.setattr(
+        download_job,
+        "_acquire_lock",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(PermissionError("denied")),
+    )
+
+    result = download_job.start_job("candidates")
+
+    assert result == {"ok": False, "error": "storage_unavailable", "status": "failed"}
+
+
 def test_download_preview_posters_stops_between_urls(monkeypatch, tmp_path) -> None:
     from posters import download_images
 

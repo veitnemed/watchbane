@@ -27,7 +27,7 @@ USER_SCORE_MAX = 3
 USER_SCORE_STEP = 1
 YEAR_FILTER_MIN = 1980
 YEAR_FILTER_MAX = date.today().year
-YEAR_FILTER_DEFAULT_FROM = 2000
+YEAR_FILTER_DEFAULT_FROM = YEAR_FILTER_MIN
 YEAR_FILTER_DEFAULT_TO = date.today().year
 
 GENRE_FILTER_ALL = "Все жанры"
@@ -270,7 +270,7 @@ def score_filter_is_active(min_score, max_score: float | None = None) -> bool:
 
 
 def year_filter_is_active(year_from: int, year_to: int) -> bool:
-    """Return True when year range differs from the default 2000–current year."""
+    """Return True when year range differs from the full supported range."""
     return int(year_from) != YEAR_FILTER_DEFAULT_FROM or int(year_to) != YEAR_FILTER_DEFAULT_TO
 
 

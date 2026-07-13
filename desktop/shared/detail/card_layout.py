@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from PyQt6.QtCore import QEvent, QTimer, Qt
+from PyQt6.QtGui import QFontMetrics, QTextLayout, QTextOption
+from PyQt6.QtWidgets import QLabel
+
 from desktop.i18n import tr
 from desktop.shared.detail.action_icons import make_detail_action_icon
 from desktop.shared.detail.profiles import (
@@ -29,6 +33,72 @@ from desktop.theme import (
 
 RATING_META_PILLS_SPACING = 1
 UNCONSTRAINED_MINIMUM_WIDTH = 0
+
+
+class _DetailTitleLabel(QLabel):
+    """Word-wrapped title that keeps extreme input within the title hierarchy."""
+
+    def __init__(self, text: str, *, maximum_lines: int) -> None:
+        super().__init__()
+        self._full_text = ""
+        self._maximum_lines = max(1, int(maximum_lines))
+        self.setText(text)
+
+    def setText(self, text: str) -> None:  # noqa: N802 - Qt override
+        self._full_text = " ".join(str(text or "").split())
+        self._refresh_elision()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(event)
+        self._refresh_elision()
+
+    def showEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().showEvent(event)
+        QTimer.singleShot(0, self._refresh_elision)
+
+    def changeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            QTimer.singleShot(0, self._refresh_elision)
+
+    def _refresh_elision(self) -> None:
+        width = self.width()
+        if width < 40 or not self._full_text:
+            display = self._full_text
+        else:
+            text_layout = QTextLayout(self._full_text, self.font())
+            option = QTextOption()
+            option.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+            text_layout.setTextOption(option)
+            text_layout.beginLayout()
+            lines = []
+            for _index in range(self._maximum_lines):
+                line = text_layout.createLine()
+                if not line.isValid():
+                    break
+                line.setLineWidth(width)
+                lines.append(line)
+            text_layout.endLayout()
+
+            if not lines:
+                display = self._full_text
+            else:
+                last_line = lines[-1]
+                visible_end = last_line.textStart() + last_line.textLength()
+                if visible_end >= len(self._full_text):
+                    display = self._full_text
+                else:
+                    last_start = last_line.textStart()
+                    last_segment = self._full_text[last_start:]
+                    elided_last = QFontMetrics(self.font()).elidedText(
+                        last_segment,
+                        Qt.TextElideMode.ElideRight,
+                        width,
+                    )
+                    display = self._full_text[:last_start] + elided_last
+        if super().text() != display:
+            super().setText(display)
+        self.setToolTip(self._full_text if display != self._full_text else "")
 
 
 @dataclass(frozen=True)
@@ -80,6 +150,8 @@ class DetailCardHandles:
     overview_divider: Any
     overview_title_label: Any
     overview_label: Any
+    overview_footer_widget: Any
+    overview_footer_layout: Any
     overview_gap_widget: Any
 
 
@@ -92,6 +164,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         QHBoxLayout,
         QLabel,
         QPushButton,
+        QSpacerItem,
         QSizePolicy,
         QVBoxLayout,
         QWidget,
@@ -355,7 +428,10 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._poster_actions_layout.setContentsMargins(0, 0, 0, 0)
     owner._poster_actions_layout.setSpacing(profile.detail_small_spacing)
 
-    owner._title_label = QLabel(tr("watched.empty.select_title"))
+    owner._title_label = _DetailTitleLabel(
+        tr("watched.empty.select_title"),
+        maximum_lines=profile.detail_title_max_lines,
+    )
     owner._title_label.setObjectName("detailTitle")
     owner._title_label.setWordWrap(True)
     owner._title_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -444,7 +520,9 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._final_score_stars_label = QLabel("WatchBane")
     owner._final_score_stars_label.setObjectName("detailFinalScoreStarsLabel")
     owner._final_score_stars_label.setWordWrap(True)
-    owner._final_score_stars_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    owner._final_score_stars_label.setAlignment(
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    )
     owner._final_score_stars_label.setSizePolicy(
         QSizePolicy.Policy.Expanding,
         QSizePolicy.Policy.Minimum,
@@ -501,6 +579,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         owner._mark_watched_button = mark_watched_button
         owner._mark_watched_button.setObjectName("candidateMarkWatchedButton")
         owner._mark_watched_button.setToolTip(tr("detail.action.mark_watched"))
+        owner._mark_watched_button.setAccessibleName(tr("detail.action.mark_watched"))
         owner._mark_watched_button.setIcon(
             make_detail_action_icon("eye", COLOR_TEXT, COLOR_TEXT_SECONDARY)
         )
@@ -525,6 +604,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         owner._hide_button = hide_button
         owner._hide_button.setObjectName("candidateHideButton")
         owner._hide_button.setToolTip(tr("detail.action.hide_candidate"))
+        owner._hide_button.setAccessibleName(tr("detail.action.hide_candidate"))
         owner._hide_button.setIcon(
             make_detail_action_icon("hide", COLOR_TEXT, COLOR_TEXT_SECONDARY)
         )
@@ -665,10 +745,35 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._overview_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
     overview_layout.addWidget(owner._overview_divider)
-    overview_layout.addSpacing(profile.detail_overview_title_top_gap)
+    owner._overview_title_gap_item = QSpacerItem(
+        0,
+        profile.detail_overview_title_top_gap,
+        QSizePolicy.Policy.Minimum,
+        QSizePolicy.Policy.Fixed,
+    )
+    overview_layout.addItem(owner._overview_title_gap_item)
     overview_layout.addWidget(owner._overview_title_label)
-    overview_layout.addSpacing(profile.detail_overview_text_top_gap)
+    owner._overview_text_gap_item = QSpacerItem(
+        0,
+        profile.detail_overview_text_top_gap,
+        QSizePolicy.Policy.Minimum,
+        QSizePolicy.Policy.Fixed,
+    )
+    overview_layout.addItem(owner._overview_text_gap_item)
     overview_layout.addWidget(owner._overview_label)
+
+    owner._overview_footer_widget = QWidget()
+    owner._overview_footer_widget.setObjectName("detailOverviewFooter")
+    owner._overview_footer_widget.setStyleSheet(TRANSPARENT_STYLE)
+    owner._overview_footer_widget.setSizePolicy(
+        QSizePolicy.Policy.Expanding,
+        QSizePolicy.Policy.Minimum,
+    )
+    owner._overview_footer_layout = QVBoxLayout(owner._overview_footer_widget)
+    owner._overview_footer_layout.setContentsMargins(0, 0, 0, 0)
+    owner._overview_footer_layout.setSpacing(profile.detail_small_spacing)
+    owner._overview_footer_widget.hide()
+    overview_layout.addWidget(owner._overview_footer_widget)
     owner._overview_frame.hide()
 
     owner._overview_gap_widget = QWidget()
@@ -765,6 +870,8 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         overview_divider=owner._overview_divider,
         overview_title_label=owner._overview_title_label,
         overview_label=owner._overview_label,
+        overview_footer_widget=owner._overview_footer_widget,
+        overview_footer_layout=owner._overview_footer_layout,
         overview_gap_widget=owner._overview_gap_widget,
     )
 

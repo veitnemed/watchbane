@@ -75,14 +75,18 @@ class CandidateDiscoveryPreferences:
             except (TypeError, ValueError):
                 score = None
         votes = _year(self.min_tmdb_votes)
+        include_genres = genre_schema.normalize_genre_filter_list(_texts(self.include_genres))
+        exclude_genres = genre_schema.normalize_genre_filter_list(_texts(self.exclude_genres))
+        excluded = set(exclude_genres)
+        include_genres = [genre for genre in include_genres if genre not in excluded]
         return CandidateDiscoveryPreferences(
             preset_id=preset_id,
             media_type=_choice(self.media_type, MEDIA_TYPES, "both"),
             animation_mode=_choice(self.animation_mode, ANIMATION_MODES, "any"),
             release_preference=_choice(self.release_preference, RELEASE_PREFERENCES, "mixed"),
             countries=tuple(normalize_country_filter_list(self.countries)[:5]),
-            include_genres=tuple(genre_schema.normalize_genre_filter_list(_texts(self.include_genres))),
-            exclude_genres=tuple(genre_schema.normalize_genre_filter_list(_texts(self.exclude_genres))),
+            include_genres=tuple(include_genres),
+            exclude_genres=tuple(exclude_genres),
             year_min=year_min,
             year_max=year_max,
             min_tmdb_score=score,

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import shutil
+import os
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 
@@ -12,7 +14,6 @@ from posters.cache import (
     DEFAULT_POSTER_CACHE_JSON,
     load_poster_cache,
     poster_identity_key,
-    save_poster_cache,
 )
 from storage import data as storage_data
 
@@ -113,7 +114,15 @@ def backup_before_watched_delete(timestamp: str | None = None) -> list[str]:
     poster_cache_path = DEFAULT_POSTER_CACHE_JSON
     if poster_cache_path.is_file():
         destination = poster_cache_path.with_name(poster_cache_path.name + suffix)
-        shutil.copy2(poster_cache_path, destination)
+        temp_destination = destination.with_name(destination.name + ".tmp")
+        try:
+            shutil.copy2(poster_cache_path, temp_destination)
+            os.replace(temp_destination, destination)
+        finally:
+            try:
+                temp_destination.unlink()
+            except OSError:
+                pass
         backups.append(str(destination))
 
     return backups
@@ -142,28 +151,21 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
     cache_entry = poster_cache.get(cache_identity) if isinstance(poster_cache.get(cache_identity), dict) else None
     had_cache_entry = cache_entry is not None
 
-    backups = backup_before_watched_delete(timestamp=timestamp)
+    try:
+        backups = backup_before_watched_delete(timestamp=timestamp)
+    except (OSError, sqlite3.Error):
+        return DeleteRecordResult(
+            ok=False,
+            dataset_key=dataset_key,
+            message="Не удалось создать резервную копию. Удаление отменено.",
+            reason="backup_error",
+            dataset_count=len(dataset),
+            backups=[],
+        )
 
     prepared_dataset = dict(dataset)
     prepared_meta = dict(meta)
     prepared_cache = dict(poster_cache)
-
-    deleted_poster_file = 0
-    try:
-        from posters.download_images import remove_local_poster_file
-
-        remove_result = remove_local_poster_file(title, year, cache_entry=cache_entry)
-        if remove_result.get("deleted") is True:
-            deleted_poster_file = 1
-    except OSError as error:
-        return DeleteRecordResult(
-            ok=False,
-            dataset_key=dataset_key,
-            message=f"Ошибка удаления локального постера: {error}",
-            reason="poster_delete_error",
-            dataset_count=len(dataset),
-            backups=backups,
-        )
 
     deleted_dataset = 0
     if dataset_key in prepared_dataset:
@@ -181,18 +183,33 @@ def delete_watched_record(dataset_key: str, *, timestamp: str | None = None) -> 
         deleted_poster_cache = 1
 
     try:
-        storage_data.save_dataset(prepared_dataset)
-        storage_data.save_meta(prepared_meta)
-        save_poster_cache(prepared_cache)
-    except OSError as error:
+        storage_data.save_dataset_meta_and_poster_cache(
+            prepared_dataset,
+            prepared_meta,
+            prepared_cache,
+        )
+    except (OSError, sqlite3.Error):
         return DeleteRecordResult(
             ok=False,
             dataset_key=dataset_key,
-            message=f"Ошибка сохранения: {error}",
+            message="Не удалось сохранить изменения. Запись не удалена.",
             reason="save_error",
             dataset_count=len(dataset),
             backups=backups,
         )
+
+    deleted_poster_file = 0
+    try:
+        from posters.download_images import remove_local_poster_file
+
+        remove_result = remove_local_poster_file(title, year, cache_entry=cache_entry)
+        if remove_result.get("deleted") is True:
+            deleted_poster_file = 1
+    except OSError:
+        # The database delete is already committed. A leftover cache image is
+        # harmless and may be cleaned later; it must not turn a successful
+        # record deletion into a false failure.
+        deleted_poster_file = 0
 
     return DeleteRecordResult(
         ok=True,

@@ -86,9 +86,12 @@ def test_delete_watched_record_removes_dataset_meta_and_poster_cache(monkeypatch
     monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
     monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: copy.deepcopy(meta))
     monkeypatch.setattr(records_delete, "load_poster_cache", lambda: copy.deepcopy(poster_cache))
-    monkeypatch.setattr(records_delete.storage_data, "save_dataset", lambda payload: saved_dataset.update(payload))
-    monkeypatch.setattr(records_delete.storage_data, "save_meta", lambda payload: saved_meta.update(payload))
-    monkeypatch.setattr(records_delete, "save_poster_cache", lambda payload: saved_cache.update(payload))
+    def save_state(dataset_payload, meta_payload, cache_payload):
+        saved_dataset.update(dataset_payload)
+        saved_meta.update(meta_payload)
+        saved_cache.update(cache_payload)
+
+    monkeypatch.setattr(records_delete.storage_data, "save_dataset_meta_and_poster_cache", save_state)
     monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: ["backup-dataset"])
 
     result = module.delete_watched_record("Alpha", timestamp="test")
@@ -116,9 +119,11 @@ def test_delete_watched_record_without_meta_or_cache(monkeypatch) -> None:
     monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
     monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: {})
     monkeypatch.setattr(records_delete, "load_poster_cache", lambda: {})
-    monkeypatch.setattr(records_delete.storage_data, "save_dataset", lambda payload: saved_dataset.update(payload))
-    monkeypatch.setattr(records_delete.storage_data, "save_meta", lambda _payload: None)
-    monkeypatch.setattr(records_delete, "save_poster_cache", lambda _payload: None)
+    monkeypatch.setattr(
+        records_delete.storage_data,
+        "save_dataset_meta_and_poster_cache",
+        lambda dataset_payload, _meta_payload, _cache_payload: saved_dataset.update(dataset_payload),
+    )
     monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: [])
 
     result = module.delete_watched_record("Alpha", timestamp="test")
@@ -139,15 +144,57 @@ def test_delete_watched_record_missing_entry_does_not_save(monkeypatch) -> None:
 
     save_called = {"dataset": False}
 
-    def fake_save_dataset(_payload):
+    def fake_save_state(_dataset_payload, _meta_payload, _cache_payload):
         save_called["dataset"] = True
 
-    monkeypatch.setattr(records_delete.storage_data, "save_dataset", fake_save_dataset)
+    monkeypatch.setattr(
+        records_delete.storage_data,
+        "save_dataset_meta_and_poster_cache",
+        fake_save_state,
+    )
 
     result = module.delete_watched_record("Missing", timestamp="test")
 
     assert result["ok"] is False
     assert save_called["dataset"] is False
+
+
+def test_delete_watched_record_save_failure_keeps_local_poster(monkeypatch, tmp_path) -> None:
+    from dataset.records import delete as records_delete
+    from posters.cache import poster_identity_key
+
+    dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
+    identity = poster_identity_key("Alpha", 2020)
+    poster_path = tmp_path / "alpha.jpg"
+    poster_path.write_bytes(b"poster")
+    poster_cache = {
+        identity: {
+            "title": "Alpha",
+            "year": 2020,
+            "status": "found",
+            "local_path": str(poster_path),
+        }
+    }
+
+    monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
+    monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: {})
+    monkeypatch.setattr(records_delete, "load_poster_cache", lambda: copy.deepcopy(poster_cache))
+    monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: [])
+
+    def fail_atomic_save(_dataset, _meta, _cache):
+        raise OSError("forced save failure")
+
+    monkeypatch.setattr(
+        records_delete.storage_data,
+        "save_dataset_meta_and_poster_cache",
+        fail_atomic_save,
+    )
+
+    result = records_delete.delete_watched_record("Alpha", timestamp="test")
+
+    assert result.ok is False
+    assert result.reason == "save_error"
+    assert poster_path.is_file() is True
 
 
 def test_backup_before_watched_delete_creates_files(monkeypatch, tmp_path) -> None:
@@ -168,6 +215,32 @@ def test_backup_before_watched_delete_creates_files(monkeypatch, tmp_path) -> No
 
     assert str(sqlite_backup) in backups
     assert any(Path(path).name == "posters.json.backup_before_delete_123" for path in backups)
+
+
+def test_backup_failure_cancels_delete_without_partial_write(monkeypatch) -> None:
+    from dataset.records import delete as records_delete
+
+    dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
+    monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
+    monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: {})
+    monkeypatch.setattr(records_delete, "load_poster_cache", lambda: {})
+    monkeypatch.setattr(
+        records_delete,
+        "backup_before_watched_delete",
+        lambda timestamp=None: (_ for _ in ()).throw(PermissionError("backup denied")),
+    )
+    monkeypatch.setattr(
+        records_delete.storage_data,
+        "save_dataset_meta_and_poster_cache",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("save must not run")),
+    )
+
+    result = records_delete.delete_watched_record("Alpha", timestamp="test")
+
+    assert result.ok is False
+    assert result.reason == "backup_error"
+    assert result.dataset_count == 1
+    assert "denied" not in result.message
 
 
 def test_build_watched_delete_preview(monkeypatch) -> None:
@@ -209,9 +282,11 @@ def test_delete_watched_record_does_not_touch_candidate_pool(monkeypatch) -> Non
         monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
         monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: {})
         monkeypatch.setattr(records_delete, "load_poster_cache", lambda: {})
-        monkeypatch.setattr(records_delete.storage_data, "save_dataset", lambda _payload: None)
-        monkeypatch.setattr(records_delete.storage_data, "save_meta", lambda _payload: None)
-        monkeypatch.setattr(records_delete, "save_poster_cache", lambda _payload: None)
+        monkeypatch.setattr(
+            records_delete.storage_data,
+            "save_dataset_meta_and_poster_cache",
+            lambda _dataset, _meta, _cache: None,
+        )
         monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: [])
 
         module.delete_watched_record("Alpha", timestamp="test")

@@ -131,7 +131,11 @@ def test_apply_action_promotes_closest_quality_at_removed_position(tmp_path) -> 
     )
     assert len(updated["reserve"]) == 3
     promotion_identity = candidate_state_identity_key(expected_promotion).rsplit("|", 1)[0]
-    assert get_impression(promotion_identity, expected_promotion["media_type"], path=tmp_path / "deck.sqlite3")
+    assert get_impression(
+        promotion_identity,
+        expected_promotion["media_type"],
+        path=tmp_path / "deck.sqlite3",
+    ) is None
 
 
 def test_empty_reserve_shrinks_active_and_requests_refill(tmp_path) -> None:
@@ -186,16 +190,103 @@ def test_duplicate_identity_media_is_emitted_once(tmp_path) -> None:
     assert len(deck["active"]) == 6
 
 
-def test_impressions_are_recorded_for_active_but_not_reserve(tmp_path) -> None:
+def test_same_title_year_media_with_different_tmdb_ids_is_emitted_once(tmp_path) -> None:
+    first = _candidate(1, title="Shared title", media_type="tv")
+    second = {**first, "tmdb_id": 99_002, "final_score": first["final_score"] - 1}
+    deck = _service(
+        {"first": first, "second": second},
+        tmp_path / "deck.sqlite3",
+    ).build_deck({}, NOW, limit_active=10, reserve_size=10)
+
+    assert len(deck["active"] + deck["reserve"]) == 1
+    assert deck["excluded"]["duplicate"] == 1
+
+
+def test_same_title_and_tmdb_id_stays_distinct_between_movie_and_tv(tmp_path) -> None:
+    movie = _candidate(1, title="Shared title", media_type="movie")
+    tv = {**movie, "media_type": "tv"}
+    deck = _service(
+        {"movie": movie, "tv": tv},
+        tmp_path / "deck.sqlite3",
+    ).build_deck({}, NOW, limit_active=10, reserve_size=10)
+
+    shown = deck["active"] + deck["reserve"]
+    assert len(shown) == 2
+    assert {item["media_type"] for item in shown} == {"movie", "tv"}
+
+
+def test_remakes_with_same_title_and_different_years_are_preserved(tmp_path) -> None:
+    original = _candidate(1, title="The Thing", media_type="movie")
+    remake = {**original, "year": original["year"] + 20, "tmdb_id": 99_003}
+    deck = _service(
+        {"original": original, "remake": remake},
+        tmp_path / "deck.sqlite3",
+    ).build_deck({}, NOW, limit_active=10, reserve_size=10)
+
+    assert {item["year"] for item in deck["active"] + deck["reserve"]} == {
+        original["year"],
+        remake["year"],
+    }
+
+
+def test_localized_aliases_cannot_duplicate_active_or_reserve(tmp_path) -> None:
+    english = {
+        **_candidate(1, title="Squid Game", media_type="tv"),
+        "localized": {"ru": {"title": "Игра в кальмара"}},
+    }
+    russian = {
+        **_candidate(2, title="Игра в кальмара", media_type="tv"),
+        "year": english["year"],
+        "localized": {"en": {"title": "Squid Game"}},
+    }
+    deck = _service(
+        {"english": english, "russian": russian},
+        tmp_path / "deck.sqlite3",
+    ).build_deck({}, NOW, limit_active=1, reserve_size=10)
+
+    assert len(deck["active"] + deck["reserve"]) == 1
+
+
+def test_top_up_removes_alias_duplicate_between_active_and_reserve(tmp_path) -> None:
+    pool = _pool(8)
+    service = _service(pool, tmp_path / "deck.sqlite3")
+    deck = service.build_deck({}, NOW, limit_active=3, reserve_size=5)
+    duplicate = {
+        **deck["active"][0],
+        "tmdb_id": 88_888,
+        "pool_entry_key": "duplicate-alias",
+    }
+    deck["reserve"].append(duplicate)
+    service._decks[deck["deck_id"]] = deck
+
+    updated = service.top_up_deck(deck["deck_id"], NOW)
+    identities = _identities(updated["active"] + updated["reserve"])
+
+    assert len(identities) == len(set(identities))
+    titles = [
+        (item["title"].casefold(), item["year"], item["media_type"])
+        for item in updated["active"] + updated["reserve"]
+    ]
+    assert len(titles) == len(set(titles))
+
+
+def test_impressions_are_recorded_only_when_active_detail_is_revealed(tmp_path) -> None:
     db_path = tmp_path / "deck.sqlite3"
-    deck = _service(_pool(10), db_path).build_deck({}, NOW, limit_active=3, reserve_size=5)
+    service = _service(_pool(10), db_path)
+    deck = service.build_deck({}, NOW, limit_active=3, reserve_size=5)
 
     for candidate in deck["active"]:
         identity_key = candidate_state_identity_key(candidate).rsplit("|", 1)[0]
-        assert get_impression(identity_key, candidate["media_type"], path=db_path) is not None
+        assert get_impression(identity_key, candidate["media_type"], path=db_path) is None
     for candidate in deck["reserve"]:
         identity_key = candidate_state_identity_key(candidate).rsplit("|", 1)[0]
         assert get_impression(identity_key, candidate["media_type"], path=db_path) is None
+
+    revealed = deck["active"][0]
+    assert service.record_detail_reveal(deck["deck_id"], revealed, shown_at=NOW.isoformat()) is True
+    assert service.record_detail_reveal(deck["deck_id"], revealed, shown_at=NOW.isoformat()) is False
+    identity_key = candidate_state_identity_key(revealed).rsplit("|", 1)[0]
+    assert get_impression(identity_key, revealed["media_type"], path=db_path)["shown_count"] == 1
 
 
 def test_underfilled_deck_reports_reason_and_counts(tmp_path) -> None:
@@ -224,6 +315,66 @@ def test_future_release_is_not_eligible(tmp_path) -> None:
     assert deck["excluded"]["future_release"] == 1
 
 
+def test_full_release_date_distinguishes_today_from_tomorrow(tmp_path) -> None:
+    now = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
+    pool = {
+        "today": {**_candidate(1), "year": None, "release_date": "2026-07-13"},
+        "tomorrow": {**_candidate(2), "year": None, "release_date": "2026-07-14"},
+        "month-only": {**_candidate(3), "year": None, "release_date": "2026-07"},
+    }
+    deck = _service(pool, tmp_path / "deck.sqlite3").build_deck(
+        {}, now, limit_active=10, reserve_size=0
+    )
+
+    assert {item["title"] for item in deck["active"]} == {
+        pool["today"]["title"],
+        pool["month-only"]["title"],
+    }
+    assert deck["excluded"]["future_release"] == 1
+
+
+def test_unknown_string_and_zero_year_do_not_crash_or_look_future(tmp_path) -> None:
+    pool = {
+        "unknown": {**_candidate(1), "year": None},
+        "text": {**_candidate(2), "year": "unknown"},
+        "zero": {**_candidate(3), "year": 0},
+        "string": {**_candidate(4), "year": "2026"},
+    }
+    deck = _service(pool, tmp_path / "deck.sqlite3").build_deck(
+        {}, NOW, limit_active=10, reserve_size=0
+    )
+
+    assert len(deck["active"]) == 4
+    assert deck["excluded"]["future_release"] == 0
+
+
+def test_same_instant_across_midnight_and_timezones_has_same_daily_order(tmp_path) -> None:
+    pool = _pool(60)
+    local_before_midnight = datetime.fromisoformat("2026-12-31T23:30:00-02:00")
+    utc_after_midnight = datetime.fromisoformat("2027-01-01T01:30:00+00:00")
+
+    first = _service(pool, tmp_path / "first.sqlite3").build_deck({}, local_before_midnight)
+    second = _service(pool, tmp_path / "second.sqlite3").build_deck({}, utc_after_midnight)
+
+    assert _identities(first["active"] + first["reserve"]) == _identities(
+        second["active"] + second["reserve"]
+    )
+
+
+def test_leap_day_and_new_year_boundaries_use_utc_calendar(tmp_path) -> None:
+    pool = {
+        "leap": {**_candidate(1), "year": None, "release_date": "2028-02-29"},
+        "next-year": {**_candidate(2), "year": None, "release_date": "2029-01-01"},
+    }
+    leap_day = datetime(2028, 2, 29, 0, 0, tzinfo=timezone.utc)
+    deck = _service(pool, tmp_path / "deck.sqlite3").build_deck(
+        {}, leap_day, limit_active=10, reserve_size=0
+    )
+
+    assert [item["title"] for item in deck["active"]] == [pool["leap"]["title"]]
+    assert deck["excluded"]["future_release"] == 1
+
+
 def test_refresh_reuses_same_daily_deck_until_forced(tmp_path) -> None:
     db_path = tmp_path / "deck.sqlite3"
     service = _service(_pool(80), db_path)
@@ -235,8 +386,75 @@ def test_refresh_reuses_same_daily_deck_until_forced(tmp_path) -> None:
     assert second["deck_id"] == first["deck_id"]
     first_candidate = first["active"][0]
     impression_key = candidate_state_identity_key(first_candidate).rsplit("|", 1)[0]
-    assert get_impression(impression_key, first_candidate["media_type"], path=db_path)["shown_count"] == 1
+    assert get_impression(impression_key, first_candidate["media_type"], path=db_path) is None
     assert forced["deck_id"] != first["deck_id"]
+
+
+def test_refresh_restores_same_deck_order_across_restart_and_next_day(tmp_path) -> None:
+    db_path = tmp_path / "deck.sqlite3"
+    pool = _pool(120)
+    first = _service(pool, db_path).refresh_deck({}, NOW)
+
+    restored = _service(pool, db_path).refresh_deck({}, NOW + timedelta(days=1))
+
+    assert restored["deck_id"] == first["deck_id"]
+    assert _identities(restored["active"]) == _identities(first["active"])
+    assert _identities(restored["reserve"]) == _identities(first["reserve"])
+
+
+def test_persisted_deck_restart_skips_full_build_rerank(tmp_path) -> None:
+    db_path = tmp_path / "deck.sqlite3"
+    pool = _pool(120)
+    first = _service(pool, db_path).refresh_deck({}, NOW)
+    restarted = _service(pool, db_path)
+    restarted.build_deck = lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("persisted deck triggered a full build")
+    )
+
+    restored = restarted.refresh_deck({}, NOW + timedelta(hours=1))
+
+    assert restored["deck_id"] == first["deck_id"]
+    assert _identities(restored["active"]) == _identities(first["active"])
+
+
+def test_reveal_idempotence_survives_service_restart(tmp_path) -> None:
+    db_path = tmp_path / "deck.sqlite3"
+    pool = _pool(30)
+    service = _service(pool, db_path)
+    deck = service.refresh_deck({}, NOW)
+    candidate = deck["active"][0]
+    assert service.record_detail_reveal(deck["deck_id"], candidate) is True
+
+    restarted = _service(pool, db_path)
+    restored = restarted.refresh_deck({}, NOW + timedelta(hours=1))
+
+    assert restarted.record_detail_reveal(restored["deck_id"], candidate) is False
+    impression_key = candidate_state_identity_key(candidate).rsplit("|", 1)[0]
+    assert get_impression(impression_key, candidate["media_type"], path=db_path)["shown_count"] == 1
+
+
+def test_deck_snapshot_respects_interrupted_external_transaction(tmp_path) -> None:
+    from storage.sqlite.connection import connect
+    from storage.sqlite.migrations import apply_migrations
+    from storage.sqlite.recommendation_deck_repository import load_current_deck, save_current_deck
+
+    db_path = tmp_path / "deck.sqlite3"
+    original = {"deck_id": "stable-deck", "active": [_candidate(1)], "reserve": []}
+    save_current_deck(original, path=db_path)
+
+    conn = connect(db_path)
+    apply_migrations(conn)
+    try:
+        conn.execute("BEGIN")
+        save_current_deck(
+            {"deck_id": "interrupted-deck", "active": [_candidate(2)], "reserve": []},
+            conn=conn,
+        )
+        conn.rollback()
+    finally:
+        conn.close()
+
+    assert load_current_deck(path=db_path) == original
 
 
 def test_known_rating_candidate_continues_to_rank_by_rating() -> None:

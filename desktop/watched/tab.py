@@ -201,8 +201,7 @@ class WatchedTabView(WatchedTabActionsMixin):
         self._filters.reload_genre_options(self._entries)
         watched_visible = self._library_section == SECTION_WATCHED
         self._add_title_button.setVisible(watched_visible)
-        self._filters.toggle.setVisible(watched_visible)
-        self._filters.panel.setVisible(watched_visible and self._filters._expanded)
+        self._filters.set_available(watched_visible)
         self._refresh_list()
         if self._list_widget.count() > 0:
             self._list_widget.setCurrentRow(0)
@@ -395,8 +394,9 @@ class WatchedTabView(WatchedTabActionsMixin):
         else:
             self._state_service.restore_candidate(candidate)
             message = tr("library.status.restored")
-        self._show_status(message, 4000)
+        self._notify_entries_changed()
         self._on_section_changed(self._section_tabs.currentIndex())
+        self._show_status(message, 4000)
 
     def _reload_watched_search_index(self) -> None:
         self._watched_search_index = build_watched_search_index(self._entries)
@@ -509,7 +509,8 @@ class WatchedTabView(WatchedTabActionsMixin):
         return self._visible_entries[row]
 
     def _show_empty_details(self) -> None:
-        if self._search_input.text().strip():
+        filtered_to_zero = bool(self._entries) and not self._visible_entries
+        if self._search_input.text().strip() or filtered_to_zero:
             title = tr("watched.empty.not_found")
         elif self._library_section == SECTION_SAVED:
             title = tr("library.empty.saved")

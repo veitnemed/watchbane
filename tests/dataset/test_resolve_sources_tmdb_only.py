@@ -94,7 +94,31 @@ def test_search_tmdb_defaults_data_not_found() -> None:
         "data": None,
         "error": {"ok": False, "error": "not_found", "details": "TMDb не нашёл объект: Missing"},
         "status": "не найдено",
+        "search_results": [],
+        "selected_tmdb_id": None,
     }
+
+
+def test_search_tmdb_defaults_data_resolves_explicit_result_id() -> None:
+    details_calls = []
+
+    def fake_details(tmdb_id, **_kwargs):
+        details_calls.append(tmdb_id)
+        return _details(id=tmdb_id, name=f"Selected {tmdb_id}")
+
+    result = sources.search_tmdb_defaults_data(
+        [{"title": "Shared", "year": 2024}],
+        search_func=lambda _title: [
+            {"id": 10, "name": "Shared", "first_air_date": "2024-01-01"},
+            {"id": 20, "name": "Shared", "first_air_date": "2024-01-01"},
+        ],
+        details_func=fake_details,
+        selected_tmdb_id=20,
+    )
+
+    assert details_calls == [20]
+    assert result["selected_tmdb_id"] == 20
+    assert [item["id"] for item in result["search_results"]] == [10, 20]
 
 
 def test_search_tmdb_defaults_data_network_error() -> None:

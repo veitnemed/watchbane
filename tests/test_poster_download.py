@@ -28,6 +28,46 @@ def _make_movie(title: str, user_score: float, year: int, poster_url: str | None
     return movie
 
 
+def test_download_write_failure_preserves_existing_poster_and_removes_temp(monkeypatch, tmp_path) -> None:
+    from posters.download_images import _download_poster_once
+
+    destination = tmp_path / "poster.jpg"
+    destination.write_bytes(b"existing")
+
+    class Response:
+        def __init__(self) -> None:
+            self._read = False
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> None:
+            return None
+
+        def read(self, _size: int) -> bytes:
+            if self._read:
+                return b""
+            self._read = True
+            return b"replacement"
+
+    monkeypatch.setattr("posters.download_images.urlopen", lambda *_args, **_kwargs: Response())
+    original_replace = Path.replace
+
+    def fail_final_replace(path: Path, target: Path):
+        if Path(target) == destination:
+            raise OSError("synthetic interrupted replace")
+        return original_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_final_replace)
+
+    assert _download_poster_once("https://example.com/poster.jpg", destination) == (
+        False,
+        "write_failed",
+    )
+    assert destination.read_bytes() == b"existing"
+    assert list(tmp_path.glob(".*.tmp")) == []
+
+
 def test_download_poster_for_title_downloads_and_persists_local_path(monkeypatch) -> None:
     import tempfile
 
@@ -321,10 +361,12 @@ def test_delete_watched_record_removes_local_poster_file(monkeypatch) -> None:
 
         monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
         monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: {})
-        monkeypatch.setattr(records_delete.storage_data, "save_dataset", lambda payload: None)
-        monkeypatch.setattr(records_delete.storage_data, "save_meta", lambda payload: None)
+        monkeypatch.setattr(
+            records_delete.storage_data,
+            "save_dataset_meta_and_poster_cache",
+            lambda _dataset, _meta, cache: saved_cache.update(cache),
+        )
         monkeypatch.setattr(records_delete, "load_poster_cache", lambda: copy.deepcopy(poster_cache))
-        monkeypatch.setattr(records_delete, "save_poster_cache", lambda payload: saved_cache.update(payload))
         monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: [])
 
         result = module.delete_watched_record("Alpha", timestamp="test")

@@ -81,6 +81,7 @@ from desktop.theme.tokens import (
     COLOR_CARD_ALT,
     COLOR_SURFACE,
     COLOR_TEXT,
+    COLOR_TEXT_INVERTED,
     COLOR_TEXT_MUTED,
     COLOR_TEXT_SECONDARY,
     COLOR_TEXT_SOFT,
@@ -597,7 +598,7 @@ QPushButton#onboardingNext, QPushButton#onboardingOpen {{
     background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #25C6FF, stop:1 #159FE3);
     border: 1px solid #25C6FF;
     border-radius: {px(9)}px;
-    color: {COLOR_TEXT};
+    color: {COLOR_TEXT_INVERTED};
     font-size: {font_px(FONT_DIALOG_TITLE - 1)}px;
     font-weight: 700;
     padding: {px(9)}px {px(20)}px;
@@ -687,7 +688,7 @@ QPushButton#onboardingScalePreviewAction {{
     background-color: {COLOR_ACCENT};
     border: 1px solid {COLOR_ACCENT};
     border-radius: {px(RADIUS_BUTTON)}px;
-    color: {COLOR_TEXT};
+    color: {COLOR_TEXT_INVERTED};
     font-size: {font_px(FONT_BASE)}px;
     font-weight: 700;
     padding: {px(9)}px {px(14)}px;
@@ -704,7 +705,6 @@ class OnboardingAutofillDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("onboardingAutofillDialog")
         self.setModal(True)
-        self.setMinimumSize(scale_px(ONBOARDING_MIN_WIDTH), scale_px(ONBOARDING_MIN_HEIGHT))
         self._resize_for_launch()
         self.setStyleSheet(_wizard_style())
         self._ui_language = "en" if str(ui_language or "").casefold().startswith("en") else "ru"
@@ -746,7 +746,16 @@ class OnboardingAutofillDialog(QDialog):
         self._stack = QStackedWidget()
         self._stack.setObjectName("onboardingStack")
         self._stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        card_layout.addWidget(self._stack, 1)
+        self._page_scroll = QScrollArea()
+        self._page_scroll.setObjectName("onboardingPageScroll")
+        self._page_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._page_scroll.setWidgetResizable(True)
+        self._page_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._page_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._page_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._page_scroll.viewport().setAutoFillBackground(False)
+        self._page_scroll.setWidget(self._stack)
+        card_layout.addWidget(self._page_scroll, 1)
 
         self._setup_page = self._build_setup_page()
         self._stack.addWidget(self._setup_page)
@@ -789,14 +798,32 @@ class OnboardingAutofillDialog(QDialog):
         self._sync_controls()
 
     def _resize_for_launch(self) -> None:
+        screen = self.screen() or QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            edge_margin = scale_px(24)
+            maximum_width = max(1, available.width() - edge_margin)
+            maximum_height = max(1, available.height() - edge_margin)
+        else:
+            maximum_width = scale_px(ONBOARDING_BASE_WIDTH)
+            maximum_height = scale_px(ONBOARDING_BASE_HEIGHT)
+
+        self.setMinimumSize(
+            min(scale_px(ONBOARDING_MIN_WIDTH), maximum_width),
+            min(scale_px(ONBOARDING_MIN_HEIGHT), maximum_height),
+        )
+        self.setMaximumSize(maximum_width, maximum_height)
         parent = self.parentWidget()
         if parent is not None and parent.width() > 0 and parent.height() > 0:
             self.resize(
-                max(scale_px(ONBOARDING_MIN_WIDTH), parent.width()),
-                max(scale_px(ONBOARDING_MIN_HEIGHT), parent.height()),
+                min(maximum_width, max(self.minimumWidth(), parent.width())),
+                min(maximum_height, max(self.minimumHeight(), parent.height())),
             )
             return
-        self.resize(scale_px(ONBOARDING_BASE_WIDTH), scale_px(ONBOARDING_BASE_HEIGHT))
+        self.resize(
+            min(scale_px(ONBOARDING_BASE_WIDTH), maximum_width),
+            min(scale_px(ONBOARDING_BASE_HEIGHT), maximum_height),
+        )
 
     def showEvent(self, event) -> None:  # noqa: N802 - Qt override
         self._resize_for_launch()
@@ -1289,6 +1316,9 @@ class OnboardingAutofillDialog(QDialog):
 
         self._progress = QProgressBar()
         self._progress.setObjectName("onboardingProgress")
+        self._progress.setAccessibleName(
+            self._text("Сборка первого пула", "Building the first pool")
+        )
         self._progress.setRange(0, 100)
         self._progress.setValue(0)
         layout.addWidget(self._progress)

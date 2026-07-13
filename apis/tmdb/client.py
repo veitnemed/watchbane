@@ -23,6 +23,7 @@ DEFAULT_LANGUAGE = "ru-RU"
 DEFAULT_REGION = "RU"
 TMDB_BEARER_TOKEN_ENV_VARS = ("TMDB_ACCESS_TOKEN", "TMDB_TOKEN")
 TMDB_API_KEY_ENV_VAR = "TMDB_API_KEY"
+TMDB_CREDENTIALS_DISABLED_ENV_VAR = "WATCHBANE_TMDB_CREDENTIALS_DISABLED"
 DEFAULT_TV_DETAIL_APPENDS = (
     "external_ids",
     "content_ratings",
@@ -169,17 +170,39 @@ def has_tmdb_credentials() -> bool:
     return True
 
 
-def save_tmdb_bearer_token(token: str) -> None:
-    """Persist bearer token to data/.env.local without logging the secret."""
+def normalize_tmdb_bearer_token(token: str) -> str:
+    """Normalize pasted bearer credentials and reject dotenv/header injection."""
     normalized = str(token or "").strip()
+    if normalized.casefold() == "bearer":
+        raise ValueError("TMDb token must not be empty.")
+    if normalized.casefold().startswith("bearer "):
+        normalized = normalized[7:].strip()
     if normalized == "":
         raise ValueError("TMDb token must not be empty.")
+    if any(character.isspace() or character in "\r\n\x00" for character in normalized):
+        raise ValueError("TMDb token must be a single value without whitespace.")
+    return normalized
 
-    env_path = get_tmdb_env_path()
-    env_path.parent.mkdir(parents=True, exist_ok=True)
 
+def _write_runtime_env_lines(env_path: Path, lines: list[str]) -> None:
+    payload = "\n".join(lines)
+    if payload:
+        payload += "\n"
+    temp_path = env_path.with_suffix(env_path.suffix + ".tmp")
+    try:
+        temp_path.write_text(payload, encoding="utf-8")
+        os.replace(temp_path, env_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+def _lines_without_tmdb_credentials(env_path: Path) -> list[str]:
     preserved_lines: list[str] = []
-    token_keys = {*TMDB_BEARER_TOKEN_ENV_VARS, TMDB_API_KEY_ENV_VAR}
+    token_keys = {
+        *TMDB_BEARER_TOKEN_ENV_VARS,
+        TMDB_API_KEY_ENV_VAR,
+        TMDB_CREDENTIALS_DISABLED_ENV_VAR,
+    }
     if env_path.is_file():
         for raw_line in env_path.read_text(encoding="utf-8").splitlines():
             stripped = raw_line.strip()
@@ -187,32 +210,69 @@ def save_tmdb_bearer_token(token: str) -> None:
                 preserved_lines.append(raw_line)
                 continue
             key = stripped.split("=", 1)[0].strip()
-            if key in token_keys:
-                continue
-            preserved_lines.append(raw_line)
-
+            if key not in token_keys:
+                preserved_lines.append(raw_line)
     while preserved_lines and preserved_lines[-1].strip() == "":
         preserved_lines.pop()
+    return preserved_lines
+
+
+def save_tmdb_bearer_token(token: str) -> None:
+    """Persist bearer token to data/.env.local without logging the secret."""
+    normalized = normalize_tmdb_bearer_token(token)
+
+    env_path = get_tmdb_env_path()
+    env_path.parent.mkdir(parents=True, exist_ok=True)
+
+    preserved_lines = _lines_without_tmdb_credentials(env_path)
 
     payload_lines = list(preserved_lines)
     if payload_lines:
         payload_lines.append("")
     payload_lines.append(f"TMDB_ACCESS_TOKEN={normalized}")
-    env_path.write_text("\n".join(payload_lines) + "\n", encoding="utf-8")
+    _write_runtime_env_lines(env_path, payload_lines)
 
     os.environ["TMDB_ACCESS_TOKEN"] = normalized
     os.environ.pop("TMDB_TOKEN", None)
     os.environ.pop(TMDB_API_KEY_ENV_VAR, None)
+    os.environ.pop(TMDB_CREDENTIALS_DISABLED_ENV_VAR, None)
+
+
+def delete_tmdb_credentials() -> bool:
+    """Remove persisted/runtime TMDb credentials while preserving unrelated env keys."""
+    env_path = get_tmdb_env_path()
+    had_credentials = any(os.environ.get(key, "").strip() for key in (*TMDB_BEARER_TOKEN_ENV_VARS, TMDB_API_KEY_ENV_VAR))
+    if env_path.is_file():
+        before = env_path.read_text(encoding="utf-8").splitlines()
+        preserved = _lines_without_tmdb_credentials(env_path)
+        had_credentials = had_credentials or preserved != before
+        preserved.append(f"{TMDB_CREDENTIALS_DISABLED_ENV_VAR}=1")
+        _write_runtime_env_lines(env_path, preserved)
+    else:
+        env_path.parent.mkdir(parents=True, exist_ok=True)
+        _write_runtime_env_lines(env_path, [f"{TMDB_CREDENTIALS_DISABLED_ENV_VAR}=1"])
+    for key in (*TMDB_BEARER_TOKEN_ENV_VARS, TMDB_API_KEY_ENV_VAR):
+        os.environ.pop(key, None)
+    os.environ[TMDB_CREDENTIALS_DISABLED_ENV_VAR] = "1"
+    return bool(had_credentials)
 
 
 def load_tmdb_credentials() -> tuple[str, str]:
     """Return TMDb auth as ("bearer", token) or ("api_key", key)."""
     _load_all_tmdb_env_files()
 
+    if os.getenv(TMDB_CREDENTIALS_DISABLED_ENV_VAR, "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        raise RuntimeError("TMDb credentials are disabled for this Watchbane runtime.")
+
     for env_name in TMDB_BEARER_TOKEN_ENV_VARS:
         token = os.getenv(env_name, "").strip()
         if token:
-            return "bearer", token
+            return "bearer", normalize_tmdb_bearer_token(token)
 
     api_key = os.getenv(TMDB_API_KEY_ENV_VAR, "").strip()
     if api_key:
@@ -309,7 +369,7 @@ def tmdb_get(
     request_params = dict(params or {})
     headers = {"Accept": "application/json"}
     if token:
-        headers["Authorization"] = f"Bearer {token}"
+        headers["Authorization"] = f"Bearer {normalize_tmdb_bearer_token(token)}"
     else:
         auth_kind, credential = load_tmdb_credentials()
         if auth_kind == "api_key":

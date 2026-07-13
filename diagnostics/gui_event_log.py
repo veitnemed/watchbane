@@ -13,6 +13,8 @@ from typing import Any
 
 
 from config import constant
+from diagnostics.log_sanitize import sanitize_log_entry
+from diagnostics.log_retention import prune_files, rotate_file
 
 
 DEFAULT_GUI_LOG_DIR = Path(constant.LOGS_DIR) / "reports"
@@ -20,6 +22,7 @@ GUI_EVENT_LOG_ENV = "SERIES_LIST_GUI_EVENT_LOG"
 _LOCK = Lock()
 _SESSION_LOG_PATH: Path | None = None
 _SESSION_ENABLED = False
+GUI_LOG_SESSION_LIMIT = 10
 
 
 def _now_iso() -> str:
@@ -27,7 +30,7 @@ def _now_iso() -> str:
 
 
 def _session_stamp() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
+    return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
 
 def _clean(value: Any) -> Any:
@@ -45,6 +48,7 @@ def start_gui_event_log(log_dir: str | Path | None = None) -> Path:
     global _SESSION_ENABLED, _SESSION_LOG_PATH
     output_dir = Path(DEFAULT_GUI_LOG_DIR if log_dir is None else log_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    prune_files(output_dir, "*_gui_session.jsonl*", keep=GUI_LOG_SESSION_LIMIT - 1)
     with _LOCK:
         _SESSION_ENABLED = True
         if _SESSION_LOG_PATH is None:
@@ -61,11 +65,15 @@ def gui_event_log_enabled() -> bool:
 def start_gui_event_log_if_enabled(log_dir: str | Path | None = None) -> Path | None:
     if gui_event_log_enabled() is False:
         return None
-    return start_gui_event_log(log_dir)
+    try:
+        return start_gui_event_log(log_dir)
+    except OSError:
+        return None
 
 
 def log_event(event: str, **fields) -> None:
     """Append one event to the current GUI session log."""
+    global _SESSION_ENABLED
     if _SESSION_ENABLED is False or _SESSION_LOG_PATH is None:
         return
     payload = {
@@ -73,10 +81,14 @@ def log_event(event: str, **fields) -> None:
         "event": event,
         **{str(key): _clean(value) for key, value in fields.items()},
     }
-    line = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    with _LOCK:
-        with _SESSION_LOG_PATH.open("a", encoding="utf-8") as file:
-            file.write(line + "\n")
+    line = json.dumps(sanitize_log_entry(payload), ensure_ascii=False, sort_keys=True)
+    try:
+        with _LOCK:
+            rotate_file(_SESSION_LOG_PATH)
+            with _SESSION_LOG_PATH.open("a", encoding="utf-8") as file:
+                file.write(line + "\n")
+    except (OSError, TypeError):
+        _SESSION_ENABLED = False
 
 
 def log_exception(event: str, error: BaseException, **fields) -> None:

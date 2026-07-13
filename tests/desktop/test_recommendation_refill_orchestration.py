@@ -283,6 +283,28 @@ def test_repeated_identical_refill_request_starts_only_one_worker(qtbot, monkeyp
     assert workers[0].running is True
 
 
+def test_shutdown_clears_queued_refill_and_does_not_restart_worker(qtbot, monkeypatch) -> None:
+    workers = _install_blocking_replenish_worker(monkeypatch)
+    _service, _session, view = _build_filters_view(
+        qtbot,
+        monkeypatch,
+        [_candidate(1, country="RU", genres=["Crime"])],
+    )
+    first_intent = {"countries": ["RU"], "target_add_count": 30}
+    queued_intent = {"countries": ["US"], "target_add_count": 30}
+    assert view._start_filter_replenish(first_intent) is True
+    view._pending_replenish_intent = queued_intent
+    view._pending_replenish_generation = view._replenish_generation
+
+    view.prepare_for_shutdown()
+    workers[0].finish_thread()
+
+    assert workers[0].cancelled is True
+    assert view._pending_replenish_intent is None
+    assert view._pending_replenish_generation is None
+    assert len(workers) == 1
+
+
 def test_changed_refill_preferences_cancel_active_and_ignore_its_stale_result(
     qtbot,
     monkeypatch,
@@ -455,12 +477,48 @@ def test_candidate_list_requests_refill_for_initial_underfilled_deck() -> None:
     view._session = session
     view._deck = deck
     view._refill_requested_deck_ids = set()
+    view._refill_last_attempt = None
     view._on_refill_needed = lambda payload: refill_calls.append(deepcopy(payload)) or True
 
     view._maybe_request_recommendation_refill()
 
     assert len(refill_calls) == 1
     assert _intent_countries(refill_calls[0]) == {"RU"}
+
+    view._maybe_request_recommendation_refill()
+    assert len(refill_calls) == 1
+    assert view._refill_requested_deck_ids == {"refill-test-deck"}
+
+
+def test_candidate_list_first_activation_requests_underfilled_refill(qtbot, monkeypatch) -> None:
+    candidate = _candidate(1, country="RU", genres=["Crime"])
+    preferences = _dark_ru_preferences()
+    refill_calls: list[dict] = []
+    initial = _deck_payload(candidate, preferences, refill_needed=True)
+    initial["underfilled_reason"] = "reserve_underfilled"
+    view = _build_list_view(
+        qtbot,
+        monkeypatch,
+        candidate=candidate,
+        preferences=preferences,
+        deck_service=FakeDeckService(initial),
+        refill_calls=refill_calls,
+    )
+
+    assert view._initial_deck_loaded is True
+    assert len(refill_calls) == 1
+    assert _intent_countries(refill_calls[0]) == {"RU"}
+
+    view.on_replenish_state_changed("loading")
+    assert view._deck_reserve_indicator._mode == "replenishing"
+    view.on_replenish_state_changed("error")
+    assert view._deck_reserve_indicator._mode == "offline"
+    assert view._deck_refill_button.isVisible()
+
+    calls_before_retry = len(refill_calls)
+    view._deck_refill_button.click()
+    view._deck_refill_button.click()
+    assert len(refill_calls) == calls_before_retry + 1
 
 
 def test_candidate_list_requests_refill_after_action_exhausts_reserve(qtbot, monkeypatch) -> None:

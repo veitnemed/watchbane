@@ -23,6 +23,22 @@ def test_global_menu_prints_candidate_summary(capsys) -> None:
     assert "7 >> Dev GUI: empty candidate pool on startup" in output
 
 
+def test_console_profile_summary_does_not_expose_local_path(monkeypatch, tmp_path) -> None:
+    from ui.console import menu_state
+
+    monkeypatch.setattr(menu_state.profiles, "get_active_profile", lambda: "sandbox")
+    monkeypatch.setattr(
+        menu_state.profiles,
+        "get_profile_data_dir",
+        lambda _profile: tmp_path / "private" / "data",
+    )
+
+    summary = menu_state.get_profile_summary_line()
+
+    assert summary == "Активный профиль данных: sandbox"
+    assert str(tmp_path) not in summary
+
+
 def test_console_dev_gui_launcher_sets_candidate_clear_env(monkeypatch) -> None:
     from storage import runtime
     from ui.console import dev_gui
@@ -169,6 +185,21 @@ def test_candidate_pool_tool_starts_background_poster_job(monkeypatch, capsys) -
     output = capsys.readouterr().out
     assert "Загрузка запущена в фоне." in output
     assert "PID: 123" in output
+
+
+def test_candidate_pool_preview_download_empty_state_has_valid_russian(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(candidate_pool_tools.ui, "clean_terminal", lambda: None)
+    monkeypatch.setattr(
+        candidate_pool_tools.candidate_service,
+        "get_candidate_poster_diagnostics_view",
+        lambda: {"is_empty_pool": True},
+    )
+
+    candidate_pool_tools.download_candidate_pool_preview_posters()
+
+    output = capsys.readouterr().out
+    assert "Общий candidate pool пуст." in output
+    assert "Рћ" not in output
 
 
 def test_candidate_pool_cleanup_menu_handles_keyboard_interrupt(monkeypatch, capsys) -> None:

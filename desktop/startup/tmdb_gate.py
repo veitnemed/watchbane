@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
 
 from desktop.i18n import tr
 from desktop.shared.brand_assets import tmdb_logo_label, watchbane_wordmark_label
-from desktop.startup.worker import TmdbNetworkProbeWorker, TmdbStartupValidateWorker
+from desktop.startup.worker import TmdbStartupReadinessWorker, TmdbStartupValidateWorker
 from desktop.theme.scaling import font_px, scale_px
 from desktop.theme.styles.startup import build_startup_gate_style
 from desktop.theme.tokens import (
@@ -35,17 +35,20 @@ class TmdbStartupGateView(QWidget):
     """Minimal premium gate for TMDb network check and token entry."""
 
     passed = pyqtSignal()
+    localModeRequested = pyqtSignal()
+    attentionRequired = pyqtSignal()
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, *, autostart: bool = True) -> None:
         super().__init__(parent)
         self.setObjectName("startupGateRoot")
         self.setStyleSheet(build_startup_gate_style())
         self._network_ok = False
         self._busy = False
-        self._network_worker: TmdbNetworkProbeWorker | None = None
+        self._network_worker: TmdbStartupReadinessWorker | None = None
         self._validate_worker: TmdbStartupValidateWorker | None = None
         self._build_ui()
-        self._start_network_probe()
+        if autostart:
+            self.start_readiness_probe()
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -138,6 +141,11 @@ class TmdbStartupGateView(QWidget):
         self._continue_button.setMinimumWidth(scale_px(180))
         self._continue_button.setMinimumHeight(scale_px(42))
         self._continue_button.clicked.connect(self._on_continue_clicked)
+        self._offline_button = QPushButton(tr("startup.tmdb.continue_offline"))
+        self._offline_button.setObjectName("startupSecondaryButton")
+        self._offline_button.clicked.connect(self.localModeRequested.emit)
+        self._offline_button.setMinimumHeight(scale_px(42))
+        button_row.addWidget(self._offline_button)
         button_row.addWidget(self._continue_button)
         button_row.addStretch(1)
 
@@ -180,11 +188,16 @@ class TmdbStartupGateView(QWidget):
 
     def _start_network_probe(self) -> None:
         self._network_label.setText(tr("startup.tmdb.network.checking"))
-        worker = TmdbNetworkProbeWorker(parent=self)
+        worker = TmdbStartupReadinessWorker(parent=self)
         worker.completed.connect(self._on_network_probe_finished)
         worker.finished.connect(worker.deleteLater)
         self._network_worker = worker
         worker.start()
+
+    def start_readiness_probe(self) -> None:
+        """Check credentials while the main shell stays visible on the fast path."""
+        if self._network_worker is None:
+            self._start_network_probe()
 
     def _on_token_changed(self, _text: str) -> None:
         if self._busy:
@@ -195,21 +208,41 @@ class TmdbStartupGateView(QWidget):
 
     def _on_network_probe_finished(self, result: dict) -> None:
         self._network_worker = None
-        if result.get("ok") is True:
+        if result.get("ready") is True:
+            self._network_ok = True
+            self._network_label.setText(tr("startup.tmdb.network.ok"))
+            self.passed.emit()
+            return
+
+        network = result.get("network") if isinstance(result.get("network"), dict) else result
+        if network.get("ok") is True:
             self._network_ok = True
             self._network_label.setText(tr("startup.tmdb.network.ok"))
             self._token_input.setEnabled(True)
             self._continue_button.setEnabled(self._token_input.text().strip() != "")
+            error_code = str(result.get("error") or "")
+            if error_code in {"invalid_token", "validation_failed"}:
+                mapping = {
+                    "invalid_token": "startup.tmdb.error.invalid_token",
+                    "validation_failed": "startup.tmdb.error.validation_failed",
+                }
+                self._show_error(tr(mapping[error_code]))
+            self.attentionRequired.emit()
             return
 
-        dns = result.get("dns") if isinstance(result.get("dns"), dict) else {}
-        if result.get("error") == "dns_blocked" or dns.get("blocked_localhost"):
+        dns = network.get("dns") if isinstance(network.get("dns"), dict) else {}
+        if (
+            result.get("error") == "dns_blocked"
+            or network.get("error") == "dns_blocked"
+            or dns.get("blocked_localhost")
+        ):
             self._network_label.setText(tr("startup.tmdb.network.blocked"))
         else:
             self._network_label.setText(tr("startup.tmdb.network.unreachable"))
         self._network_ok = False
         self._token_input.setEnabled(False)
         self._continue_button.setEnabled(False)
+        self.attentionRequired.emit()
 
     def _on_continue_clicked(self) -> None:
         if self._busy or self._network_ok is False:

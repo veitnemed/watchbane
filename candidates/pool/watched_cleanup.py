@@ -74,6 +74,15 @@ def _movie_media_type(movie: dict) -> str:
     return normalize_media_type(main_info.get("media_type") or source.get("media_type"))
 
 
+def _movie_has_media_type(movie: dict) -> bool:
+    source = movie if isinstance(movie, dict) else {}
+    main_info = source.get("main_info") if isinstance(source.get("main_info"), dict) else {}
+    return bool(
+        main_info.get("media_type") not in (None, "")
+        or source.get("media_type") not in (None, "")
+    )
+
+
 def _candidate_media_type(candidate: dict) -> str | None:
     source = candidate if isinstance(candidate, dict) else {}
     if source.get("media_type") in (None, ""):
@@ -123,6 +132,7 @@ def build_watched_signatures() -> set:
         if isinstance(movie, dict) is False:
             continue
         media_type = _movie_media_type(movie)
+        has_media_type = _movie_has_media_type(movie)
         year = _movie_year(movie)
         for title in dataset_title_aliases(dataset_key, movie):
             signature = title_identity_key({
@@ -130,8 +140,17 @@ def build_watched_signatures() -> set:
                 "year": year,
             })
             if signature != "|":
-                signatures.add(signature)
-        signatures.update(_external_id_signatures(movie, media_type=media_type, include_unscoped=True))
+                if has_media_type:
+                    signatures.add(("title", media_type, signature))
+                else:
+                    signatures.add(signature)
+        signatures.update(
+            _external_id_signatures(
+                movie,
+                media_type=media_type,
+                include_unscoped=not has_media_type,
+            )
+        )
     return signatures
 
 
@@ -153,9 +172,15 @@ def is_watched_candidate(
 
     title_aliases = candidate_title_aliases(candidate)
     year = _candidate_year(candidate)
+    candidate_media_type = _candidate_media_type(candidate)
     for title in title_aliases:
         exact_signature = title_identity_key({"title": title, "year": year})
-        if exact_signature in watched_signatures:
+        scoped_signature = (
+            None
+            if candidate_media_type is None
+            else ("title", candidate_media_type, exact_signature)
+        )
+        if exact_signature in watched_signatures or scoped_signature in watched_signatures:
             return True
 
     candidate_compacts = [
@@ -164,7 +189,14 @@ def is_watched_candidate(
         if normalized_title_key(title)
     ]
     for watched_signature in watched_signatures:
-        if "|" not in watched_signature:
+        watched_media_type = None
+        if isinstance(watched_signature, tuple) and len(watched_signature) == 3:
+            signature_kind, watched_media_type, watched_signature = watched_signature
+            if signature_kind != "title":
+                continue
+            if candidate_media_type is not None and watched_media_type != candidate_media_type:
+                continue
+        if not isinstance(watched_signature, str) or "|" not in watched_signature:
             continue
         watched_title, _, watched_year = watched_signature.partition("|")
         if str(watched_year) != str(year):

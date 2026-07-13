@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QSizePolicy
 
 from desktop.i18n import tr
 from desktop.shared.detail import profiles as detail_profiles
@@ -64,6 +65,50 @@ class DetailCard(DetailCardPosterMixin):
         layout = self._main_info_section.layout()
         if layout is not None:
             layout.addWidget(widget)
+
+    def add_overview_footer(self, widget) -> None:
+        """Place a screen-specific explanatory block directly after the overview."""
+        self._overview_footer_layout.addWidget(widget)
+
+    def _set_overview_content(self, text: str, *, show_footer: bool) -> None:
+        value = str(text or "").strip()
+        has_text = value != ""
+        self._overview_label.setText(value)
+        self._overview_divider.setVisible(has_text)
+        self._overview_title_label.setVisible(has_text)
+        self._overview_label.setVisible(has_text)
+        title_gap = (
+            self._profile.detail_overview_title_top_gap
+            if has_text
+            else UNCONSTRAINED_MINIMUM_HEIGHT
+        )
+        text_gap = (
+            self._profile.detail_overview_text_top_gap
+            if has_text
+            else UNCONSTRAINED_MINIMUM_HEIGHT
+        )
+        self._overview_title_gap_item.changeSize(
+            0,
+            title_gap,
+            QSizePolicy.Policy.Minimum,
+            QSizePolicy.Policy.Fixed,
+        )
+        self._overview_text_gap_item.changeSize(
+            0,
+            text_gap,
+            QSizePolicy.Policy.Minimum,
+            QSizePolicy.Policy.Fixed,
+        )
+
+        footer_visible = show_footer and self._overview_footer_layout.count() > 0
+        footer_top_margin = self._profile.detail_section_spacing if has_text else 0
+        self._overview_footer_layout.setContentsMargins(0, footer_top_margin, 0, 0)
+        self._overview_footer_widget.setVisible(footer_visible)
+
+        section_visible = has_text or footer_visible
+        self._overview_frame.setVisible(section_visible)
+        self._overview_gap_widget.setVisible(section_visible)
+        self._overview_frame.layout().invalidate()
 
     def set_mark_watched_handler(self, handler) -> None:
         """Optional callback for candidate transfer to watched dataset."""
@@ -176,9 +221,7 @@ class DetailCard(DetailCardPosterMixin):
         self._set_score_summary_items([], None)
         self._detail_chip_labels = []
         self._refresh_detail_chips()
-        self._overview_label.setText("")
-        self._overview_frame.setVisible(False)
-        self._overview_gap_widget.setVisible(False)
+        self._set_overview_content("", show_footer=False)
         self._main_info_expanded = False
         self._set_main_info_items([])
         if self._mark_watched_button is not None:
@@ -219,14 +262,8 @@ class DetailCard(DetailCardPosterMixin):
         self._set_main_info_items(build_main_info_items(card))
         self._apply_media_theme_properties()
 
-        if has_overview_text(card):
-            self._overview_label.setText(get_overview_display(card))
-            self._overview_gap_widget.setVisible(True)
-            self._overview_frame.setVisible(True)
-        else:
-            self._overview_label.setText("")
-            self._overview_gap_widget.setVisible(False)
-            self._overview_frame.setVisible(False)
+        overview = get_overview_display(card) if has_overview_text(card) else ""
+        self._set_overview_content(overview, show_footer=True)
 
         poster_path = resolve_local_poster_path(movie, card)
         if poster_path is None or self._set_poster_image(poster_path) is False:
@@ -314,7 +351,9 @@ class DetailCard(DetailCardPosterMixin):
             self._tmdb_ring_layout.addStretch(1)
         self._tmdb_ring_slot.setVisible(has_tmdb_ring)
 
-        has_final_stars = star_item is not None
+        has_final_stars = (
+            self._profile.show_recommendation_strength and star_item is not None
+        )
         if has_final_stars:
             self._final_score_stars_label.setText(str(star_item.get("label") or ""))
             self._final_score_stars_label.setToolTip(str(star_item.get("tooltip") or ""))

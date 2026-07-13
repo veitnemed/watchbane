@@ -3,6 +3,7 @@ from app.core.filters import candidate_matches, filter_candidates
 from app.core.ranking import calculate_quality_score, rank_candidates
 from candidates.models.keys import title_identity_key
 from candidates.pool.dataset_overlap import (
+    build_dataset_title_keys,
     is_dataset_title_match,
     purge_dataset_title_matches_from_pool,
 )
@@ -817,6 +818,61 @@ def test_is_dataset_title_match_accepts_legacy_name_only_candidate() -> None:
     dataset_keys = {"legacy show"}
     candidate = {"name": "Legacy Show", "year": 2018}
     assert is_dataset_title_match(candidate, dataset_keys) is True
+
+
+def test_dataset_title_match_preserves_same_title_other_media(monkeypatch) -> None:
+    dataset = {
+        "Shared": {
+            "main_info": {
+                "title": "Shared",
+                "year": 2024,
+                "media_type": "movie",
+            }
+        }
+    }
+    monkeypatch.setattr("storage.data.load_dataset", lambda: dataset)
+    dataset_keys = build_dataset_title_keys()
+
+    assert is_dataset_title_match(
+        {"title": "Shared", "year": 2024, "media_type": "movie"},
+        dataset_keys,
+    ) is True
+    assert is_dataset_title_match(
+        {"title": "Shared", "year": 2024, "media_type": "tv"},
+        dataset_keys,
+    ) is False
+
+
+def test_remove_watched_candidates_scopes_same_tmdb_id_by_media(monkeypatch) -> None:
+    dataset = {
+        "Shared": {
+            "main_info": {
+                "title": "Shared",
+                "year": 2024,
+                "media_type": "movie",
+            },
+            "tmdb_id": 42,
+        }
+    }
+    pool = {
+        "shared|2024|movie": {
+            "title": "Shared",
+            "year": 2024,
+            "media_type": "movie",
+            "tmdb_id": 42,
+        },
+        "shared|2024": {
+            "title": "Shared",
+            "year": 2024,
+            "media_type": "tv",
+            "tmdb_id": 42,
+        },
+    }
+    monkeypatch.setattr("storage.data.load_dataset", lambda: dataset)
+
+    filtered = remove_watched_candidates(pool)
+
+    assert list(filtered) == ["shared|2024"]
 
 
 def test_purge_dataset_title_matches_from_pool(monkeypatch) -> None:

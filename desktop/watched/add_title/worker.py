@@ -25,31 +25,31 @@ class AddTitleResolveWorker(QThread):
         *,
         data_language: str = "ru",
         media_type: str = "tv",
+        selected_tmdb_id: int | None = None,
     ) -> None:
         super().__init__(parent)
         self._title = title
         self._country = country
         self._data_language = data_language
         self._media_type = media_type
+        self._selected_tmdb_id = selected_tmdb_id
 
     def run(self) -> None:
         log_event("add_title.worker.run.begin", title=self._title, country=self._country, media_type=self._media_type)
         try:
-            if _callable_accepts_media_type(service.resolve_title_for_add):
-                bundle = service.resolve_title_for_add(
-                    self._title,
-                    self._country,
-                    on_progress=self._on_progress,
-                    data_language=self._data_language,
-                    media_type=self._media_type,
-                )
-            else:
-                bundle = service.resolve_title_for_add(
-                    self._title,
-                    self._country,
-                    on_progress=self._on_progress,
-                    data_language=self._data_language,
-                )
+            kwargs = {
+                "on_progress": self._on_progress,
+                "data_language": self._data_language,
+            }
+            if _callable_accepts_parameter(service.resolve_title_for_add, "media_type"):
+                kwargs["media_type"] = self._media_type
+            if _callable_accepts_parameter(service.resolve_title_for_add, "selected_tmdb_id"):
+                kwargs["selected_tmdb_id"] = self._selected_tmdb_id
+            bundle = service.resolve_title_for_add(
+                self._title,
+                self._country,
+                **kwargs,
+            )
         except Exception as error:  # noqa: BLE001 - surface to dialog
             log_exception("add_title.worker.run.error", error, title=self._title, country=self._country, media_type=self._media_type)
             self.failed.emit(str(error))
@@ -61,12 +61,12 @@ class AddTitleResolveWorker(QThread):
         self.progress.emit(current, total, message)
 
 
-def _callable_accepts_media_type(func) -> bool:
+def _callable_accepts_parameter(func, name: str) -> bool:
     try:
         signature = inspect.signature(func)
     except (TypeError, ValueError):
         return True
-    if "media_type" in signature.parameters:
+    if name in signature.parameters:
         return True
     return any(
         parameter.kind == inspect.Parameter.VAR_KEYWORD

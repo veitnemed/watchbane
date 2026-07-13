@@ -5,6 +5,7 @@ from __future__ import annotations
 from candidates.models.keys import normalize_key_part
 from candidates.pool.dedupe import candidate_title
 from candidates.pool.normalization import normalize_storage_pool
+from dataset.models.media_type import normalize_media_type
 
 
 TITLE_ALIAS_SELECTORS = (
@@ -25,6 +26,14 @@ TITLE_ALIAS_SELECTORS = (
     ("title_en",),
     ("name_en",),
 )
+
+
+class DatasetTitleKeys(set[str]):
+    """Title-key set carrying media-aware watched entries for modern callers."""
+
+    def __init__(self, entries_by_key: dict[str, list[dict]]) -> None:
+        super().__init__(entries_by_key)
+        self.entries_by_key = entries_by_key
 
 
 def _clean_text(value) -> str | None:
@@ -101,20 +110,43 @@ def build_dataset_entries_by_title_key() -> dict[str, list[dict]]:
                 "dataset_key": dataset_key,
                 "title": title,
                 "year": main_info.get("year"),
+                "media_type": normalize_media_type(
+                    main_info.get("media_type") or movie.get("media_type")
+                ),
+                "has_media_type": bool(
+                    main_info.get("media_type") not in (None, "")
+                    or movie.get("media_type") not in (None, "")
+                ),
             })
     return groups
 
 
 def build_dataset_title_keys() -> set[str]:
-    """Read-only set of normalized dataset titles for strict pool gate."""
-    return set(build_dataset_entries_by_title_key().keys())
+    """Read-only title set with media identity details for strict pool gates."""
+    return DatasetTitleKeys(build_dataset_entries_by_title_key())
 
 
 def is_dataset_title_match(candidate: dict, dataset_title_keys: set[str] | None = None) -> bool:
     """True when candidate normalized title already exists in watched dataset."""
     if dataset_title_keys is None:
         dataset_title_keys = build_dataset_title_keys()
-    return any(title_key in dataset_title_keys for title_key in candidate_title_keys(candidate))
+    matching_keys = candidate_title_keys(candidate).intersection(dataset_title_keys)
+    if not matching_keys:
+        return False
+
+    entries_by_key = getattr(dataset_title_keys, "entries_by_key", None)
+    candidate_media_type = candidate.get("media_type")
+    if not isinstance(entries_by_key, dict) or candidate_media_type in (None, ""):
+        return True
+
+    normalized_media_type = normalize_media_type(candidate_media_type)
+    for title_key in matching_keys:
+        for entry in entries_by_key.get(title_key) or []:
+            if not entry.get("has_media_type"):
+                return True
+            if entry.get("media_type") == normalized_media_type:
+                return True
+    return False
 
 
 def count_pool_dataset_title_matches(pool: dict | None = None) -> dict:

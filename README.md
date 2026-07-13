@@ -117,7 +117,7 @@ Do not move `Watchbane.exe` out of that folder: it depends on the adjacent `_int
 - interface scale and language;
 - downloaded poster previews;
 - the current local recommendation deck;
-- deck reserve level on the Recommendations tab (remaining active + reserve cards vs target size 25).
+- deck supply on the Recommendations tab (active + reserve + fresh locally eligible titles; ready at 45+).
 
 Opening the application does **not** immediately refresh the pool. New TMDb candidates are requested after an explicit search/filter action or a later background maintenance check when automatic refill is enabled.
 

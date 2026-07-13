@@ -55,11 +55,14 @@ def test_restore_backup_restores_sqlite_database(tmp_path, monkeypatch) -> None:
     storage_data.save_dataset({"Alpha": _movie("Alpha")})
     backup_path = create_backup()
     storage_data.clean_dataset()
+    backups_before_restore = set((tmp_path / "data" / "backups").iterdir())
 
     restored_count = restore_backup(backup_path)
 
     assert restored_count == 1
     assert list(storage_data.load_dataset()) == ["Alpha"]
+    backups_after_restore = set((tmp_path / "data" / "backups").iterdir())
+    assert len(backups_after_restore - backups_before_restore) == 1
 
 
 def test_restore_sqlite_database_rejects_invalid_backup_without_touching_target(tmp_path) -> None:
@@ -113,3 +116,30 @@ def test_restore_sqlite_database_rejects_incomplete_schema_without_touching_targ
         raise AssertionError("restore_sqlite_database should reject incomplete SQLite backups")
 
     assert list(watched_repository.load_dataset_dict(path=db_path)) == ["Alpha"]
+
+
+def test_console_backup_menu_hides_corruption_details_and_preserves_target(
+    tmp_path,
+    monkeypatch,
+    capsys,
+) -> None:
+    from ui.console import backup_menu
+
+    _use_sqlite(tmp_path, monkeypatch)
+    storage_data.save_dataset({"Alpha": _movie("Alpha")})
+    corrupt_backup = tmp_path / "private-runtime-path.sqlite3"
+    corrupt_backup.write_bytes(b"not a sqlite database")
+    answers = iter(["1", "yes"])
+    monkeypatch.setattr(
+        backup_menu.storage_files,
+        "get_latest_backups",
+        lambda _limit: [corrupt_backup],
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+
+    backup_menu.open_backup_menu()
+
+    output = capsys.readouterr().out
+    assert "Backup повреждён или несовместим. Данные не изменены." in output
+    assert str(corrupt_backup) not in output
+    assert list(storage_data.load_dataset()) == ["Alpha"]

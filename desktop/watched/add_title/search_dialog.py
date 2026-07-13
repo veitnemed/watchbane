@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QInputDialog,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -57,6 +58,7 @@ class AddTitleSearchDialog(QDialog):
         self._request_seq = 0
         self._active_request_id = 0
         self._cancel_after_worker = False
+        self._selected_tmdb_id: int | None = None
         self.last_title = initial_title.strip()
         self.last_country = initial_country
         self.last_media_type = MEDIA_TYPE_TV
@@ -131,6 +133,7 @@ class AddTitleSearchDialog(QDialog):
 
         self._progress = QProgressBar()
         self._progress.setObjectName("addTitleProgress")
+        self._progress.setAccessibleName(tr("add_title.status.searching"))
         self._progress.setTextVisible(True)
         self._progress.hide()
         root_layout.addWidget(self._progress)
@@ -253,6 +256,7 @@ class AddTitleSearchDialog(QDialog):
                 self,
                 data_language=self._data_language,
                 media_type=self.last_media_type,
+                selected_tmdb_id=self._selected_tmdb_id,
             )
         except TypeError:
             try:
@@ -261,9 +265,18 @@ class AddTitleSearchDialog(QDialog):
                     self.last_country,
                     self,
                     media_type=self.last_media_type,
+                    selected_tmdb_id=self._selected_tmdb_id,
                 )
             except TypeError:
-                worker = self._worker_factory(title, self.last_country, self)
+                try:
+                    worker = self._worker_factory(
+                        title,
+                        self.last_country,
+                        self,
+                        media_type=self.last_media_type,
+                    )
+                except TypeError:
+                    worker = self._worker_factory(title, self.last_country, self)
         worker.progress.connect(
             lambda current, total, message, rid=request_id: self._on_progress(rid, current, total, message)
         )
@@ -334,8 +347,47 @@ class AddTitleSearchDialog(QDialog):
             log_event("add_title.search.cancel_completed", request_id=request_id)
             self.reject()
             return
+        if self._selected_tmdb_id is None and len(bundle.search_results) > 1:
+            options = [self._format_search_result(item) for item in bundle.search_results]
+            selected_label, accepted = self._choose_search_result(options)
+            if accepted is False:
+                self._bundle = None
+                return
+            selected_index = options.index(selected_label)
+            selected = bundle.search_results[selected_index]
+            self._selected_tmdb_id = int(selected.get("id") or 0) or None
+            if self._selected_tmdb_id != bundle.selected_tmdb_id:
+                self._start_search(trigger="result_selection")
+                return
+        self._selected_tmdb_id = None
         self._bundle = bundle
         self.accept()
+
+    @staticmethod
+    def _format_search_result(item: dict) -> str:
+        title = str(
+            item.get("name")
+            or item.get("title")
+            or item.get("original_name")
+            or item.get("original_title")
+            or "—"
+        ).strip()
+        date_value = str(item.get("first_air_date") or item.get("release_date") or "")
+        year = date_value[:4] if len(date_value) >= 4 else "—"
+        original = str(item.get("original_name") or item.get("original_title") or "").strip()
+        suffix = f" · {original}" if original and original.casefold() != title.casefold() else ""
+        return f"{title} ({year}){suffix} · TMDb {item.get('id')}"
+
+    def _choose_search_result(self, options: list[str]) -> tuple[str, bool]:
+        dialog = QInputDialog(self)
+        dialog.setWindowTitle(tr("add_title.results.title"))
+        dialog.setLabelText(tr("add_title.results.prompt"))
+        dialog.setComboBoxItems(options)
+        dialog.setComboBoxEditable(False)
+        dialog.setOkButtonText(tr("common.continue"))
+        dialog.setCancelButtonText(tr("common.cancel"))
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        return dialog.textValue(), accepted
 
     def reject(self) -> None:
         if self._worker is not None and self._worker.isRunning():

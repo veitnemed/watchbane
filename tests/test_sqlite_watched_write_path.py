@@ -119,6 +119,35 @@ def test_sqlite_runtime_save_dataset_and_meta_rolls_back_together(tmp_path, monk
     assert storage_data.load_meta() == {}
 
 
+def test_sqlite_runtime_delete_state_rolls_back_when_poster_cache_save_fails(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _use_sqlite(tmp_path, monkeypatch)
+
+    from posters.cache import poster_identity_key
+    from storage.sqlite import poster_repository
+
+    movie = _movie("Alpha")
+    meta = {"Alpha": {"main_info": movie["main_info"], "raw_scores": {"tmdb_id": 1}}}
+    identity = poster_identity_key("Alpha", movie["main_info"]["year"])
+    poster_cache = {identity: {"title": "Alpha", "year": 2015, "status": "found"}}
+    storage_data.save_dataset_and_meta({"Alpha": movie}, meta)
+    poster_repository.save_poster_cache_dict(poster_cache)
+
+    def fail_save_poster_cache(*args, **kwargs):
+        raise OSError("forced poster-cache failure")
+
+    monkeypatch.setattr(poster_repository, "save_poster_cache_dict", fail_save_poster_cache)
+
+    with pytest.raises(OSError, match="forced poster-cache failure"):
+        storage_data.save_dataset_meta_and_poster_cache({}, {}, {})
+
+    assert list(storage_data.load_dataset()) == ["Alpha"]
+    assert list(storage_data.load_meta()) == ["Alpha"]
+    assert poster_repository.load_poster_cache_dict() == poster_cache
+
+
 def test_sqlite_runtime_add_update_delete_watched_record(tmp_path, monkeypatch) -> None:
     _use_sqlite(tmp_path, monkeypatch)
     from dataset.records import add as add_module
@@ -130,7 +159,6 @@ def test_sqlite_runtime_add_update_delete_watched_record(tmp_path, monkeypatch) 
     monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
     monkeypatch.setattr(delete_module, "backup_before_watched_delete", lambda timestamp=None: [])
     monkeypatch.setattr(delete_module, "load_poster_cache", lambda: {})
-    monkeypatch.setattr(delete_module, "save_poster_cache", lambda _cache: None)
 
     add_result = add_dataset_record(_movie("Alpha"))
     assert add_result.ok is True

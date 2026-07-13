@@ -158,6 +158,7 @@ def search_tmdb_title_for_add(
     normalizer=None,
     language: str | None = None,
     media_type: str = "tv",
+    selected_tmdb_id: int | None = None,
 ) -> dict[str, Any]:
     """Search TMDb and return normalized add-flow data without KP/IMDb ratings."""
     result = search_tmdb_defaults_data(
@@ -168,6 +169,7 @@ def search_tmdb_title_for_add(
         normalizer=normalizer,
         language=language,
         media_type=media_type,
+        selected_tmdb_id=selected_tmdb_id,
     )
     if result["data"] is not None:
         result["data"] = _clean_tmdb_data(result["data"])
@@ -186,6 +188,7 @@ def resolve_title_data_for_add(
     tmdb_details_func=None,
     tmdb_normalizer=None,
     media_type: str = "tv",
+    selected_tmdb_id: int | None = None,
 ) -> dict:
     """Resolve add-title defaults through TMDb only."""
     title = _normalize_text(title)
@@ -204,6 +207,7 @@ def resolve_title_data_for_add(
         normalizer=tmdb_normalizer,
         language=resolved_tmdb_language,
         media_type=normalized_media_type,
+        selected_tmdb_id=selected_tmdb_id,
     )
     tmdb_data = tmdb_result["data"]
     tmdb_error = tmdb_result["error"]
@@ -226,6 +230,8 @@ def resolve_title_data_for_add(
             "tmdb_language": resolved_tmdb_language,
             "media_type": normalized_media_type,
             "found": False,
+            "search_results": tmdb_result.get("search_results") or [],
+            "selected_tmdb_id": tmdb_result.get("selected_tmdb_id"),
         }
 
     _report_add_progress(on_progress, 2, "TMDb Details", "Успешно")
@@ -253,6 +259,8 @@ def resolve_title_data_for_add(
         "tmdb_language": resolved_tmdb_language,
         "media_type": normalized_media_type,
         "found": True,
+        "search_results": tmdb_result.get("search_results") or [],
+        "selected_tmdb_id": tmdb_result.get("selected_tmdb_id"),
     }
 
 

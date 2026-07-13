@@ -12,9 +12,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
+from config import constant
+from diagnostics.log_retention import prune_files
+from diagnostics.log_sanitize import sanitize_log_entry
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_REPORTS_DIR = ROOT_DIR / "logs" / "reports"
+DEFAULT_REPORTS_DIR = Path(constant.LOGS_DIR) / "reports"
+RUNTIME_REPORT_PAIR_LIMIT = 20
 
 
 def _now_iso() -> str:
@@ -64,6 +68,8 @@ def write_report(report: dict, reports_dir: str | Path = DEFAULT_REPORTS_DIR) ->
     """Write JSON and text report files. Returns paths."""
     output_dir = Path(reports_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    prune_files(output_dir, "*.json", keep=RUNTIME_REPORT_PAIR_LIMIT - 1)
+    prune_files(output_dir, "*.txt", keep=RUNTIME_REPORT_PAIR_LIMIT - 1)
 
     status = _slug(str(report.get("status") or "unknown"))
     scenario = _slug(str(report.get("scenario") or "scenario"))
@@ -71,8 +77,9 @@ def write_report(report: dict, reports_dir: str | Path = DEFAULT_REPORTS_DIR) ->
     json_path = output_dir / f"{stem}.json"
     txt_path = output_dir / f"{stem}.txt"
 
-    json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    txt_path.write_text(format_text_report(report), encoding="utf-8")
+    sanitized = sanitize_log_entry(report)
+    json_path.write_text(json.dumps(sanitized, ensure_ascii=False, indent=2), encoding="utf-8")
+    txt_path.write_text(format_text_report(sanitized), encoding="utf-8")
     return {"json_path": str(json_path), "text_path": str(txt_path)}
 
 

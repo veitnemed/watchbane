@@ -85,10 +85,19 @@ class UiTextService:
         return dict(self.replenish_result)
 
 
-def _build_view(qtbot, service: UiTextService | None = None):
+def _build_view(
+    qtbot,
+    service: UiTextService | None = None,
+    *,
+    on_replenish_state_changed=None,
+):
     service = service or UiTextService()
     session = CandidateSearchSession(service=service)
-    view = CandidateFiltersView(session, service=service)
+    view = CandidateFiltersView(
+        session,
+        service=service,
+        on_replenish_state_changed=on_replenish_state_changed,
+    )
     view._form.advanced_mode_toggle.setChecked(True)
     qtbot.addWidget(view.widget)
     view.widget.show()
@@ -128,6 +137,7 @@ def test_apply_without_replenish_reports_local_filter_applied(qtbot) -> None:
 
 
 def test_blocked_replenish_reports_no_tmdb_call_status(qtbot) -> None:
+    states: list[str] = []
     service, _session, view = _build_view(
         qtbot,
         UiTextService(
@@ -139,6 +149,7 @@ def test_blocked_replenish_reports_no_tmdb_call_status(qtbot) -> None:
                 "saved_count": 0,
             }
         ),
+        on_replenish_state_changed=states.append,
     )
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
     checkbox = view.widget.findChild(QCheckBox, "candidateReplenishEnabled")
@@ -152,10 +163,16 @@ def test_blocked_replenish_reports_no_tmdb_call_status(qtbot) -> None:
 
     qtbot.waitUntil(lambda: len(service.replenish_calls) == 1)
     qtbot.waitUntil(lambda: lead.text() == tr("recommendations.discovery.status.conflict"))
+    assert states == ["loading", "error"]
 
 
 def test_underfilled_replenish_reports_added_count(qtbot) -> None:
-    service, _session, view = _build_view(qtbot, UiTextService(add_on_replenish=True))
+    states: list[str] = []
+    service, _session, view = _build_view(
+        qtbot,
+        UiTextService(add_on_replenish=True),
+        on_replenish_state_changed=states.append,
+    )
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
     checkbox = view.widget.findChild(QCheckBox, "candidateReplenishEnabled")
     stats = view.widget.findChild(QLabel, "candidateFiltersIntroStats")
@@ -168,3 +185,4 @@ def test_underfilled_replenish_reports_added_count(qtbot) -> None:
 
     qtbot.waitUntil(lambda: len(service.replenish_calls) == 1)
     qtbot.waitUntil(lambda: "Добавлено 1 из 30" in stats.text())
+    assert states == ["loading", "finished"]

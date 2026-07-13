@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 
@@ -12,6 +13,15 @@ from storage.sqlite.session import connection, transaction, utc_now
 
 
 ImpressionIdentity = tuple[str, str]
+
+
+def _utc_timestamp(value: str | None) -> str:
+    if value in (None, ""):
+        return utc_now()
+    parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat(timespec="seconds")
 
 
 def _identity(item: dict | tuple[str, str]) -> ImpressionIdentity:
@@ -34,7 +44,7 @@ def record_impressions(
     identities = tuple(dict.fromkeys(_identity(item) for item in items))
     if not identities:
         return 0
-    timestamp = str(shown_at or utc_now())
+    timestamp = _utc_timestamp(shown_at)
     rows = [
         (identity_key, media_type, timestamp, timestamp, deck_id)
         for identity_key, media_type in identities
@@ -86,6 +96,32 @@ def get_impression(
             active.close()
 
 
+def forget_impressions(
+    items: Iterable[dict | tuple[str, str]],
+    *,
+    conn: sqlite3.Connection | None = None,
+    path: str | Path | None = None,
+) -> int:
+    """Remove recent-seen history for explicit user restore actions."""
+    identities = tuple(dict.fromkeys(_identity(item) for item in items))
+    if not identities:
+        return 0
+    active, owned = connection(conn, path)
+    try:
+        with transaction(active, owned):
+            removed = 0
+            for identity_key, media_type in identities:
+                cursor = active.execute(
+                    "DELETE FROM candidate_impressions WHERE identity_key = ? AND media_type = ?",
+                    (identity_key, media_type),
+                )
+                removed += max(0, int(cursor.rowcount))
+        return removed
+    finally:
+        if owned:
+            active.close()
+
+
 def get_recently_seen(
     cutoff_at: str,
     *,
@@ -93,6 +129,7 @@ def get_recently_seen(
     path: str | Path | None = None,
 ) -> list[dict]:
     active, owned = connection(conn, path)
+    normalized_cutoff = _utc_timestamp(cutoff_at)
     try:
         return [
             dict(row)
@@ -101,10 +138,10 @@ def get_recently_seen(
                 SELECT identity_key, media_type, shown_count,
                        first_shown_at, last_shown_at, last_deck_id
                 FROM candidate_impressions
-                WHERE last_shown_at > ?
+                WHERE julianday(last_shown_at) > julianday(?)
                 ORDER BY last_shown_at DESC, identity_key, media_type
                 """,
-                (str(cutoff_at),),
+                (normalized_cutoff,),
             )
         ]
     finally:

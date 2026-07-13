@@ -113,6 +113,36 @@ def test_simple_preferences_are_default_and_advanced_filters_remain_available(qt
     assert any(section.isHidden() is False for section in advanced_sections)
 
 
+def test_saved_discovery_preferences_seed_startup_deck_filters(qtbot, monkeypatch) -> None:
+    from candidates.preferences import (
+        CandidateDiscoveryPreferences,
+        RecommendationVector,
+        SimpleRecommendationPreferences,
+    )
+    import desktop.candidates.filters_view as filters_module
+
+    discovery = CandidateDiscoveryPreferences(media_type="tv", countries=("RU",))
+    monkeypatch.setattr(
+        filters_module,
+        "load_simple_recommendation_preferences",
+        SimpleRecommendationPreferences,
+    )
+    monkeypatch.setattr(
+        filters_module,
+        "load_recommendation_preferences",
+        lambda: (discovery, RecommendationVector()),
+    )
+
+    session = CandidateSearchSession(service=SimplePreferenceService(30))
+    view = filters_module.CandidateFiltersView(session, service=session.service)
+    qtbot.addWidget(view.widget)
+
+    assert session.filters is None
+    assert session.startup_filters is not None
+    assert session.startup_filters["media_type"] == "tv"
+    assert session.startup_filters["country"] == ["RU"]
+
+
 def test_recommendation_controls_fit_russian_labels_at_desktop_width(qtbot) -> None:
     _session, view = _build_view(qtbot, SimplePreferenceService(30))
     view.widget.resize(1280, 720)

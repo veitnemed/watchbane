@@ -20,6 +20,8 @@ APP_LANGUAGE_DEFAULT = "ru"
 APP_LANGUAGE_SUPPORTED = ("ru", "en")
 APP_INTERFACE_LANGUAGE_ENV = "WATCHBANE_INTERFACE_LANGUAGE"
 APP_DATA_LANGUAGE_ENV = "WATCHBANE_DATA_LANGUAGE"
+APP_SETTINGS_SCHEMA_KEY = "desktop_app_settings_schema_version"
+APP_SETTINGS_SCHEMA_VERSION = 1
 
 
 APP_AUTO_POOL_REFILL_DEFAULT = True
@@ -108,9 +110,26 @@ def _settings_from_payload(payload) -> AppSettings:
     )
 
 
+def _canonical_settings_payload(settings: AppSettings) -> dict:
+    return {
+        **asdict(settings),
+        APP_SETTINGS_SCHEMA_KEY: APP_SETTINGS_SCHEMA_VERSION,
+    }
+
+
 @lru_cache(maxsize=8)
 def _load_app_settings_for_data_root(_data_root: str) -> AppSettings:
-    return _settings_from_payload(app_settings_store.load_sqlite_settings_dict())
+    payload = app_settings_store.load_sqlite_settings_dict()
+    settings = _settings_from_payload(payload)
+    canonical = _canonical_settings_payload(settings)
+    corrections = {
+        key: value
+        for key, value in canonical.items()
+        if payload.get(key) != value
+    }
+    if corrections:
+        app_settings_store.save_sqlite_settings_dict(corrections)
+    return settings
 
 
 def invalidate_app_settings_cache() -> None:
@@ -133,7 +152,7 @@ def save_app_settings(settings: AppSettings) -> None:
         auto_pool_refill=normalize_auto_pool_refill(settings.auto_pool_refill),
         fts_search_enabled=normalize_fts_search_enabled(settings.fts_search_enabled),
     )
-    app_settings_store.save_sqlite_settings_dict(asdict(normalized))
+    app_settings_store.save_sqlite_settings_dict(_canonical_settings_payload(normalized))
     invalidate_app_settings_cache()
 
 

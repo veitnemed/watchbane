@@ -215,16 +215,46 @@ QLabel#recommendationsDeckStatus {{
 QWidget#recommendationsDeckLoadingPage {{
     background: transparent;
 }}
-QLabel#recommendationsDeckLoadingTitle {{
+QWidget#recommendationsLoadingListShell,
+QStackedWidget#recommendationsListBodyStack,
+QWidget#recommendationEmptyState,
+QWidget#recommendationEmptyStateContent,
+QWidget#recommendationEmptyStateAccessory {{
     background: transparent;
-    color: {COLOR_TEXT};
-    font-size: {font_px(FONT_TITLE)}px;
-    font-weight: 700;
 }}
-QLabel#recommendationsDeckLoadingDetail {{
+QFrame#recommendationsLoadingListPlaceholder {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_CARD)}px;
+}}
+QFrame#recommendationEmptyStateIconShell {{
+    background-color: {FILM_ACCENT_DIM};
+    border: 1px solid {FILM_BORDER};
+    border-radius: {list_px(36)}px;
+}}
+QLabel#recommendationEmptyStateIcon {{
     background: transparent;
-    color: {COLOR_TEXT_SECONDARY};
+    border: none;
+}}
+QLabel#candidateSearchDetailPlaceholder {{
+    background: transparent;
+    color: {FILM_TEXT};
+    font-size: {font_px(FONT_TITLE_LARGE)}px;
+    font-weight: 500;
+}}
+QLabel#recommendationEmptyStateSubtitle {{
+    background: transparent;
+    color: {FILM_TEXT_SUBTLE};
+    font-size: {font_px(FONT_SECTION)}px;
+}}
+QWidget#recommendationEmptyState[compact="true"] QLabel#candidateSearchDetailPlaceholder {{
+    font-size: {font_px(FONT_TITLE)}px;
+}}
+QWidget#recommendationEmptyState[compact="true"] QLabel#recommendationEmptyStateSubtitle {{
     font-size: {font_px(FONT_BASE)}px;
+}}
+QFrame#recommendationEmptyStateIconShell[compactIcon="true"] {{
+    border-radius: {list_px(27)}px;
 }}
 QProgressBar#recommendationsDeckLoadingProgress {{
     background-color: {COLOR_CARD_ALT};
@@ -247,6 +277,24 @@ QWidget#recommendationsFeedHeader {{
 }}
 QWidget#recommendationsDeckReserveIndicator {{
     background: transparent;
+}}
+QLabel#recommendationsDeckReserveLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_MUTED};
+    font-size: {font_px(FONT_SMALL)}px;
+}}
+QPushButton#recommendationsDeckRefillButton {{
+    background: transparent;
+    border: 1px solid {COLOR_BORDER_HOVER};
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+    min-height: {px(26)}px;
+    padding: {px(2)}px {px(9)}px;
+}}
+QPushButton#recommendationsDeckRefillButton:hover {{
+    border-color: {COLOR_FOCUS_BORDER};
+    color: {COLOR_TEXT};
 }}
 QLabel#recommendationsFeedTitle {{
     background: transparent;
@@ -314,13 +362,13 @@ QPushButton#recommendationHiddenButton {{
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
     font-size: {font_px(FONT_SMALL)}px;
     font-weight: 700;
-    min-height: {list_px(32)}px;
-    padding: {list_px(4)}px {list_px(10)}px;
+    min-height: {list_px(38)}px;
+    padding: {list_px(5)}px {list_px(10)}px;
 }}
 QPushButton#recommendationWatchedButton {{
     background-color: {COLOR_ADD_BUTTON_TOP};
     border: 1px solid {COLOR_FOCUS_BORDER};
-    color: {COLOR_TEXT};
+    color: {COLOR_TEXT_INVERTED};
 }}
 QPushButton#recommendationWatchlistButton {{
     background-color: {COLOR_CARD_ALT};
@@ -526,6 +574,9 @@ QPushButton#candidateSearchApplyTopButton {{
 }}
 QPushButton#candidateSearchApplyTopButton:hover {{
     background-color: {COLOR_ADD_BUTTON_HOVER};
+}}
+QPushButton#candidateSearchApplyTopButton[pendingChanges="true"] {{
+    border-color: {COLOR_FOCUS_BORDER};
 }}
 QPushButton#candidateSearchResetTopButton {{
     background-color: {COLOR_CARD_ALT};

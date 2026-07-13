@@ -15,8 +15,22 @@ from desktop.watched.add_title.search_dialog import AddTitleSearchDialog
 class WorkerHarness:
     workers: list["FakeResolveWorker"]
 
-    def factory(self, title: str, country: str, parent=None, *, media_type: str = "tv"):
-        worker = FakeResolveWorker(title, country, parent, media_type=media_type)
+    def factory(
+        self,
+        title: str,
+        country: str,
+        parent=None,
+        *,
+        media_type: str = "tv",
+        selected_tmdb_id: int | None = None,
+    ):
+        worker = FakeResolveWorker(
+            title,
+            country,
+            parent,
+            media_type=media_type,
+            selected_tmdb_id=selected_tmdb_id,
+        )
         self.workers.append(worker)
         return worker
 
@@ -27,11 +41,20 @@ class FakeResolveWorker(QObject):
     failed = pyqtSignal(str)
     finished = pyqtSignal()
 
-    def __init__(self, title: str, country: str, parent=None, *, media_type: str = "tv") -> None:
+    def __init__(
+        self,
+        title: str,
+        country: str,
+        parent=None,
+        *,
+        media_type: str = "tv",
+        selected_tmdb_id: int | None = None,
+    ) -> None:
         super().__init__(parent)
         self.title = title
         self.country = country
         self.media_type = media_type
+        self.selected_tmdb_id = selected_tmdb_id
         self.started = False
         self.interrupted = False
         self.deleted = False
@@ -179,6 +202,36 @@ def test_success_from_current_request_saves_bundle_and_accepts_dialog(qapp) -> N
     harness.workers[0].complete(bundle)
 
     assert dialog.resolve_bundle is bundle
+    assert dialog.result() == QDialog.DialogCode.Accepted
+
+
+def test_multiple_results_require_explicit_selection_before_preview(qapp, monkeypatch) -> None:
+    from dataclasses import replace
+
+    harness = WorkerHarness([])
+    dialog = _dialog(harness)
+    dialog._start_search(trigger="button")
+    results = (
+        {"id": 10, "name": "Shared", "first_air_date": "2024-01-01"},
+        {"id": 20, "name": "Shared", "first_air_date": "2024-01-01"},
+    )
+    first_bundle = replace(_bundle("Shared", 2024), search_results=results, selected_tmdb_id=10)
+    second_bundle = replace(first_bundle, selected_tmdb_id=20)
+    monkeypatch.setattr(
+        dialog,
+        "_choose_search_result",
+        lambda _options: (dialog._format_search_result(results[1]), True),
+    )
+
+    harness.workers[0].complete(first_bundle)
+
+    assert dialog.result() == 0
+    assert len(harness.workers) == 2
+    assert harness.workers[1].selected_tmdb_id == 20
+
+    harness.workers[1].complete(second_bundle)
+
+    assert dialog.resolve_bundle is second_bundle
     assert dialog.result() == QDialog.DialogCode.Accepted
 
 
