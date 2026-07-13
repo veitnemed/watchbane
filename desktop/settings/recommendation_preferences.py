@@ -44,10 +44,18 @@ def load_recommendation_preferences() -> tuple[CandidateDiscoveryPreferences, Re
     discovery_payload = settings.get(DISCOVERY_SETTINGS_KEY)
     vector_payload = settings.get(VECTOR_SETTINGS_KEY)
     if isinstance(discovery_payload, dict) and isinstance(vector_payload, dict):
-        return (
-            CandidateDiscoveryPreferences.from_dict(discovery_payload),
-            RecommendationVector.from_dict(vector_payload),
-        )
+        discovery = CandidateDiscoveryPreferences.from_dict(discovery_payload)
+        vector = RecommendationVector.from_dict(vector_payload)
+        normalized_discovery = {**discovery_payload, **discovery.to_dict()}
+        normalized_vector = {**vector_payload, **vector.to_dict()}
+        corrections = {}
+        if normalized_discovery != discovery_payload:
+            corrections[DISCOVERY_SETTINGS_KEY] = normalized_discovery
+        if normalized_vector != vector_payload:
+            corrections[VECTOR_SETTINGS_KEY] = normalized_vector
+        if corrections:
+            app_settings_store.save_sqlite_settings_dict(corrections)
+        return discovery, vector
     discovery, vector = _migrate_legacy_preferences(
         settings.get(SETTINGS_KEY) if isinstance(settings.get(SETTINGS_KEY), dict) else None
     )

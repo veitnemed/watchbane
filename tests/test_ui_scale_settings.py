@@ -12,6 +12,8 @@ from desktop.settings.app_settings import (
     APP_DATA_LANGUAGE_ENV,
     APP_INTERFACE_LANGUAGE_ENV,
     APP_LANGUAGE_DEFAULT,
+    APP_SETTINGS_SCHEMA_KEY,
+    APP_SETTINGS_SCHEMA_VERSION,
     APP_UI_SCALE_DEFAULT,
     APP_UI_SCALE_MAX,
     APP_UI_SCALE_MIN,
@@ -161,6 +163,71 @@ def test_invalid_persisted_language_values_default_to_ru(monkeypatch, tmp_path) 
     assert settings.interface_language == "ru"
     assert settings.data_language == "ru"
 
+    persisted = settings_repository.load_settings_dict(path=db_path)
+    assert persisted["interface_language"] == "ru"
+    assert persisted["data_language"] == "ru"
+    assert persisted[APP_SETTINGS_SCHEMA_KEY] == APP_SETTINGS_SCHEMA_VERSION
+
+
+@pytest.mark.parametrize(
+    ("stored", "expected"),
+    [(-50, APP_UI_SCALE_MIN), (50, APP_UI_SCALE_MAX), ("broken", APP_UI_SCALE_DEFAULT)],
+)
+def test_invalid_persisted_scale_is_normalized_and_saved(monkeypatch, tmp_path, stored, expected) -> None:
+    db_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_repository.save_settings_dict(
+        {"ui_scale": stored, "future_setting": {"keep": True}},
+        path=db_path,
+    )
+
+    assert load_app_settings().ui_scale == expected
+
+    persisted = settings_repository.load_settings_dict(path=db_path)
+    assert persisted["ui_scale"] == expected
+    assert persisted["future_setting"] == {"keep": True}
+    assert persisted[APP_SETTINGS_SCHEMA_KEY] == APP_SETTINGS_SCHEMA_VERSION
+
+
+def test_legacy_settings_payload_is_upgraded_without_dropping_unknown_keys(monkeypatch, tmp_path) -> None:
+    db_path = _use_settings_path(monkeypatch, tmp_path)
+    settings_repository.save_settings_dict(
+        {
+            "interface_language": "en",
+            "unknown_tab": "future-screen",
+            "future_payload": {"version": 9},
+        },
+        path=db_path,
+    )
+
+    settings = load_app_settings()
+
+    assert settings.interface_language == "en"
+    persisted = settings_repository.load_settings_dict(path=db_path)
+    assert persisted["data_language"] == APP_LANGUAGE_DEFAULT
+    assert persisted["ui_scale"] == APP_UI_SCALE_DEFAULT
+    assert persisted["unknown_tab"] == "future-screen"
+    assert persisted["future_payload"] == {"version": 9}
+
+
+def test_ui_settings_repair_does_not_replace_persisted_recommendation_deck(monkeypatch, tmp_path) -> None:
+    from storage.sqlite import recommendation_deck_repository
+
+    db_path = _use_settings_path(monkeypatch, tmp_path)
+    original_deck = {
+        "deck_id": "keep-this-deck",
+        "active": [{"title": "Existing", "media_type": "movie", "tmdb_id": 1}],
+        "reserve": [],
+    }
+    recommendation_deck_repository.save_current_deck(original_deck, path=db_path)
+    settings_repository.set_setting("ui_scale", "invalid", path=db_path)
+    settings_repository.set_setting("interface_language", "unknown", path=db_path)
+
+    settings = load_app_settings()
+
+    assert settings.ui_scale == APP_UI_SCALE_DEFAULT
+    assert settings.interface_language == APP_LANGUAGE_DEFAULT
+    assert recommendation_deck_repository.load_current_deck(path=db_path) == original_deck
+
 
 def test_save_then_load_ui_scale(monkeypatch, tmp_path) -> None:
     db_path = _use_settings_path(monkeypatch, tmp_path)
@@ -191,6 +258,7 @@ def test_save_then_load_languages(monkeypatch, tmp_path) -> None:
         "data_language": "ru",
         "auto_pool_refill": True,
         "fts_search_enabled": True,
+        APP_SETTINGS_SCHEMA_KEY: APP_SETTINGS_SCHEMA_VERSION,
     }
     assert settings.interface_language == "en"
     assert settings.data_language == "ru"

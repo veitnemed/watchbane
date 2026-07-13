@@ -6324,6 +6324,41 @@ def test_main_window_restores_saved_geometry_inside_available_screen(qapp, maxim
     window.close()
 
 
+@pytest.mark.parametrize(
+    "invalid_geometry",
+    (
+        "not-a-geometry",
+        {"x": "bad", "y": None, "width": -5, "height": 0, "maximized": "yes"},
+    ),
+)
+def test_invalid_main_window_geometry_falls_back_and_is_repaired_on_close(qapp, invalid_geometry) -> None:
+    from config import app_settings_store
+    from desktop.shell.main_window import WINDOW_GEOMETRY_SETTINGS_KEY, WatchedMoviesWindow
+
+    app_settings_store.save_sqlite_settings_dict(
+        {
+            WINDOW_GEOMETRY_SETTINGS_KEY: invalid_geometry,
+            "desktop_main_tab_v1": "removed-tab",
+            "future_setting": {"keep": True},
+        }
+    )
+
+    window = WatchedMoviesWindow()
+    assert window._main_tabs.currentIndex() == 0
+    assert window.geometry().isValid() is True
+    window.show()
+    qapp.processEvents()
+    window.close()
+    qapp.processEvents()
+
+    persisted = app_settings_store.load_sqlite_settings_dict()
+    repaired = persisted[WINDOW_GEOMETRY_SETTINGS_KEY]
+    assert all(isinstance(repaired[key], int) for key in ("x", "y", "width", "height"))
+    assert isinstance(repaired["maximized"], bool)
+    assert persisted["desktop_main_tab_v1"] == "removed-tab"
+    assert persisted["future_setting"] == {"keep": True}
+
+
 def test_main_window_persists_normal_geometry_on_close(qapp) -> None:
     import inspect
 

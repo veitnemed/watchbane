@@ -53,7 +53,9 @@ class SimpleRecommendationPreferences:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any] | None) -> "SimpleRecommendationPreferences":
-        return cls(**dict(payload or {})).normalized()
+        source = dict(payload or {})
+        allowed = cls.__dataclass_fields__
+        return cls(**{key: value for key, value in source.items() if key in allowed}).normalized()
 
     def to_candidate_filters(self, defaults: dict | None = None) -> dict:
         preferences = self.normalized()
