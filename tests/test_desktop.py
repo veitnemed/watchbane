@@ -7451,6 +7451,20 @@ def test_poster_pixmap_caches_are_bounded(qapp, tmp_path) -> None:
     assert len(list_delegate._thumb_pixmap_cache) <= list_delegate.LIST_THUMB_PIXMAP_CACHE_LIMIT
 
 
+def test_corrupt_local_poster_falls_back_without_exception(qapp, tmp_path) -> None:
+    from desktop.shared.detail import card_poster, list_delegate
+
+    path = tmp_path / "corrupt-poster.jpg"
+    path.write_bytes(b"not an image")
+    card_poster.clear_detail_poster_source_cache()
+    list_delegate.clear_list_thumb_pixmap_cache()
+
+    assert card_poster.load_detail_poster_source_pixmap(str(path)) is None
+    assert list_delegate._load_list_thumb_pixmap(str(path)) is None
+    assert card_poster.load_detail_poster_source_pixmap(str(path)) is None
+    assert list_delegate._load_list_thumb_pixmap(str(path)) is None
+
+
 def test_startup_gate_labels_and_simple_preferences_have_explicit_surfaces() -> None:
     from desktop.theme.styles.candidates_shell import build_candidates_shell_style
     from desktop.theme.styles.startup import build_startup_gate_style

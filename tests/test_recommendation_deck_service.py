@@ -402,6 +402,21 @@ def test_refresh_restores_same_deck_order_across_restart_and_next_day(tmp_path) 
     assert _identities(restored["reserve"]) == _identities(first["reserve"])
 
 
+def test_persisted_deck_restart_skips_full_build_rerank(tmp_path) -> None:
+    db_path = tmp_path / "deck.sqlite3"
+    pool = _pool(120)
+    first = _service(pool, db_path).refresh_deck({}, NOW)
+    restarted = _service(pool, db_path)
+    restarted.build_deck = lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("persisted deck triggered a full build")
+    )
+
+    restored = restarted.refresh_deck({}, NOW + timedelta(hours=1))
+
+    assert restored["deck_id"] == first["deck_id"]
+    assert _identities(restored["active"]) == _identities(first["active"])
+
+
 def test_reveal_idempotence_survives_service_restart(tmp_path) -> None:
     db_path = tmp_path / "deck.sqlite3"
     pool = _pool(30)
