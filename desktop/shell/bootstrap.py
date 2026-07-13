@@ -32,14 +32,16 @@ def _show_database_recovery_dialog(error) -> None:
 
     from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
+    from app.use_cases.sqlite_recovery import (
+        format_startup_database_error,
+        restore_selected_startup_backup,
+    )
     from config import constant
-    from storage.sqlite.backup import restore_sqlite_database
-    from storage.sqlite.startup import startup_database_error_message
 
     dialog = QMessageBox()
     dialog.setIcon(QMessageBox.Icon.Critical)
     dialog.setWindowTitle("Watchbane — база данных")
-    dialog.setText(startup_database_error_message(error))
+    dialog.setText(format_startup_database_error(error))
     restore_button = dialog.addButton(
         "Выбрать резервную копию…",
         QMessageBox.ButtonRole.ActionRole,
@@ -68,7 +70,7 @@ def _show_database_recovery_dialog(error) -> None:
     if answer != QMessageBox.StandardButton.Yes:
         return
     try:
-        restore_sqlite_database(selected, db_path=error.db_path)
+        restore_selected_startup_backup(selected, error)
     except (OSError, ValueError, sqlite3.DatabaseError) as restore_error:
         QMessageBox.critical(
             None,
@@ -211,9 +213,9 @@ def main() -> None:
         sys.exit(exit_code)
     except Exception as error:
         log_exception("app.error", error)
-        from storage.sqlite.startup import StartupDatabaseError
+        from app.use_cases.sqlite_recovery import is_startup_database_error
 
-        if isinstance(error, StartupDatabaseError):
+        if is_startup_database_error(error):
             _show_database_recovery_dialog(error)
             return
         if is_storage_write_error(error):

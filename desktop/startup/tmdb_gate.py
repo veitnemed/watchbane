@@ -35,6 +35,7 @@ class TmdbStartupGateView(QWidget):
     """Minimal premium gate for TMDb network check and token entry."""
 
     passed = pyqtSignal()
+    localModeRequested = pyqtSignal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -138,6 +139,11 @@ class TmdbStartupGateView(QWidget):
         self._continue_button.setMinimumWidth(scale_px(180))
         self._continue_button.setMinimumHeight(scale_px(42))
         self._continue_button.clicked.connect(self._on_continue_clicked)
+        self._offline_button = QPushButton(tr("startup.tmdb.continue_offline"))
+        self._offline_button.setObjectName("startupSecondaryButton")
+        self._offline_button.clicked.connect(self.localModeRequested.emit)
+        self._offline_button.setMinimumHeight(scale_px(42))
+        button_row.addWidget(self._offline_button)
         button_row.addWidget(self._continue_button)
         button_row.addStretch(1)
 

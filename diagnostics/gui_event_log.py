@@ -13,6 +13,7 @@ from typing import Any
 
 
 from config import constant
+from diagnostics.log_sanitize import sanitize_log_entry
 
 
 DEFAULT_GUI_LOG_DIR = Path(constant.LOGS_DIR) / "reports"
@@ -77,7 +78,7 @@ def log_event(event: str, **fields) -> None:
         "event": event,
         **{str(key): _clean(value) for key, value in fields.items()},
     }
-    line = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    line = json.dumps(sanitize_log_entry(payload), ensure_ascii=False, sort_keys=True)
     try:
         with _LOCK:
             with _SESSION_LOG_PATH.open("a", encoding="utf-8") as file:

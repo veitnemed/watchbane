@@ -31,6 +31,35 @@ QFrame#poolOpsSection {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_CARD)}px;
 }}
+QFrame#tmdbCredentialsSection {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_CARD)}px;
+}}
+QLabel#tmdbCredentialsTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SECTION)}px;
+    font-weight: 700;
+}}
+QLabel#tmdbCredentialsHint,
+QLabel#tmdbCredentialsStatus {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+}}
+QLineEdit#tmdbCredentialInput {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_BASE)}px;
+    padding: {px(6)}px {px(10)}px;
+    min-height: {px(28)}px;
+}}
+QLineEdit#tmdbCredentialInput:focus {{
+    border-color: {COLOR_ACCENT};
+}}
 QWidget#poolOpsStatsContainer {{
     background: transparent;
 }}
@@ -149,6 +178,17 @@ QPushButton#poolOpsBuildButton {{
     padding: {px(6)}px {px(12)}px;
     min-height: {px(28)}px;
 }}
+QPushButton#deleteTmdbCredentialsButton,
+QPushButton#saveTmdbCredentialsButton {{
+    background-color: {COLOR_CARD_ALT};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_BASE)}px;
+    font-weight: 600;
+    padding: {px(6)}px {px(12)}px;
+    min-height: {px(28)}px;
+}}
 QPushButton#resetUiScaleButton:hover,
 QPushButton#saveSettingsButton:hover,
 QPushButton#poolOpsDedupeButton:hover,
@@ -156,6 +196,11 @@ QPushButton#poolOpsPurgeButton:hover,
 QPushButton#poolOpsClearButton:hover,
 QPushButton#poolOpsImportButton:hover,
 QPushButton#poolOpsBuildButton:hover {{
+    background-color: {COLOR_CONTROL_HOVER};
+    border-color: {COLOR_BORDER_HOVER};
+}}
+QPushButton#deleteTmdbCredentialsButton:hover,
+QPushButton#saveTmdbCredentialsButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};
     border-color: {COLOR_BORDER_HOVER};
 }}

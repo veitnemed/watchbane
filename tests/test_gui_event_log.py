@@ -29,10 +29,23 @@ def test_gui_event_log_is_silent_until_enabled(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setenv(gui_event_log.GUI_EVENT_LOG_ENV, "1")
     path = gui_event_log.start_gui_event_log_if_enabled(tmp_path)
-
     assert path is not None
     assert path.exists()
 
+
+def test_gui_event_log_redacts_tmdb_token_from_message_and_traceback(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(gui_event_log, "_SESSION_LOG_PATH", None)
+    monkeypatch.setattr(gui_event_log, "_SESSION_ENABLED", False)
+    path = gui_event_log.start_gui_event_log(tmp_path)
+
+    try:
+        raise RuntimeError("authorization=Bearer-secret-token")
+    except RuntimeError as error:
+        gui_event_log.log_exception("tmdb.validation.failed", error, token="secret-token")
+
+    raw = path.read_text(encoding="utf-8")
+    assert "secret-token" not in raw
+    assert "<redacted>" in raw
 
 def test_add_title_dialogs_are_instrumented() -> None:
     import inspect

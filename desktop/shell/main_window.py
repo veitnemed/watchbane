@@ -74,6 +74,7 @@ class WatchedMoviesWindow(QMainWindow):
         self._onboarding_view: OnboardingAutofillDialog | None = None
         self._tmdb_gate_view: TmdbStartupGateView | None = None
         self._tmdb_gate_passed = False
+        self._tmdb_local_mode = False
         self._pool_refill_worker: PoolReplenishWorker | None = None
         self._pool_refill_timer = QTimer(self)
         self._pool_refill_timer.setInterval(POOL_AUTO_REFILL_CHECK_INTERVAL_MS)
@@ -315,7 +316,7 @@ class WatchedMoviesWindow(QMainWindow):
 
     def maybe_start_pool_auto_refill(self) -> None:
         """Start a quiet background pool top-up when the pool runs low."""
-        if self._tmdb_gate_passed is False or self._tmdb_gate_view is not None:
+        if self._tmdb_gate_passed is False or self._tmdb_local_mode or self._tmdb_gate_view is not None:
             return
         if self._pool_refill_worker is not None or self._onboarding_view is not None:
             return
@@ -396,17 +397,31 @@ class WatchedMoviesWindow(QMainWindow):
         gate = TmdbStartupGateView(parent=self)
         gate.setWindowFlag(Qt.WindowType.Widget, True)
 
-        def finish_gate() -> None:
-            reload_tmdb_runtime()
+        def close_gate(*, reload_runtime: bool, start_onboarding: bool) -> None:
+            if reload_runtime:
+                reload_tmdb_runtime()
             self._tmdb_gate_passed = True
             self._root_stack.setCurrentWidget(self._main_tabs)
-            log_event("startup.tmdb_gate.passed")
             self._root_stack.removeWidget(gate)
             gate.deleteLater()
             self._tmdb_gate_view = None
-            self.maybe_show_onboarding_autofill()
+            if start_onboarding:
+                self.maybe_show_onboarding_autofill()
+
+        def finish_gate() -> None:
+            log_event("startup.tmdb_gate.passed")
+            self._tmdb_local_mode = False
+            close_gate(reload_runtime=True, start_onboarding=True)
+
+        def continue_locally() -> None:
+            log_event("startup.tmdb_gate.local_mode")
+            self._tmdb_local_mode = True
+            close_gate(reload_runtime=False, start_onboarding=False)
 
         gate.passed.connect(finish_gate)
+        local_mode_signal = getattr(gate, "localModeRequested", None)
+        if local_mode_signal is not None:
+            local_mode_signal.connect(continue_locally)
         self._tmdb_gate_view = gate
         self._root_stack.addWidget(gate)
         self._root_stack.setCurrentWidget(gate)
