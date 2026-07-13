@@ -413,6 +413,33 @@ def test_empty_recommendation_deck_shows_stable_empty_state(qtbot) -> None:
     assert list_view.widget.findChild(QFrame, "recommendationActionPanel").isHidden()
 
 
+def test_recommendation_header_keeps_status_and_reserve_controls_in_bounds(qtbot) -> None:
+    service = FakeCandidateService(_candidate_set(31))
+    deck_service = FakeRecommendationDeckService(service)
+    _service, _session, _filters_view, list_view = _build_views(
+        qtbot, service, deck_service
+    )
+    header = list_view.widget.findChild(QWidget, "recommendationsFeedHeader")
+    title = list_view.widget.findChild(QLabel, "recommendationsFeedTitle")
+    reserve = list_view.widget.findChild(QLabel, "recommendationsDeckReserveLabel")
+    status = list_view.widget.findChild(QLabel, "recommendationsDeckStatus")
+    retry = list_view.widget.findChild(QPushButton, "recommendationsDeckRefillButton")
+    assert header is not None and title is not None and reserve is not None
+    assert status is not None and retry is not None
+
+    status.setText("25 рекомендаций")
+    status.show()
+    retry.setText("Повторить")
+    retry.show()
+    list_view.widget.resize(1280, 800)
+    qtbot.wait(50)
+
+    assert status.y() == title.y()
+    assert reserve.y() > title.y()
+    assert status.geometry().right() <= header.contentsRect().right()
+    assert retry.geometry().right() <= header.contentsRect().right()
+
+
 def test_compact_recommendations_show_visible_loading_state(qtbot) -> None:
     from desktop.i18n import tr
 
