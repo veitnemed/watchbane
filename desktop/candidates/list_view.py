@@ -278,23 +278,28 @@ class CandidateListView(CandidateListActionsMixin):
 
         feed_header = QWidget()
         feed_header.setObjectName("recommendationsFeedHeader")
-        feed_header_layout = QHBoxLayout(feed_header)
+        feed_header_layout = QVBoxLayout(feed_header)
         feed_header_layout.setContentsMargins(0, 0, 0, 0)
-        feed_header_layout.setSpacing(list_px(10))
+        feed_header_layout.setSpacing(list_px(2))
+        feed_controls_layout = QHBoxLayout()
+        feed_controls_layout.setContentsMargins(0, 0, 0, 0)
+        feed_controls_layout.setSpacing(list_px(10))
         self._feed_title = QLabel(tr("recommendations.feed.title"))
         self._feed_title.setObjectName("recommendationsFeedTitle")
-        feed_header_layout.addWidget(self._feed_title)
+        feed_controls_layout.addWidget(self._feed_title)
         self._deck_reserve_label = QLabel(tr("recommendations.deck_reserve.label"))
         self._deck_reserve_label.setObjectName("recommendationsDeckReserveLabel")
-        feed_header_layout.addWidget(self._deck_reserve_label)
+        feed_controls_layout.addWidget(self._deck_reserve_label)
         self._deck_reserve_indicator = DeckReserveIndicator(feed_header)
-        feed_header_layout.addWidget(self._deck_reserve_indicator)
+        feed_controls_layout.addWidget(self._deck_reserve_indicator)
         self._deck_refill_button = QPushButton(tr("recommendations.deck_reserve.refresh"))
         self._deck_refill_button.setObjectName("recommendationsDeckRefillButton")
         self._deck_refill_button.clicked.connect(self._on_deck_refill_clicked)
         self._deck_refill_button.hide()
-        feed_header_layout.addWidget(self._deck_refill_button)
-        feed_header_layout.addStretch(1)
+        feed_controls_layout.addWidget(self._deck_refill_button)
+        feed_controls_layout.addStretch(1)
+        feed_header_layout.addLayout(feed_controls_layout)
+        self._deck_status_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         feed_header_layout.addWidget(self._deck_status_label)
         self._new_deck_button = QPushButton(tr("recommendations.new_deck"))
         self._new_deck_button.setObjectName("recommendationsNewDeckButton")
@@ -658,7 +663,11 @@ class CandidateListView(CandidateListActionsMixin):
         }
 
     def _deck_preferences(self) -> dict:
-        return dict(self._session.filters or DEFAULT_BROWSE_FILTERS)
+        return dict(
+            self._session.filters
+            or self._session.startup_filters
+            or DEFAULT_BROWSE_FILTERS
+        )
 
     def _deck_vector(self) -> dict:
         return dict(self._session.recommendation_vector)

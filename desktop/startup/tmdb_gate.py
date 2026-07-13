@@ -36,8 +36,9 @@ class TmdbStartupGateView(QWidget):
 
     passed = pyqtSignal()
     localModeRequested = pyqtSignal()
+    attentionRequired = pyqtSignal()
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, *, autostart: bool = True) -> None:
         super().__init__(parent)
         self.setObjectName("startupGateRoot")
         self.setStyleSheet(build_startup_gate_style())
@@ -46,7 +47,8 @@ class TmdbStartupGateView(QWidget):
         self._network_worker: TmdbStartupReadinessWorker | None = None
         self._validate_worker: TmdbStartupValidateWorker | None = None
         self._build_ui()
-        self._start_network_probe()
+        if autostart:
+            self.start_readiness_probe()
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -192,6 +194,11 @@ class TmdbStartupGateView(QWidget):
         self._network_worker = worker
         worker.start()
 
+    def start_readiness_probe(self) -> None:
+        """Check credentials while the main shell stays visible on the fast path."""
+        if self._network_worker is None:
+            self._start_network_probe()
+
     def _on_token_changed(self, _text: str) -> None:
         if self._busy:
             return
@@ -220,6 +227,7 @@ class TmdbStartupGateView(QWidget):
                     "validation_failed": "startup.tmdb.error.validation_failed",
                 }
                 self._show_error(tr(mapping[error_code]))
+            self.attentionRequired.emit()
             return
 
         dns = network.get("dns") if isinstance(network.get("dns"), dict) else {}
@@ -234,6 +242,7 @@ class TmdbStartupGateView(QWidget):
         self._network_ok = False
         self._token_input.setEnabled(False)
         self._continue_button.setEnabled(False)
+        self.attentionRequired.emit()
 
     def _on_continue_clicked(self) -> None:
         if self._busy or self._network_ok is False:

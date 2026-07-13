@@ -333,6 +333,9 @@ class CandidateFiltersView:
         self._apply_filter_defaults()
         self._set_discovery_controls(self._discovery_preferences)
         self._set_vector_controls(self._recommendation_vector)
+        self._session.startup_filters = self._discovery_preferences.to_candidate_filters(
+            DEFAULT_BROWSE_FILTERS
+        )
         self._session.recommendation_vector = self._recommendation_vector.to_dict()
         self._connect_summary_updates()
         self._connect_recommendation_controls()

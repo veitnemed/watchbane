@@ -203,6 +203,7 @@ def test_startup_gate_async_fast_path_passes_without_token_entry(monkeypatch, qa
         window.maybe_show_tmdb_startup_gate()
         gate = window._tmdb_gate_view
         assert isinstance(gate, TmdbStartupGateView)
+        assert window._root_stack.currentWidget() is window._main_tabs
         gate._on_network_probe_finished({"ready": True, "network": {"ok": True}})
         assert window._tmdb_gate_passed is True
         assert window._tmdb_gate_view is None
@@ -259,6 +260,43 @@ def test_startup_gate_blocks_onboarding_until_passed(monkeypatch, qapp) -> None:
         assert window._tmdb_gate_view is not None
         window.maybe_show_onboarding_autofill()
         assert window._onboarding_view is None
+    finally:
+        window.close()
+
+
+def test_startup_gate_becomes_visible_only_when_attention_is_required(monkeypatch, qapp) -> None:
+    from desktop.startup.tmdb_gate import TmdbStartupGateView
+
+    monkeypatch.setattr(TmdbStartupGateView, "_start_network_probe", lambda self: None)
+    monkeypatch.setattr(
+        main_window_module,
+        "build_main_tabs",
+        lambda tabs, parent, *, on_status_message: (
+            object(),
+            SimpleNamespace(
+                candidate_session=SimpleNamespace(
+                    reload_from_pool=lambda force=False: None,
+                    invalidate_pool_cache=lambda: None,
+                ),
+                refresh_candidate_filters=lambda: None,
+                focus_candidates=lambda: None,
+            ),
+        ),
+    )
+
+    window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
+    try:
+        window.maybe_show_tmdb_startup_gate()
+        gate = window._tmdb_gate_view
+        assert window._root_stack.currentWidget() is window._main_tabs
+
+        gate._on_network_probe_finished({
+            "ready": False,
+            "error": "missing_token",
+            "network": {"ok": True},
+        })
+
+        assert window._root_stack.currentWidget() is gate
     finally:
         window.close()
 

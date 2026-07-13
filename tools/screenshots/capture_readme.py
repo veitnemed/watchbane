@@ -29,11 +29,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--width", type=int, default=1600)
     parser.add_argument("--height", type=int, default=960)
     parser.add_argument("--scale", type=float, default=1.0)
+    parser.add_argument("--interface-language", choices=("ru", "en"), default="en")
     parser.add_argument("--watched-title", default="Breaking Bad")
     args = parser.parse_args(argv)
 
     os.environ["WATCHBANE_DATA_DIR"] = str(args.runtime_root.resolve())
-    os.environ["WATCHBANE_INTERFACE_LANGUAGE"] = "en"
+    os.environ["WATCHBANE_INTERFACE_LANGUAGE"] = args.interface_language
     os.environ["WATCHBANE_DATA_LANGUAGE"] = "en"
     os.environ["WATCHBANE_UI_SCALE"] = str(args.scale)
     os.environ.setdefault("QT_QPA_PLATFORM", "windows" if os.name == "nt" else "offscreen")

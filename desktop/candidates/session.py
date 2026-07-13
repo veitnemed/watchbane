@@ -36,6 +36,7 @@ class CandidateSearchSession:
     def __init__(self, service=None) -> None:
         self.service = service or candidate_search
         self.filters: dict | None = None
+        self.startup_filters: dict | None = None
         self.filtered_candidates: list[dict] = []
         self.filtered_count: int = 0
         self.hidden_duplicates: int = 0
@@ -197,6 +198,7 @@ class CandidateSearchSession:
 
     def apply_filters(self, filters: dict, *, text_query: str | None = None) -> dict:
         """Filter saved pool candidates without sorting."""
+        self.startup_filters = dict(filters)
         search_id = uuid.uuid4().hex
         started = perf_counter()
         overview = self._get_overview()
@@ -249,6 +251,7 @@ class CandidateSearchSession:
         parent=None,
     ) -> int:
         """Filter candidates in a worker and ignore stale results."""
+        self.startup_filters = dict(filters)
         self._request_id += 1
         request_id = self._request_id
         self.last_error = None

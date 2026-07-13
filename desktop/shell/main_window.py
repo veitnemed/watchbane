@@ -394,7 +394,13 @@ class WatchedMoviesWindow(QMainWindow):
         """Block main UI until TMDb network and credentials are ready."""
         from app.use_cases.tmdb_title_add import reload_tmdb_runtime
 
-        gate = TmdbStartupGateView(parent=self)
+        delayed_gate = True
+        try:
+            gate = TmdbStartupGateView(parent=self, autostart=False)
+        except TypeError:
+            # Compatibility for lightweight injected/test gates.
+            delayed_gate = False
+            gate = TmdbStartupGateView(parent=self)
         gate.setWindowFlag(Qt.WindowType.Widget, True)
 
         def close_gate(*, reload_runtime: bool, start_onboarding: bool) -> None:
@@ -418,12 +424,23 @@ class WatchedMoviesWindow(QMainWindow):
             self._tmdb_local_mode = True
             close_gate(reload_runtime=False, start_onboarding=False)
 
+        def show_gate() -> None:
+            if self._tmdb_gate_view is not gate:
+                return
+            self._root_stack.setCurrentWidget(gate)
+            gate.show()
+            log_event("startup.tmdb_gate.shown")
+
         gate.passed.connect(finish_gate)
         local_mode_signal = getattr(gate, "localModeRequested", None)
         if local_mode_signal is not None:
             local_mode_signal.connect(continue_locally)
+        attention_signal = getattr(gate, "attentionRequired", None)
+        if attention_signal is not None:
+            attention_signal.connect(show_gate)
         self._tmdb_gate_view = gate
         self._root_stack.addWidget(gate)
-        self._root_stack.setCurrentWidget(gate)
-        gate.show()
-        log_event("startup.tmdb_gate.shown")
+        if delayed_gate and attention_signal is not None:
+            gate.start_readiness_probe()
+        else:
+            show_gate()
