@@ -169,13 +169,14 @@ function Read-LocalToken {
 }
 
 function Test-HttpsEndpoint {
-    param([string]$Url, [string]$Token = "", [int]$TimeoutMs = 10000)
+    param([string]$Url, [string]$Token = "", [int]$TimeoutMs = 10000, [switch]$DisableProxy)
     $started = Get-Date
     try {
         $request = [System.Net.HttpWebRequest]::Create($Url)
         $request.Method = "GET"
         $request.Timeout = $TimeoutMs
         $request.ReadWriteTimeout = $TimeoutMs
+        if ($DisableProxy) { $request.Proxy = $null }
         $request.UserAgent = "Watchbane-TMDb-Diagnostics/1"
         $request.Accept = "application/json,image/*,*/*"
         if ($Token) { $request.Headers["Authorization"] = "Bearer $Token" }
@@ -213,6 +214,22 @@ function Get-HostDiagnostic {
         trustedDns = $serverDns
         tcp443 = Test-Tcp443 -HostName $HostName
         https = Test-HttpsEndpoint -Url $Url -Token $Token
+        httpsDirect = Test-HttpsEndpoint -Url $Url -Token $Token -DisableProxy
+    }
+}
+
+function Get-SystemProxySummary {
+    try {
+        $target = [Uri]"https://api.themoviedb.org/3/configuration"
+        $proxyUri = [System.Net.WebRequest]::GetSystemWebProxy().GetProxy($target)
+        $configured = $null -ne $proxyUri -and $proxyUri.AbsoluteUri -ne $target.AbsoluteUri
+        return [ordered]@{
+            configured = $configured
+            endpoint = if ($configured) { "$($proxyUri.Scheme)://$($proxyUri.Host):$($proxyUri.Port)" } else { "" }
+        }
+    }
+    catch {
+        return [ordered]@{ configured = $null; endpoint = ""; error = $_.Exception.Message }
     }
 }
 
@@ -252,6 +269,7 @@ $report = [ordered]@{
     optionalHosts = @("wsrv.nl")
     refererOnlyHosts = @("www.themoviedb.org")
     token = [ordered]@{ present = $tokenInfo.present; suffix = $tokenInfo.suffix; sourceName = $tokenInfo.sourceName }
+    systemProxy = Get-SystemProxySummary
     api = $api
     poster = $poster
     primaryFailure = $failure
@@ -276,6 +294,7 @@ $summary = @(
     "- Poster host available: $($report.posterHostAvailable)",
     "- Token present: $($report.token.present)",
     "- Token suffix: $(if ($report.token.present) { '...' + $report.token.suffix } else { '-' })",
+    "- System proxy configured: $($report.systemProxy.configured)",
     "",
     "Required hosts: api.themoviedb.org, image.tmdb.org.",
     "www.themoviedb.org is Referer-only; wsrv.nl is an optional poster fallback.",
