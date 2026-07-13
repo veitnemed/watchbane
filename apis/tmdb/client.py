@@ -176,6 +176,9 @@ def has_tmdb_credentials() -> bool:
 def normalize_tmdb_bearer_token(token: str) -> str:
     """Normalize pasted bearer credentials and reject dotenv/header injection."""
     normalized = str(token or "").strip()
+    assignment = normalized.split("=", 1)
+    if len(assignment) == 2 and assignment[0].strip() in TMDB_BEARER_TOKEN_ENV_VARS:
+        normalized = assignment[1].strip().strip("\"'")
     if normalized.casefold() == "bearer":
         raise ValueError("TMDb token must not be empty.")
     if normalized.casefold().startswith("bearer "):

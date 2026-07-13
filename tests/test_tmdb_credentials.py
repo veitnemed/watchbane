@@ -86,6 +86,21 @@ def test_bearer_prefix_and_outer_whitespace_are_normalized(tmp_path, monkeypatch
     assert tmdb_api.load_tmdb_credentials() == ("bearer", "secret-token")
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "TMDB_ACCESS_TOKEN=secret-token",
+        "TMDB_TOKEN='secret-token'",
+    ],
+)
+def test_dotenv_assignment_can_be_pasted_into_token_field(tmp_path, monkeypatch, value) -> None:
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+
+    tmdb_api.save_tmdb_bearer_token(value)
+
+    assert tmdb_api.load_tmdb_credentials() == ("bearer", "secret-token")
+
+
 @pytest.mark.parametrize("value", ["one\ntwo", "one\rtwo", "one two", "Bearer "])
 def test_save_rejects_multiline_or_ambiguous_token_without_touching_existing(
     tmp_path, monkeypatch, value

@@ -4,7 +4,8 @@ param(
     [switch]$Vpn,
     [string]$Label = "",
     [string]$OutputDirectory = "",
-    [string]$TokenPath = ""
+    [string]$TokenPath = "",
+    [switch]$TokenProbeOnly
 )
 
 Set-StrictMode -Version Latest
@@ -153,16 +154,20 @@ function Test-Tcp443 {
 
 function Read-LocalToken {
     param([string]$RequestedPath)
-    $candidates = @()
-    if ($RequestedPath) { $candidates += $RequestedPath }
-    $candidates += @(
-        (Join-Path (Get-Location) "local_tocen.txt"),
-        (Join-Path (Get-Location) "local_token.txt")
-    )
+    $candidates = if ($RequestedPath) {
+        @($RequestedPath)
+    }
+    else {
+        @(
+            (Join-Path (Get-Location) "local_tocen.txt"),
+            (Join-Path (Get-Location) "local_token.txt")
+        )
+    }
     $selected = $candidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
     if (-not $selected) { return [ordered]@{ present = $false; suffix = ""; value = ""; sourceName = "" } }
     $line = Get-Content -LiteralPath $selected -Encoding UTF8 | Where-Object { $_.Trim().Length -gt 0 } | Select-Object -First 1
     $value = ([string]$line).Trim([char]0xFEFF).Trim()
+    $value = ($value -replace '^(?i)(TMDB_ACCESS_TOKEN|TMDB_TOKEN)\s*=\s*', '').Trim().Trim('"').Trim("'")
     $value = ($value -replace '^(?i)Bearer\s+', '').Trim()
     $suffix = if ($value.Length -le 4) { $value } else { $value.Substring($value.Length - 4) }
     return [ordered]@{ present = ($value.Length -gt 0); suffix = $suffix; value = $value; sourceName = [System.IO.Path]::GetFileName([string]$selected) }
@@ -244,6 +249,16 @@ function Get-PrimaryFailure {
     if ($Api.https.status -eq 403) { return "api-forbidden" }
     if (-not $Poster.https.reached) { return "poster-host-unavailable" }
     return "none"
+}
+
+if ($TokenProbeOnly) {
+    $tokenProbe = Read-LocalToken -RequestedPath $TokenPath
+    [ordered]@{
+        present = $tokenProbe.present
+        suffix = $tokenProbe.suffix
+        sourceName = $tokenProbe.sourceName
+    } | ConvertTo-Json -Compress
+    exit 0
 }
 
 $root = Split-Path -Parent $PSScriptRoot

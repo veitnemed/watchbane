@@ -8,7 +8,8 @@ param(
     [string]$BackupPath = "",
     [string]$OutputDirectory = "",
     [int]$MaxAgeHours = 24,
-    [switch]$Yes
+    [switch]$Yes,
+    [switch]$SelfTest
 )
 
 Set-StrictMode -Version Latest
@@ -187,6 +188,11 @@ function Flush-Dns {
     if ($LASTEXITCODE -ne 0) { Write-Warning "ipconfig /flushdns failed with exit code $LASTEXITCODE." }
 }
 
+function Test-StateStale {
+    param([datetime]$AppliedAt, [int]$Hours)
+    return ((Get-Date) - $AppliedAt).TotalHours -ge $Hours
+}
+
 function Show-Status {
     $content = [System.IO.File]::ReadAllText($hostsPath)
     $block = Get-WatchbaneBlock -Content $content
@@ -197,11 +203,33 @@ function Show-Status {
         $age = (Get-Date) - [datetime]$state.appliedAt
         Write-Output "Applied at: $($state.appliedAt)"
         Write-Output "Age hours: $([math]::Round($age.TotalHours, 1))"
-        if ($age.TotalHours -ge $MaxAgeHours) {
+        if (Test-StateStale -AppliedAt ([datetime]$state.appliedAt) -Hours $MaxAgeHours) {
             Write-Warning "The CDN addresses are stale. Re-run -Preview before keeping or reapplying this override."
         }
     }
     Write-Warning "CDN IPs can change. A hosts override is temporary; prefer repairing DNS or the network route."
+}
+
+if ($SelfTest) {
+    $sample = "127.0.0.1 localhost`r`n$beginMarker`r`n203.0.113.10 api.themoviedb.org`r`n$endMarker`r`n10.0.0.2 custom.local`r`n"
+    $block = Get-WatchbaneBlock -Content $sample
+    if (-not $block -or $block -notmatch 'api\.themoviedb\.org') { throw "Self-test: existing block was not detected." }
+    $removed = Remove-WatchbaneBlock -Content $sample
+    if ($removed -match [regex]::Escape($beginMarker)) { throw "Self-test: marked block was not removed." }
+    if ($removed -notmatch '127\.0\.0\.1 localhost' -or $removed -notmatch '10\.0\.0\.2 custom\.local') {
+        throw "Self-test: unrelated hosts lines were changed."
+    }
+    if (-not (Test-StateStale -AppliedAt (Get-Date).AddHours(-25) -Hours 24)) {
+        throw "Self-test: stale override was not detected."
+    }
+    $backup = Save-HostsBackup -Content $sample
+    if (-not (Test-Path -LiteralPath $backup -PathType Leaf)) { throw "Self-test: backup was not created." }
+    $restoreTarget = Join-Path $backupDirectory "selftest-restored-hosts"
+    Copy-Item -LiteralPath $backup -Destination $restoreTarget -Force
+    if ([System.IO.File]::ReadAllText($restoreTarget) -ne $sample) { throw "Self-test: backup restore did not preserve content." }
+    Remove-Item -LiteralPath $restoreTarget -Force
+    Write-Output "SELFTEST OK"
+    exit 0
 }
 
 if ($Status) { Show-Status; exit 0 }
