@@ -230,6 +230,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_loading_state = RecommendationEmptyState("loading")
         self._deck_loading_progress = QProgressBar(self._deck_loading_page)
         self._deck_loading_progress.setObjectName("recommendationsDeckLoadingProgress")
+        self._deck_loading_progress.setAccessibleName(tr("recommendations.state.loading"))
         self._deck_loading_progress.setRange(0, ACTIVE_DECK_SIZE)
         self._deck_loading_progress.setValue(0)
         self._deck_loading_progress.setTextVisible(True)

@@ -238,6 +238,9 @@ class CandidateFiltersView:
 
         self._replenish_progress_bar = QProgressBar()
         self._replenish_progress_bar.setObjectName("candidateReplenishProgressBar")
+        self._replenish_progress_bar.setAccessibleName(
+            tr("candidates.filters.replenish.title")
+        )
         self._replenish_progress_bar.setRange(0, FILTER_REPLENISH_DEFAULT_BATCH_SIZE)
         self._replenish_progress_bar.setValue(0)
         self._replenish_progress_bar.setFormat(f"0 / {FILTER_REPLENISH_DEFAULT_BATCH_SIZE}")
@@ -1156,6 +1159,13 @@ class CandidateFiltersView:
         self._replenish_progress_bar.setRange(0, maximum)
         self._replenish_progress_bar.setValue(value)
         self._replenish_progress_bar.setFormat(f"{value} / {maximum}")
+        self._replenish_progress_bar.setAccessibleDescription(
+            tr(
+                "candidates.filters.replenish.status.progress",
+                current=value,
+                total=maximum,
+            )
+        )
         self._replenish_progress_bar.setVisible(True)
 
     def _hide_replenish_progress(self) -> None:

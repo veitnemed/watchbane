@@ -133,6 +133,7 @@ class AddTitleSearchDialog(QDialog):
 
         self._progress = QProgressBar()
         self._progress.setObjectName("addTitleProgress")
+        self._progress.setAccessibleName(tr("add_title.status.searching"))
         self._progress.setTextVisible(True)
         self._progress.hide()
         root_layout.addWidget(self._progress)

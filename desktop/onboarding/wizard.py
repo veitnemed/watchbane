@@ -1316,6 +1316,9 @@ class OnboardingAutofillDialog(QDialog):
 
         self._progress = QProgressBar()
         self._progress.setObjectName("onboardingProgress")
+        self._progress.setAccessibleName(
+            self._text("Сборка первого пула", "Building the first pool")
+        )
         self._progress.setRange(0, 100)
         self._progress.setValue(0)
         layout.addWidget(self._progress)

@@ -577,6 +577,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         owner._mark_watched_button = mark_watched_button
         owner._mark_watched_button.setObjectName("candidateMarkWatchedButton")
         owner._mark_watched_button.setToolTip(tr("detail.action.mark_watched"))
+        owner._mark_watched_button.setAccessibleName(tr("detail.action.mark_watched"))
         owner._mark_watched_button.setIcon(
             make_detail_action_icon("eye", COLOR_TEXT, COLOR_TEXT_SECONDARY)
         )
@@ -601,6 +602,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         owner._hide_button = hide_button
         owner._hide_button.setObjectName("candidateHideButton")
         owner._hide_button.setToolTip(tr("detail.action.hide_candidate"))
+        owner._hide_button.setAccessibleName(tr("detail.action.hide_candidate"))
         owner._hide_button.setIcon(
             make_detail_action_icon("hide", COLOR_TEXT, COLOR_TEXT_SECONDARY)
         )

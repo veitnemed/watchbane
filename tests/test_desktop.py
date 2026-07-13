@@ -334,6 +334,7 @@ def test_english_country_display_and_add_title_country_combo(qapp) -> None:
 
     assert dialog._country_combo.itemText(0) == "Any country"
     assert dialog._country_combo.currentText() == "United States"
+    assert dialog._progress.accessibleName() == "Searching…"
 
 
 def test_add_title_resolve_uses_data_language_for_tmdb_locale() -> None:
@@ -2869,10 +2870,12 @@ def test_detail_card_builds_layout_for_supported_profiles(qapp, profile_name) ->
     hide_button = hero.findChild(QPushButton, "candidateHideButton")
     if profile.show_mark_watched_button:
         assert mark_button is not None
+        assert mark_button.accessibleName() == mark_button.toolTip()
     else:
         assert mark_button is None
     if profile.show_hide_candidate_button:
         assert hide_button is not None
+        assert hide_button.accessibleName() == hide_button.toolTip()
     else:
         assert hide_button is None
 

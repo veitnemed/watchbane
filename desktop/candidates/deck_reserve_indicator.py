@@ -47,6 +47,7 @@ class DeckReserveIndicator(QWidget):
         super().__init__(parent)
         self.setObjectName("recommendationsDeckReserveIndicator")
         self.setStyleSheet(TRANSPARENT_STYLE)
+        self.setAccessibleName(tr("recommendations.deck_reserve.label"))
         self._mode = "idle"
         self._progress = 0.0
         self._center_text = ""
@@ -64,9 +65,12 @@ class DeckReserveIndicator(QWidget):
         self._stop_spinner()
         self._mode = presentation.mode
         if presentation.tooltip_key:
-            self.setToolTip(tr(presentation.tooltip_key, **presentation.tooltip_kwargs))
+            description = tr(presentation.tooltip_key, **presentation.tooltip_kwargs)
+            self.setToolTip(description)
+            self.setAccessibleDescription(description)
         else:
             self.setToolTip("")
+            self.setAccessibleDescription("")
 
         if presentation.mode == "idle":
             self.hide()

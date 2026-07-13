@@ -1282,7 +1282,7 @@ def test_onboarding_wizard_supports_all_country_chip_combinations(qapp) -> None:
 
 
 def test_onboarding_wizard_scale_preview_has_sample_widgets(qapp) -> None:
-    from PyQt6.QtWidgets import QFrame, QLabel, QPushButton
+    from PyQt6.QtWidgets import QFrame, QLabel, QProgressBar, QPushButton
 
     from desktop.onboarding import OnboardingAutofillDialog
 
@@ -1290,10 +1290,12 @@ def test_onboarding_wizard_scale_preview_has_sample_widgets(qapp) -> None:
     try:
         preview = dialog.findChild(QFrame, "onboardingScalePreview")
         action = dialog.findChild(QPushButton, "onboardingScalePreviewAction")
+        progress = dialog.findChild(QProgressBar, "onboardingProgress")
         chips = dialog.findChildren(QLabel, "onboardingScalePreviewChip")
 
         assert preview is not None
         assert action is not None
+        assert progress is not None and progress.accessibleName()
         assert action.text() == "Кнопка"
         assert [chip.text() for chip in chips] == ["Страна", "Жанр", "Оценка"]
     finally:
