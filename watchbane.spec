@@ -11,7 +11,17 @@ a = Analysis(
     ["start_app.py"],
     pathex=[],
     binaries=webengine_binaries,
-    datas=[("desktop/images", "desktop/images"), *webengine_datas],
+    datas=[
+        ("desktop/images/logos", "desktop/images/logos"),
+        (
+            "desktop/images/logos_for_start_select_menu",
+            "desktop/images/logos_for_start_select_menu",
+        ),
+        ("desktop/images/user_rating_not_for_me.svg", "desktop/images"),
+        ("desktop/images/user_rating_ok.svg", "desktop/images"),
+        ("desktop/images/user_rating_top.svg", "desktop/images"),
+        *webengine_datas,
+    ],
     hiddenimports=webengine_hiddenimports,
     hookspath=[],
     hooksconfig={},

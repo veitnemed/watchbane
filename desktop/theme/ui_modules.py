@@ -11,8 +11,6 @@ _SCALED_UI_MODULE_NAMES = (
     "desktop.theme.shell_layout",
     "desktop.theme.styles.shell",
     "desktop.watched.add_title.constants",
-    "desktop.analytics.charts",
-    "desktop.analytics.constants",
 )
 
 _SCALED_MAIN_TAB_MODULE_NAMES = (
