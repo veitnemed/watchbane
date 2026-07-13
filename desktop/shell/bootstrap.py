@@ -6,10 +6,10 @@ from dataclasses import asdict
 import os
 import sys
 
-from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication
 
+from common.release import APP_DISPLAY_NAME, APP_NAME, APP_VERSION
 from desktop.settings import APP_UI_SCALE_ENV, AppSettings, get_persisted_ui_scale, load_app_settings
 from desktop.storage_errors import is_storage_write_error, storage_write_error_message
 from desktop.shell.app_icon import apply_app_icon
@@ -144,6 +144,9 @@ def log_startup_scale_diagnostics(
 
 def main() -> None:
     app = QApplication(sys.argv)
+    app.setApplicationName(APP_NAME)
+    app.setApplicationDisplayName(APP_DISPLAY_NAME)
+    app.setApplicationVersion(APP_VERSION)
     from desktop.shell.single_instance import SingleInstanceGuard, show_already_running_warning
 
     try:
@@ -204,7 +207,7 @@ def main() -> None:
         window = WatchedMoviesWindow()
         try:
             window.show()
-            QTimer.singleShot(250, window.maybe_show_tmdb_startup_gate)
+            window.schedule_tmdb_startup_gate()
             log_event("app.window.shown")
             exit_code = app.exec()
         finally:

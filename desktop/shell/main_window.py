@@ -7,6 +7,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QStyle, QTabWidget
 
 from candidates import service as candidate_service
+from common.release import APP_NAME, APP_VERSION
 from config import app_settings_store
 from diagnostics.gui_event_log import log_event
 from desktop.i18n import tr
@@ -47,7 +48,7 @@ class WatchedMoviesWindow(QMainWindow):
 
     def __init__(self, initial_size: tuple[int, int] | None = None) -> None:
         super().__init__()
-        self.setWindowTitle("Watchbane")
+        self.setWindowTitle(f"{APP_NAME} {APP_VERSION}")
         self.setWindowIcon(build_app_icon())
         self._persist_window_geometry = initial_size is None
         self.resize(*(initial_size or scaled_main_window_size()))
@@ -75,6 +76,9 @@ class WatchedMoviesWindow(QMainWindow):
         self._tmdb_gate_view: TmdbStartupGateView | None = None
         self._tmdb_gate_passed = False
         self._tmdb_local_mode = False
+        self._tmdb_gate_timer = QTimer(self)
+        self._tmdb_gate_timer.setSingleShot(True)
+        self._tmdb_gate_timer.timeout.connect(self.maybe_show_tmdb_startup_gate)
         self._pool_refill_worker: PoolReplenishWorker | None = None
         self._pool_refill_timer = QTimer(self)
         self._pool_refill_timer.setInterval(POOL_AUTO_REFILL_CHECK_INTERVAL_MS)
@@ -204,12 +208,14 @@ class WatchedMoviesWindow(QMainWindow):
             log_event("app.window.geometry_save_failed", error=str(error))
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
+        self._tmdb_gate_timer.stop()
         if self._persist_window_geometry:
             self._save_window_geometry()
         super().closeEvent(event)
 
     def shutdown_background_workers(self) -> None:
         """Cancel and join child QThreads before the Qt object tree is destroyed."""
+        self._tmdb_gate_timer.stop()
         refill_timer = getattr(self, "_pool_refill_timer", None)
         if refill_timer is not None:
             refill_timer.stop()
@@ -256,6 +262,10 @@ class WatchedMoviesWindow(QMainWindow):
                     # The queued finished callback already deleted this worker.
                     continue
             app.processEvents()
+
+    def schedule_tmdb_startup_gate(self, delay_ms: int = 250) -> None:
+        """Schedule the startup probe on a window-owned timer that shutdown can cancel."""
+        self._tmdb_gate_timer.start(max(0, int(delay_ms)))
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)

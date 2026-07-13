@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from common.release import release_signature
 from desktop.i18n import tr
 from desktop.shared.brand_assets import tmdb_logo_label, watchbane_wordmark_label
 from desktop.startup.worker import TmdbStartupReadinessWorker, TmdbStartupValidateWorker
@@ -168,6 +169,11 @@ class TmdbStartupGateView(QWidget):
             0,
             Qt.AlignmentFlag.AlignHCenter,
         )
+        release_label = QLabel(release_signature())
+        release_label.setObjectName("startupReleaseVersion")
+        release_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        release_label.setWordWrap(True)
+        card_layout.addWidget(release_label)
 
         outer.addWidget(card, 0, Qt.AlignmentFlag.AlignHCenter)
         outer.addStretch(2)

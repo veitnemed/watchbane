@@ -18,6 +18,12 @@ QLabel#settingsTabTitle {{
     font-size: {font_px(FONT_TITLE)}px;
     font-weight: 700;
 }}
+QLabel#settingsReleaseVersion {{
+    background: transparent;
+    color: {COLOR_TEXT_MUTED};
+    font-size: {font_px(FONT_SMALL)}px;
+    padding: {px(12)}px 0 {px(4)}px 0;
+}}
 QWidget#uiScaleControlPanel {{
     background: transparent;
 }}

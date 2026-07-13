@@ -6,6 +6,7 @@ from collections.abc import Callable
 
 from PyQt6.QtWidgets import QLabel, QScrollArea, QVBoxLayout, QWidget
 
+from common.release import release_signature
 from desktop.i18n import tr
 from desktop.settings.pool_ops_panel import PoolOpsPanel
 from desktop.settings.tmdb_credentials_panel import TmdbCredentialsPanel
@@ -68,6 +69,11 @@ class SettingsTabView:
         self._pool_ops_panel.poolChanged.connect(self._on_pool_changed_signal)
         layout.addWidget(self._pool_ops_panel)
         layout.addStretch(1)
+
+        release_label = QLabel(release_signature())
+        release_label.setObjectName("settingsReleaseVersion")
+        release_label.setWordWrap(True)
+        layout.addWidget(release_label)
 
         scroll.setWidget(content)
         self._widget = scroll

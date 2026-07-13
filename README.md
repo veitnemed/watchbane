@@ -2,10 +2,14 @@
 
 [![Tests](https://github.com/veitnemed/watchbane/actions/workflows/tests.yml/badge.svg)](https://github.com/veitnemed/watchbane/actions/workflows/tests.yml)
 [![Windows](https://img.shields.io/badge/Windows-desktop-1677ff.svg)](#getting-started)
+[![Release](https://img.shields.io/badge/release-0.1.0--alpha.1-f39c12.svg)](VERSION.md)
+[![ReDeck](https://img.shields.io/badge/ReDeck-v0.1%20Alpha-20b2aa.svg)](VERSION.md)
 [![Local first](https://img.shields.io/badge/data-local--first-16a085.svg)](#your-data-stays-yours)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 **A personal movie and series recommender that learns from your choices, not a streaming platform's agenda.**
+
+Current release: **Watchbane 0.1.0-alpha.1 — First Deck**. Recommendation engine: **ReDeck v0.1 Alpha**. See the [version contract](VERSION.md) and [release notes](RELEASE_NOTES.md).
 
 Watchbane brings your watched collection, saved titles and a living recommendation deck into one focused Windows app. Choose a direction, adjust how adventurous the mix should be, and get a queue you can understand and control.
 
@@ -57,7 +61,7 @@ The TMDb token entered during setup is stored locally. Watchbane does not bundle
 
 ### Windows EXE
 
-Release builds are folder-based. Run `Watchbane.exe` from `dist/Watchbane/` and keep its `_internal/` directory beside it. On the first launch:
+Release builds are folder-based. Download and unpack `Watchbane-0.1.0-alpha.1-windows-x64.zip`, then run `Watchbane.exe` inside its `Watchbane/` folder. Keep `_internal/` beside it. On the first launch:
 
 1. Watchbane checks whether TMDb is reachable.
 2. Paste your TMDb API Read Access Token (Bearer token).
@@ -99,7 +103,7 @@ py start_console.py
 
 ### Build a Windows release
 
-The MVP release uses PyInstaller **onedir** mode, not a single-file executable. This keeps the executable and its bundled runtime/assets together in `dist/Watchbane/`.
+Watchbane 0.1.0-alpha.1 uses PyInstaller **onedir** mode, not a single-file executable. This keeps the executable and its bundled runtime/assets together in `dist/Watchbane/`.
 
 ```powershell
 ./tools/build_desktop.ps1

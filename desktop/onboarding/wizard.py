@@ -48,6 +48,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from common.release import release_signature
+
 from app.use_cases import onboarding
 from candidates.models import country_reference
 from candidates.onboarding.taste_presets import (
@@ -90,6 +92,7 @@ from desktop.theme.tokens import (
     FONT_FAMILY,
     FONT_FAMILY_QSS,
     FONT_SMALL,
+    FONT_TINY,
     RADIUS_BUTTON,
     SPACING_LARGE,
     SPACING_MEDIUM,
@@ -503,6 +506,12 @@ QLabel#onboardingSubtitle, QLabel#onboardingStatus {{
     color: #AEBBD0;
     font-size: {font_px(17)}px;
 }}
+QLabel#onboardingReleaseVersion {{
+    background: transparent;
+    color: {COLOR_TEXT_MUTED};
+    font-size: {font_px(FONT_TINY)}px;
+    padding: 0;
+}}
 QLabel#onboardingDot {{
     background-color: transparent;
     border: 0;
@@ -794,6 +803,12 @@ class OnboardingAutofillDialog(QDialog):
         self._next_button.clicked.connect(self._go_next)
         controls.addWidget(self._next_button)
         card_layout.addLayout(controls)
+
+        release_label = QLabel(release_signature())
+        release_label.setObjectName("onboardingReleaseVersion")
+        release_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        release_label.setWordWrap(True)
+        card_layout.addWidget(release_label)
 
         self._sync_controls()
 

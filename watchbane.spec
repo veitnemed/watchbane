@@ -42,6 +42,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    version="tools/windows_version_info.txt",
     icon=["desktop/images/logos/main_icon.ico"],
 )
 

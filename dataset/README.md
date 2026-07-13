@@ -1,5 +1,7 @@
 # dataset
 
+Документ относится к **Watchbane 0.1.0-alpha.1 — First Deck** / **ReDeck v0.1 Alpha**. Каноническая версия: [../VERSION.md](../VERSION.md).
+
 Доменный слой watched-базы Watchbane.
 
 ## Целевая структура

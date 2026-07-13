@@ -77,6 +77,13 @@ QLabel#watchbaneWordmark {{
     font-weight: 600;
     padding: 0;
 }}
+QLabel#startupReleaseVersion {{
+    background: transparent;
+    border: none;
+    color: {COLOR_TEXT_MUTED};
+    font-size: {font_px(FONT_TINY)}px;
+    padding: 0;
+}}
 QLineEdit#startupTokenInput {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};
