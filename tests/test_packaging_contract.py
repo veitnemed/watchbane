@@ -15,9 +15,14 @@ def test_onedir_spec_bundles_only_runtime_image_assets() -> None:
 
 def test_packaged_startup_does_not_dynamically_require_retired_analytics() -> None:
     source = Path("desktop/theme/ui_modules.py").read_text(encoding="utf-8")
+    bootstrap_source = Path("desktop/shell/bootstrap.py").read_text(encoding="utf-8")
+    spec_source = Path("watchbane.spec").read_text(encoding="utf-8")
 
     assert '"desktop.analytics.charts"' not in source
     assert '"desktop.analytics.constants"' not in source
+    assert "QtWebEngine" not in bootstrap_source
+    assert "QtWebEngine" not in spec_source
+    assert "collect_all" not in spec_source
 
 
 def test_official_build_script_requires_onedir_executable() -> None:

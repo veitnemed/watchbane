@@ -6,7 +6,7 @@ from dataclasses import asdict
 import os
 import sys
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication
 
@@ -87,15 +87,6 @@ def _show_database_recovery_dialog(error) -> None:
     )
 
 
-def _prepare_webengine() -> None:
-    """Prepare Qt WebEngine before QApplication is created."""
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
-    try:
-        from PyQt6 import QtWebEngineWidgets  # noqa: F401
-    except ImportError:
-        pass
-
-
 def _geometry_diagnostics(geometry) -> dict[str, int] | None:
     if geometry is None:
         return None
@@ -152,7 +143,6 @@ def log_startup_scale_diagnostics(
 
 
 def main() -> None:
-    _prepare_webengine()
     app = QApplication(sys.argv)
     from desktop.shell.single_instance import SingleInstanceGuard, show_already_running_warning
 
