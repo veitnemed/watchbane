@@ -291,7 +291,7 @@ def test_english_data_language_formats_detail_values() -> None:
         data_language="en",
     )
 
-    assert {"label": "Type", "value": "Series"} in items
+    assert not any(item["label"] == "Type" for item in items)
     assert {"label": "Country", "value": "United States"} in items
     assert {"label": "Premiere", "value": "8 Feb 2015"} in items
     assert {"label": "Last episode", "value": "15 Aug 2022"} in items
@@ -3440,8 +3440,7 @@ def test_detail_main_info_panel_renders_known_rows(qapp) -> None:
     assert len(icons) == len(labels)
     assert len(row_dividers) == len(labels) - 1
     assert all(icon.pixmap() is not None for icon in icons)
-    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
-    assert "Сериал" in values
+    assert labels == ["Страна", "Где смотреть", "Голоса TMDb"]
     assert "США" in values
     assert "12.9к" in values
 
@@ -3464,6 +3463,7 @@ def test_detail_main_info_header_does_not_share_row_with_toggle(qapp) -> None:
                 "watch_providers": None,
                 "tmdb_votes": 2600,
                 "status": "Released",
+                "first_air_date": "2024-01-15",
             },
         )
     )
@@ -3535,6 +3535,7 @@ def test_detail_main_info_panel_renders_former_additional_rows(qapp) -> None:
                 "runtime_status": "watched",
                 "number_of_seasons": 2,
                 "number_of_episodes": 32,
+                "country": "RU",
                 "watch_providers": ["Kinopoisk"],
                 "status": "Ended",
                 "episode_run_time": [52],
@@ -3593,7 +3594,7 @@ def test_detail_main_info_toggle_is_hidden_for_four_or_fewer_rows(qapp) -> None:
     toggle = detail.widget.findChild(QPushButton, "detailMainInfoToggleButton")
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
 
-    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert labels == ["Страна", "Где смотреть", "Голоса TMDb"]
     assert toggle is not None
     assert toggle.isHidden() is True
 
@@ -3658,7 +3659,7 @@ def test_detail_main_info_toggle_collapses_and_expands_rows(qapp) -> None:
     toggle = detail.widget.findChild(QPushButton, "detailMainInfoToggleButton")
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
 
-    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert labels == ["Страна", "Где смотреть", "Голоса TMDb", "Статус"]
     assert toggle is not None
     assert toggle.text() == "Показать больше"
 
@@ -3667,7 +3668,6 @@ def test_detail_main_info_toggle_collapses_and_expands_rows(qapp) -> None:
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
 
     assert labels == [
-        "Тип",
         "Страна",
         "Где смотреть",
         "Голоса TMDb",
@@ -3680,7 +3680,7 @@ def test_detail_main_info_toggle_collapses_and_expands_rows(qapp) -> None:
     _flush_qt_deferred_deletes(qapp)
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
 
-    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert labels == ["Страна", "Где смотреть", "Голоса TMDb", "Статус"]
     assert toggle.text() == "Показать больше"
 
 
@@ -3723,7 +3723,7 @@ def test_detail_main_info_resets_to_collapsed_for_new_entry(qapp) -> None:
     panel = detail.widget.findChild(QFrame, "detailMainInfoPanel")
     labels = [item.text() for item in panel.findChildren(QLabel, "detailMainInfoLabel")]
 
-    assert labels == ["Тип", "Страна", "Где смотреть", "Голоса TMDb"]
+    assert labels == ["Страна", "Где смотреть", "Голоса TMDb", "Статус"]
     assert toggle.text() == "Показать больше"
 
 
