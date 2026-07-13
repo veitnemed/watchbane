@@ -179,6 +179,7 @@ py -m pytest
 - [WORKSPACE_HOUSEKEEPING.md](operations/WORKSPACE_HOUSEKEEPING.md) - правила локальной чистки workspace.
 - [REPORT_OUTPUT_POLICY.md](operations/REPORT_OUTPUT_POLICY.md) - куда писать raw reports и curated summaries.
 - [onboarding_dev_sandbox.md](operations/onboarding_dev_sandbox.md) - dev-флаги и sandbox onboarding flow.
+- [TMDB_NETWORK_TROUBLESHOOTING.md](TMDB_NETWORK_TROUBLESHOOTING.md) - диагностика DNS/TCP/TLS/API/postеров, VPN-матрица и обратимые recovery tools.
 - [GITHUB_PUBLICATION_CHECKLIST.md](operations/GITHUB_PUBLICATION_CHECKLIST.md) - checklist публикации.
 
 ### Project
