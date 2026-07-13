@@ -194,6 +194,21 @@ def test_diagnostic_summary_distinguishes_api_token_and_poster_failures() -> Non
     assert severity == "warning"
 
 
+def test_recovery_dialog_contains_vpn_matrix_actions(qapp) -> None:
+    from PyQt6.QtWidgets import QPushButton
+
+    from desktop.startup.network_tools import TmdbRecoveryToolsDialog
+
+    dialog = TmdbRecoveryToolsDialog()
+    try:
+        labels = {button.text() for button in dialog.findChildren(QPushButton)}
+        assert any("без VPN" in label for label in labels)
+        assert any("с VPN" in label for label in labels)
+        assert any("Сравнить VPN" in label for label in labels)
+    finally:
+        dialog.close()
+
+
 def test_settings_tmdb_panel_masks_credentials_and_preserves_old_token_on_error(monkeypatch, qapp) -> None:
     from PyQt6.QtWidgets import QLineEdit
 

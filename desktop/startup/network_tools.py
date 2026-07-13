@@ -166,10 +166,10 @@ def _launch_powershell(script_name: str, action: str, *, elevated: bool) -> bool
         "-NoExit",
         "-File",
         str(script),
-        action,
-        "-OutputDirectory",
-        str(diagnostic_output_dir()),
     ]
+    if action:
+        arguments.append(action)
+    arguments.extend(("-OutputDirectory", str(diagnostic_output_dir())))
     try:
         if elevated:
             import ctypes
@@ -208,6 +208,9 @@ class TmdbRecoveryToolsDialog(QDialog):
         layout.addWidget(explanation)
 
         actions = (
+            ("startup.tmdb.tools.no_vpn", "tmdb-network-diagnose.ps1", "-NoVpn", False),
+            ("startup.tmdb.tools.vpn", "tmdb-network-diagnose.ps1", "-Vpn", False),
+            ("startup.tmdb.tools.compare", "tmdb-network-compare.ps1", "", False),
             ("startup.tmdb.tools.dns_status", "tmdb-dns-recovery.ps1", "-Status", False),
             ("startup.tmdb.tools.dns_apply", "tmdb-dns-recovery.ps1", "-Apply", True),
             ("startup.tmdb.tools.dns_restore", "tmdb-dns-recovery.ps1", "-Restore", True),
