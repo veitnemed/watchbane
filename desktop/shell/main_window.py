@@ -220,11 +220,8 @@ class WatchedMoviesWindow(QMainWindow):
             if callable(prepare):
                 prepare()
 
-        workers = [
-            worker
-            for worker in self.findChildren(QThread)
-            if worker.isRunning()
-        ]
+        thread_objects = list(self.findChildren(QThread))
+        workers = [worker for worker in thread_objects if worker.isRunning()]
         if workers:
             log_event("app.worker_shutdown.begin", worker_count=len(workers))
             for worker in workers:
@@ -247,9 +244,17 @@ class WatchedMoviesWindow(QMainWindow):
         # QThread.finished callbacks (including deleteLater) can still be queued when
         # QApplication.exec() has returned. Drain them before Python/Qt teardown.
         app = QApplication.instance()
-        if app is not None:
+        if app is not None and thread_objects:
             app.processEvents()
-            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            for worker in thread_objects:
+                try:
+                    QCoreApplication.sendPostedEvents(
+                        worker,
+                        QEvent.Type.DeferredDelete,
+                    )
+                except RuntimeError:
+                    # The queued finished callback already deleted this worker.
+                    continue
             app.processEvents()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
