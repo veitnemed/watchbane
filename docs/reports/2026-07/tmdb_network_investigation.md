@@ -57,9 +57,12 @@ No permanent CDN IP is embedded in Watchbane.
 
 - Windows PowerShell 5.1 parser: all four scripts pass.
 - PowerShell 7 was not installed on the test machine; the scripts avoid APIs unavailable in Windows PowerShell 5.1.
-- Offline targeted regression: 68 tests passed before documentation finalization.
+- Full regression: 1612 tests passed, 1 skipped.
+- Final targeted token-gate/PowerShell regression after adding the VPN matrix: 30 tests passed.
 - Native Windows token-gate screenshots were visually reviewed at application scales 0.75, 1.0 and 1.5; Segoe UI was available.
+- The recovery-tools dialog was visually reviewed at scale 1.0; all VPN, DNS and hosts actions fit without clipping.
 - Read-only live probe: API HTTP 200, poster endpoint HTTP 404 reachability, token accepted.
+- Native Qt GUI smoke inserted the complete local dotenv-style token into the masked field, invoked the standard validation worker and observed the token gate `passed` signal. The smoke used an isolated temporary runtime.
 - DNS and hosts mutation actions were not executed.
 - Secret scans found no token value in Git diff, staged content or generated diagnostic reports.
 
