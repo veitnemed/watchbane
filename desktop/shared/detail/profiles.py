@@ -251,6 +251,7 @@ class DetailCardLayoutProfile:
     rating_value_font_point: int
     rating_label_font_point: int
     show_user_score: bool = True
+    show_recommendation_strength: bool = False
     show_mark_watched_button: bool = False
     show_hide_candidate_button: bool = False
     include_bottom_stretch: bool = True
@@ -368,6 +369,7 @@ ADD_TITLE_PREVIEW_CARD_PROFILE = DetailCardLayoutProfile(
 CANDIDATE_DETAIL_CARD_PROFILE = replace(
     DETAIL_CARD_LAYOUT_PROFILE,
     show_user_score=False,
+    show_recommendation_strength=True,
     show_mark_watched_button=False,
     show_hide_candidate_button=False,
 )

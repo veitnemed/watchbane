@@ -192,13 +192,6 @@ def build_main_info_items(card: dict, data_language: str | None = None) -> list[
     items: list[dict[str, object]] = []
     language = _resolve_data_language(data_language)
 
-    items.append(
-        {
-            "label": tr("detail.info.type"),
-            "value": normalize_object_type(card.get("object_type") or card.get("media_type"), card, data_language=language),
-        }
-    )
-
     country = _clean_text(card.get("country"))
     if country is not None:
         country_codes = country_schema.normalize_country_filter_list(country)

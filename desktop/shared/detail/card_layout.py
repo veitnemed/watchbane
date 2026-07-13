@@ -520,7 +520,9 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._final_score_stars_label = QLabel("WatchBane")
     owner._final_score_stars_label.setObjectName("detailFinalScoreStarsLabel")
     owner._final_score_stars_label.setWordWrap(True)
-    owner._final_score_stars_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+    owner._final_score_stars_label.setAlignment(
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    )
     owner._final_score_stars_label.setSizePolicy(
         QSizePolicy.Policy.Expanding,
         QSizePolicy.Policy.Minimum,

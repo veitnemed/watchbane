@@ -351,7 +351,9 @@ class DetailCard(DetailCardPosterMixin):
             self._tmdb_ring_layout.addStretch(1)
         self._tmdb_ring_slot.setVisible(has_tmdb_ring)
 
-        has_final_stars = star_item is not None
+        has_final_stars = (
+            self._profile.show_recommendation_strength and star_item is not None
+        )
         if has_final_stars:
             self._final_score_stars_label.setText(str(star_item.get("label") or ""))
             self._final_score_stars_label.setToolTip(str(star_item.get("tooltip") or ""))

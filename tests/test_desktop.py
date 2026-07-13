@@ -2087,7 +2087,7 @@ def test_build_detail_info_pill_labels_keeps_only_genres() -> None:
     ]
 
 
-def test_build_main_info_items_formats_type_and_country_only() -> None:
+def test_build_main_info_items_omits_redundant_type_and_formats_country() -> None:
     import desktop.settings.app_settings  # noqa: F401
     from desktop.shared.detail.main_info import build_main_info_items
 
@@ -2103,7 +2103,6 @@ def test_build_main_info_items_formats_type_and_country_only() -> None:
             "kp_votes": 128536,
         }
     ) == [
-        {"label": "Тип", "value": "Сериал"},
         {"label": "Страна", "value": "Россия"},
         {"label": "Где смотреть", "value": "Неизвестно"},
         {"label": "Голоса TMDb", "value": "3.5к"},
@@ -2177,17 +2176,16 @@ def test_build_title_meta_text_formats_movie_runtime_next_to_year() -> None:
 def test_build_main_info_items_displays_normalized_country_value() -> None:
     from desktop.watched import build_main_info_items
 
-    assert build_main_info_items({"country": "RU, Russia", "object_type": "series"})[1] == {
+    assert build_main_info_items({"country": "RU, Russia", "object_type": "series"})[0] == {
         "label": "Страна",
         "value": "Россия",
     }
 
 
-def test_build_main_info_items_hides_empty_votes_and_defaults_type() -> None:
+def test_build_main_info_items_hides_empty_votes_and_omits_type() -> None:
     from desktop.watched import build_main_info_items
 
     assert build_main_info_items({"imdb_votes": None, "kp_votes": 0}) == [
-        {"label": "Тип", "value": "Неизвестно"},
         {"label": "Где смотреть", "value": "Неизвестно"},
     ]
 
@@ -3808,7 +3806,7 @@ def test_watched_detail_card_does_not_render_my_score_ring() -> None:
     assert "owner._score_summary_row.addWidget" in layout_source
 
 
-def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
+def test_watched_score_summary_row_hides_recommendation_strength(qapp) -> None:
     from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QFrame, QLabel, QWidget
 
@@ -3844,25 +3842,24 @@ def test_watched_score_summary_row_contains_tmdb_ring_and_stars(qapp) -> None:
     assert stars_label is not None
     assert top_divider is not None
     assert bottom_divider is not None
-    assert stars_label.text() == "Рекомендация: Сильный выбор"
     assert stars_label.wordWrap() is True
     assert stars_label.alignment() & Qt.AlignmentFlag.AlignLeft
     assert tmdb_ring.parent() is not stars_block
-    assert stars_block.isHidden() is False
+    assert stars_block.isHidden() is True
     assert getattr(tmdb_ring, "_display_label") == "TMDb"
     assert getattr(tmdb_ring, "_display_value") == "7.4"
     assert getattr(tmdb_ring, "_ring_progress") == 0.74
     assert not any(getattr(child, "_display_label", "") == "моя" for child in score_row.findChildren(QWidget))
 
 
-def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
+def test_candidate_recommendation_keeps_position_when_main_info_expands(qapp) -> None:
     import desktop.settings.app_settings  # noqa: F401 — preload before theme.shared imports
     from PyQt6.QtCore import QPoint
     from PyQt6.QtWidgets import QPushButton, QWidget
 
-    from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
+    from desktop.shared.detail import CANDIDATE_DETAIL_CARD_PROFILE, WatchedDetailCard
 
-    detail = WatchedDetailCard(profile=DETAIL_CARD_LAYOUT_PROFILE)
+    detail = WatchedDetailCard(profile=CANDIDATE_DETAIL_CARD_PROFILE)
     frame = detail.widget
     frame.show()
     frame.resize(1200, 800)
@@ -3872,7 +3869,7 @@ def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
             {},
             {
                 "title": "Alpha",
-                "runtime_status": "watched",
+                "runtime_status": "candidate",
                 "tmdb_score": 7.8,
                 "final_score": 0.78,
                 "country": "RU",
@@ -3899,7 +3896,7 @@ def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
     assert toggle is not None
     assert toggle.isHidden() is False
     assert toggle.minimumWidth() >= toggle.fontMetrics().horizontalAdvance(toggle.text())
-    assert content.width() <= DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width
+    assert content.width() <= CANDIDATE_DETAIL_CARD_PROFILE.detail_content_max_width
     assert content.width() >= content.minimumSizeHint().width()
 
     def right_edge(widget: QWidget) -> int:
@@ -3914,7 +3911,7 @@ def test_final_score_stars_keep_position_when_main_info_expands(qapp) -> None:
     stars_left_before = left_edge(stars)
     gap_before = stars_left_before - ring_right
 
-    assert abs(gap_before - DETAIL_CARD_LAYOUT_PROFILE.detail_stars_left_gap) <= 2
+    assert abs(gap_before - CANDIDATE_DETAIL_CARD_PROFILE.detail_stars_left_gap) <= 2
 
     toggle.click()
     _flush_qt_deferred_deletes(qapp)
@@ -7514,6 +7511,8 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
     assert CANDIDATE_DETAIL_CARD_PROFILE.detail_info_min_width == DETAIL_CARD_LAYOUT_PROFILE.detail_info_min_width
     assert CANDIDATE_DETAIL_CARD_PROFILE.detail_section_max_width == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_user_score is False
+    assert CANDIDATE_DETAIL_CARD_PROFILE.show_recommendation_strength is True
+    assert DETAIL_CARD_LAYOUT_PROFILE.show_recommendation_strength is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_mark_watched_button is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_hide_candidate_button is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.include_bottom_stretch == DETAIL_CARD_LAYOUT_PROFILE.include_bottom_stretch

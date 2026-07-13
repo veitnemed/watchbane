@@ -144,9 +144,9 @@ QLabel#genrePill {{
 }}
 QLabel#detailFinalScoreStarsLabel {{
     background: transparent;
-    color: {FILM_TEXT_MUTED};
-    font-size: {font_px(FONT_SMALL)}px;
-    font-weight: 500;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SMALL + 2)}px;
+    font-weight: 600;
     padding: 0;
 }}
 QWidget#mainInfoSection,
