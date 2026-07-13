@@ -154,6 +154,46 @@ def test_startup_gate_masks_token_and_offers_local_mode(monkeypatch, qapp) -> No
         gate.close()
 
 
+def test_startup_gate_exposes_readonly_diagnostics_and_recovery_tools(monkeypatch, qapp) -> None:
+    from PyQt6.QtWidgets import QLineEdit
+
+    from desktop.startup.tmdb_gate import TmdbStartupGateView
+
+    monkeypatch.setattr(TmdbStartupGateView, "_start_network_probe", lambda self: None)
+    gate = TmdbStartupGateView()
+    try:
+        assert "TMDb" in gate._diagnostics_button.text()
+        assert gate._tools_button.isEnabled() is True
+        assert gate._token_input.echoMode() == QLineEdit.EchoMode.Password
+    finally:
+        gate.close()
+
+
+def test_diagnostic_summary_distinguishes_api_token_and_poster_failures() -> None:
+    from desktop.startup.network_tools import format_tmdb_diagnostic_summary
+
+    unauthorized = {
+        "ok": True,
+        "networkPathAvailable": True,
+        "api": {"systemDns": {"addresses": [{"address": "203.0.113.1", "classification": "public-ipv4"}]}, "https": {"status": 401}},
+        "poster": {"systemDns": {"addresses": [{"address": "203.0.113.2", "classification": "public-ipv4"}]}, "https": {"status": 404}},
+        "posterHostAvailable": True,
+    }
+    message, severity = format_tmdb_diagnostic_summary(unauthorized)
+    assert "401" in message
+    assert severity == "warning"
+
+    poster_loopback = {
+        **unauthorized,
+        "api": {**unauthorized["api"], "https": {"status": 200}},
+        "apiAuthorized": True,
+        "poster": {"systemDns": {"addresses": [{"address": "127.0.0.1", "classification": "loopback"}]}, "https": {"status": 404}},
+    }
+    message, severity = format_tmdb_diagnostic_summary(poster_loopback)
+    assert "127.0.0.1" in message
+    assert severity == "warning"
+
+
 def test_settings_tmdb_panel_masks_credentials_and_preserves_old_token_on_error(monkeypatch, qapp) -> None:
     from PyQt6.QtWidgets import QLineEdit
 

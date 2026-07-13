@@ -18,6 +18,11 @@ from PyQt6.QtWidgets import (
 from common.release import release_signature
 from desktop.i18n import tr
 from desktop.shared.brand_assets import tmdb_logo_label, watchbane_wordmark_label
+from desktop.startup.network_tools import (
+    TmdbDiagnosticsWorker,
+    TmdbRecoveryToolsDialog,
+    format_tmdb_diagnostic_summary,
+)
 from desktop.startup.worker import TmdbStartupReadinessWorker, TmdbStartupValidateWorker
 from desktop.theme.scaling import font_px, scale_px
 from desktop.theme.styles.startup import build_startup_gate_style
@@ -47,6 +52,7 @@ class TmdbStartupGateView(QWidget):
         self._busy = False
         self._network_worker: TmdbStartupReadinessWorker | None = None
         self._validate_worker: TmdbStartupValidateWorker | None = None
+        self._diagnostics_worker: TmdbDiagnosticsWorker | None = None
         self._build_ui()
         if autostart:
             self.start_readiness_probe()
@@ -91,6 +97,16 @@ class TmdbStartupGateView(QWidget):
         self._network_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._network_label.setFont(QFont(FONT_FAMILY, font_px(FONT_SMALL)))
 
+        diagnostics_row = QHBoxLayout()
+        self._diagnostics_button = QPushButton(tr("startup.tmdb.diagnostics.run"))
+        self._diagnostics_button.setObjectName("startupDiagnosticButton")
+        self._diagnostics_button.clicked.connect(self._run_diagnostics)
+        self._tools_button = QPushButton(tr("startup.tmdb.tools.open"))
+        self._tools_button.setObjectName("startupToolsButton")
+        self._tools_button.clicked.connect(self._open_recovery_tools)
+        diagnostics_row.addWidget(self._diagnostics_button)
+        diagnostics_row.addWidget(self._tools_button)
+
         token_caption = QLabel(tr("startup.tmdb.token.label"))
         token_caption.setObjectName("startupGateTokenLabel")
         token_caption.setFont(QFont(FONT_FAMILY, font_px(FONT_BASE)))
@@ -114,6 +130,7 @@ class TmdbStartupGateView(QWidget):
 
         attribution = QFrame()
         attribution.setObjectName("startupTmdbAttribution")
+        attribution.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         attribution_layout = QHBoxLayout(attribution)
         attribution_layout.setContentsMargins(
             scale_px(12), scale_px(10), scale_px(12), scale_px(10)
@@ -124,6 +141,7 @@ class TmdbStartupGateView(QWidget):
         attribution_text.setObjectName("startupTmdbAttributionText")
         attribution_text.setWordWrap(True)
         attribution_text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        attribution_text.setMinimumHeight(scale_px(58))
         attribution_layout.addWidget(attribution_text, 1)
 
         self._error_label = QLabel("")
@@ -154,6 +172,7 @@ class TmdbStartupGateView(QWidget):
         card_layout.addWidget(subtitle)
         card_layout.addSpacing(scale_px(SPACING_SMALL + 2))
         card_layout.addWidget(self._network_label)
+        card_layout.addLayout(diagnostics_row)
         card_layout.addSpacing(scale_px(SPACING_MEDIUM))
         card_layout.addWidget(token_caption)
         card_layout.addWidget(self._token_input)
@@ -199,6 +218,38 @@ class TmdbStartupGateView(QWidget):
         worker.finished.connect(worker.deleteLater)
         self._network_worker = worker
         worker.start()
+
+    def _run_diagnostics(self) -> None:
+        if self._diagnostics_worker is not None:
+            return
+        self._diagnostics_button.setEnabled(False)
+        self._diagnostics_button.setText(tr("startup.tmdb.diagnostics.running"))
+        self._network_label.setText(tr("startup.tmdb.diagnostics.running_detail"))
+        worker = TmdbDiagnosticsWorker(parent=self)
+        worker.completed.connect(self._on_diagnostics_finished)
+        worker.finished.connect(worker.deleteLater)
+        self._diagnostics_worker = worker
+        worker.start()
+
+    def _on_diagnostics_finished(self, result: dict) -> None:
+        self._diagnostics_worker = None
+        self._diagnostics_button.setEnabled(True)
+        self._diagnostics_button.setText(tr("startup.tmdb.diagnostics.run"))
+        message, severity = format_tmdb_diagnostic_summary(result)
+        self._network_label.setProperty("diagnosticSeverity", severity)
+        self._network_label.setText(message)
+        self._network_label.style().unpolish(self._network_label)
+        self._network_label.style().polish(self._network_label)
+        network_available = result.get("networkPathAvailable") is True
+        self._network_ok = network_available
+        self._token_input.setEnabled(network_available and not self._busy)
+        self._continue_button.setEnabled(
+            network_available and not self._busy and bool(self._token_input.text().strip())
+        )
+
+    def _open_recovery_tools(self) -> None:
+        dialog = TmdbRecoveryToolsDialog(self)
+        dialog.exec()
 
     def start_readiness_probe(self) -> None:
         """Check credentials while the main shell stays visible on the fast path."""
