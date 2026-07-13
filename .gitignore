@@ -16,6 +16,9 @@ Thumbs.db
 venv/
 .env/
 .env.local
+local_tocen.txt
+local_token.txt
+.local/diagnostics/
 tmdb.env
 
 # Local recovery and spreadsheet files

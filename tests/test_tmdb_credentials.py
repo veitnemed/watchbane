@@ -60,6 +60,21 @@ def test_has_tmdb_credentials_reads_app_data_env_local(tmp_path, monkeypatch) ->
     assert tmdb_api.load_tmdb_token() == "secret-token"
 
 
+def test_frozen_build_does_not_load_credentials_from_working_tree(tmp_path, monkeypatch) -> None:
+    working_tree = tmp_path / "working-tree"
+    working_tree.mkdir()
+    (working_tree / ".env.local").write_text(
+        "TMDB_ACCESS_TOKEN=developer-token\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(working_tree)
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "runtime" / "data"))
+    monkeypatch.setattr(tmdb_api.sys, "frozen", True, raising=False)
+
+    with pytest.raises(RuntimeError, match="credentials not found"):
+        tmdb_api.load_tmdb_credentials()
+
+
 def test_bearer_prefix_and_outer_whitespace_are_normalized(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
 

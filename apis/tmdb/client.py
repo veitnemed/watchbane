@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import socket
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -151,14 +152,16 @@ def load_app_data_dotenv(*, overwrite: bool = False) -> None:
 
 def reload_tmdb_env() -> None:
     """Reload TMDb credentials from project and runtime env files."""
-    for env_file in (".env", ".env.local", "tmdb.env"):
-        load_dotenv(env_file)
+    if not getattr(sys, "frozen", False):
+        for env_file in (".env", ".env.local", "tmdb.env"):
+            load_dotenv(env_file)
     load_app_data_dotenv(overwrite=True)
 
 
 def _load_all_tmdb_env_files() -> None:
-    for env_file in (".env", ".env.local", "tmdb.env"):
-        load_dotenv(env_file)
+    if not getattr(sys, "frozen", False):
+        for env_file in (".env", ".env.local", "tmdb.env"):
+            load_dotenv(env_file)
     load_app_data_dotenv()
 
 
