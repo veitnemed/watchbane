@@ -1148,6 +1148,16 @@ class CandidateFiltersView:
         """Connect the worker lifecycle to another tab without coupling their widgets."""
         self._on_replenish_state_changed = callback
 
+    def prepare_for_shutdown(self) -> None:
+        """Prevent a queued filter intent from spawning a worker during app teardown."""
+        self._replenish_generation += 1
+        self._pending_replenish_intent = None
+        self._pending_replenish_generation = None
+        worker = self._replenish_worker
+        if worker is not None:
+            worker.cancel()
+            worker.requestInterruption()
+
     def _notify_replenish_state(self, state: str) -> None:
         callback = self._on_replenish_state_changed
         if callback is not None:

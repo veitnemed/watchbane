@@ -283,6 +283,28 @@ def test_repeated_identical_refill_request_starts_only_one_worker(qtbot, monkeyp
     assert workers[0].running is True
 
 
+def test_shutdown_clears_queued_refill_and_does_not_restart_worker(qtbot, monkeypatch) -> None:
+    workers = _install_blocking_replenish_worker(monkeypatch)
+    _service, _session, view = _build_filters_view(
+        qtbot,
+        monkeypatch,
+        [_candidate(1, country="RU", genres=["Crime"])],
+    )
+    first_intent = {"countries": ["RU"], "target_add_count": 30}
+    queued_intent = {"countries": ["US"], "target_add_count": 30}
+    assert view._start_filter_replenish(first_intent) is True
+    view._pending_replenish_intent = queued_intent
+    view._pending_replenish_generation = view._replenish_generation
+
+    view.prepare_for_shutdown()
+    workers[0].finish_thread()
+
+    assert workers[0].cancelled is True
+    assert view._pending_replenish_intent is None
+    assert view._pending_replenish_generation is None
+    assert len(workers) == 1
+
+
 def test_changed_refill_preferences_cancel_active_and_ignore_its_stale_result(
     qtbot,
     monkeypatch,

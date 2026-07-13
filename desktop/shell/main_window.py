@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QRect, QThread, Qt, QTimer
+from PyQt6.QtCore import QCoreApplication, QEvent, QRect, QThread, Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QStyle, QTabWidget
 
@@ -214,31 +214,43 @@ class WatchedMoviesWindow(QMainWindow):
         if refill_timer is not None:
             refill_timer.stop()
 
+        registry = getattr(self, "_tab_registry", None)
+        for spec in getattr(registry, "_specs", {}).values():
+            prepare = getattr(spec.view, "prepare_for_shutdown", None)
+            if callable(prepare):
+                prepare()
+
         workers = [
             worker
             for worker in self.findChildren(QThread)
             if worker.isRunning()
         ]
-        if not workers:
-            return
+        if workers:
+            log_event("app.worker_shutdown.begin", worker_count=len(workers))
+            for worker in workers:
+                cancel = getattr(worker, "cancel", None)
+                if callable(cancel):
+                    try:
+                        cancel()
+                    except Exception as error:
+                        log_event(
+                            "app.worker_shutdown.cancel_failed",
+                            worker=worker.metaObject().className(),
+                            error=str(error),
+                        )
+                worker.requestInterruption()
 
-        log_event("app.worker_shutdown.begin", worker_count=len(workers))
-        for worker in workers:
-            cancel = getattr(worker, "cancel", None)
-            if callable(cancel):
-                try:
-                    cancel()
-                except Exception as error:
-                    log_event(
-                        "app.worker_shutdown.cancel_failed",
-                        worker=worker.metaObject().className(),
-                        error=str(error),
-                    )
-            worker.requestInterruption()
+            for worker in workers:
+                worker.wait()
+            log_event("app.worker_shutdown.end", worker_count=len(workers))
 
-        for worker in workers:
-            worker.wait()
-        log_event("app.worker_shutdown.end", worker_count=len(workers))
+        # QThread.finished callbacks (including deleteLater) can still be queued when
+        # QApplication.exec() has returned. Drain them before Python/Qt teardown.
+        app = QApplication.instance()
+        if app is not None:
+            app.processEvents()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            app.processEvents()
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)
