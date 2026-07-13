@@ -63,12 +63,10 @@ def ensure_runtime_data_layout(*, create_initial_backup: bool = False) -> dict:
         }
 
     directories = ensure_runtime_directories()
-    init_meta()
-    init_dataset()
-    init_candidate_criteria()
-    init_candidate_pool()
-    init_search_lists()
 
+    # Inspect and migrate SQLite before repository initializers can open it.
+    # This keeps corrupt or unsupported runtimes away from the main UI and
+    # avoids accidental writes before the read-only preflight has completed.
     from storage.sqlite.startup import ensure_sqlite_startup_migration
 
     sqlite_startup_migration = ensure_sqlite_startup_migration(
@@ -76,6 +74,12 @@ def ensure_runtime_data_layout(*, create_initial_backup: bool = False) -> dict:
     )
     sqlite_db_path = sqlite_startup_migration["db_path"]
     sqlite_schema_version = sqlite_startup_migration["schema_version"]
+
+    init_meta()
+    init_dataset()
+    init_candidate_criteria()
+    init_candidate_pool()
+    init_search_lists()
 
     backup_created = False
     if create_initial_backup:

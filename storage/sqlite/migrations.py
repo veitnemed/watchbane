@@ -94,6 +94,13 @@ def _apply_migrations_unlocked(
             int(row["version"]): str(row["name"])
             for row in active_conn.execute("SELECT version, name FROM schema_migrations")
         }
+        supported_versions = {migration.version for migration in migration_list}
+        unsupported_versions = sorted(set(applied) - supported_versions)
+        if unsupported_versions:
+            raise MigrationError(
+                "SQLite schema is newer than this Watchbane build: "
+                + ", ".join(str(version) for version in unsupported_versions)
+            )
         for migration in sorted(migration_list, key=lambda item: item.version):
             applied_name = applied.get(migration.version)
             if applied_name is not None:
@@ -120,7 +127,9 @@ def _apply_migrations_unlocked(
                         db_path=target,
                         backup_dir=target.parent / "backups" / "migrations",
                     )
-            with active_conn:
+            savepoint = f"watchbane_migration_{migration.version}"
+            active_conn.execute(f"SAVEPOINT {savepoint}")
+            try:
                 migration.apply(active_conn)
                 active_conn.execute(
                     """
@@ -133,6 +142,11 @@ def _apply_migrations_unlocked(
                         datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     ),
                 )
+                active_conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+            except Exception:
+                active_conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+                active_conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+                raise
             applied[migration.version] = migration.name
         return get_current_schema_version(active_conn)
     finally:

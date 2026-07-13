@@ -25,6 +25,66 @@ from diagnostics.gui_event_log import log_event, log_exception, start_gui_event_
 from storage.runtime import ensure_runtime_data_layout
 
 
+def _show_database_recovery_dialog(error) -> None:
+    """Offer an explicit, validated restore without ever opening the main UI."""
+    from pathlib import Path
+    import sqlite3
+
+    from PyQt6.QtWidgets import QFileDialog, QMessageBox
+
+    from config import constant
+    from storage.sqlite.backup import restore_sqlite_database
+    from storage.sqlite.startup import startup_database_error_message
+
+    dialog = QMessageBox()
+    dialog.setIcon(QMessageBox.Icon.Critical)
+    dialog.setWindowTitle("Watchbane — база данных")
+    dialog.setText(startup_database_error_message(error))
+    restore_button = dialog.addButton(
+        "Выбрать резервную копию…",
+        QMessageBox.ButtonRole.ActionRole,
+    )
+    dialog.addButton("Закрыть", QMessageBox.ButtonRole.RejectRole)
+    dialog.exec()
+    if dialog.clickedButton() is not restore_button:
+        return
+
+    selected, _filter = QFileDialog.getOpenFileName(
+        None,
+        "Выберите резервную копию Watchbane",
+        str(Path(constant.BACKUP_DIR)),
+        "SQLite backup (*.sqlite3 *.sqlite *.db)",
+    )
+    if not selected:
+        return
+    answer = QMessageBox.question(
+        None,
+        "Подтвердите восстановление",
+        "Выбранная копия будет проверена, затем заменит текущую базу. "
+        "Повреждённый файл уже сохранён для диагностики. Продолжить?",
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.No,
+    )
+    if answer != QMessageBox.StandardButton.Yes:
+        return
+    try:
+        restore_sqlite_database(selected, db_path=error.db_path)
+    except (OSError, ValueError, sqlite3.DatabaseError) as restore_error:
+        QMessageBox.critical(
+            None,
+            "Восстановление не выполнено",
+            "Резервная копия не прошла проверку или недоступна. "
+            "Текущая база не заменена.\n\n"
+            f"Причина: {restore_error}",
+        )
+        return
+    QMessageBox.information(
+        None,
+        "Восстановление завершено",
+        "Резервная копия восстановлена. Перезапустите Watchbane.",
+    )
+
+
 def _prepare_webengine() -> None:
     """Prepare Qt WebEngine before QApplication is created."""
     QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
@@ -151,6 +211,11 @@ def main() -> None:
         sys.exit(exit_code)
     except Exception as error:
         log_exception("app.error", error)
+        from storage.sqlite.startup import StartupDatabaseError
+
+        if isinstance(error, StartupDatabaseError):
+            _show_database_recovery_dialog(error)
+            return
         if is_storage_write_error(error):
             from PyQt6.QtWidgets import QMessageBox
 
