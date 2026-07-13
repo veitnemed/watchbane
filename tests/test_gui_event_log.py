@@ -47,6 +47,37 @@ def test_gui_event_log_redacts_tmdb_token_from_message_and_traceback(tmp_path, m
     assert "secret-token" not in raw
     assert "<redacted>" in raw
 
+
+def test_gui_event_log_prunes_old_sessions(tmp_path, monkeypatch) -> None:
+    for index in range(gui_event_log.GUI_LOG_SESSION_LIMIT + 5):
+        (tmp_path / f"20000101_000000_{index:06d}_gui_session.jsonl").write_text(
+            "{}\n", encoding="utf-8"
+        )
+    monkeypatch.setattr(gui_event_log, "_SESSION_LOG_PATH", None)
+    monkeypatch.setattr(gui_event_log, "_SESSION_ENABLED", False)
+
+    current = gui_event_log.start_gui_event_log(tmp_path)
+
+    assert current.exists()
+    assert len(list(tmp_path.glob("*_gui_session.jsonl*"))) <= gui_event_log.GUI_LOG_SESSION_LIMIT
+
+
+def test_gui_event_log_redacts_full_collection_payload(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(gui_event_log, "_SESSION_LOG_PATH", None)
+    monkeypatch.setattr(gui_event_log, "_SESSION_ENABLED", False)
+    path = gui_event_log.start_gui_event_log(tmp_path)
+
+    gui_event_log.log_event(
+        "privacy.collection",
+        watched_records=[{"title": "Private title"}],
+        watched_count=1,
+    )
+
+    raw = path.read_text(encoding="utf-8")
+    assert "Private title" not in raw
+    assert "<redacted_collection>" in raw
+    assert '"watched_count": 1' in raw
+
 def test_add_title_dialogs_are_instrumented() -> None:
     import inspect
 

@@ -164,6 +164,16 @@ def main() -> None:
 
             QMessageBox.warning(None, "Watchbane", storage_write_error_message())
             return
+        if getattr(sys, "frozen", False):
+            from PyQt6.QtWidgets import QMessageBox
+
+            QMessageBox.critical(
+                None,
+                "Watchbane",
+                "Не удалось запустить Watchbane из-за внутренней ошибки. "
+                "Перезапустите приложение; подробности сохранены в диагностике, если она включена.",
+            )
+            return
         raise
     if instance_guard.acquire() is False:
         show_already_running_warning()

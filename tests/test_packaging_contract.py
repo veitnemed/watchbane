@@ -26,3 +26,4 @@ def test_official_build_script_requires_onedir_executable() -> None:
     assert "py -m PyInstaller --noconfirm --clean watchbane.spec" in source
     assert '"dist\\Watchbane\\Watchbane.exe"' in source
     assert "Onedir build did not produce" in source
+    assert "disable_windowed_traceback=True" in Path("watchbane.spec").read_text(encoding="utf-8")

@@ -8,12 +8,15 @@ import json
 from pathlib import Path
 from typing import Any
 
+from config import constant
+from diagnostics.log_retention import rotate_file
+
 from candidates.replenish.filter_discover import (
     discover_params_have_broad_origin_fallback,
     discover_params_have_vote_rating_filters,
 )
 
-DEFAULT_REPORT_DIR = Path("data/reports/candidates/replenish")
+DEFAULT_REPORT_DIR = Path(constant.APP_DATA_DIR) / "reports" / "candidates" / "replenish"
 LATEST_JSON = "filter_replenish_latest.json"
 LATEST_MD = "filter_replenish_latest.md"
 RUNS_JSONL = "filter_replenish_runs.jsonl"
@@ -194,6 +197,7 @@ def write_filter_replenish_report(
     json_text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
     json_path.write_text(json_text + "\n", encoding="utf-8")
     md_path.write_text(_markdown_report(payload), encoding="utf-8")
+    rotate_file(jsonl_path)
     with jsonl_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True))
         handle.write("\n")

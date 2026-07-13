@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import candidates.search.query_log as query_log
 
@@ -62,6 +63,19 @@ def test_search_query_log_enabled_writes_one_row(tmp_path, monkeypatch) -> None:
     assert entry["zero_result"] is False
     assert entry["latency_ms"] == 12.3
     assert entry["sort_mode"] == "final_score"
+
+
+def test_search_query_log_rotates_when_size_limit_is_reached(tmp_path, monkeypatch) -> None:
+    log_path = tmp_path / "reports" / "search_query_log.jsonl"
+    log_path.parent.mkdir(parents=True)
+    log_path.write_bytes(b"x" * (2 * 1024 * 1024))
+    monkeypatch.setattr(query_log, "DEFAULT_LOG_PATH", log_path)
+    monkeypatch.setenv(query_log.SEARCH_QUERY_LOG_ENV, "1")
+
+    assert query_log.append_search_query_log(_build_entry()) is None
+
+    assert Path(f"{log_path}.1").stat().st_size == 2 * 1024 * 1024
+    assert len(_read_jsonl(log_path)) == 1
 
 
 def test_top_results_contain_rank_title_id_score(tmp_path, monkeypatch) -> None:

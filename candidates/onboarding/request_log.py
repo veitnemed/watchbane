@@ -20,6 +20,8 @@ from diagnostics.log_sanitize import (
     _sanitize_value,
     sanitize_log_entry,
 )
+from diagnostics.log_retention import rotate_file
+from config import constant
 
 __all__ = [
     "MAX_TEXT_LENGTH",
@@ -42,7 +44,7 @@ __all__ = [
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_LOG_PATH = PROJECT_ROOT / "reports" / "onboarding" / "user_requests" / "onboarding_request_log.jsonl"
+DEFAULT_LOG_PATH = Path(constant.LOGS_DIR) / "onboarding" / "user_requests" / "onboarding_request_log.jsonl"
 ENV_FLAG = "WATCHBANE_LOG_ONBOARDING_REQUESTS"
 
 
@@ -116,6 +118,7 @@ def append_onboarding_request_log(
         target = Path(path) if path is not None else DEFAULT_LOG_PATH
         target.parent.mkdir(parents=True, exist_ok=True)
         sanitized = sanitize_log_entry(entry)
+        rotate_file(target)
         with target.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(sanitized, ensure_ascii=False, sort_keys=True))
             handle.write("\n")

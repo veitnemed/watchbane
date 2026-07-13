@@ -52,6 +52,40 @@ def test_write_report_creates_json_and_text(tmp_path) -> None:
     assert "Progress:" in Path(files["text_path"]).read_text(encoding="utf-8")
 
 
+def test_runtime_report_redacts_secrets_paths_and_full_collection(tmp_path) -> None:
+    report = {
+        "scenario": "privacy",
+        "status": "error",
+        "inputs": {
+            "authorization": "Bearer secret-token",
+            "runtime": r"D:\Users\Private\watchbane.sqlite3",
+            "watched_records": [{"title": "Private title"}],
+        },
+        "error": "token=secret-token path D:\\Users\\Private\\watchbane.sqlite3",
+    }
+
+    files = runtime_reports.write_report(report, tmp_path)
+
+    raw = Path(files["json_path"]).read_text(encoding="utf-8") + Path(
+        files["text_path"]
+    ).read_text(encoding="utf-8")
+    assert "secret-token" not in raw
+    assert "Private title" not in raw
+    assert "D:\\Users\\Private" not in raw
+    assert "<redacted" in raw
+
+
+def test_runtime_report_directory_is_bounded(tmp_path) -> None:
+    for index in range(runtime_reports.RUNTIME_REPORT_PAIR_LIMIT + 5):
+        runtime_reports.write_report(
+            {"scenario": f"scenario-{index}", "status": "ok"},
+            tmp_path,
+        )
+
+    assert len(list(tmp_path.glob("*.json"))) <= runtime_reports.RUNTIME_REPORT_PAIR_LIMIT
+    assert len(list(tmp_path.glob("*.txt"))) <= runtime_reports.RUNTIME_REPORT_PAIR_LIMIT
+
+
 def test_run_add_title_report_records_progress_without_network(tmp_path) -> None:
     def fake_resolver(title, country, on_progress=None):
         on_progress(1, 7, "IMDb dataset: Поиск")

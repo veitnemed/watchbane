@@ -16,9 +16,11 @@ from typing import Any
 
 from candidates.onboarding.request_log import current_git_commit, utc_timestamp
 from diagnostics.log_sanitize import _sanitize_text, sanitize_log_entry
+from diagnostics.log_retention import rotate_file
+from config import constant
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_LOG_PATH = PROJECT_ROOT / "reports" / "search" / "user_queries" / "search_query_log.jsonl"
+DEFAULT_LOG_PATH = Path(constant.LOGS_DIR) / "search" / "user_queries" / "search_query_log.jsonl"
 SEARCH_QUERY_LOG_ENV = "WATCHBANE_LOG_SEARCH_QUERIES"
 TOP_RESULTS_LIMIT = 20
 
@@ -150,6 +152,7 @@ def append_search_query_log(
         target = Path(path) if path is not None else DEFAULT_LOG_PATH
         target.parent.mkdir(parents=True, exist_ok=True)
         sanitized = sanitize_log_entry(entry)
+        rotate_file(target)
         with target.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(sanitized, ensure_ascii=False, sort_keys=True))
             handle.write("\n")
