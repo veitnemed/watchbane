@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -16,6 +17,14 @@ from PyQt6.QtWidgets import QDialog, QLabel, QPushButton, QVBoxLayout, QWidget
 from config.app_paths import get_app_paths
 from desktop.i18n import tr
 from desktop.theme.scaling import scale_px
+
+
+_HOSTS_BEGIN_MARKER = "# BEGIN WATCHBANE TEMP TMDB"
+_HOSTS_END_MARKER = "# END WATCHBANE TEMP TMDB"
+_BYPASS_ENTRIES = {
+    "api.themoviedb.org": "3.173.161.72",
+    "www.themoviedb.org": "18.239.105.83",
+}
 
 
 def tmdb_script_path(name: str) -> Path:
@@ -32,6 +41,172 @@ def diagnostic_output_dir() -> Path:
     if getattr(sys, "frozen", False):
         return get_app_paths().root / "diagnostics"
     return Path(__file__).resolve().parents[2] / ".local" / "diagnostics"
+
+
+def tmdb_hosts_path() -> Path:
+    """Return the Windows hosts path without reading or changing it."""
+    system_root = Path(os.environ.get("SystemRoot", r"C:\Windows"))
+    return system_root / "System32" / "drivers" / "etc" / "hosts"
+
+
+def tmdb_bypass_active(content: str) -> bool:
+    """Check that both fixed mappings exist inside Watchbane's marked block."""
+    pattern = re.compile(
+        rf"(?ms)^{re.escape(_HOSTS_BEGIN_MARKER)}\s*$"
+        rf"(.*?)"
+        rf"^{re.escape(_HOSTS_END_MARKER)}\s*$"
+    )
+    match = pattern.search(content)
+    if match is None:
+        return False
+    mappings: dict[str, str] = {}
+    for raw_line in match.group(1).splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split()
+        if len(fields) >= 2:
+            mappings[fields[1].lower()] = fields[0]
+    return all(mappings.get(host) == address for host, address in _BYPASS_ENTRIES.items())
+
+
+def _run_elevated_powershell(
+    script: Path,
+    arguments: list[str],
+    *,
+    timeout_ms: int = 300_000,
+) -> dict[str, Any]:
+    """Launch one known script through UAC and wait for its exit status."""
+    if os.name != "nt":
+        return {"ok": False, "error": "windows-required"}
+
+    import ctypes
+    from ctypes import wintypes
+
+    class ShellExecuteInfo(ctypes.Structure):
+        _fields_ = [
+            ("cbSize", wintypes.DWORD),
+            ("fMask", ctypes.c_ulong),
+            ("hwnd", wintypes.HWND),
+            ("lpVerb", wintypes.LPCWSTR),
+            ("lpFile", wintypes.LPCWSTR),
+            ("lpParameters", wintypes.LPCWSTR),
+            ("lpDirectory", wintypes.LPCWSTR),
+            ("nShow", ctypes.c_int),
+            ("hInstApp", wintypes.HINSTANCE),
+            ("lpIDList", wintypes.LPVOID),
+            ("lpClass", wintypes.LPCWSTR),
+            ("hkeyClass", wintypes.HKEY),
+            ("dwHotKey", wintypes.DWORD),
+            ("hIcon", wintypes.HANDLE),
+            ("hProcess", wintypes.HANDLE),
+        ]
+
+    parameters = subprocess.list2cmdline(
+        [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(script),
+            *arguments,
+        ]
+    )
+    info = ShellExecuteInfo()
+    info.cbSize = ctypes.sizeof(info)
+    info.fMask = 0x00000040  # SEE_MASK_NOCLOSEPROCESS
+    info.lpVerb = "runas"
+    info.lpFile = "powershell.exe"
+    info.lpParameters = parameters
+    info.lpDirectory = str(script.parents[1])
+    info.nShow = 1
+
+    shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+    shell_execute = shell32.ShellExecuteExW
+    shell_execute.argtypes = [ctypes.POINTER(ShellExecuteInfo)]
+    shell_execute.restype = wintypes.BOOL
+    if not shell_execute(ctypes.byref(info)):
+        error_code = ctypes.get_last_error()
+        error = "uac-cancelled" if error_code == 1223 else "elevated-launch-failed"
+        return {"ok": False, "error": error, "win_error": error_code}
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    wait_for_single_object = kernel32.WaitForSingleObject
+    wait_for_single_object.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    wait_for_single_object.restype = wintypes.DWORD
+    get_exit_code = kernel32.GetExitCodeProcess
+    get_exit_code.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    get_exit_code.restype = wintypes.BOOL
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+    try:
+        wait_result = wait_for_single_object(info.hProcess, timeout_ms)
+        if wait_result == 0x00000102:  # WAIT_TIMEOUT
+            return {"ok": False, "error": "elevated-timeout"}
+        if wait_result != 0:
+            return {
+                "ok": False,
+                "error": "elevated-wait-failed",
+                "win_error": ctypes.get_last_error(),
+            }
+        exit_code = wintypes.DWORD()
+        if not get_exit_code(info.hProcess, ctypes.byref(exit_code)):
+            return {
+                "ok": False,
+                "error": "elevated-exit-code-failed",
+                "win_error": ctypes.get_last_error(),
+            }
+        return {
+            "ok": exit_code.value == 0,
+            "error": None if exit_code.value == 0 else "hosts-script-failed",
+            "exit_code": exit_code.value,
+        }
+    finally:
+        close_handle(info.hProcess)
+
+
+def run_tmdb_hosts_bypass() -> dict[str, Any]:
+    """Apply the guarded fixed hosts workaround, then verify the full TMDb path."""
+    script = tmdb_script_path("tmdb-hosts-override.ps1")
+    if not script.is_file():
+        return {"ok": False, "error": "hosts-script-missing"}
+    output_dir = diagnostic_output_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    elevated = _run_elevated_powershell(
+        script,
+        [
+            "-TryBypass",
+            "-Apply",
+            "-Yes",
+            "-OutputDirectory",
+            str(output_dir),
+        ],
+    )
+    if elevated.get("ok") is not True:
+        return elevated
+    try:
+        content = tmdb_hosts_path().read_text(encoding="utf-8-sig", errors="replace")
+    except OSError as error:
+        return {"ok": False, "error": "hosts-read-failed", "details": str(error)}
+    if not tmdb_bypass_active(content):
+        return {"ok": False, "error": "hosts-bypass-not-active"}
+
+    diagnostic = run_readonly_tmdb_diagnostics()
+    network_available = diagnostic.get("networkPathAvailable") is True
+    poster_available = diagnostic.get("posterHostAvailable") is True
+    return {
+        # The elevated script already rolls back and exits non-zero when its
+        # authoritative post-apply API/poster check fails. This second probe is
+        # informational and must not turn a completed safe apply into a false
+        # failure because of a later transient network hiccup.
+        "ok": True,
+        "error": None,
+        "bypass_active": True,
+        "diagnostic": diagnostic,
+        "followup_check_ok": network_available and poster_available,
+        "exit_code": elevated.get("exit_code"),
+    }
 
 
 def _latest_report(output_dir: Path, *, newer_than: float) -> Path | None:
@@ -151,6 +326,19 @@ class TmdbDiagnosticsWorker(QThread):
         if self.isInterruptionRequested():
             return
         result = run_readonly_tmdb_diagnostics()
+        if not self.isInterruptionRequested():
+            self.completed.emit(result)
+
+
+class TmdbBypassWorker(QThread):
+    """Apply and verify the explicit temporary hosts workaround off the GUI thread."""
+
+    completed = pyqtSignal(dict)
+
+    def run(self) -> None:
+        if self.isInterruptionRequested():
+            return
+        result = run_tmdb_hosts_bypass()
         if not self.isInterruptionRequested():
             self.completed.emit(result)
 

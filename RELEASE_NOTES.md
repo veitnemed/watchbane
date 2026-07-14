@@ -1,8 +1,8 @@
-# Watchbane 0.1.0-alpha.1 — First Deck
+# Watchbane 0.1.1-alpha.1 — Open Route
 
-Recommendation engine: **ReDeck v0.1 Alpha**
+Recommendation engine: **ReDeck v0.1.0**
 
-Release tag: `v0.1.0-alpha.1`
+Release tag: `v0.1.1-alpha.1`
 
 Target: Windows 10/11 x64
 
@@ -16,10 +16,12 @@ Target: Windows 10/11 x64
 - SQLite backup, migration and startup recovery.
 - User-owned TMDb credential lifecycle; no shared token is bundled.
 - Offline access to already stored local data.
+- A guarded **Попробовать обход** flow on the token screen for affected TMDb routes.
+- Fixed endpoint validation, UAC elevation, timestamped `hosts` backup, marked-block-only updates, DNS flush and automatic rollback on failed post-check.
 
 ## Release hardening
 
-- `1574 passed, 1 skipped` in the final full regression suite before release packaging.
+- `1616 passed, 1 skipped` in the final full regression suite before release packaging.
 - Native Windows movie/tv visual matrix checked at 75%, 100% and 150%.
 - Existing-profile upgrade from schema v4 to v6 and immediate restart verified.
 - Worker shutdown, repeated actions, large pools, corrupt posters and FTS fallback exercised.
@@ -28,7 +30,7 @@ Target: Windows 10/11 x64
 
 ## Distribution
 
-The release artifact is `Watchbane-0.1.0-alpha.1-windows-x64.zip`. It contains a folder-based PyInstaller onedir build:
+The release artifact is `Watchbane-0.1.1-alpha.1-windows-x64.zip`. It contains a folder-based PyInstaller onedir build:
 
 ```text
 Watchbane/
@@ -38,7 +40,7 @@ Watchbane/
 
 Extract the complete folder and run `Watchbane.exe`. Do not move the EXE away from `_internal/`.
 
-SHA-256: `C837527B554119336D38AC68096E9E468DB5D1CFDFE188E5BA6880AC77E42780`.
+SHA-256: `0068F750C6C3907FD54FD36EA740DE080211962DD7269EA6CA88CCD0C81F51D3`.
 
 ## Known alpha limits
 

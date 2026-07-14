@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -19,6 +20,7 @@ from common.release import release_signature
 from desktop.i18n import tr
 from desktop.shared.brand_assets import tmdb_logo_label, watchbane_wordmark_label
 from desktop.startup.network_tools import (
+    TmdbBypassWorker,
     TmdbDiagnosticsWorker,
     TmdbRecoveryToolsDialog,
     format_tmdb_diagnostic_summary,
@@ -53,6 +55,7 @@ class TmdbStartupGateView(QWidget):
         self._network_worker: TmdbStartupReadinessWorker | None = None
         self._validate_worker: TmdbStartupValidateWorker | None = None
         self._diagnostics_worker: TmdbDiagnosticsWorker | None = None
+        self._bypass_worker: TmdbBypassWorker | None = None
         self._build_ui()
         if autostart:
             self.start_readiness_probe()
@@ -106,6 +109,11 @@ class TmdbStartupGateView(QWidget):
         self._tools_button.clicked.connect(self._open_recovery_tools)
         diagnostics_row.addWidget(self._diagnostics_button)
         diagnostics_row.addWidget(self._tools_button)
+
+        self._bypass_button = QPushButton(tr("startup.tmdb.bypass.try"))
+        self._bypass_button.setObjectName("startupBypassButton")
+        self._bypass_button.setMinimumHeight(scale_px(40))
+        self._bypass_button.clicked.connect(self._try_bypass)
 
         token_caption = QLabel(tr("startup.tmdb.token.label"))
         token_caption.setObjectName("startupGateTokenLabel")
@@ -173,6 +181,7 @@ class TmdbStartupGateView(QWidget):
         card_layout.addSpacing(scale_px(SPACING_SMALL + 2))
         card_layout.addWidget(self._network_label)
         card_layout.addLayout(diagnostics_row)
+        card_layout.addWidget(self._bypass_button)
         card_layout.addSpacing(scale_px(SPACING_MEDIUM))
         card_layout.addWidget(token_caption)
         card_layout.addWidget(self._token_input)
@@ -250,6 +259,71 @@ class TmdbStartupGateView(QWidget):
     def _open_recovery_tools(self) -> None:
         dialog = TmdbRecoveryToolsDialog(self)
         dialog.exec()
+
+    def _try_bypass(self) -> None:
+        if self._bypass_worker is not None:
+            return
+        answer = QMessageBox.question(
+            self,
+            tr("startup.tmdb.bypass.confirm_title"),
+            tr("startup.tmdb.bypass.confirm_text"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        self._bypass_button.setEnabled(False)
+        self._bypass_button.setText(tr("startup.tmdb.bypass.running"))
+        self._diagnostics_button.setEnabled(False)
+        self._tools_button.setEnabled(False)
+        self._network_label.setProperty("diagnosticSeverity", "warning")
+        self._network_label.setText(tr("startup.tmdb.bypass.running_detail"))
+        self._network_label.style().unpolish(self._network_label)
+        self._network_label.style().polish(self._network_label)
+        worker = TmdbBypassWorker(parent=self)
+        worker.completed.connect(self._on_bypass_finished)
+        worker.finished.connect(worker.deleteLater)
+        self._bypass_worker = worker
+        worker.start()
+
+    def _on_bypass_finished(self, result: dict) -> None:
+        self._bypass_worker = None
+        self._bypass_button.setEnabled(True)
+        self._bypass_button.setText(tr("startup.tmdb.bypass.try"))
+        self._diagnostics_button.setEnabled(True)
+        self._tools_button.setEnabled(True)
+
+        if result.get("ok") is True and result.get("bypass_active") is True:
+            self._network_ok = True
+            self._network_label.setProperty("diagnosticSeverity", "success")
+            self._network_label.setText(tr("startup.tmdb.bypass.success"))
+            self._token_input.setEnabled(not self._busy)
+            self._continue_button.setEnabled(
+                not self._busy and bool(self._token_input.text().strip())
+            )
+            self._show_error("")
+            self._network_label.style().unpolish(self._network_label)
+            self._network_label.style().polish(self._network_label)
+            if self._token_input.text().strip():
+                self._on_continue_clicked()
+            else:
+                self._token_input.setFocus()
+            return
+
+        self._network_ok = False
+        self._token_input.setEnabled(False)
+        self._continue_button.setEnabled(False)
+        self._network_label.setProperty("diagnosticSeverity", "error")
+        error = str(result.get("error") or "")
+        message_key = (
+            "startup.tmdb.bypass.cancelled"
+            if error == "uac-cancelled"
+            else "startup.tmdb.bypass.failed"
+        )
+        self._network_label.setText(tr(message_key))
+        self._network_label.style().unpolish(self._network_label)
+        self._network_label.style().polish(self._network_label)
 
     def start_readiness_probe(self) -> None:
         """Check credentials while the main shell stays visible on the fast path."""

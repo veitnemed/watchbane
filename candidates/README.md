@@ -1,6 +1,6 @@
 # candidates
 
-Версия продукта: **Watchbane 0.1.0-alpha.1 — First Deck**. Публичное имя текущего recommendation flow: **ReDeck v0.1 Alpha**. Полный контракт версии: [../VERSION.md](../VERSION.md).
+Версия продукта: **Watchbane 0.1.1-alpha.1 — Open Route**. Публичное имя текущего recommendation flow: **ReDeck v0.1.0**. Полный контракт версии: [../VERSION.md](../VERSION.md).
 
 Папка `candidates` отвечает за сбор, хранение, импорт, фильтрацию и диагностику общего пула кандидатов для рекомендаций сериалов и фильмов.
 

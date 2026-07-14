@@ -51,7 +51,7 @@ from desktop.candidates.filters_form import CANDIDATE_YEAR_MIN, FiltersFormWidge
 from desktop.candidates.filters_intro import build_intro_copy
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 from desktop.candidates.workers.filter_replenish_worker import FilterReplenishWorker
-from desktop.i18n import tr
+from desktop.i18n import tr, translate
 from desktop.settings.app_settings import get_persisted_data_language, get_persisted_interface_language
 from desktop.settings.recommendation_preferences import (
     load_recommendation_preferences,
@@ -1335,8 +1335,18 @@ class CandidateFiltersView:
         self._last_replenish_result = {"ok": False, "error": str(message)}
         self._set_replenish_running(False)
         self._hide_replenish_progress()
-        self._intro_lead.setText(tr("recommendations.discovery.status.failed"))
-        self._intro_stats.setText(tr("candidates.filters.error.stats"))
+        self._intro_lead.setText(
+            translate(
+                "recommendations.discovery.status.failed",
+                interface_language=self._interface_language,
+            )
+        )
+        self._intro_stats.setText(
+            translate(
+                "candidates.filters.error.stats",
+                interface_language=self._interface_language,
+            )
+        )
         self._intro_stats.setVisible(True)
         self._notify_replenish_state("error")
 

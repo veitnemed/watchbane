@@ -16,13 +16,13 @@ VSVersionInfo(
         '040904B0',
         [StringStruct('CompanyName', 'Watchbane'),
          StringStruct('FileDescription', 'Watchbane — First Deck'),
-         StringStruct('FileVersion', '0.1.0-alpha.1'),
+         StringStruct('FileVersion', '0.1.1-alpha.1'),
          StringStruct('InternalName', 'Watchbane'),
          StringStruct('LegalCopyright', 'Copyright (c) 2026 Watchbane contributors'),
          StringStruct('OriginalFilename', 'Watchbane.exe'),
          StringStruct('ProductName', 'Watchbane'),
-         StringStruct('ProductVersion', '0.1.0-alpha.1'),
-         StringStruct('Comments', 'Recommendation engine: ReDeck v0.1 Alpha')])
+         StringStruct('ProductVersion', '0.1.1-alpha.1'),
+         StringStruct('Comments', 'Recommendation engine: ReDeck v0.1.0')])
     ]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]

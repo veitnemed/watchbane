@@ -5,6 +5,9 @@ param(
     [switch]$Remove,
     [switch]$Restore,
     [switch]$Status,
+    [switch]$TryBypass,
+    [string]$ApiAddress = "3.173.161.72",
+    [string]$WebsiteAddress = "18.239.105.83",
     [string]$BackupPath = "",
     [string]$OutputDirectory = "",
     [int]$MaxAgeHours = 24,
@@ -30,6 +33,12 @@ $requiredHosts = @(
     [ordered]@{ host = "api.themoviedb.org"; url = "https://api.themoviedb.org/3/configuration" },
     [ordered]@{ host = "image.tmdb.org"; url = "https://image.tmdb.org/t/p/w92" }
 )
+if ($TryBypass) {
+    $requiredHosts = @(
+        [ordered]@{ host = "api.themoviedb.org"; url = "https://api.themoviedb.org/3/configuration"; address = $ApiAddress },
+        [ordered]@{ host = "www.themoviedb.org"; url = "https://www.themoviedb.org/"; address = $WebsiteAddress }
+    )
+}
 
 function Test-IsAdministrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -126,17 +135,38 @@ function Select-ValidatedAddress {
     foreach ($address in @(Resolve-PublicCandidates -HostName $Target.host)) {
         $transport = Test-DirectTcpTls -HostName $Target.host -Address $address
         if (-not $transport.tcp -or -not $transport.tls) {
-            Write-Output "Rejected $($Target.host) ${address}: TCP/TLS validation failed."
+            Write-Host "Rejected $($Target.host) ${address}: TCP/TLS validation failed."
             continue
         }
         $https = Test-DirectHttps -HostName $Target.host -Address $address -Url $Target.url
         if ($https.reached -and $https.status -in @(200, 401, 403, 404)) {
-            Write-Output "Validated $($Target.host) ${address}: HTTPS $($https.status)."
+            Write-Host "Validated $($Target.host) ${address}: HTTPS $($https.status)."
             return [ordered]@{ host = $Target.host; address = $address; httpsStatus = $https.status }
         }
-        Write-Output "Rejected $($Target.host) ${address}: HTTPS validation failed."
+        Write-Host "Rejected $($Target.host) ${address}: HTTPS validation failed."
     }
     return $null
+}
+
+function Select-ProvidedAddress {
+    param([System.Collections.IDictionary]$Target)
+    $address = [string]$Target.address
+    if (-not (Test-PublicIPv4 -Address $address)) {
+        Write-Host "Rejected $($Target.host) ${address}: not a public IPv4 address."
+        return $null
+    }
+    $transport = Test-DirectTcpTls -HostName $Target.host -Address $address
+    if (-not $transport.tcp -or -not $transport.tls) {
+        Write-Host "Rejected $($Target.host) ${address}: TCP/TLS validation failed."
+        return $null
+    }
+    $https = Test-DirectHttps -HostName $Target.host -Address $address -Url $Target.url
+    if (-not $https.reached -or $https.status -notin @(200, 401, 403, 404)) {
+        Write-Host "Rejected $($Target.host) ${address}: HTTPS validation failed."
+        return $null
+    }
+    Write-Host "Validated fixed bypass $($Target.host) ${address}: HTTPS $($https.status)."
+    return [ordered]@{ host = $Target.host; address = $address; httpsStatus = $https.status }
 }
 
 function Get-WatchbaneBlock {
@@ -155,7 +185,12 @@ function Remove-WatchbaneBlock {
 
 function New-OverrideBlock {
     param([object[]]$Entries)
-    $lines = @($beginMarker, "# Applied: $((Get-Date).ToString('o'))", "# Revalidate after: $MaxAgeHours hours")
+    $lines = @(
+        $beginMarker,
+        "# TEMP TMDb diagnostic",
+        "# Applied: $((Get-Date).ToString('o'))",
+        "# Revalidate after: $MaxAgeHours hours"
+    )
     foreach ($entry in $Entries) { $lines += "$($entry.address) $($entry.host)" }
     $lines += $endMarker
     return $lines -join "`r`n"
@@ -222,6 +257,17 @@ if ($SelfTest) {
     if (-not (Test-StateStale -AppliedAt (Get-Date).AddHours(-25) -Hours 24)) {
         throw "Self-test: stale override was not detected."
     }
+    $testBlock = New-OverrideBlock -Entries @(
+        [ordered]@{ host = "api.themoviedb.org"; address = "3.173.161.72" },
+        [ordered]@{ host = "www.themoviedb.org"; address = "18.239.105.83" }
+    )
+    if ($testBlock -notmatch [regex]::Escape("# TEMP TMDb diagnostic")) {
+        throw "Self-test: diagnostic comment is missing."
+    }
+    if ($testBlock -notmatch '3\.173\.161\.72 api\.themoviedb\.org' -or
+        $testBlock -notmatch '18\.239\.105\.83 www\.themoviedb\.org') {
+        throw "Self-test: fixed bypass entries are incomplete."
+    }
     $backup = Save-HostsBackup -Content $sample
     if (-not (Test-Path -LiteralPath $backup -PathType Leaf)) { throw "Self-test: backup was not created." }
     $restoreTarget = Join-Path $backupDirectory "selftest-restored-hosts"
@@ -269,7 +315,12 @@ if ($Remove) {
 
 $validated = @()
 foreach ($target in $requiredHosts) {
-    $entry = Select-ValidatedAddress -Target $target
+    $entry = if ($TryBypass) {
+        Select-ProvidedAddress -Target $target
+    }
+    else {
+        Select-ValidatedAddress -Target $target
+    }
     if ($null -eq $entry) { throw "No currently validated public IPv4 was found for $($target.host). Hosts was not changed." }
     $validated += $entry
 }
@@ -296,6 +347,7 @@ $updatedContent = $withoutBlock.TrimEnd("`r", "`n") + "`r`n`r`n" + $newBlock + "
 Write-HostsContent -Content $updatedContent
 [ordered]@{
     schemaVersion = 1
+    mode = $(if ($TryBypass) { "fixed-bypass" } else { "trusted-dns" })
     appliedAt = (Get-Date).ToString("o")
     maxAgeHours = $MaxAgeHours
     backupPath = $BackupPath

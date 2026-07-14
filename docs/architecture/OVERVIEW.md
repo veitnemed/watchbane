@@ -1,6 +1,6 @@
 # Watchbane architecture
 
-Версия архитектурного среза: **Watchbane 0.1.0-alpha.1 — First Deck** / **ReDeck v0.1 Alpha**. Канонический release contract: [../../VERSION.md](../../VERSION.md).
+Версия архитектурного среза: **Watchbane 0.1.1-alpha.1 — Open Route** / **ReDeck v0.1.0**. Канонический release contract: [../../VERSION.md](../../VERSION.md).
 
 Watchbane is a local-first PyQt6 application. The desktop UI delegates product operations to application use cases; domain services contain the recommendation and library flows; infrastructure modules own persistence and external API access.
 

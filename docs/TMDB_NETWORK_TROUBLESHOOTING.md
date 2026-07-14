@@ -85,9 +85,12 @@ Before applying, the tool displays the adapter and current DNS servers. It creat
 
 A hosts override is a last-resort diagnostic workaround because CDN addresses can change. The default action is preview-only:
 
+On the startup token screen, **Попробовать обход** runs the guarded fixed route used by Watchbane 0.1.1-alpha.1. It validates `3.173.161.72` for `api.themoviedb.org` and `18.239.105.83` for `www.themoviedb.org` with TCP 443, correct TLS SNI and HTTPS before requesting UAC. The button then creates a backup, writes only the marked block, flushes DNS, verifies the API and poster path, and automatically restores the backup if the post-check fails.
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/tmdb-hosts-override.ps1 -Preview
 powershell -ExecutionPolicy Bypass -File scripts/tmdb-hosts-override.ps1 -Status
+powershell -ExecutionPolicy Bypass -File scripts/tmdb-hosts-override.ps1 -TryBypass -Preview
 ```
 
 Preview obtains current public IPv4 candidates through an independent DNS query and accepts an address only after direct TCP 443, TLS with correct SNI and HTTPS validation. If validation fails, hosts is not changed.
@@ -104,8 +107,9 @@ Only the marked block is changed:
 
 ```text
 # BEGIN WATCHBANE TEMP TMDB
-<validated current IPv4> api.themoviedb.org
-<validated current IPv4> image.tmdb.org
+# TEMP TMDb diagnostic
+3.173.161.72 api.themoviedb.org
+18.239.105.83 www.themoviedb.org
 # END WATCHBANE TEMP TMDB
 ```
 

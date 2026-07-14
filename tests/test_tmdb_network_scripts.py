@@ -104,6 +104,56 @@ def test_hosts_script_selftest_preserves_unrelated_lines_and_restores_backup(tmp
     assert list((tmp_path / "hosts-backups").glob("hosts-*.bak"))
 
 
+def test_hosts_bypass_detection_requires_both_entries_inside_marked_block() -> None:
+    from desktop.startup.network_tools import tmdb_bypass_active
+
+    content = """127.0.0.1 localhost
+# BEGIN WATCHBANE TEMP TMDB
+# TEMP TMDb diagnostic
+3.173.161.72 api.themoviedb.org
+18.239.105.83 www.themoviedb.org
+# END WATCHBANE TEMP TMDB
+"""
+    assert tmdb_bypass_active(content) is True
+    assert tmdb_bypass_active(content.replace("18.239.105.83", "203.0.113.5")) is False
+    assert tmdb_bypass_active(content.replace("# END WATCHBANE TEMP TMDB", "")) is False
+
+
+def test_hosts_bypass_runner_verifies_marked_block_and_network(monkeypatch, tmp_path: Path) -> None:
+    import desktop.startup.network_tools as network_tools
+
+    script = tmp_path / "scripts" / "tmdb-hosts-override.ps1"
+    script.parent.mkdir()
+    script.write_text("# test", encoding="utf-8")
+    hosts = tmp_path / "hosts"
+    hosts.write_text(
+        "# BEGIN WATCHBANE TEMP TMDB\n"
+        "# TEMP TMDb diagnostic\n"
+        "3.173.161.72 api.themoviedb.org\n"
+        "18.239.105.83 www.themoviedb.org\n"
+        "# END WATCHBANE TEMP TMDB\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(network_tools, "tmdb_script_path", lambda _name: script)
+    monkeypatch.setattr(network_tools, "diagnostic_output_dir", lambda: tmp_path / "reports")
+    monkeypatch.setattr(network_tools, "tmdb_hosts_path", lambda: hosts)
+    monkeypatch.setattr(
+        network_tools,
+        "_run_elevated_powershell",
+        lambda *_args, **_kwargs: {"ok": True, "exit_code": 0},
+    )
+    monkeypatch.setattr(
+        network_tools,
+        "run_readonly_tmdb_diagnostics",
+        lambda: {"ok": True, "networkPathAvailable": True, "posterHostAvailable": True},
+    )
+
+    result = network_tools.run_tmdb_hosts_bypass()
+
+    assert result["ok"] is True
+    assert result["bypass_active"] is True
+
+
 def _host(classes: list[str], *, status: int | None, error: str | None = None) -> dict:
     return {
         "systemDns": {

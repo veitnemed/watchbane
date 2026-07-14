@@ -13,12 +13,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_release_identity_is_stable_and_public() -> None:
-    assert APP_VERSION == "0.1.0-alpha.1"
-    assert APP_RELEASE_TAG == "v0.1.0-alpha.1"
-    assert APP_DISPLAY_NAME == "Watchbane 0.1.0-alpha.1 — First Deck"
-    assert RECOMMENDATION_ENGINE_DISPLAY_NAME == "ReDeck v0.1 Alpha"
+    assert APP_VERSION == "0.1.1-alpha.1"
+    assert APP_RELEASE_TAG == "v0.1.1-alpha.1"
+    assert APP_DISPLAY_NAME == "Watchbane 0.1.1-alpha.1 — Open Route"
+    assert RECOMMENDATION_ENGINE_DISPLAY_NAME == "ReDeck v0.1.0"
     assert release_signature() == (
-        "Watchbane 0.1.0-alpha.1 — First Deck · ReDeck v0.1 Alpha"
+        "Watchbane 0.1.1-alpha.1 — Open Route · ReDeck v0.1.0"
     )
 
 
@@ -27,8 +27,8 @@ def test_windows_bundle_uses_matching_version_metadata() -> None:
     metadata = (ROOT / "tools" / "windows_version_info.txt").read_text(encoding="utf-8")
 
     assert 'version="tools/windows_version_info.txt"' in spec
-    assert "0.1.0-alpha.1" in metadata
-    assert "ReDeck v0.1 Alpha" in metadata
+    assert "0.1.1-alpha.1" in metadata
+    assert "ReDeck v0.1.0" in metadata
 
 
 def test_release_identity_is_visible_on_startup_and_settings(qapp) -> None:

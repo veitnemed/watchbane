@@ -63,6 +63,10 @@ QLabel#startupGateNetworkStatus[diagnosticSeverity="warning"] {{
     color: {COLOR_TEXT_SOFT};
     border-color: {COLOR_ACCENT_SOFT};
 }}
+QLabel#startupGateNetworkStatus[diagnosticSeverity="success"] {{
+    color: {COLOR_TEXT};
+    border-color: {COLOR_ACCENT};
+}}
 QLabel#startupGateHint {{
     color: {COLOR_TEXT_MUTED};
 }}
@@ -121,7 +125,8 @@ QPushButton#startupPrimaryButton:disabled {{
     color: {COLOR_TEXT_MUTED};
 }}
 QPushButton#startupDiagnosticButton,
-QPushButton#startupToolsButton {{
+QPushButton#startupToolsButton,
+QPushButton#startupBypassButton {{
     background-color: {COLOR_CARD_ALT};
     color: {COLOR_TEXT_SECONDARY};
     border: 1px solid {COLOR_BORDER};
@@ -130,8 +135,14 @@ QPushButton#startupToolsButton {{
     font-size: {font_px(FONT_SMALL)}px;
 }}
 QPushButton#startupDiagnosticButton:hover:enabled,
-QPushButton#startupToolsButton:hover:enabled {{
+QPushButton#startupToolsButton:hover:enabled,
+QPushButton#startupBypassButton:hover:enabled {{
     border-color: {COLOR_ACCENT};
     color: {COLOR_TEXT};
+}}
+QPushButton#startupBypassButton {{
+    color: {COLOR_TEXT};
+    border-color: {COLOR_ACCENT_SOFT};
+    font-weight: 600;
 }}
 """

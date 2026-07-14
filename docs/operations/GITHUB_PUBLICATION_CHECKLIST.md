@@ -32,10 +32,10 @@ Things that cannot be fully configured from files in the repository.
 
 ## First Public Release
 
-- Release identity: `Watchbane 0.1.0-alpha.1 — First Deck`.
-- Recommendation engine: `ReDeck v0.1 Alpha`.
-- Tag `v0.1.0-alpha.1`.
-- Attach `Watchbane-0.1.0-alpha.1-windows-x64.zip` and its SHA-256 checksum.
+- Release identity: `Watchbane 0.1.1-alpha.1 — Open Route`.
+- Recommendation engine: `ReDeck v0.1.0`.
+- Tag `v0.1.1-alpha.1`.
+- Attach `Watchbane-0.1.1-alpha.1-windows-x64.zip` and its SHA-256 checksum.
 - Write release notes with:
   - what works now;
   - what is local-only;

@@ -1,4 +1,4 @@
-# TMDb Network Investigation — 2026-07-13
+# TMDb Network Investigation — 2026-07-13/14
 
 ## Outcome
 
@@ -27,7 +27,7 @@ Queries sent to explicitly named public DNS servers produced mixed/intercepted a
 - Poster host with current VPN/proxy: works.
 - API without VPN: not measured; the user must disconnect the VPN and run the `-NoVpn` command.
 - Whether VPN is required: not yet proven either way for a truly direct connection.
-- Hosts override: not required for the current working path. Preview failed closed because no candidate public IPv4 passed every validation step; hosts remained unchanged.
+- Fixed hosts workaround: the user-supplied API and website endpoints passed direct TCP/TLS/HTTPS validation and were applied through the guarded startup flow on 2026-07-14.
 - DNS change: not applied. The active tunnel adapter already reported Cloudflare DNS, so changing DNS was not justified.
 
 ## Host inventory
@@ -37,7 +37,7 @@ Queries sent to explicitly named public DNS servers produced mixed/intercepted a
 - Optional poster fallback: `wsrv.nl`.
 - Referer-only, no required connection: `www.themoviedb.org`.
 
-No permanent CDN IP is embedded in Watchbane.
+Watchbane 0.1.1-alpha.1 includes two explicit temporary diagnostic addresses for the user-triggered **Попробовать обход** flow. They are never applied silently: validation, confirmation, UAC, backup and automatic rollback are mandatory.
 
 ## Files added or changed
 
@@ -57,13 +57,14 @@ No permanent CDN IP is embedded in Watchbane.
 
 - Windows PowerShell 5.1 parser: all four scripts pass.
 - PowerShell 7 was not installed on the test machine; the scripts avoid APIs unavailable in Windows PowerShell 5.1.
-- Full regression: 1612 tests passed, 1 skipped.
+- Final Watchbane 0.1.1-alpha.1 regression: 1616 tests passed, 1 skipped.
 - Final targeted token-gate/PowerShell regression after adding the VPN matrix: 30 tests passed.
 - Native Windows token-gate screenshots were visually reviewed at application scales 0.75, 1.0 and 1.5; Segoe UI was available.
 - The recovery-tools dialog was visually reviewed at scale 1.0; all VPN, DNS and hosts actions fit without clipping.
 - Read-only live probe: API HTTP 200, poster endpoint HTTP 404 reachability, token accepted.
 - Native Qt GUI smoke inserted the complete local dotenv-style token into the masked field, invoked the standard validation worker and observed the token gate `passed` signal. The smoke used an isolated temporary runtime.
-- DNS and hosts mutation actions were not executed.
+- The fixed hosts action was executed through UAC. A timestamped backup and state file were created; the marked block was present after apply; API authorization and poster reachability both passed.
+- The native Qt token-gate flow was then exercised end-to-end: visible window, masked `local_tocen` insertion, bypass button, UAC, token validation and `passed=True` without timeout.
 - Secret scans found no token value in Git diff, staged content or generated diagnostic reports.
 
 ## Next manual experiment

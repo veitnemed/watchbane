@@ -164,7 +164,23 @@ def test_startup_gate_exposes_readonly_diagnostics_and_recovery_tools(monkeypatc
     try:
         assert "TMDb" in gate._diagnostics_button.text()
         assert gate._tools_button.isEnabled() is True
+        assert gate._bypass_button.text() == "Попробовать обход"
         assert gate._token_input.echoMode() == QLineEdit.EchoMode.Password
+    finally:
+        gate.close()
+
+
+def test_startup_gate_enables_token_after_verified_hosts_bypass(monkeypatch, qapp) -> None:
+    from desktop.startup.tmdb_gate import TmdbStartupGateView
+
+    monkeypatch.setattr(TmdbStartupGateView, "_start_network_probe", lambda self: None)
+    gate = TmdbStartupGateView()
+    try:
+        gate._on_bypass_finished({"ok": True, "bypass_active": True})
+
+        assert gate._network_ok is True
+        assert gate._token_input.isEnabled() is True
+        assert "временный обход" in gate._network_label.text().lower()
     finally:
         gate.close()
 

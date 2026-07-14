@@ -2,18 +2,18 @@
 
 | Component | Version | Name | Status |
 |---|---|---|---|
-| Desktop application | `0.1.0-alpha.1` | **First Deck** | Alpha release |
-| Recommendation engine | `ReDeck v0.1 Alpha` | **ReDeck** | First public algorithm contract |
-| Windows package | `Watchbane-0.1.0-alpha.1-windows-x64.zip` | Folder-based onedir bundle | Windows 10/11, x64 |
+| Desktop application | `0.1.1-alpha.1` | **Open Route** | Alpha release |
+| Recommendation engine | `ReDeck v0.1.0` | **ReDeck** | Versioned recommendation contract |
+| Windows package | `Watchbane-0.1.1-alpha.1-windows-x64.zip` | Folder-based onedir bundle | Windows 10/11, x64 |
 
-Release tag: `v0.1.0-alpha.1`.
+Release tag: `v0.1.1-alpha.1`.
 
 ## Version policy
 
 - `common/release.py` is the single source of truth for runtime and UI version strings.
 - `tools/windows_version_info.txt` carries matching Windows executable metadata.
 - Active documentation without its own historical version marker describes this release.
-- `ReDeck v0.1 Alpha` identifies the recommendation flow used by this application release: local candidate pool, persisted intent/vector, deck ranking, diversity, impressions, reserve and user actions.
+- `ReDeck v0.1.0` identifies the recommendation flow used by this application release: local candidate pool, persisted intent/vector, deck ranking, diversity, impressions, reserve and user actions.
 - Alpha means the storage and recommendation behavior is usable and regression-tested, but public APIs and UI details may still change before `1.0.0`.
 
 ## Distribution format
@@ -23,5 +23,5 @@ The Windows build is **not** a standalone single file. The complete `Watchbane/`
 Release archive SHA-256:
 
 ```text
-C837527B554119336D38AC68096E9E468DB5D1CFDFE188E5BA6880AC77E42780
+0068F750C6C3907FD54FD36EA740DE080211962DD7269EA6CA88CCD0C81F51D3
 ```
