@@ -21,11 +21,17 @@ Target: Windows 10/11 x64
 
 ## Release hardening
 
-- `1616 passed, 1 skipped` in the final full regression suite before release packaging.
+- Applying settings now builds a populated deck from fast TMDb Discover candidates whose genres are represented by `genre_ids`.
+- Profile registry paths remain anchored to the shared application data root after switching profiles.
+- Settings now include a guarded factory reset that removes all local profiles and caches without a backup, preserves only the current TMDb credential and restarts onboarding from language/UI scale.
+- Recommendation loading starts only after explicit Apply or Refresh; deck generation and poster loading no longer block the UI.
+- Qt workers use bounded cooperative shutdown instead of indefinite waits.
+- `1623 passed, 1 skipped` in the final full regression suite before release packaging.
 - Native Windows movie/tv visual matrix checked at 75%, 100% and 150%.
 - Existing-profile upgrade from schema v4 to v6 and immediate restart verified.
 - Worker shutdown, repeated actions, large pools, corrupt posters and FTS fallback exercised.
-- Immediate and delayed packaged-window shutdown verified with `exit 0`.
+- Ten isolated packaged cold starts and shutdowns completed with `exit 0`; the window appeared in 754–843 ms (776 ms average) on the release machine.
+- The ZIP-extracted build was launched from an isolated runtime and closed normally with `exit 0`.
 - Retired QtWebEngine/Plotly runtime dependency removed from the base desktop package.
 
 ## Distribution
@@ -40,7 +46,7 @@ Watchbane/
 
 Extract the complete folder and run `Watchbane.exe`. Do not move the EXE away from `_internal/`.
 
-SHA-256: `0068F750C6C3907FD54FD36EA740DE080211962DD7269EA6CA88CCD0C81F51D3`.
+SHA-256: `D891BB7E8D3B4B69FE3FFB1421D50F8CBA8DD7CC6A2DBBF9F81411F66F59E65E`.
 
 ## Known alpha limits
 
