@@ -16,6 +16,7 @@ from config.app_paths import get_app_paths
 MAIN_PROFILE = "main"
 SANDBOX_PROFILE = "sandbox"
 SANDBOX_KIND = "sandbox"
+USER_KIND = "user"
 ACTIVE_PROFILE_JSON = "active_profile.json"
 PROFILE_META_JSON = "profile.json"
 _BASE_DATA_DIR_OVERRIDE: Path | None = None
@@ -44,6 +45,11 @@ def _base_data_dir() -> Path:
     if _BASE_DATA_DIR_OVERRIDE is not None:
         return _BASE_DATA_DIR_OVERRIDE
     return Path(constant.APP_DATA_DIR)
+
+
+def get_base_data_dir() -> Path:
+    """Return the profile registry root without changing the active profile."""
+    return _base_data_dir()
 
 
 def set_base_data_dir(path: str | Path | None) -> None:
@@ -102,12 +108,22 @@ def _profile_exists(name: str) -> bool:
     return data_dir.is_dir() and _profile_meta_path(profile).is_file()
 
 
+def profile_exists(name: str) -> bool:
+    """Return whether a named profile is available."""
+    return _profile_exists(name)
+
+
 def _profile_kind(name: str) -> str:
     profile = _clean_profile_name(name)
     if profile == MAIN_PROFILE:
         return MAIN_PROFILE
     meta = _read_json(_profile_meta_path(profile))
     return str(meta.get("kind") or "").strip().casefold()
+
+
+def profile_kind(name: str) -> str:
+    """Return the persisted profile kind."""
+    return _profile_kind(name)
 
 
 def get_active_profile() -> str:
@@ -131,6 +147,24 @@ def list_profiles() -> list[str]:
             if child.is_dir() and (child / PROFILE_META_JSON).is_file():
                 names.add(child.name)
     return [MAIN_PROFILE] + sorted(name for name in names if name != MAIN_PROFILE)
+
+
+def describe_profiles() -> list[dict[str, str]]:
+    """Return selector-safe profile metadata without opening profile databases."""
+    active = get_active_profile()
+    result: list[dict[str, str]] = []
+    for name in list_profiles():
+        meta = _read_json(_profile_meta_path(name)) if name != MAIN_PROFILE else {}
+        display_name = str(meta.get("display_name") or meta.get("name") or name).strip() or name
+        result.append(
+            {
+                "name": name,
+                "display_name": display_name,
+                "kind": MAIN_PROFILE if name == MAIN_PROFILE else (_profile_kind(name) or USER_KIND),
+                "active": "1" if name == active else "0",
+            }
+        )
+    return result
 
 
 def _empty_profile_paths(data_dir: Path) -> dict[str, Path]:
@@ -160,11 +194,19 @@ def _ensure_profile_layout(data_dir: Path) -> None:
         directory.mkdir(parents=True, exist_ok=True)
 
 
-def create_sandbox_profile(name: str = SANDBOX_PROFILE) -> None:
-    """Create a sandbox profile layout without legacy runtime JSON files."""
+def create_profile(
+    name: str,
+    *,
+    kind: str = USER_KIND,
+    display_name: str | None = None,
+) -> str:
+    """Create a named profile layout without initializing its SQLite database."""
     profile = _clean_profile_name(name)
     if profile == MAIN_PROFILE:
-        raise ProfileSafetyError("Main profile cannot be created as a sandbox.")
+        raise ProfileSafetyError("Main profile cannot be created.")
+    normalized_kind = str(kind or USER_KIND).strip().casefold()
+    if normalized_kind not in {USER_KIND, SANDBOX_KIND}:
+        raise ValueError(f"Unsupported profile kind: {kind!r}")
 
     data_dir = get_profile_data_dir(profile)
     _ensure_profile_layout(data_dir)
@@ -174,10 +216,17 @@ def create_sandbox_profile(name: str = SANDBOX_PROFILE) -> None:
             meta_path,
             {
                 "name": profile,
-                "kind": SANDBOX_KIND,
+                "display_name": str(display_name or name).strip() or profile,
+                "kind": normalized_kind,
                 "created_at": datetime.now().isoformat(timespec="seconds"),
             },
         )
+    return profile
+
+
+def create_sandbox_profile(name: str = SANDBOX_PROFILE) -> None:
+    """Create a sandbox profile layout without legacy runtime JSON files."""
+    create_profile(name, kind=SANDBOX_KIND, display_name=name)
 
 
 def _backup_root() -> Path:
@@ -199,6 +248,8 @@ def _safe_profile_dir(name: str) -> Path:
 def backup_profile(name: str) -> Path:
     """Copy a profile directory before destructive operations."""
     profile = _clean_profile_name(name)
+    if profile == MAIN_PROFILE:
+        raise ProfileSafetyError("Use the full-profile reset service for main backups.")
     data_dir = _safe_profile_dir(profile)
     if data_dir.is_dir() is False:
         raise FileNotFoundError(f"Profile not found: {profile}")
@@ -232,6 +283,25 @@ def reset_profile(name: str) -> Path:
 
     shutil.rmtree(data_dir)
     create_sandbox_profile(profile)
+    if get_active_profile() == profile:
+        apply_profile_to_constants(profile)
+    return backup_path
+
+
+def reset_named_profile(name: str) -> Path:
+    """Reset any non-main profile after a complete directory backup."""
+    profile = _clean_profile_name(name)
+    if profile == MAIN_PROFILE:
+        raise ProfileSafetyError("Main profile requires managed-path reset.")
+    data_dir = _safe_profile_dir(profile)
+    meta = _read_json(_profile_meta_path(profile))
+    backup_path = backup_profile(profile)
+    shutil.rmtree(data_dir)
+    create_profile(
+        profile,
+        kind=str(meta.get("kind") or USER_KIND),
+        display_name=str(meta.get("display_name") or meta.get("name") or profile),
+    )
     if get_active_profile() == profile:
         apply_profile_to_constants(profile)
     return backup_path

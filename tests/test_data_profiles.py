@@ -100,6 +100,16 @@ def test_create_sandbox_profile_creates_layout_without_runtime_json_files(isolat
     assert (sandbox_dir / "profile.json").is_file()
 
 
+def test_create_user_profile_is_available_to_startup_selector(isolated_profiles) -> None:
+    created = profiles.create_profile("Friend", display_name="Друг")
+
+    assert created == "friend"
+    assert profiles.list_profiles() == ["main", "friend"]
+    description = next(item for item in profiles.describe_profiles() if item["name"] == "friend")
+    assert description["display_name"] == "Друг"
+    assert description["kind"] == profiles.USER_KIND
+
+
 def test_switch_sandbox_changes_active_profile_and_paths(isolated_profiles) -> None:
     profiles.create_sandbox_profile()
     profiles.set_active_profile(profiles.SANDBOX_PROFILE)
@@ -170,6 +180,54 @@ def test_reset_sandbox_clears_sandbox_but_not_main(isolated_profiles) -> None:
 def test_reset_main_profile_is_forbidden(isolated_profiles) -> None:
     with pytest.raises(profiles.ProfileSafetyError):
         profiles.reset_profile(profiles.MAIN_PROFILE)
+
+
+def test_deferred_main_reset_preserves_other_profiles_and_requires_selector(isolated_profiles) -> None:
+    from storage import profile_reset
+
+    isolated_profiles.mkdir(parents=True, exist_ok=True)
+    main_db = isolated_profiles / "watchbane.sqlite3"
+    main_db.write_bytes(b"main-db")
+    (isolated_profiles / ".env.local").write_text("TMDB_ACCESS_TOKEN=secret", encoding="utf-8")
+    (isolated_profiles / "watched").mkdir(exist_ok=True)
+    (isolated_profiles / "watched" / "sentinel.json").write_text("{}", encoding="utf-8")
+    profiles.create_profile("friend", display_name="Friend")
+    friend_dir = profiles.get_profile_data_dir("friend")
+    (friend_dir / "watchbane.sqlite3").write_bytes(b"friend-db")
+
+    request_path = profile_reset.request_full_profile_reset("main")
+    result = profile_reset.process_pending_profile_reset()
+
+    assert request_path.exists() is False
+    assert result["applied"] is True
+    assert Path(result["backup_path"]).is_dir()
+    assert main_db.exists() is False
+    assert (isolated_profiles / ".env.local").exists() is False
+    assert (isolated_profiles / "watched").exists() is False
+    assert (friend_dir / "watchbane.sqlite3").read_bytes() == b"friend-db"
+    assert profile_reset.profile_selection_required() is True
+
+    profile_reset.clear_profile_selection_required()
+
+    assert profile_reset.profile_selection_required() is False
+
+
+def test_deferred_named_reset_preserves_profile_identity(isolated_profiles) -> None:
+    from storage import profile_reset
+
+    profiles.create_profile("friend", display_name="Friend")
+    profiles.set_active_profile("friend")
+    friend_dir = profiles.get_profile_data_dir("friend")
+    (friend_dir / "watchbane.sqlite3").write_bytes(b"profile-db")
+
+    profile_reset.request_full_profile_reset()
+    result = profile_reset.process_pending_profile_reset()
+
+    assert result["profile"] == "friend"
+    assert Path(result["backup_path"]).is_dir()
+    assert (friend_dir / "watchbane.sqlite3").exists() is False
+    description = next(item for item in profiles.describe_profiles() if item["name"] == "friend")
+    assert description["display_name"] == "Friend"
 
 
 def test_return_to_main_restores_main_dataset_access(isolated_profiles) -> None:
