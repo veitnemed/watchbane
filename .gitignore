@@ -30,21 +30,10 @@ api_token.py
 secrets/
 desktop/theme/local_ui_tuning.py
 .browser_profiles/
-data/cache/
-data/watched/*.json*
-data/candidates/*.json*
-data/logs/
-data/backups/
-data/exports/
-data/**/*.backup*
-data/profiles/*/backups/
-data/profiles/*/cache/
-data/profiles/*/logs/
-data/profiles/*/exports/
-data/profiles/**
+/data/
 
 # Large local datasets and generated outputs
-datasets/
+/datasets/
 *.sqlite
 *.sqlite3
 *.db
