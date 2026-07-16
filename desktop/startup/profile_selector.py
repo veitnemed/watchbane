@@ -14,7 +14,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from storage import profiles
+from app.use_cases import profile_management
+from desktop.theme.scaling import scale_px
 
 
 class ProfileSelectionDialog(QDialog):
@@ -25,7 +26,7 @@ class ProfileSelectionDialog(QDialog):
         self.setObjectName("startupProfileSelector")
         self.setWindowTitle("Watchbane — выбор профиля")
         self.setModal(True)
-        self.setMinimumWidth(460)
+        self.setMinimumWidth(scale_px(460))
         self._selected_profile: str | None = None
 
         layout = QVBoxLayout(self)
@@ -70,10 +71,10 @@ class ProfileSelectionDialog(QDialog):
     def _reload_profiles(self, *, select_name: str | None = None) -> None:
         self._profiles.clear()
         selected_index = 0
-        for index, item in enumerate(profiles.describe_profiles()):
+        for index, item in enumerate(profile_management.list_profile_descriptions()):
             name = item["name"]
             label = item["display_name"]
-            if name == profiles.MAIN_PROFILE:
+            if name == profile_management.MAIN_PROFILE:
                 label = f"{label} (основной)"
             self._profiles.addItem(label, name)
             if name == select_name or (select_name is None and item["active"] == "1"):
@@ -90,8 +91,11 @@ class ProfileSelectionDialog(QDialog):
         if accepted is False or not display_name.strip():
             return
         try:
-            created = profiles.create_profile(display_name, display_name=display_name)
-        except (ValueError, OSError, profiles.ProfileError) as error:
+            created = profile_management.create_profile(
+                display_name,
+                display_name=display_name,
+            )
+        except (ValueError, OSError, RuntimeError) as error:
             QMessageBox.warning(
                 self,
                 "Профиль не создан",

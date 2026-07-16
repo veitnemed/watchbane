@@ -9,7 +9,11 @@ from ui.console import ui
 
 def test_tmdb_check_api_available_ok(monkeypatch) -> None:
     monkeypatch.setattr(tmdb_api, "load_tmdb_credentials", lambda: ("bearer", "test-token"))
-    monkeypatch.setattr(tmdb_api, "tmdb_get", lambda path, token=None: {"images": {}})
+    monkeypatch.setattr(
+        tmdb_api,
+        "tmdb_get",
+        lambda path, token=None, **_kwargs: {"images": {}},
+    )
 
     result = tmdb_api.check_api_available()
 

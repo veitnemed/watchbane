@@ -6640,6 +6640,8 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     assert len(registry._specs) == len(set(registry._specs))
     assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
     assert all(hasattr(spec.view, "widget") for spec in registry._specs.values())
+    assert registry._specs["candidates"].view.activation_count == 0
+    registry.activate_current()
     assert registry._specs["candidates"].view.activation_count == 1
     assert (
         registry._specs["filters"].view.replenish_state_listener.__self__

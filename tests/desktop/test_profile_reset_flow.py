@@ -36,7 +36,7 @@ def test_bootstrap_processes_reset_and_selector_before_runtime_init() -> None:
 
     source = inspect.getsource(bootstrap.main)
 
-    process_reset = source.index("process_pending_profile_reset()")
+    process_reset = source.index("process_pending_reset()")
     show_selector = source.index("ProfileSelectionDialog()")
     runtime_init = source.index("ensure_runtime_data_layout()")
 

@@ -252,6 +252,7 @@ def test_simple_apply_refills_when_total_pool_is_large_but_matching_slice_is_sma
     view._form.direction_control.setValue(direction_values.index("russian_mainstream"))
     view._form.discovery_media_control.setValue("tv")
     view._form.vector_mood_control.setValue("dark")
+    view._form.replenish_enabled_check.setChecked(True)
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
     assert apply_button is not None
 
@@ -490,7 +491,7 @@ def test_candidate_list_requests_refill_for_initial_underfilled_deck() -> None:
     assert view._refill_requested_deck_ids == {"refill-test-deck"}
 
 
-def test_candidate_list_first_activation_requests_underfilled_refill(qtbot, monkeypatch) -> None:
+def test_candidate_list_first_activation_waits_for_explicit_refill(qtbot, monkeypatch) -> None:
     candidate = _candidate(1, country="RU", genres=["Crime"])
     preferences = _dark_ru_preferences()
     refill_calls: list[dict] = []
@@ -506,8 +507,7 @@ def test_candidate_list_first_activation_requests_underfilled_refill(qtbot, monk
     )
 
     assert view._initial_deck_loaded is True
-    assert len(refill_calls) == 1
-    assert _intent_countries(refill_calls[0]) == {"RU"}
+    assert refill_calls == []
 
     view.on_replenish_state_changed("loading")
     assert view._deck_reserve_indicator._mode == "replenishing"
@@ -515,13 +515,13 @@ def test_candidate_list_first_activation_requests_underfilled_refill(qtbot, monk
     assert view._deck_reserve_indicator._mode == "offline"
     assert view._deck_refill_button.isVisible()
 
-    calls_before_retry = len(refill_calls)
     view._deck_refill_button.click()
     view._deck_refill_button.click()
-    assert len(refill_calls) == calls_before_retry + 1
+    assert len(refill_calls) == 1
+    assert _intent_countries(refill_calls[0]) == {"RU"}
 
 
-def test_candidate_list_requests_refill_after_action_exhausts_reserve(qtbot, monkeypatch) -> None:
+def test_candidate_list_action_waits_for_explicit_refill(qtbot, monkeypatch) -> None:
     candidate = _candidate(1, country="RU", genres=["Crime"])
     preferences = _dark_ru_preferences()
     refill_calls: list[dict] = []
@@ -549,6 +549,10 @@ def test_candidate_list_requests_refill_after_action_exhausts_reserve(qtbot, mon
     view._apply_recommendation_action("hidden")
 
     assert deck_service.action_calls == [("hidden", candidate_detail_identity(candidate))]
+    assert refill_calls == []
+
+    view._on_deck_refill_clicked()
+
     assert len(refill_calls) == 1
     assert _intent_countries(refill_calls[0]) == {"RU"}
 

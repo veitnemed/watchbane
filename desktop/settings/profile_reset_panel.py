@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
 
 from desktop.i18n import get_interface_language, tr
 from desktop.theme.scaling import layout_px
-from storage import profile_reset, profiles
+from app.use_cases import profile_management
 
 
 class ProfileResetPanel(QWidget):
@@ -59,7 +59,7 @@ class ProfileResetPanel(QWidget):
         self._description.setText(
             tr(
                 "settings.profile.reset.description",
-                profile=profiles.get_active_profile(),
+                profile=profile_management.active_profile(),
             )
         )
 
@@ -90,8 +90,8 @@ class ProfileResetPanel(QWidget):
             )
             return
         try:
-            profile_reset.request_full_profile_reset()
-        except (OSError, ValueError, profiles.ProfileError) as error:
+            profile_management.request_active_profile_reset()
+        except (OSError, ValueError, RuntimeError) as error:
             QMessageBox.critical(
                 self,
                 tr("settings.profile.reset.error.title"),

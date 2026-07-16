@@ -179,12 +179,11 @@ def main() -> None:
         profile_reset_result = None
         try:
             from storage.runtime import apply_dev_startup_reset_from_env
-            from storage import profile_reset
+            from app.use_cases import profile_management
 
-            profile_reset_result = profile_reset.process_pending_profile_reset()
-            if profile_reset.profile_selection_required():
+            profile_reset_result = profile_management.process_pending_reset()
+            if profile_management.selection_required():
                 from desktop.startup.profile_selector import ProfileSelectionDialog
-                from storage import profiles
 
                 selector = ProfileSelectionDialog()
                 if selector.exec() != selector.DialogCode.Accepted:
@@ -192,8 +191,8 @@ def main() -> None:
                 selected_profile = selector.selected_profile
                 if selected_profile in (None, ""):
                     return
-                profiles.set_active_profile(selected_profile)
-                profile_reset.clear_profile_selection_required()
+                profile_management.set_active_profile(selected_profile)
+                profile_management.clear_selection_required()
             dev_reset = apply_dev_startup_reset_from_env()
         except Exception as error:
             log_exception("app.dev_startup_reset.error", error)
