@@ -230,6 +230,55 @@ def test_deferred_named_reset_preserves_profile_identity(isolated_profiles) -> N
     assert description["display_name"] == "Friend"
 
 
+def test_factory_reset_deletes_everything_without_backup_and_keeps_token(
+    isolated_profiles,
+) -> None:
+    from candidates.onboarding_service import should_show_onboarding_autofill
+    from storage import profile_reset, runtime
+
+    isolated_profiles.mkdir(parents=True, exist_ok=True)
+    (isolated_profiles / "watchbane.sqlite3").write_bytes(b"main-db")
+    (isolated_profiles / "backups").mkdir()
+    (isolated_profiles / "backups" / "old.sqlite3").write_bytes(b"old-backup")
+    profiles.create_profile("friend", display_name="Friend")
+    profiles.set_active_profile("friend")
+    friend_dir = profiles.get_profile_data_dir("friend")
+    (friend_dir / "watchbane.sqlite3").write_bytes(b"friend-db")
+    (friend_dir / ".env.local").write_text(
+        "# keep no comments\n"
+        "OTHER_SETTING=remove-me\n"
+        "TMDB_ACCESS_TOKEN=keep-me\n",
+        encoding="utf-8",
+    )
+
+    request_path = profile_reset.request_factory_reset_keep_token()
+    result = profile_reset.process_pending_profile_reset()
+
+    assert request_path.exists() is False
+    assert result == {
+        "applied": True,
+        "profile": "main",
+        "backup_path": None,
+        "mode": profile_reset.RESET_MODE_FACTORY_KEEP_TOKEN,
+    }
+    assert profiles.get_active_profile() == "main"
+    assert profiles.list_profiles() == ["main"]
+    assert (isolated_profiles / "watchbane.sqlite3").exists() is False
+    assert (isolated_profiles / "backups").exists() is False
+    assert (isolated_profiles / "profiles").exists() is False
+    assert (isolated_profiles / ".env.local").read_text(encoding="utf-8") == (
+        "TMDB_ACCESS_TOKEN=keep-me\n"
+    )
+    assert profile_reset.profile_selection_required() is False
+
+    runtime.ensure_runtime_data_layout()
+
+    assert should_show_onboarding_autofill() is True
+    assert (isolated_profiles / ".env.local").read_text(encoding="utf-8") == (
+        "TMDB_ACCESS_TOKEN=keep-me\n"
+    )
+
+
 def test_return_to_main_restores_main_dataset_access(isolated_profiles) -> None:
     from storage import data as storage_data
     from storage import runtime

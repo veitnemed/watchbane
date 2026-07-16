@@ -42,6 +42,28 @@ QFrame#tmdbCredentialsSection {{
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_CARD)}px;
 }}
+QFrame#profileResetSection,
+QFrame#factoryResetSection {{
+    background-color: {COLOR_CARD};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_CARD)}px;
+}}
+QFrame#factoryResetSection {{
+    border-color: {COLOR_STALE_BORDER};
+}}
+QLabel#profileResetTitle,
+QLabel#factoryResetTitle {{
+    background: transparent;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_SECTION)}px;
+    font-weight: 700;
+}}
+QLabel#profileResetDescription,
+QLabel#factoryResetDescription {{
+    background: transparent;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+}}
 QLabel#tmdbCredentialsTitle {{
     background: transparent;
     color: {COLOR_TEXT};
@@ -174,7 +196,8 @@ QPushButton#poolOpsDedupeButton,
 QPushButton#poolOpsPurgeButton,
 QPushButton#poolOpsClearButton,
 QPushButton#poolOpsImportButton,
-QPushButton#poolOpsBuildButton {{
+QPushButton#poolOpsBuildButton,
+QPushButton#profileResetButton {{
     background-color: {COLOR_CARD_ALT};
     border: 1px solid {COLOR_BORDER};
     border-radius: {px(RADIUS_BUTTON_SMALL)}px;
@@ -195,13 +218,24 @@ QPushButton#saveTmdbCredentialsButton {{
     padding: {px(6)}px {px(12)}px;
     min-height: {px(28)}px;
 }}
+QPushButton#factoryResetButton {{
+    background-color: {COLOR_DELETE_BUTTON};
+    border: 1px solid {COLOR_STALE_BORDER};
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    color: {COLOR_TEXT};
+    font-size: {font_px(FONT_BASE)}px;
+    font-weight: 700;
+    padding: {px(6)}px {px(12)}px;
+    min-height: {px(30)}px;
+}}
 QPushButton#resetUiScaleButton:hover,
 QPushButton#saveSettingsButton:hover,
 QPushButton#poolOpsDedupeButton:hover,
 QPushButton#poolOpsPurgeButton:hover,
 QPushButton#poolOpsClearButton:hover,
 QPushButton#poolOpsImportButton:hover,
-QPushButton#poolOpsBuildButton:hover {{
+QPushButton#poolOpsBuildButton:hover,
+QPushButton#profileResetButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};
     border-color: {COLOR_BORDER_HOVER};
 }}
@@ -209,5 +243,9 @@ QPushButton#deleteTmdbCredentialsButton:hover,
 QPushButton#saveTmdbCredentialsButton:hover {{
     background-color: {COLOR_CONTROL_HOVER};
     border-color: {COLOR_BORDER_HOVER};
+}}
+QPushButton#factoryResetButton:hover {{
+    background-color: {COLOR_DELETE_BUTTON_HOVER};
+    border-color: {COLOR_STALE_TEXT};
 }}
 """

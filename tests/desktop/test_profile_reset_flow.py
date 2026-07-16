@@ -50,5 +50,6 @@ def test_settings_tab_exposes_full_profile_reset_panel(qapp) -> None:
 
     try:
         assert view.widget.findChild(QPushButton, "profileResetButton") is not None
+        assert view.widget.findChild(QPushButton, "factoryResetButton") is not None
     finally:
         view.widget.deleteLater()

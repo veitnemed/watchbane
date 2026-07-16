@@ -16,6 +16,15 @@ from storage import profiles
 RESET_REQUEST_JSON = "profile_reset_request.json"
 SELECTION_REQUIRED_JSON = "profile_selection_required.json"
 DATABASE_NAMES = ("watchbane.sqlite3", "watchbane.sqlite", "watchbane.db")
+RESET_MODE_PROFILE_BACKUP = "profile_backup"
+RESET_MODE_FACTORY_KEEP_TOKEN = "factory_keep_token"
+TMDB_CREDENTIAL_KEYS = frozenset(
+    {
+        "TMDB_ACCESS_TOKEN",
+        "TMDB_TOKEN",
+        "TMDB_API_KEY",
+    }
+)
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -53,6 +62,24 @@ def request_full_profile_reset(profile: str | None = None) -> Path:
         path,
         {
             "profile": target,
+            "mode": RESET_MODE_PROFILE_BACKUP,
+            "requested_at": datetime.now().isoformat(timespec="seconds"),
+        },
+    )
+    return path
+
+
+def request_factory_reset_keep_token() -> Path:
+    """Persist a no-backup factory reset while retaining current TMDb credentials."""
+    target = profiles.get_active_profile()
+    if profiles.profile_exists(target) is False:
+        raise FileNotFoundError(f"Profile not found: {target}")
+    path = _request_path()
+    _write_json(
+        path,
+        {
+            "profile": target,
+            "mode": RESET_MODE_FACTORY_KEEP_TOKEN,
             "requested_at": datetime.now().isoformat(timespec="seconds"),
         },
     )
@@ -132,6 +159,87 @@ def _reset_main_profile() -> Path:
     return backup_path
 
 
+def _tmdb_credential_lines(data_dir: Path) -> list[str]:
+    credentials: dict[str, str] = {}
+    for name in (".env.local", "tmdb.env", ".env"):
+        path = data_dir / name
+        if path.is_file() is False:
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8-sig").splitlines()
+        except OSError:
+            continue
+        for raw_line in lines:
+            stripped = raw_line.strip()
+            if stripped.startswith("#") or "=" not in stripped:
+                continue
+            key, value = stripped.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if key in TMDB_CREDENTIAL_KEYS and value:
+                credentials[key] = value
+    return [f"{key}={value}" for key, value in credentials.items()]
+
+
+def _write_tmdb_credentials(data_dir: Path, lines: list[str]) -> None:
+    if not lines:
+        return
+    data_dir.mkdir(parents=True, exist_ok=True)
+    path = data_dir / ".env.local"
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    try:
+        temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _factory_reset_paths() -> list[Path]:
+    base = profiles.get_base_data_dir()
+    installed = get_app_paths()
+    if base.resolve() != installed.data_dir.resolve():
+        return [base]
+    return [
+        installed.data_dir,
+        installed.cache_dir,
+        installed.posters_dir,
+        installed.config_dir,
+        installed.exports_dir,
+        installed.logs_dir,
+        installed.backups_dir,
+    ]
+
+
+def _assert_factory_path_safe(path: Path) -> None:
+    resolved = path.resolve()
+    if resolved == resolved.parent or resolved == Path.home().resolve():
+        raise RuntimeError(f"Unsafe factory reset path: {resolved}")
+    base = profiles.get_base_data_dir().resolve()
+    installed = get_app_paths()
+    if base == installed.data_dir.resolve():
+        allowed_root = installed.root.resolve()
+        if resolved != allowed_root and resolved.is_relative_to(allowed_root) is False:
+            raise RuntimeError(f"Factory reset path escapes runtime root: {resolved}")
+    elif resolved != base:
+        raise RuntimeError(f"Factory reset path escapes profile registry: {resolved}")
+
+
+def _reset_factory_keep_token() -> None:
+    base = profiles.get_base_data_dir()
+    active_data_dir = profiles.get_active_data_dir()
+    credentials = _tmdb_credential_lines(active_data_dir)
+    paths = _factory_reset_paths()
+    for path in paths:
+        _assert_factory_path_safe(path)
+    for path in paths:
+        if path.is_dir():
+            shutil.rmtree(path)
+        elif path.exists():
+            path.unlink()
+    _write_tmdb_credentials(base, credentials)
+    profiles.apply_profile_to_constants(profiles.MAIN_PROFILE)
+
+
 def process_pending_profile_reset() -> dict[str, Any]:
     """Backup and clear one requested profile before runtime initialization."""
     request_path = _request_path()
@@ -141,6 +249,17 @@ def process_pending_profile_reset() -> dict[str, Any]:
     target = str(payload.get("profile") or "").strip().casefold()
     if profiles.profile_exists(target) is False:
         raise FileNotFoundError(f"Profile not found: {target}")
+    mode = str(payload.get("mode") or RESET_MODE_PROFILE_BACKUP).strip().casefold()
+    if mode == RESET_MODE_FACTORY_KEEP_TOKEN:
+        _reset_factory_keep_token()
+        return {
+            "applied": True,
+            "profile": profiles.MAIN_PROFILE,
+            "backup_path": None,
+            "mode": RESET_MODE_FACTORY_KEEP_TOKEN,
+        }
+    if mode != RESET_MODE_PROFILE_BACKUP:
+        raise ValueError(f"Unsupported profile reset mode: {mode}")
 
     backup_path = (
         _reset_main_profile()
@@ -160,4 +279,5 @@ def process_pending_profile_reset() -> dict[str, Any]:
         "applied": True,
         "profile": target,
         "backup_path": str(backup_path),
+        "mode": RESET_MODE_PROFILE_BACKUP,
     }

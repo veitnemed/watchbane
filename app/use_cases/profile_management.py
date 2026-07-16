@@ -37,4 +37,8 @@ def request_active_profile_reset() -> None:
     profile_reset.request_full_profile_reset()
 
 
+def request_factory_reset_keep_token() -> None:
+    profile_reset.request_factory_reset_keep_token()
+
+
 MAIN_PROFILE = profiles.MAIN_PROFILE
