@@ -108,6 +108,20 @@ def test_tmdb_candidate_without_genres_and_countries_is_incomplete() -> None:
     assert normalized["missing_fields"] == ["genres", "countries"]
 
 
+def test_discover_genre_ids_are_available_to_runtime_filters() -> None:
+    candidate = normalize_candidate_record(
+        {
+            "title": "Discover anime",
+            "year": 2025,
+            "media_type": "tv",
+            "genre_ids": [16, 18, 10765],
+        }
+    )
+
+    assert candidate["genre_keys"] == ["animation", "drama", "sci_fi_fantasy"]
+    assert candidate["genres_display"]
+
+
 def test_ensure_candidate_defaults_does_not_create_kp_imdb_rating_fields() -> None:
     candidate = {
         "title": "TMDb Only",

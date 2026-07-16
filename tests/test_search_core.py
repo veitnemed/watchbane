@@ -124,6 +124,28 @@ def test_candidate_matches_media_type_filter() -> None:
     assert candidate_matches(_candidate(media_type="tv"), {"media_type": "movie"}) is False
 
 
+def test_discover_only_candidate_matches_animation_and_genre_filters() -> None:
+    candidate = _candidate(
+        title="Discover anime",
+        media_type="tv",
+        year=2025,
+        countries=["JP"],
+        country_codes=["JP"],
+        genres=[],
+        genre_ids=[16, 18, 10765],
+    )
+
+    assert candidate_matches(
+        candidate,
+        {
+            "country": ["JP"],
+            "animation_mode": "animation_only",
+            "include_genres": ["drama", "sci_fi_fantasy"],
+            "year_min": 2022,
+        },
+    ) is True
+
+
 def test_candidate_matches_skips_watched_and_hidden() -> None:
     candidate = _candidate()
     identity = title_identity_key(candidate)

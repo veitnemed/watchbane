@@ -42,6 +42,36 @@ GENRE_KEY_TO_DISPLAY_LABELS.update({
     "sci_fi_fantasy": ("Фантастика", "Фэнтези"),
 })
 
+# Discover responses contain numeric genre_ids but no localized genre names.
+# Keep runtime filtering useful before lazy Details enrichment fills ``genres``.
+TMDB_GENRE_ID_TO_KEYS: dict[int, tuple[str, ...]] = {
+    12: ("action_adventure",),
+    14: ("sci_fi_fantasy",),
+    16: ("animation",),
+    18: ("drama",),
+    27: ("horror",),
+    28: ("action_adventure",),
+    35: ("comedy",),
+    36: ("history",),
+    37: ("western",),
+    53: ("thriller",),
+    80: ("crime",),
+    99: ("documentary",),
+    878: ("sci_fi_fantasy",),
+    9648: ("mystery",),
+    10402: ("music",),
+    10749: ("romance",),
+    10751: ("family",),
+    10752: ("war",),
+    10759: ("action_adventure",),
+    10762: ("family",),
+    10763: ("news",),
+    10764: ("reality",),
+    10765: ("sci_fi_fantasy",),
+    10767: ("talk_show",),
+    10768: ("war",),
+}
+
 _GENRE_ALIASES_BY_KEY: dict[str, list[str]] = {
     "drama": ["drama", "драма"],
     "comedy": ["comedy", "комедия"],
@@ -174,7 +204,7 @@ def genre_keys_match_none(candidate_keys: list[str], excluded_keys: list[str]) -
 
 
 def build_genre_keys(candidate: dict) -> list[str]:
-    """Builds ordered unique genre keys from TMDb genres, then legacy genres."""
+    """Build ordered genre keys from names and Discover-only numeric ids."""
     raw_values: list[str] = []
     for field_name in ("genres_tmdb", "genres"):
         raw_values.extend(_iter_raw_genres(candidate.get(field_name)))
@@ -187,6 +217,16 @@ def build_genre_keys(candidate: dict) -> list[str]:
             continue
         seen.add(genre_key)
         keys.append(genre_key)
+    for raw_genre_id in candidate.get("genre_ids") or []:
+        try:
+            genre_id = int(raw_genre_id)
+        except (TypeError, ValueError):
+            continue
+        for genre_key in TMDB_GENRE_ID_TO_KEYS.get(genre_id, ()):
+            if genre_key in seen:
+                continue
+            seen.add(genre_key)
+            keys.append(genre_key)
     return keys
 
 
