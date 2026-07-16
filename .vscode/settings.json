@@ -1,0 +1,82 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.env/Scripts/python.exe",
+  "python.languageServer": "None",
+  "files.autoSave": "afterDelay",
+  "files.eol": "\r\n",
+  "files.encoding": "utf8",
+  "files.insertFinalNewline": true,
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "[python]": {
+    "editor.tabSize": 4
+  },
+  "[json]": {
+    "editor.tabSize": 2
+  },
+  "[markdown]": {
+    "editor.tabSize": 2
+  },
+  "terminal.integrated.cwd": "${workspaceFolder}",
+  "explorer.compactFolders": true,
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    ".pytest-tmp": true,
+    ".pytest_cache": true,
+    ".browser_profiles": true,
+    ".env": true,
+    ".venv": true,
+    "_safety_audit": true,
+    "data": true,
+    "tmp": true,
+    "build": true,
+    "dist": true,
+    "screens": true,
+    "diagnostics": true,
+    "reports": true,
+    "archive": true,
+    "datasets": true,
+    "data/cache": true,
+    "data/logs": true,
+    "data/backups": true,
+    "data/exports": true,
+    "data/diagnostics": true
+  },
+  "search.exclude": {
+    "**/__pycache__": true,
+    ".pytest-tmp": true,
+    ".pytest_cache": true,
+    ".browser_profiles": true,
+    ".env": true,
+    ".venv": true,
+    "_safety_audit": true,
+    "data": true,
+    "tmp": true,
+    "build": true,
+    "dist": true,
+    "screens": true,
+    "diagnostics": true,
+    "reports": true,
+    "archive": true,
+    "datasets": true,
+    "data/cache": true,
+    "data/logs": true,
+    "data/backups": true,
+    "data/exports": true,
+    "data/diagnostics": true
+  },
+  "files.watcherExclude": {
+    "**/.env/**": true,
+    "**/.venv/**": true,
+    "**/__pycache__/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.pytest-tmp*/**": true,
+    "**/data/**": true,
+    "**/datasets/**": true,
+    "**/tmp/**": true,
+    "**/build/**": true,
+    "**/dist/**": true,
+    "**/screens/**": true,
+    "**/.browser_profiles/**": true
+  }
+}
