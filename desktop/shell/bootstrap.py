@@ -174,9 +174,24 @@ def main() -> None:
 
     try:
         dev_reset = None
+        profile_reset_result = None
         try:
             from storage.runtime import apply_dev_startup_reset_from_env
+            from storage import profile_reset
 
+            profile_reset_result = profile_reset.process_pending_profile_reset()
+            if profile_reset.profile_selection_required():
+                from desktop.startup.profile_selector import ProfileSelectionDialog
+                from storage import profiles
+
+                selector = ProfileSelectionDialog()
+                if selector.exec() != selector.DialogCode.Accepted:
+                    return
+                selected_profile = selector.selected_profile
+                if selected_profile in (None, ""):
+                    return
+                profiles.set_active_profile(selected_profile)
+                profile_reset.clear_profile_selection_required()
             dev_reset = apply_dev_startup_reset_from_env()
         except Exception as error:
             log_exception("app.dev_startup_reset.error", error)
@@ -193,6 +208,8 @@ def main() -> None:
             log_event("app.bootstrap.runtime_ready", log_path=str(log_path))
             if dev_reset and dev_reset.get("applied"):
                 log_event("app.bootstrap.dev_startup_reset", **dev_reset)
+            if profile_reset_result and profile_reset_result.get("applied"):
+                log_event("app.bootstrap.profile_reset", **profile_reset_result)
         apply_app_icon(app)
         app.setFont(QFont(FONT_FAMILY, font_px(FONT_APP)))
         from desktop.shell.main_window import WatchedMoviesWindow, scaled_main_window_size
