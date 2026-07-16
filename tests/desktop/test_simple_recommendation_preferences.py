@@ -162,7 +162,19 @@ def test_recommendation_controls_fit_russian_labels_at_desktop_width(qtbot) -> N
     assert summary_scroll.verticalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAsNeeded
 
 
-def test_simple_preferences_save_and_start_one_auto_refill(qtbot) -> None:
+def test_vector_changes_are_staged_until_apply(qtbot) -> None:
+    session, view = _build_view(qtbot, SimplePreferenceService(30))
+    original_vector = dict(session.recommendation_vector)
+
+    control = view._form.vector_openness_control
+    control.setValue(0 if control.value() != 0 else 2)
+    qtbot.wait(350)
+
+    assert session.recommendation_vector == original_vector
+    assert view._filters_dirty is True
+
+
+def test_simple_preferences_wait_for_apply_and_start_one_explicit_refill(qtbot) -> None:
     from desktop.settings.recommendation_preferences import load_recommendation_preferences
 
     service = SimplePreferenceService(1)
@@ -172,9 +184,10 @@ def test_simple_preferences_save_and_start_one_auto_refill(qtbot) -> None:
     view._form.discovery_media_control.setValue("movie")
     view._form.discovery_release_control.setValue("classic")
     view._form.vector_mood_control.setValue("dark")
-    view._apply_vector_locally()
+    view._form.replenish_enabled_check.setChecked(True)
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
 
+    assert service.replenish_calls == []
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: len(service.replenish_calls) == 1)
     qtbot.waitUntil(lambda: view._replenish_worker is None)
@@ -202,6 +215,7 @@ def test_network_error_keeps_local_results(qtbot) -> None:
     service = SimplePreferenceService(1, replenish_ok=False)
     session, view = _build_view(qtbot, service)
     apply_button = view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
+    view._form.replenish_enabled_check.setChecked(True)
 
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: view._last_replenish_result is not None)

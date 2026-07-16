@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QHBoxLayout, QTabWidget, QWidget
 
 from desktop.candidates.filters_view import CandidateFiltersView
@@ -73,6 +73,10 @@ class MainTabRegistry:
             return
         view = self._specs[tab_id].view
         activate_tab_view(view)
+
+    def activate_current(self) -> None:
+        """Activate the visible tab after startup gates are complete."""
+        self.on_current_changed(self._tabs.currentIndex())
 
 
 def build_main_tabs(
@@ -156,15 +160,6 @@ def build_main_tabs(
         on_pool_changed=on_pool_changed,
     )
     registry.register(ShellTabSpec("settings", languages.tr("tabs.settings"), settings_tab_view))
-
-    def activate_initial_tab() -> None:
-        try:
-            current_index = tabs.currentIndex()
-        except RuntimeError:
-            return
-        registry.on_current_changed(current_index)
-
-    QTimer.singleShot(0, activate_initial_tab)
 
     context = AppTabsContext(
         watched_tab_view=watched_tab_view,

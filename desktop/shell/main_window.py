@@ -12,8 +12,7 @@ from config import app_settings_store
 from diagnostics.gui_event_log import log_event
 from desktop.i18n import tr
 from desktop.onboarding import OnboardingAutofillDialog
-from desktop.onboarding.worker import PoolReplenishWorker
-from desktop.settings.app_settings import get_persisted_interface_language, load_app_settings
+from desktop.settings.app_settings import get_persisted_interface_language
 from desktop.shell.app_icon import build_app_icon
 from desktop.shell.tabs import build_main_tabs
 from desktop.startup import TmdbStartupGateView
@@ -24,7 +23,6 @@ from desktop.theme.ui_modules import ensure_scaled_main_tab_modules
 MAIN_WINDOW_BASE_WIDTH = 1180
 MAIN_WINDOW_BASE_HEIGHT = 720
 MAIN_WINDOW_SCREEN_MARGIN = 80
-POOL_AUTO_REFILL_CHECK_INTERVAL_MS = 15 * 60 * 1000
 WINDOW_GEOMETRY_SETTINGS_KEY = "desktop_main_window_state_v1"
 
 
@@ -79,11 +77,6 @@ class WatchedMoviesWindow(QMainWindow):
         self._tmdb_gate_timer = QTimer(self)
         self._tmdb_gate_timer.setSingleShot(True)
         self._tmdb_gate_timer.timeout.connect(self.maybe_show_tmdb_startup_gate)
-        self._pool_refill_worker: PoolReplenishWorker | None = None
-        self._pool_refill_timer = QTimer(self)
-        self._pool_refill_timer.setInterval(POOL_AUTO_REFILL_CHECK_INTERVAL_MS)
-        self._pool_refill_timer.timeout.connect(self.maybe_start_pool_auto_refill)
-        self._pool_refill_timer.start()
         self._restored_geometry_needs_frame_clamp = False
         if self._persist_window_geometry:
             self._restored_geometry_needs_frame_clamp = self._restore_window_geometry()
@@ -216,10 +209,6 @@ class WatchedMoviesWindow(QMainWindow):
     def shutdown_background_workers(self) -> None:
         """Cancel and join child QThreads before the Qt object tree is destroyed."""
         self._tmdb_gate_timer.stop()
-        refill_timer = getattr(self, "_pool_refill_timer", None)
-        if refill_timer is not None:
-            refill_timer.stop()
-
         registry = getattr(self, "_tab_registry", None)
         for spec in getattr(registry, "_specs", {}).values():
             prepare = getattr(spec.view, "prepare_for_shutdown", None)
@@ -341,50 +330,12 @@ class WatchedMoviesWindow(QMainWindow):
         if callable(refresh_filters):
             refresh_filters()
 
-    def maybe_start_pool_auto_refill(self) -> None:
-        """Start a quiet background pool top-up when the pool runs low."""
-        if self._tmdb_gate_passed is False or self._tmdb_local_mode or self._tmdb_gate_view is not None:
-            return
-        if self._pool_refill_worker is not None or self._onboarding_view is not None:
-            return
-        if load_app_settings().auto_pool_refill is False:
-            return
-        try:
-            view = candidate_service.get_pool_replenish_view()
-        except Exception:
-            return
-        if view.get("needs_replenish") is not True:
-            return
-
-        worker = PoolReplenishWorker(self)
-
-        def on_refill_finished(result: object) -> None:
-            data = result if isinstance(result, dict) else {}
-            created = int(data.get("created_count") or 0)
-            if created > 0:
-                self._refresh_candidate_pool_views()
-                self._show_status_message(tr("pool.auto_refill.done").format(count=created), 8000)
-            log_event("pool.auto_refill.finished", created_count=created)
-            self._pool_refill_worker = None
-
-        def on_refill_failed(message: str) -> None:
-            self._show_status_message(tr("pool.auto_refill.failed"), 8000)
-            log_event("pool.auto_refill.failed", error=message)
-            self._pool_refill_worker = None
-
-        worker.finished_with_result.connect(on_refill_finished)
-        worker.failed.connect(on_refill_failed)
-        self._pool_refill_worker = worker
-        self._show_status_message(tr("pool.auto_refill.started"), 6000)
-        log_event("pool.auto_refill.started", pool_size=view.get("pool_size"), missing=view.get("missing"))
-        worker.start()
-
-    def maybe_show_onboarding_autofill(self) -> None:
+    def maybe_show_onboarding_autofill(self) -> bool:
         """Show first-run deterministic candidate-pool autofill wizard when needed."""
         if self._tmdb_gate_passed is False:
-            return
+            return False
         if candidate_service.should_show_onboarding_autofill() is False:
-            return
+            return False
         onboarding = OnboardingAutofillDialog(
             ui_language=get_persisted_interface_language(),
             parent=self,
@@ -416,6 +367,7 @@ class WatchedMoviesWindow(QMainWindow):
         self._root_stack.setCurrentWidget(onboarding)
         onboarding.show()
         log_event("onboarding.view.shown")
+        return True
 
     def maybe_show_tmdb_startup_gate(self) -> None:
         """Block main UI until TMDb network and credentials are ready."""
@@ -438,8 +390,11 @@ class WatchedMoviesWindow(QMainWindow):
             self._root_stack.removeWidget(gate)
             gate.deleteLater()
             self._tmdb_gate_view = None
-            if start_onboarding:
-                self.maybe_show_onboarding_autofill()
+            onboarding_started = start_onboarding and self.maybe_show_onboarding_autofill()
+            if onboarding_started is False:
+                activate_current = getattr(self._tab_registry, "activate_current", None)
+                if callable(activate_current):
+                    activate_current()
 
         def finish_gate() -> None:
             log_event("startup.tmdb_gate.passed")

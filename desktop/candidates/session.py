@@ -335,7 +335,12 @@ class CandidateSearchSession:
                 }
             self._notify_listeners()
 
-    def set_recommendation_vector(self, vector: RecommendationVector | dict) -> bool:
+    def set_recommendation_vector(
+        self,
+        vector: RecommendationVector | dict,
+        *,
+        notify: bool = True,
+    ) -> bool:
         normalized = (
             vector.normalized() if isinstance(vector, RecommendationVector)
             else RecommendationVector.from_dict(vector)
@@ -343,7 +348,8 @@ class CandidateSearchSession:
         if normalized == self.recommendation_vector:
             return False
         self.recommendation_vector = normalized
-        self._notify_listeners()
+        if notify:
+            self._notify_listeners()
         return True
 
     def next_recommendation_variation(self) -> int:

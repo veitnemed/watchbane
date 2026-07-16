@@ -266,6 +266,7 @@ def test_apply_with_replenish_checked_calls_worker_service_seam(qtbot) -> None:
     assert progress is not None
 
     view._form.discovery_media_control.setValue("movie")
+    checkbox.setChecked(True)
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(lambda: len(service.replenish_calls) == 1)

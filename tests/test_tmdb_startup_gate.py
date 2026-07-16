@@ -425,7 +425,6 @@ def test_main_window_local_mode_skips_onboarding_and_network_refill(monkeypatch,
         assert window._tmdb_local_mode is True
         assert window._root_stack.currentWidget() is window._main_tabs
         assert window._onboarding_view is None
-        window.maybe_start_pool_auto_refill()
     finally:
         window.close()
 
@@ -491,7 +490,7 @@ def test_startup_gate_pass_marks_ready_and_opens_onboarding(monkeypatch, qapp) -
         window.close()
 
 
-def test_existing_pool_does_not_refill_during_startup_gate_flow(monkeypatch, qapp) -> None:
+def test_existing_pool_does_not_expose_automatic_refill_during_startup(monkeypatch, qapp) -> None:
     monkeypatch.setattr(
         main_window_module.candidate_service,
         "should_show_onboarding_autofill",
@@ -513,11 +512,9 @@ def test_existing_pool_does_not_refill_during_startup_gate_flow(monkeypatch, qap
         ),
     )
     window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
-    calls = {"count": 0}
-    window.maybe_start_pool_auto_refill = lambda: calls.__setitem__("count", calls["count"] + 1)
     window._tmdb_gate_passed = True
     try:
         window.maybe_show_onboarding_autofill()
-        assert calls["count"] == 0
+        assert not hasattr(window, "maybe_start_pool_auto_refill")
     finally:
         window.close()

@@ -52,7 +52,11 @@ from desktop.candidates.filters_intro import build_intro_copy
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 from desktop.candidates.workers.filter_replenish_worker import FilterReplenishWorker
 from desktop.i18n import tr, translate
-from desktop.settings.app_settings import get_persisted_data_language, get_persisted_interface_language
+from desktop.settings.app_settings import (
+    get_persisted_data_language,
+    get_persisted_interface_language,
+    load_app_settings,
+)
 from desktop.settings.recommendation_preferences import (
     load_recommendation_preferences,
     load_simple_recommendation_preferences,
@@ -140,11 +144,6 @@ class CandidateFiltersView:
         self._active_replenish_generation: int | None = None
         self._active_replenish_signature: str | None = None
         self._disposed = False
-        self._vector_debounce = QTimer()
-        self._vector_debounce.setSingleShot(True)
-        self._vector_debounce.setInterval(300)
-        self._vector_debounce.timeout.connect(self._apply_vector_locally)
-
         view = self
 
         class CandidateFiltersRootWidget(QWidget):
@@ -510,9 +509,8 @@ class CandidateFiltersView:
             self._form.vector_rarity_control,
             self._form.vector_diversity_control,
         ):
-            control.sliderReleased.connect(self._schedule_vector_apply)
-            control.valueChanged.connect(lambda _value: self._vector_debounce.start())
-        self._form.vector_mood_control.valueChanged.connect(self._schedule_vector_apply)
+            control.valueChanged.connect(update)
+        self._form.vector_mood_control.valueChanged.connect(update)
         self._form.variation_button.clicked.connect(self._on_variation_requested)
 
     def _direction_values(self) -> list[str]:
@@ -561,15 +559,6 @@ class CandidateFiltersView:
             diversity_level=self._form.vector_diversity_control.value(),
             mood=self._form.vector_mood_control.value(),
         ).normalized()
-
-    def _schedule_vector_apply(self, *_args) -> None:
-        self._vector_debounce.start()
-
-    def _apply_vector_locally(self) -> None:
-        vector = self._collect_vector()
-        self._recommendation_vector = vector
-        save_recommendation_vector(vector)
-        self._session.set_recommendation_vector(vector)
 
     def _on_variation_requested(self) -> None:
         self._session.next_recommendation_variation()
@@ -1097,8 +1086,7 @@ class CandidateFiltersView:
     def _reset_filters(self) -> None:
         self._set_discovery_controls(CandidateDiscoveryPreferences())
         self._set_vector_controls(RecommendationVector())
-        self._apply_vector_locally()
-        self._apply_filters()
+        self._on_filter_controls_changed()
 
     def on_before_apply(self, filters: dict) -> dict:
         """Extension seam for tests/future wrappers; default is no-op."""
@@ -1111,8 +1099,12 @@ class CandidateFiltersView:
         if self._replenish_worker is not None:
             self._replenish_worker.cancel()
         preferences = self._collect_discovery_preferences()
+        vector = self._collect_vector()
         self._discovery_preferences = preferences
+        self._recommendation_vector = vector
         save_discovery_preferences(preferences)
+        save_recommendation_vector(vector)
+        self._session.set_recommendation_vector(vector, notify=False)
         filters = self.on_before_apply(
             preferences.to_candidate_filters(DEFAULT_BROWSE_FILTERS)
         )
@@ -1121,7 +1113,11 @@ class CandidateFiltersView:
                 data_language=self._data_language,
                 target_add_count=FILTER_REPLENISH_DEFAULT_BATCH_SIZE,
             )
-            if self._discovery_pool_needs_replenish(preferences)
+            if (
+                self._replenish_enabled_check.isChecked()
+                and load_app_settings().auto_pool_refill
+                and self._discovery_pool_needs_replenish(preferences)
+            )
             else None
         )
         self._pending_replenish_generation = (

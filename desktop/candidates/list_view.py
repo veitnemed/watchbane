@@ -1085,7 +1085,6 @@ class CandidateListView(CandidateListActionsMixin):
             prepare_posters=replacement and not vector_only_remix,
         )
         self._initial_deck_loaded = True
-        self._maybe_request_recommendation_refill()
 
     def _on_new_deck_clicked(self) -> None:
         if self._new_deck_in_progress:
@@ -1163,7 +1162,6 @@ class CandidateListView(CandidateListActionsMixin):
         else:
             self._clear_detail(show_filters_hint=False)
         self._update_deck_status()
-        self._maybe_request_recommendation_refill()
         if self._candidates:
             self._deck_status_label.setText(tr(f"recommendations.action.done.{action}"))
         # TODO: add transactional undo when the shell supports actionable toast notifications.
@@ -1335,7 +1333,6 @@ class CandidateListView(CandidateListActionsMixin):
                         updated,
                         prepare_posters=first_candidates_after_empty_deck,
                     )
-                    self._maybe_request_recommendation_refill()
             else:
                 self._load_recommendation_deck(force_new=False)
 

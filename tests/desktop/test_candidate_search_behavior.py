@@ -887,7 +887,7 @@ def test_media_type_filter_updates_candidate_list(qtbot) -> None:
     assert service.applied_filters[-1]["media_type"] == "movie"
 
 
-def test_filter_reset_button_clears_and_applies_all_filters(qtbot) -> None:
+def test_filter_reset_button_stages_defaults_until_apply(qtbot) -> None:
     service, _session, filters_view, list_view = _build_views(qtbot)
     list_widget = _candidate_list(list_view)
     apply_button = filters_view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
@@ -905,6 +905,10 @@ def test_filter_reset_button_clears_and_applies_all_filters(qtbot) -> None:
     qtbot.waitUntil(lambda: _listed_count(list_widget) == 1)
 
     qtbot.mouseClick(reset_button, Qt.MouseButton.LeftButton)
+    assert _listed_count(list_widget) == 1
+    assert apply_button.property("pendingChanges") is True
+
+    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: _listed_count(list_widget) == 2)
 
     assert only_complete.isChecked() is False

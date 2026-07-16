@@ -6422,14 +6422,12 @@ def test_main_window_shutdown_cancels_and_joins_child_threads(qapp) -> None:
     try:
         worker.start()
         assert worker.started_running.wait(1.0)
-        assert window._pool_refill_timer.isActive() is True
 
         window.shutdown_background_workers()
 
         assert worker.cancel_called is True
         assert worker.interruption_observed.is_set() is True
         assert worker.isRunning() is False
-        assert window._pool_refill_timer.isActive() is False
     finally:
         worker.release.set()
         worker.wait(1000)
