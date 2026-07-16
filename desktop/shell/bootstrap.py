@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import os
 import sys
+from time import perf_counter
 
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication
@@ -143,6 +144,7 @@ def log_startup_scale_diagnostics(
 
 
 def main() -> None:
+    startup_started = perf_counter()
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setApplicationDisplayName(APP_DISPLAY_NAME)
@@ -205,7 +207,11 @@ def main() -> None:
         ensure_scaled_ui_modules()
         log_path = start_gui_event_log_if_enabled()
         if log_path is not None:
-            log_event("app.bootstrap.runtime_ready", log_path=str(log_path))
+            log_event(
+                "app.bootstrap.runtime_ready",
+                log_path=str(log_path),
+                elapsed_ms=round((perf_counter() - startup_started) * 1000, 1),
+            )
             if dev_reset and dev_reset.get("applied"):
                 log_event("app.bootstrap.dev_startup_reset", **dev_reset)
             if profile_reset_result and profile_reset_result.get("applied"):
@@ -225,7 +231,10 @@ def main() -> None:
         try:
             window.show()
             window.schedule_tmdb_startup_gate()
-            log_event("app.window.shown")
+            log_event(
+                "app.window.shown",
+                elapsed_ms=round((perf_counter() - startup_started) * 1000, 1),
+            )
             exit_code = app.exec()
         finally:
             window.shutdown_background_workers()

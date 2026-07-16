@@ -6434,6 +6434,47 @@ def test_main_window_shutdown_cancels_and_joins_child_threads(qapp) -> None:
         window.close()
 
 
+def test_main_window_shutdown_has_global_deadline(monkeypatch, qapp) -> None:
+    from threading import Event
+    from time import monotonic
+
+    from PyQt6.QtCore import QThread
+
+    from desktop.shell import main_window as main_window_module
+
+    class StubbornWorker(QThread):
+        def __init__(self, parent) -> None:
+            super().__init__(parent)
+            self.started_running = Event()
+            self.release = Event()
+
+        def run(self) -> None:
+            self.started_running.set()
+            self.release.wait(2.0)
+
+    monkeypatch.setattr(main_window_module, "WORKER_SHUTDOWN_TIMEOUT_MS", 75)
+    window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
+    worker = StubbornWorker(window)
+    worker.start()
+    assert worker.started_running.wait(1.0)
+
+    started = monotonic()
+    window.shutdown_background_workers()
+    elapsed = monotonic() - started
+
+    try:
+        assert elapsed < 0.5
+        assert worker in main_window_module._ORPHANED_THREADS
+        assert worker.parent() is None
+    finally:
+        worker.release.set()
+        worker.wait(1000)
+        if worker in main_window_module._ORPHANED_THREADS:
+            main_window_module._ORPHANED_THREADS.remove(worker)
+        worker.deleteLater()
+        window.close()
+
+
 def test_bootstrap_drains_workers_before_process_exit() -> None:
     import inspect
 

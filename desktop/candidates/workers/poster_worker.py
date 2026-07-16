@@ -40,6 +40,8 @@ class CandidateLocalizedPosterWorker(QThread):
         self._data_language = str(data_language or "ru")
 
     def run(self) -> None:
+        if self.isInterruptionRequested():
+            return
         try:
             from candidates.pool.localized_posters import ensure_candidate_localized_poster
 
@@ -48,9 +50,13 @@ class CandidateLocalizedPosterWorker(QThread):
                 data_language=self._data_language,
             )
         except Exception:
+            if self.isInterruptionRequested():
+                return
             self.failed.emit(self._identity)
             return
 
+        if self.isInterruptionRequested():
+            return
         self.finished_with_candidate.emit(
             self._identity,
             updated_candidate if isinstance(updated_candidate, dict) else self._candidate,

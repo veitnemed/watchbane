@@ -37,6 +37,8 @@ class RecommendationDeckWorker(QThread):
         self._force_new = bool(force_new)
 
     def run(self) -> None:
+        if self.isInterruptionRequested():
+            return
         started = perf_counter()
         try:
             try:
@@ -64,6 +66,8 @@ class RecommendationDeckWorker(QThread):
                 elapsed_ms=round(elapsed_ms, 1),
             )
             self.failed.emit(self._generation, str(error), elapsed_ms)
+            return
+        if self.isInterruptionRequested():
             return
         self.completed.emit(
             self._generation,

@@ -67,6 +67,7 @@ from desktop.theme.shell_layout import (
 from desktop.theme.layout import CANDIDATE_LIST_MAX_WIDTH, CANDIDATE_LIST_MIN_WIDTH
 from desktop.theme.scaling import list_px
 from desktop.theme.tokens import FILM_ACCENT, FILM_ACCENT_DIM, FILM_BORDER
+from diagnostics.gui_event_log import log_event
 
 logger = logging.getLogger(__name__)
 
@@ -585,6 +586,23 @@ class CandidateListView(CandidateListActionsMixin):
     @property
     def widget(self) -> QWidget:
         return self._widget
+
+    def prepare_for_shutdown(self) -> None:
+        """Stop timers and detach pending recommendation/network work."""
+        self._recommendations_active = False
+        self._deck_load_timer.stop()
+        self._deck_deadline_timer.stop()
+        self._deck_minimum_timer.stop()
+        self._action_unlock_timer.stop()
+        self._new_deck_unlock_timer.stop()
+        self._pending_deck_request = None
+        self._pending_localized_poster = None
+        self._poster_prefetch.cancel_pending()
+        worker = self._deck_worker
+        if worker is not None:
+            worker.requestInterruption()
+        for localized_worker in tuple(self._localized_poster_workers):
+            localized_worker.requestInterruption()
 
     def _update_responsive_layout(self, available_width: int | None = None) -> None:
         viewport_width = self._widget.width() if available_width is None else available_width
@@ -1432,6 +1450,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._poster_request_seq += 1
         request_seq = self._poster_request_seq
         entry = self._detail_entries.get(identity)
+        detail_cache_hit = entry is not None
         if entry is None:
             entry = self._build_detail_entry(candidate)
             self._detail_entries[identity] = entry
@@ -1453,6 +1472,12 @@ class CandidateListView(CandidateListActionsMixin):
         self._start_localized_poster_enrichment(candidate, identity, request_seq)
 
         total_ms = (render_done - started) * 1000
+        log_event(
+            "candidates.detail.rendered",
+            row=row,
+            elapsed_ms=round(total_ms, 1),
+            detail_cache_hit=detail_cache_hit,
+        )
         if total_ms >= 50:
             logger.info(
                 "candidate selection row=%s: lookup=%.1fms card=%.1fms render=%.1fms total=%.1fms",

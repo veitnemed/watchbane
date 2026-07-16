@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from time import monotonic
+
 from PyQt6.QtCore import QCoreApplication, QEvent, QRect, QThread, Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QMainWindow, QStackedWidget, QStyle, QTabWidget
@@ -24,6 +26,8 @@ MAIN_WINDOW_BASE_WIDTH = 1180
 MAIN_WINDOW_BASE_HEIGHT = 720
 MAIN_WINDOW_SCREEN_MARGIN = 80
 WINDOW_GEOMETRY_SETTINGS_KEY = "desktop_main_window_state_v1"
+WORKER_SHUTDOWN_TIMEOUT_MS = 12_000
+_ORPHANED_THREADS: list[QThread] = []
 
 
 def scaled_main_window_size() -> tuple[int, int]:
@@ -208,6 +212,7 @@ class WatchedMoviesWindow(QMainWindow):
 
     def shutdown_background_workers(self) -> None:
         """Cancel and join child QThreads before the Qt object tree is destroyed."""
+        started = monotonic()
         self._tmdb_gate_timer.stop()
         registry = getattr(self, "_tab_registry", None)
         for spec in getattr(registry, "_specs", {}).values():
@@ -232,9 +237,34 @@ class WatchedMoviesWindow(QMainWindow):
                         )
                 worker.requestInterruption()
 
+            deadline = monotonic() + WORKER_SHUTDOWN_TIMEOUT_MS / 1000.0
+            timed_out: list[QThread] = []
             for worker in workers:
-                worker.wait()
-            log_event("app.worker_shutdown.end", worker_count=len(workers))
+                remaining_ms = max(0, int((deadline - monotonic()) * 1000))
+                if remaining_ms <= 0 or worker.wait(remaining_ms) is False:
+                    timed_out.append(worker)
+            for worker in timed_out:
+                try:
+                    worker.setParent(None)
+                except RuntimeError:
+                    continue
+                if worker not in _ORPHANED_THREADS:
+                    _ORPHANED_THREADS.append(worker)
+                worker.finished.connect(
+                    lambda worker=worker: _ORPHANED_THREADS.remove(worker)
+                    if worker in _ORPHANED_THREADS
+                    else None
+                )
+                log_event(
+                    "app.worker_shutdown.timeout",
+                    worker=worker.metaObject().className(),
+                )
+            log_event(
+                "app.worker_shutdown.end",
+                worker_count=len(workers),
+                timed_out_count=len(timed_out),
+                elapsed_ms=round((monotonic() - started) * 1000, 1),
+            )
 
         # QThread.finished callbacks (including deleteLater) can still be queued when
         # QApplication.exec() has returned. Drain them before Python/Qt teardown.
@@ -251,6 +281,10 @@ class WatchedMoviesWindow(QMainWindow):
                     # The queued finished callback already deleted this worker.
                     continue
             app.processEvents()
+        log_event(
+            "app.shutdown.complete",
+            elapsed_ms=round((monotonic() - started) * 1000, 1),
+        )
 
     def schedule_tmdb_startup_gate(self, delay_ms: int = 250) -> None:
         """Schedule the startup probe on a window-owned timer that shutdown can cancel."""
