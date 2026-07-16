@@ -101,6 +101,16 @@ class CandidatePosterPrefetchController(QObject):
                 continue
             self.enqueue(candidate_detail_identity(candidate), url)
 
+    def cancel_pending(self) -> None:
+        """Abort requests from a replaced deck and clear its queued waiters."""
+        self._batch = None
+        self._waiters.clear()
+        self._queue.clear()
+        self._queued_urls.clear()
+        for reply in tuple(self._active):
+            reply.abort()
+        self._update_busy()
+
     def start_batch(
         self,
         candidates: list[dict],

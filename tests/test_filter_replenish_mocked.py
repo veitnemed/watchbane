@@ -57,7 +57,7 @@ def test_ru_dark_tv_dry_run_selects_30_candidates() -> None:
     assert result["saved_count"] == 0
     assert result["duplicate_count"] == 0
     assert result["api_requests"] == 2
-    assert result["details_requests"] == 30
+    assert result["details_requests"] == 0
     assert len(result["candidates"]) == 30
     assert {candidate["media_type"] for candidate in result["candidates"]} == {"tv"}
     assert {candidate["target_country"] for candidate in result["candidates"]} == {"RU"}
@@ -66,7 +66,7 @@ def test_ru_dark_tv_dry_run_selects_30_candidates() -> None:
         assert params["with_origin_country"] == "RU"
 
 
-def test_replenish_details_replace_discover_genre_ids_with_names_and_posters() -> None:
+def test_optional_detail_enrichment_replaces_discover_genres_and_posters() -> None:
     client = build_mock_tmdb_client("ru_dark_tv_enough")
 
     result = replenish_candidates_for_filters(
@@ -78,6 +78,7 @@ def test_replenish_details_replace_discover_genre_ids_with_names_and_posters() -
         ),
         tmdb_client=client,
         dry_run=True,
+        enrich_details=True,
     )
 
     candidate = result["candidates"][0]

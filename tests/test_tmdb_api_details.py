@@ -49,8 +49,17 @@ def test_get_tv_details_uses_default_tv_detail_appends(monkeypatch, tmp_path) ->
     calls = []
     monkeypatch.setattr(tmdb_api, "DETAILS_CACHE_DIR", tmp_path)
 
-    def fake_cached_tmdb_get(path, params, cache_path, *, force_refresh=False, token=None):
-        calls.append((path, params, cache_path, force_refresh, token))
+    def fake_cached_tmdb_get(
+        path,
+        params,
+        cache_path,
+        *,
+        force_refresh=False,
+        token=None,
+        timeout=20,
+        retries=1,
+    ):
+        calls.append((path, params, cache_path, force_refresh, token, timeout, retries))
         return {"id": 101}
 
     monkeypatch.setattr(tmdb_api, "cached_tmdb_get", fake_cached_tmdb_get)
@@ -68,8 +77,17 @@ def test_get_movie_details_uses_movie_endpoint_and_default_appends(monkeypatch, 
     calls = []
     monkeypatch.setattr(tmdb_api, "DETAILS_CACHE_DIR", tmp_path)
 
-    def fake_cached_tmdb_get(path, params, cache_path, *, force_refresh=False, token=None):
-        calls.append((path, params, cache_path, force_refresh, token))
+    def fake_cached_tmdb_get(
+        path,
+        params,
+        cache_path,
+        *,
+        force_refresh=False,
+        token=None,
+        timeout=20,
+        retries=1,
+    ):
+        calls.append((path, params, cache_path, force_refresh, token, timeout, retries))
         return {"id": 202}
 
     monkeypatch.setattr(tmdb_api, "cached_tmdb_get", fake_cached_tmdb_get)

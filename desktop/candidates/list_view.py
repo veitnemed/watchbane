@@ -45,6 +45,7 @@ from desktop.candidates.presenters import (
 )
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 from desktop.candidates.workers.poster_worker import CandidateLocalizedPosterWorker
+from desktop.candidates.workers.deck_worker import RecommendationDeckWorker
 from desktop.i18n import get_interface_language, tr
 from desktop.settings.app_settings import get_persisted_data_language
 from desktop.shared.detail import DetailCard
@@ -152,6 +153,9 @@ class CandidateListView(CandidateListActionsMixin):
         self._active_workspace_state: str | None = None
         self._deck_build_in_progress = False
         self._deck_build_failed = False
+        self._deck_worker: RecommendationDeckWorker | None = None
+        self._deck_request_generation = 0
+        self._pending_deck_request: tuple[int, bool] | None = None
         self._deck_replenishing_active = False
         self._deck_refill_failed = False
         self._action_in_progress = False
@@ -1004,54 +1008,93 @@ class CandidateListView(CandidateListActionsMixin):
         if not self._recommendations_active:
             self._deck_dirty = True
             return
+        self._deck_request_generation += 1
+        generation = self._deck_request_generation
+        if self._deck_worker is not None and self._deck_worker.isRunning():
+            self._pending_deck_request = (generation, bool(force_new))
+            self._deck_dirty = True
+            return
+        self._start_deck_worker(generation, force_new=force_new)
+
+    def _start_deck_worker(self, generation: int, *, force_new: bool) -> None:
+        self._pending_deck_request = None
         previous_deck = self._deck
-        previous_deck_id = str((previous_deck or {}).get("deck_id") or "")
-        previous_preferences = dict((previous_deck or {}).get("candidate_filters") or (previous_deck or {}).get("preferences") or {})
-        previous_vector = dict((previous_deck or {}).get("recommendation_vector") or {})
         self._new_deck_button.setEnabled(False)
         self._deck_build_in_progress = True
         self._deck_build_failed = False
+        self._deck_dirty = False
         self._deck_status_label.setText(tr("recommendations.state.loading"))
         self._deck_status_label.show()
+        if previous_deck is None:
+            self._begin_deck_preparation()
         self._update_deck_reserve_indicator()
-        build_started = perf_counter()
-        try:
-            try:
-                deck = self._deck_service.refresh_deck(
-                    self._deck_preferences(),
-                    datetime.now(timezone.utc),
-                    vector=self._deck_vector(),
-                    variation_seed=self._session.variation_seed,
-                    force_new=force_new,
-                )
-            except TypeError as error:
-                if "unexpected keyword argument" not in str(error):
-                    raise
-                deck = self._deck_service.refresh_deck(
-                    self._deck_preferences(),
-                    datetime.now(timezone.utc),
-                    force_new=force_new,
-                )
-        except Exception:
-            logger.exception("recommendation deck build failed")
-            self._deck = None
-            self._all_candidates = []
-            self._candidates = []
-            self._model.set_candidates([])
-            self._deck_status_label.setText(tr("recommendations.state.local_error"))
-            self._deck_status_label.hide()
-            self._clear_detail(show_filters_hint=False, error=True)
-            self._deck_build_in_progress = False
-            self._deck_build_failed = True
-            self._show_deck_content()
-            self._update_deck_reserve_indicator()
-            return
-        finally:
-            self._new_deck_button.setEnabled(True)
 
-        self._deck_build_ms = (perf_counter() - build_started) * 1000.0
+        worker = RecommendationDeckWorker(
+            generation=generation,
+            service=self._deck_service,
+            preferences=self._deck_preferences(),
+            now=datetime.now(timezone.utc),
+            vector=self._deck_vector(),
+            variation_seed=self._session.variation_seed,
+            force_new=force_new,
+            parent=self._widget,
+        )
+        worker.completed.connect(
+            lambda worker_generation, deck, elapsed_ms, previous=previous_deck, forced=force_new: self._on_deck_built(
+                worker_generation,
+                deck,
+                elapsed_ms,
+                previous,
+                forced,
+            )
+        )
+        worker.failed.connect(self._on_deck_build_failed)
+        worker.finished.connect(lambda worker=worker: self._on_deck_worker_finished(worker))
+        worker.finished.connect(worker.deleteLater)
+        self._deck_worker = worker
+        worker.start()
+
+    def _on_deck_build_failed(self, generation: int, _message: str, elapsed_ms: float) -> None:
+        if generation != self._deck_request_generation:
+            return
+        self._deck_build_ms = float(elapsed_ms)
+        logger.error("recommendation deck build failed generation=%s", generation)
+        self._deck = None
+        self._all_candidates = []
+        self._candidates = []
+        self._model.set_candidates([])
+        self._deck_status_label.setText(tr("recommendations.state.local_error"))
+        self._deck_status_label.hide()
+        self._clear_detail(show_filters_hint=False, error=True)
+        self._deck_build_in_progress = False
+        self._deck_build_failed = True
+        self._show_deck_content()
+        self._update_deck_reserve_indicator()
+
+    def _on_deck_built(
+        self,
+        generation: int,
+        deck: object,
+        elapsed_ms: float,
+        previous_deck: dict | None,
+        force_new: bool,
+    ) -> None:
+        if generation != self._deck_request_generation or isinstance(deck, dict) is False:
+            return
+        previous_deck_id = str((previous_deck or {}).get("deck_id") or "")
+        previous_preferences = dict(
+            (previous_deck or {}).get("candidate_filters")
+            or (previous_deck or {}).get("preferences")
+            or {}
+        )
+        previous_vector = dict((previous_deck or {}).get("recommendation_vector") or {})
+        self._deck_build_ms = float(elapsed_ms)
         current_deck_id = str(deck.get("deck_id") or "")
-        current_preferences = dict(deck.get("candidate_filters") or deck.get("preferences") or self._deck_preferences())
+        current_preferences = dict(
+            deck.get("candidate_filters")
+            or deck.get("preferences")
+            or self._deck_preferences()
+        )
         current_vector = dict(deck.get("recommendation_vector") or self._deck_vector())
         vector_only_remix = (
             not force_new
@@ -1071,7 +1114,9 @@ class CandidateListView(CandidateListActionsMixin):
             or current_vector != previous_vector
         )
         if replacement:
-            self._begin_deck_preparation()
+            cancel_pending = getattr(self._poster_prefetch, "cancel_pending", None)
+            if callable(cancel_pending):
+                cancel_pending()
         logger.info(
             "recommendation deck built deck_id=%s deck_build_ms=%.1f active=%d reserve=%d replacement=%s",
             current_deck_id,
@@ -1082,9 +1127,28 @@ class CandidateListView(CandidateListActionsMixin):
         )
         self._present_recommendation_deck(
             deck,
-            prepare_posters=replacement and not vector_only_remix,
+            prepare_posters=False,
         )
+        self._show_deck_content()
+        self._deck_build_in_progress = False
+        self._deck_build_failed = False
         self._initial_deck_loaded = True
+        if vector_only_remix:
+            self._update_deck_status()
+
+    def _on_deck_worker_finished(self, worker: RecommendationDeckWorker) -> None:
+        if self._deck_worker is worker:
+            self._deck_worker = None
+        self._new_deck_button.setEnabled(True)
+        pending = self._pending_deck_request
+        self._pending_deck_request = None
+        if pending is not None and self._recommendations_active:
+            generation, force_new = pending
+            self._start_deck_worker(generation, force_new=force_new)
+            return
+        if self._deck_build_in_progress and self._deck_build_failed is False:
+            self._deck_build_in_progress = False
+            self._update_deck_reserve_indicator()
 
     def _on_new_deck_clicked(self) -> None:
         if self._new_deck_in_progress:

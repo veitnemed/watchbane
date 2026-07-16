@@ -252,11 +252,24 @@ class TmdbClientProtocol(Protocol):
 class TmdbAutofillClient:
     """Small TMDb adapter kept injectable for tests and workers."""
 
-    def __init__(self, token: str | None = None) -> None:
+    def __init__(
+        self,
+        token: str | None = None,
+        *,
+        timeout: int | float | None = None,
+        retries: int | None = None,
+    ) -> None:
         self._token = token
+        self._timeout = timeout
+        self._retries = retries
 
     def discover(self, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
-        return tmdb_api.tmdb_get(endpoint, params=params, token=self._token)
+        request_kwargs: dict[str, Any] = {"token": self._token}
+        if self._timeout is not None:
+            request_kwargs["timeout"] = self._timeout
+        if self._retries is not None:
+            request_kwargs["retries"] = self._retries
+        return tmdb_api.tmdb_get(endpoint, params=params, **request_kwargs)
 
     def movie_genres(self, language: str = "en") -> list[dict[str, Any]]:
         return tmdb_api.get_movie_genre_list(language=language, token=self._token)

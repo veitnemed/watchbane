@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from time import perf_counter
+from threading import Event
 
 from PyQt6.QtWidgets import QStackedWidget
 
 from desktop.candidates import list_view as list_view_module
 from desktop.candidates.list_view import CandidateListView
-from desktop.candidates.presenters import candidate_detail_identity
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 
 
@@ -32,25 +31,20 @@ class FakePosterPrefetchController:
         self.candidate_settled = _Signal()
         self.batch_progress = _Signal()
         self.batch_finished = _Signal()
-        self.batch_id = 0
-        self.start_calls: list[list[dict]] = []
         self.background_calls: list[list[dict]] = []
+        self.cancel_count = 0
 
     def allow_failed_retries(self, **_kwargs) -> None:
         return None
-
-    def start_batch(self, candidates: list[dict], **_kwargs) -> int:
-        self.batch_id += 1
-        self.start_calls.append(deepcopy(candidates))
-        self.batch_started.emit(self.batch_id, len(candidates))
-        self.batch_progress.emit(self.batch_id, 0, 0, 0, len(candidates), 0)
-        return self.batch_id
 
     def enqueue_candidates(self, candidates: list[dict], **_kwargs) -> None:
         self.background_calls.append(deepcopy(candidates))
 
     def enqueue(self, *_args, **_kwargs) -> None:
         return None
+
+    def cancel_pending(self) -> None:
+        self.cancel_count += 1
 
 
 class FakeCandidateService:
@@ -61,10 +55,28 @@ class FakeCandidateService:
 class FakeDeckService:
     def __init__(self, deck: dict) -> None:
         self.deck = deepcopy(deck)
+        self.calls = 0
 
-    def refresh_deck(self, _preferences: dict, _now, *, force_new: bool = False) -> dict:
-        del force_new
+    def refresh_deck(self, _preferences: dict, _now, **_kwargs) -> dict:
+        self.calls += 1
         return deepcopy(self.deck)
+
+
+class BlockingDeckService(FakeDeckService):
+    def __init__(self, deck: dict) -> None:
+        super().__init__(deck)
+        self.first_started = Event()
+        self.release_first = Event()
+
+    def refresh_deck(self, _preferences: dict, _now, **kwargs) -> dict:
+        self.calls += 1
+        if self.calls == 1:
+            self.first_started.set()
+            self.release_first.wait(2.0)
+        result = deepcopy(self.deck)
+        result["variation_seed"] = int(kwargs.get("variation_seed") or 0)
+        result["deck_id"] = f"deck-{self.calls}"
+        return result
 
 
 def _candidate(index: int) -> dict:
@@ -85,8 +97,10 @@ def _candidate(index: int) -> dict:
 def _deck() -> dict:
     active = [_candidate(index) for index in range(25)]
     return {
-        "deck_id": "reveal-deck",
+        "deck_id": "progressive-deck",
         "preferences": deepcopy(DEFAULT_BROWSE_FILTERS),
+        "recommendation_vector": {},
+        "variation_seed": 0,
         "active": active,
         "reserve": [_candidate(100 + index) for index in range(70)],
         "active_limit": 25,
@@ -97,7 +111,7 @@ def _deck() -> dict:
     }
 
 
-def _build_view(qtbot, monkeypatch) -> CandidateListView:
+def _build_view(qtbot, monkeypatch, *, deck_service=None) -> CandidateListView:
     monkeypatch.setattr(
         list_view_module,
         "CandidatePosterPrefetchController",
@@ -114,13 +128,11 @@ def _build_view(qtbot, monkeypatch) -> CandidateListView:
     view = CandidateListView(
         session,
         service=service,
-        deck_service=FakeDeckService(_deck()),
+        deck_service=deck_service or FakeDeckService(_deck()),
     )
     view.widget._test_controller = view
     qtbot.addWidget(view.widget)
     view.widget.show()
-    view.on_tab_activated()
-    qtbot.waitUntil(lambda: view._deck_prepare_batch_id is not None)
     return view
 
 
@@ -130,122 +142,46 @@ def _stack(view: CandidateListView) -> QStackedWidget:
     return stack
 
 
-def _settle(
-    view: CandidateListView,
-    indices: list[int],
-    *,
-    settled_total: int,
-) -> None:
+def test_deck_content_is_revealed_without_waiting_for_posters(qtbot, monkeypatch) -> None:
+    view = _build_view(qtbot, monkeypatch)
+
+    view.on_tab_activated()
+    qtbot.waitUntil(lambda: view._deck_worker is None and view._deck is not None)
+
     controller = view._poster_prefetch
-    batch_id = view._deck_prepare_batch_id
-    assert batch_id is not None
-    for index in indices:
-        identity = candidate_detail_identity(view._all_candidates[index])
-        controller.candidate_settled.emit(batch_id, identity, "", False, False)
-    controller.batch_progress.emit(batch_id, 0, 0, settled_total, 25, 0)
-
-
-def test_reveal_requires_first_eight_and_twenty_settled(qtbot, monkeypatch) -> None:
-    view = _build_view(qtbot, monkeypatch)
-    view._deck_loader_shown_at = perf_counter() - 1.0
-
-    assert view._deck_loading_state.state == "loading"
-    assert view._deck_loading_state.isVisible()
-    assert view._deck_loading_progress.isVisible()
-    _settle(view, list(range(7)) + list(range(8, 21)), settled_total=20)
-    assert _stack(view).currentWidget() is view._deck_loading_page
-
-
-def test_reveal_opens_at_exactly_twenty_when_first_eight_are_settled(qtbot, monkeypatch) -> None:
-    view = _build_view(qtbot, monkeypatch)
-    view._deck_loader_shown_at = perf_counter() - 1.0
-
-    _settle(view, list(range(20)), settled_total=20)
     assert _stack(view).currentWidget() is view._deck_content_page
-
-
-def test_reveal_deadline_opens_deck_with_pending_posters(qtbot, monkeypatch) -> None:
-    view = _build_view(qtbot, monkeypatch)
-    view._deck_loader_shown_at = perf_counter() - 1.0
-    _settle(view, [0, 1, 2], settled_total=3)
-
-    assert view._deck_deadline_timer.isActive()
-    assert view._deck_deadline_timer.interval() == list_view_module.POSTER_REVEAL_DEADLINE_MS
-    view._on_deck_deadline()
-
-    assert _stack(view).currentWidget() is view._deck_content_page
-
-
-def test_fast_batch_waits_for_minimum_loader_interval(qtbot, monkeypatch) -> None:
-    view = _build_view(qtbot, monkeypatch)
-    view._deck_loader_shown_at = perf_counter()
-    _settle(view, list(range(25)), settled_total=25)
-
-    assert _stack(view).currentWidget() is view._deck_loading_page
-    assert view._deck_minimum_timer.isActive()
-
-    view._deck_loader_shown_at = perf_counter() - 1.0
-    view._on_deck_minimum_elapsed()
-    assert _stack(view).currentWidget() is view._deck_content_page
-
-
-def test_stale_batch_progress_is_ignored_by_reveal_gate(qtbot, monkeypatch) -> None:
-    view = _build_view(qtbot, monkeypatch)
-    controller = view._poster_prefetch
-    old_batch_id = view._deck_prepare_batch_id
-    assert old_batch_id is not None
-    view._deck_loader_shown_at = perf_counter() - 1.0
-
-    controller.batch_started.emit(old_batch_id + 1, 25)
-    controller.batch_progress.emit(old_batch_id, 25, 0, 25, 25, 25)
-
-    assert view._deck_prepare_batch_id == old_batch_id + 1
-    assert _stack(view).currentWidget() is view._deck_loading_page
-
-
-def test_same_deck_refill_stays_on_content_page(qtbot, monkeypatch) -> None:
-    view = _build_view(qtbot, monkeypatch)
-    view._deck_loader_shown_at = perf_counter() - 1.0
-    view._on_deck_deadline()
-    controller = view._poster_prefetch
-    assert len(controller.start_calls) == 1
-
-    updated = deepcopy(view._deck)
-    updated["active"] = list(updated["active"])[1:] + [_candidate(200)]
-    view._present_recommendation_deck(updated, prepare_posters=False)
-
-    assert _stack(view).currentWidget() is view._deck_content_page
-    assert len(controller.start_calls) == 1
+    assert len(view._all_candidates) == 25
     assert len(controller.background_calls) == 1
+    assert len(controller.background_calls[0]) == 25
 
 
-def test_force_new_deck_returns_to_loading_page(qtbot, monkeypatch) -> None:
-    view = _build_view(qtbot, monkeypatch)
-    view._deck_loader_shown_at = perf_counter() - 1.0
-    view._on_deck_deadline()
-    controller = view._poster_prefetch
+def test_replaced_deck_cancels_stale_poster_requests(qtbot, monkeypatch) -> None:
+    service = FakeDeckService(_deck())
+    view = _build_view(qtbot, monkeypatch, deck_service=service)
+    view.on_tab_activated()
+    qtbot.waitUntil(lambda: view._deck_worker is None and view._deck is not None)
+    initial_cancel_count = view._poster_prefetch.cancel_count
+
+    service.deck["deck_id"] = "replacement"
+    view._load_recommendation_deck(force_new=True)
+    qtbot.waitUntil(lambda: view._deck_worker is None and view._deck["deck_id"] == "replacement")
+
+    assert view._poster_prefetch.cancel_count == initial_cancel_count + 1
     assert _stack(view).currentWidget() is view._deck_content_page
 
-    view._on_new_deck_clicked()
 
-    assert _stack(view).currentWidget() is view._deck_loading_page
-    assert len(controller.start_calls) == 2
-    assert view._deck_prepare_batch_id == 2
+def test_deck_requests_coalesce_to_latest_generation(qtbot, monkeypatch) -> None:
+    service = BlockingDeckService(_deck())
+    view = _build_view(qtbot, monkeypatch, deck_service=service)
+    view._recommendations_active = True
 
+    view._load_recommendation_deck(force_new=False)
+    assert service.first_started.wait(1.0)
+    view._session.variation_seed = 2
+    view._load_recommendation_deck(force_new=True)
+    service.release_first.set()
 
-def test_first_candidates_after_empty_start_use_poster_prepare_gate(qtbot, monkeypatch) -> None:
-    view = _build_view(qtbot, monkeypatch)
-    controller = view._poster_prefetch
-    empty_deck = deepcopy(view._deck)
-    empty_deck["active"] = []
-    empty_deck["reserve"] = []
-    empty_deck["recommendation_vector"] = view._deck_vector()
-    view._deck = empty_deck
-    view._all_candidates = []
-    view._deck_service.top_up_deck = lambda *_args, **_kwargs: _deck()
+    qtbot.waitUntil(lambda: view._deck_worker is None and service.calls == 2)
 
-    view.refresh()
-
-    assert _stack(view).currentWidget() is view._deck_loading_page
-    assert len(controller.start_calls) == 2
-    assert len(controller.start_calls[-1]) == 25
+    assert view._deck["deck_id"] == "deck-2"
+    assert view._deck["variation_seed"] == 2

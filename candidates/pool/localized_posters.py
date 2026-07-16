@@ -12,6 +12,7 @@ from dataset.language import normalize_data_language, tmdb_locale_for_data_langu
 from dataset.tmdb_localized import localized_blocks_from_tmdb_details
 
 TMDB_DETAIL_FIELDS_CHECKED_AT = "tmdb_detail_fields_checked_at"
+INTERACTIVE_DETAIL_TIMEOUT_SECONDS = 8
 TV_METADATA_TRIGGER_FIELDS = (
     "number_of_seasons",
     "number_of_episodes",
@@ -218,11 +219,15 @@ def _fetch_details(tmdb_id: int, media_type: str, language: str, details_func=No
             int(tmdb_id),
             language=tmdb_language,
             append_to_response=tmdb_api.DEFAULT_MOVIE_DETAIL_APPENDS,
+            timeout=INTERACTIVE_DETAIL_TIMEOUT_SECONDS,
+            retries=0,
         )
     return tmdb_api.get_tv_details(
         int(tmdb_id),
         language=tmdb_language,
         append_to_response=tmdb_api.DEFAULT_TV_DETAIL_APPENDS,
+        timeout=INTERACTIVE_DETAIL_TIMEOUT_SECONDS,
+        retries=0,
     )
 
 

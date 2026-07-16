@@ -24,6 +24,7 @@ from candidates.sources.tmdb import importer as tmdb_import
 
 ONBOARDING_LAST_PROFILE_SETTING_KEY = "onboarding_last_profile"
 POOL_REPLENISH_THRESHOLD = 40
+INTERACTIVE_TMDB_TIMEOUT_SECONDS = 8
 
 
 def should_show_onboarding_autofill() -> bool:
@@ -144,7 +145,12 @@ class _FilterReplenishTmdbClient:
 
 
 def _build_filter_replenish_tmdb_client() -> _FilterReplenishTmdbClient:
-    return _FilterReplenishTmdbClient()
+    return _FilterReplenishTmdbClient(
+        TmdbAutofillClient(
+            timeout=INTERACTIVE_TMDB_TIMEOUT_SECONDS,
+            retries=0,
+        )
+    )
 
 
 def replenish_candidate_pool_for_filters(intent: dict, *, limit: int = 30, tmdb_client=None, progress_callback=None, cancel_checker=None, dry_run: bool = False) -> dict:

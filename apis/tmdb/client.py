@@ -429,13 +429,21 @@ def cached_tmdb_get(
     *,
     force_refresh: bool = False,
     token: str | None = None,
+    timeout: int | float = DEFAULT_TMDB_TIMEOUT_SECONDS,
+    retries: int = DEFAULT_TMDB_RETRIES,
 ) -> dict[str, Any]:
     ensure_cache_dirs()
     if force_refresh is False:
         cached = read_json(cache_path)
         if cached is not None:
             return cached
-    payload = tmdb_get(path, params=params, token=token)
+    payload = tmdb_get(
+        path,
+        params=params,
+        token=token,
+        timeout=timeout,
+        retries=retries,
+    )
     write_json(cache_path, payload)
     return payload
 
@@ -605,6 +613,8 @@ def get_tv_details(
     append_to_response: str | list[str] | tuple[str, ...] | None = None,
     force_refresh: bool = False,
     token: str | None = None,
+    timeout: int | float = DEFAULT_TMDB_TIMEOUT_SECONDS,
+    retries: int = DEFAULT_TMDB_RETRIES,
 ) -> dict[str, Any]:
     append_value = normalize_append_to_response(append_to_response)
     params = {
@@ -618,6 +628,8 @@ def get_tv_details(
         cache_path,
         force_refresh=force_refresh,
         token=token,
+        timeout=timeout,
+        retries=retries,
     )
 
 
@@ -628,6 +640,8 @@ def get_movie_details(
     append_to_response: str | list[str] | tuple[str, ...] | None = None,
     force_refresh: bool = False,
     token: str | None = None,
+    timeout: int | float = DEFAULT_TMDB_TIMEOUT_SECONDS,
+    retries: int = DEFAULT_TMDB_RETRIES,
 ) -> dict[str, Any]:
     if append_to_response is None:
         append_value = ",".join(DEFAULT_MOVIE_DETAIL_APPENDS)
@@ -644,6 +658,8 @@ def get_movie_details(
         cache_path,
         force_refresh=force_refresh,
         token=token,
+        timeout=timeout,
+        retries=retries,
     )
 
 
@@ -1096,7 +1112,7 @@ def check_api_available(token: str | None = None) -> dict[str, Any]:
     """Проверяет базовую доступность TMDb API коротким запросом."""
     started = time.monotonic()
     try:
-        tmdb_get("/configuration", token=token)
+        tmdb_get("/configuration", token=token, timeout=8, retries=0)
     except RuntimeError as error:
         elapsed_ms = round((time.monotonic() - started) * 1000, 1)
         if "TMDb credentials not found" in str(error):

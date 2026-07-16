@@ -243,6 +243,7 @@ def replenish_candidates_for_filters(
     existing_pool: dict[str, Any] | list[dict[str, Any]] | None = None,
     watched_tmdb_ids: set[int] | list[int] | tuple[int, ...] | None = None,
     hidden_tmdb_ids: set[int] | list[int] | tuple[int, ...] | None = None,
+    enrich_details: bool = False,
 ) -> dict[str, Any]:
     """Fetch and select candidates for a filter replenish run without saving."""
     normalized = _as_intent(intent)
@@ -377,10 +378,15 @@ def replenish_candidates_for_filters(
                     bucket_counter["duplicate_count"] += 1
                     continue
                 language = params.get("language") or "ru-RU"
-                detailed_candidate = _maybe_fetch_details(tmdb_client, candidate, language=str(language))
-                if detailed_candidate is not None:
-                    counters["details_requests"] += 1
-                    candidate = detailed_candidate
+                if enrich_details:
+                    detailed_candidate = _maybe_fetch_details(
+                        tmdb_client,
+                        candidate,
+                        language=str(language),
+                    )
+                    if detailed_candidate is not None:
+                        counters["details_requests"] += 1
+                        candidate = detailed_candidate
                 if _candidate_quality_reject_reason(candidate) is not None:
                     counters["rejected_count"] += 1
                     bucket_counter["rejected_count"] += 1
