@@ -19,6 +19,7 @@ SANDBOX_KIND = "sandbox"
 USER_KIND = "user"
 ACTIVE_PROFILE_JSON = "active_profile.json"
 PROFILE_META_JSON = "profile.json"
+_DEFAULT_BASE_DATA_DIR = Path(constant.APP_DATA_DIR)
 _BASE_DATA_DIR_OVERRIDE: Path | None = None
 
 
@@ -44,7 +45,7 @@ def _clean_profile_name(name: str) -> str:
 def _base_data_dir() -> Path:
     if _BASE_DATA_DIR_OVERRIDE is not None:
         return _BASE_DATA_DIR_OVERRIDE
-    return Path(constant.APP_DATA_DIR)
+    return _DEFAULT_BASE_DATA_DIR
 
 
 def get_base_data_dir() -> Path:

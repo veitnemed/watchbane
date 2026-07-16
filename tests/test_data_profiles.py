@@ -246,6 +246,23 @@ def test_return_to_main_restores_main_dataset_access(isolated_profiles) -> None:
     assert list(storage_data.load_dataset()) == ["Main"]
 
 
+def test_profile_registry_root_does_not_follow_active_profile_constants(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    registry_root = tmp_path / "data"
+    monkeypatch.setattr(profiles, "_BASE_DATA_DIR_OVERRIDE", None)
+    monkeypatch.setattr(profiles, "_DEFAULT_BASE_DATA_DIR", registry_root)
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(registry_root))
+
+    profiles.create_profile("friend", display_name="Friend")
+    profiles.set_active_profile("friend")
+
+    assert profiles.get_base_data_dir() == registry_root
+    assert profiles.get_profile_data_dir("friend") == registry_root / "profiles" / "friend"
+    assert Path(constant.APP_DATA_DIR) == registry_root / "profiles" / "friend"
+
+
 def test_console_data_profiles_menu_uses_profile_manager_not_storage() -> None:
     from ui.console import data_profiles_menu
     from ui.console import global_menu
