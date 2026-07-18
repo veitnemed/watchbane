@@ -1,224 +1,137 @@
-# Watchbane
+# Документация Watchbane
 
-Документация активной версии: **Watchbane 0.1.1-alpha.1 — Open Route**, алгоритм рекомендаций **ReDeck v0.1.0**. Если документ не помечен как historical/archive, он относится к этой версии. Канонический контракт: [../VERSION.md](../VERSION.md).
+Активная версия: **Watchbane 0.1.1-alpha.1 — Open Route**, алгоритм **ReDeck v0.1.0**.  
+Канон релиза: [../VERSION.md](../VERSION.md).  
+Канон продукта: [contracts/PRODUCT_ROADMAP_CONTRACT.md](contracts/PRODUCT_ROADMAP_CONTRACT.md).
 
-Локальный Python-проект для ведения личного списка просмотренных фильмов и сериалов, поиска новых тайтлов, работы с candidate pool и desktop-интерфейсом.
+Локальное Windows-приложение: личная **колода «что посмотреть дальше»** (фильм/сериал), коллекция watched/saved/hidden и TMDb. Не каталог и не стриминг.
 
-Старая ML-модель и старые ручные тесты сохранены в `archive/legacy/`, но больше не являются активной частью runtime.
+Старая ML-модель и ручные тесты — в `archive/legacy/`, не в runtime.
+
+## Читай сначала
+
+1. [PRODUCT_ROADMAP_CONTRACT.md](contracts/PRODUCT_ROADMAP_CONTRACT.md) — продукт, фаза C, колода до 10, «не делать».
+2. [VERSION.md](../VERSION.md) — версия релиза.
+3. [AGENTS.md](../AGENTS.md) — правила для агента (Composer).
+
+**Daily path:** вкладка **Рекомендации** → колода с постерами → смотрел / сохранить / скрыть.  
+**Коллекция (Моё)** — сервис вокруг колоды.  
+**UI QA (фаза C):** масштабы **`1.0`** и **`1.25`** (не `QT_SCALE_FACTOR`).
 
 ## Что умеет проект
 
-- хранить watched/dataset, meta, candidate pool, settings, actions и poster metadata в локальной SQLite-базе;
-- добавлять записи через безопасный путь `dataset.storage_movie.add_movie() -> dataset.dataset_records.add_dataset_record()`;
-- подтягивать defaults из локальных/внешних источников перед сохранением watched-записи;
-- поддерживать жанры, vibe-теги, оценки и постеры;
-- открывать desktop PyQt GUI для watched-базы;
-- показывать read-only карточку тайтла, постер, метаданные, оценки и аналитику;
-- собирать TMDb-only candidate pool;
-- импортировать TMDb result в общий candidate pool;
-- искать и ранжировать кандидатов из общего пула по runtime-фильтрам;
-- переносить кандидатов из пула в watched/dataset через форму ручного подтверждения;
-- экспортировать watched/add-title карточки через read-only слой `web/`.
+- показывать конечную колоду рекомендаций из локального пула;
+- хранить watched / saved / hidden, настройки и метаданные постеров в SQLite;
+- пополнять пул через TMDb Discover (свой токен);
+- фильтровать и ранжировать кандидатов локально;
+- вести коллекцию и карточку тайтла в desktop GUI;
+- обслуживать пул через консоль (`start_console.py`).
 
 ## Запуск
 
-Требуется Python 3.13+.
-
-Консольный вход:
+Python 3.13+.
 
 ```powershell
 py start_console.py
-```
-
-Desktop GUI:
-
-```powershell
 py start_app.py
 ```
 
-## Windows release build
-
-The default desktop release is an onedir bundle rather than a single-file executable. Build it from the repository root:
+### Сборка Windows (onedir)
 
 ```powershell
 ./tools/build_desktop.ps1
 ./dist/Watchbane/Watchbane.exe
 ```
 
-The result is `dist/Watchbane/`; `Watchbane.exe` must remain next to `_internal/` and the bundled assets. UI screenshots and layout checks use the application scale settings `0.75`, `1.0`, and `1.5` (not `QT_SCALE_FACTOR`).
+Рядом с `Watchbane.exe` должен оставаться `_internal/`.
 
-Для TMDb-потока нужен токен:
-
-- переменная окружения `TMDB_TOKEN`;
-- или `.env.local`;
-- или `tmdb.env`.
-
-Токен не должен попадать в git и в консольный вывод.
+Токен TMDb: `TMDB_TOKEN`, `.env.local` или `tmdb.env` — не коммитить и не печатать в лог.
 
 ## Основные папки
 
-- `app/` - входные сценарии приложения.
-- `desktop/` - текущий PyQt desktop GUI.
-- `ui/console/` - консольное меню, prompts и UI-оркестрация.
-- `dataset/` - записи, meta, Excel, статистика, теги, резолв тайтлов.
-- `candidates/` - общий candidate pool и TMDb pipeline.
-- `posters/` - poster-cache и загрузка постеров.
-- `web/` - read-only экспорт карточек watched/add-title.
-- `storage/` - SQLite runtime storage, legacy JSON import/export, backup, файлы, нормализация.
-- `apis/` - внешние и локальные источники данных.
-- `common/` - чистые утилиты.
-- `config/` - константы, схемы, каталоги тегов/жанров.
-- `scripts/` - ручные diagnostic/build utilities.
-- `assets/desktop/` - desktop assets.
-- `tests/` - активный pytest-набор.
-- `archive/legacy/` - старые ML/model и прежние ручные тесты.
-- `screens/tmp_ui/` - локальные временные UI-скриншоты; содержимое не коммитится.
-
-## Candidate Pool
-
-Общий пул хранится в SQLite (`data/watchbane.sqlite3`). Named pools больше не создаются: TMDb build и import обновляют один pool. Defaults фильтров и параметров сбора хранятся в SQLite criteria (`"pool"`).
-
-Счётчики в UI/console:
-
-- **уникальных** — число кандидатов после нормализации по `title|year`;
-- **в storage** — сколько физических записей сохранено, если есть лишние дубли после merge старых пуллов.
-
-Очистка дублей (console: **Поиск сериалов → Управление pool → Очистить дубли в pool**):
-
-- exact-дубли и legacy-ключи;
-- похожие названия одного года (остаётся лучшая запись).
-
-TMDb candidate pool:
-
-1. TMDb Discover.
-2. TMDb Details.
-3. TMDb-only нормализация и scoring.
-4. Сохранение отдельного JSON/CSV результата.
-5. При необходимости импорт в общий SQLite candidate pool.
-
-CLI-примеры:
-
-```powershell
-python scripts/tmdb/build_candidate_pool.py --country RU --pages 3 --details-limit 50 --mode quality
-python scripts/tmdb/build_candidate_pool.py --country KR --pages 3 --details-limit 50 --mode hidden_gems
-```
-
-## Добавление записи
-
-Есть два основных сценария:
-
-1. Ручное добавление из раздела `Данные`.
-2. Перенос кандидата из `candidate_pool`.
-
-В обоих случаях запись не добавляется молча. Сначала пользователь получает defaults, затем открывается форма подтверждения и ручного заполнения.
-
-Форма позволяет:
-
-- проверить `title` и `year`;
-- выставить `user_score`;
-- проверить и поправить `raw_scores`;
-- подтвердить или поправить жанры;
-- заполнить или изменить vibe-теги.
-
-## Полезные команды
-
-Компиляция активных пакетов:
-
-```powershell
-py -m compileall app apis candidates common config dataset desktop posters scripts storage ui web tests
-```
-
-Тесты:
-
-```powershell
-py -m pytest
-```
-
-## Где лежат данные
-
-| Назначение | Путь |
+| Папка | Назначение |
 | --- | --- |
-| SQLite runtime DB | `data/watchbane.sqlite3` |
-| Legacy JSON import/export only | `data/watched/`, `data/candidates/`, `data/settings.json`, `data/cache/posters/posters.json` |
-| API log | `data/logs/api_requests.log` |
-| Backup | `data/backups/` |
-| Excel/export | `data/exports/` |
-| Cache | `data/cache/` |
+| `app/` | сценарии приложения |
+| `desktop/` | PyQt GUI |
+| `ui/console/` | консоль |
+| `dataset/` | watched / meta |
+| `candidates/` | пул и рекомендации |
+| `posters/` | кэш постеров |
+| `storage/` | SQLite |
+| `apis/` | внешние API |
+| `tests/` | pytest |
+| `archive/legacy/` | legacy, не runtime |
+| `screens/tmp_ui/` | временные скрины (не коммитить) |
+| `internal/archive/docs/` | архив отчётов и старых планов |
 
-## Документация
+## Пул кандидатов
 
-### Architecture
+Один пул в SQLite (`data/watchbane.sqlite3`), criteria `"pool"`. Named pools не создаются.
 
-- [PROJECT_MAP.md](architecture/PROJECT_MAP.md) - карта активных модулей.
-- [LOGICAL_ARCHITECTURE.md](architecture/LOGICAL_ARCHITECTURE.md) - логические зоны проекта.
-- [ARCHITECTURE_TARGET.md](architecture/ARCHITECTURE_TARGET.md) - целевая архитектура и правила зависимостей.
-- [STRUCTURE_PLAN.md](architecture/STRUCTURE_PLAN.md) - план структурной чистки.
-- [REFACTORING_CHECKLIST.md](architecture/REFACTORING_CHECKLIST.md) - чеклист структурных правок.
+## Документация (активная)
 
-### Contracts
+### Архитектура
 
-- [ADD_RECORD_RULES.md](contracts/ADD_RECORD_RULES.md) - контракт добавления/изменения записей.
-- [TMDB_ONLY_CANDIDATE_FLOW.md](contracts/TMDB_ONLY_CANDIDATE_FLOW.md) - public TMDb-only candidate flow, migration, refresh and scoring.
-- [DESKTOP_STYLE_CONTRACT.md](contracts/DESKTOP_STYLE_CONTRACT.md) - визуальный контракт desktop GUI.
-- [UI_SCALE_CONTRACT.md](contracts/UI_SCALE_CONTRACT.md) - контракт application-level UI scale.
-- [CHIP_FILTER_WIDGET_CONTRACT.md](contracts/CHIP_FILTER_WIDGET_CONTRACT.md) - контракт chip-фильтров.
-- [DETAIL_CARD_HERO_CONTRACT.md](contracts/DETAIL_CARD_HERO_CONTRACT.md) - строгий контракт hero/detail card.
-- [DETAIL_CARD_VISUAL_CONTRACT.md](contracts/DETAIL_CARD_VISUAL_CONTRACT.md) - визуальный контракт detail card.
+- [OVERVIEW.md](architecture/OVERVIEW.md) — обзор
+- [PROJECT_MAP.md](architecture/PROJECT_MAP.md) — карта модулей
+- [LOGICAL_ARCHITECTURE.md](architecture/LOGICAL_ARCHITECTURE.md) — зоны слоёв
+- [ARCHITECTURE_TARGET.md](architecture/ARCHITECTURE_TARGET.md) — целевые правила
+- [CANDIDATE_QUEUE_AND_POSTERS.md](architecture/CANDIDATE_QUEUE_AND_POSTERS.md) — колода и постеры
+- [REFACTORING_CHECKLIST.md](architecture/REFACTORING_CHECKLIST.md) — чеклист рефакторинга
 
-### Desktop
+### Контракты
 
-- [DESKTOP_MODULE_MAP.md](desktop/DESKTOP_MODULE_MAP.md) - карта desktop-модулей и правила расширения.
-- [DESKTOP_GUI_ROADMAP.md](desktop/DESKTOP_GUI_ROADMAP.md) - roadmap desktop GUI.
+- [PRODUCT_ROADMAP_CONTRACT.md](contracts/PRODUCT_ROADMAP_CONTRACT.md) — **канон продукта**
+- [ADD_RECORD_RULES.md](contracts/ADD_RECORD_RULES.md)
+- [TMDB_ONLY_CANDIDATE_FLOW.md](contracts/TMDB_ONLY_CANDIDATE_FLOW.md)
+- [DESKTOP_STYLE_CONTRACT.md](contracts/DESKTOP_STYLE_CONTRACT.md)
+- [UI_SCALE_CONTRACT.md](contracts/UI_SCALE_CONTRACT.md)
+- [CHIP_FILTER_WIDGET_CONTRACT.md](contracts/CHIP_FILTER_WIDGET_CONTRACT.md)
+- [DETAIL_CARD_HERO_CONTRACT.md](contracts/DETAIL_CARD_HERO_CONTRACT.md)
+- [DETAIL_CARD_VISUAL_CONTRACT.md](contracts/DETAIL_CARD_VISUAL_CONTRACT.md)
 
-### Storage
+### Desktop / storage / ops
 
-- [DATA_STORAGE_PLAN.md](storage/DATA_STORAGE_PLAN.md) - структура локального хранения данных.
+- [DESKTOP_MODULE_MAP.md](desktop/DESKTOP_MODULE_MAP.md)
+- [storage/README.md](storage/README.md) — кратко про SQLite
+- [WORKSPACE_HOUSEKEEPING.md](operations/WORKSPACE_HOUSEKEEPING.md)
+- [REPORT_OUTPUT_POLICY.md](operations/REPORT_OUTPUT_POLICY.md)
+- [onboarding_dev_sandbox.md](operations/onboarding_dev_sandbox.md)
+- [TMDB_NETWORK_TROUBLESHOOTING.md](TMDB_NETWORK_TROUBLESHOOTING.md)
+- [GITHUB_PUBLICATION_CHECKLIST.md](operations/GITHUB_PUBLICATION_CHECKLIST.md)
 
-### Operations
+### Проект
 
-- [WORKSPACE_HOUSEKEEPING.md](operations/WORKSPACE_HOUSEKEEPING.md) - правила локальной чистки workspace.
-- [REPORT_OUTPUT_POLICY.md](operations/REPORT_OUTPUT_POLICY.md) - куда писать raw reports и curated summaries.
-- [onboarding_dev_sandbox.md](operations/onboarding_dev_sandbox.md) - dev-флаги и sandbox onboarding flow.
-- [TMDB_NETWORK_TROUBLESHOOTING.md](TMDB_NETWORK_TROUBLESHOOTING.md) - диагностика DNS/TCP/TLS/API/postеров, VPN-матрица и обратимые recovery tools.
-- [GITHUB_PUBLICATION_CHECKLIST.md](operations/GITHUB_PUBLICATION_CHECKLIST.md) - checklist публикации.
+- [add_functions.md](project/add_functions.md)
+- [CONTRIBUTING.md](project/CONTRIBUTING.md)
+- [SECURITY.md](project/SECURITY.md)
+- [CODE_OF_CONDUCT.md](project/CODE_OF_CONDUCT.md)
+- [AGENTS.md](project/AGENTS.md) — только слои (product → корневой AGENTS.md)
 
-### Project
+### Отчёты
 
-- [add_functions.md](project/add_functions.md) - правила добавления и изменения функционала.
-- [CONTRIBUTING.md](project/CONTRIBUTING.md) - правила участия.
-- [SECURITY.md](project/SECURITY.md) - security policy.
-- [CODE_OF_CONDUCT.md](project/CODE_OF_CONDUCT.md) - code of conduct.
-- [AGENTS.md](project/AGENTS.md) - краткие агентские правила проекта.
+Активный указатель: [reports/README.md](reports/README.md).  
+Архив: [`internal/archive/docs/reports/`](../internal/archive/docs/reports/).
 
-### Reports
+## Архив (не читать как direction)
 
-- [onboarding_country_first_10_scenario_quality_report.md](reports/onboarding/onboarding_country_first_10_scenario_quality_report.md) - последний актуальный onboarding quality report.
+- Планы: [`internal/archive/docs/plans/`](../internal/archive/docs/plans/) — STRUCTURE, POSTER, DESKTOP_GUI_ROADMAP, DATA_STORAGE
+- Closed plans / audits / movie-cycle: `internal/archive/docs/closed-plans/`, `audits/`, `codex_movie_cycle/`
 
-## Historical reports removed/archived
+## Legacy JSON
 
-- Старые generated onboarding reports удалены из активного `docs/`; оставлен только curated report в `docs/reports/onboarding/`.
-- Закрытый movie-cycle перенесён из `docs/codex_movie_cycle/` в [`internal/archive/docs/codex_movie_cycle/`](../internal/archive/docs/codex_movie_cycle/README.md).
-- Закрытые планы и аудиты перенесены в `internal/archive/docs/closed-plans/` и `internal/archive/docs/audits/`.
-
-## Legacy JSON import/export
-
-SQLite is canonical runtime storage. Legacy JSON is explicit compatibility only:
+SQLite — канон. JSON — только совместимость:
 
 ```powershell
 py tools/migrations/migrate_json_to_sqlite.py --dry-run
 py tools/migrations/migrate_json_to_sqlite.py --apply
-py tools/migrations/export_sqlite_to_json.py --output-dir data/exports/legacy-json
 ```
 
-For recovery, restore a SQLite backup from `data/backups/` first. Legacy JSON
-exports are useful for inspection, migration, and compatibility, not as an
-active backend.
+Сначала восстанавливай backup из `data/backups/`.
 
 ## Важно
 
-- SQLite candidate pool не должен меняться от runtime-фильтров поиска.
-- Обычный поиск/ранжирование работает только по ready/complete-кандидатам.
-- TMDb import и перенос кандидата в dataset - разные шаги.
-- Финальное сообщение об успешном добавлении печатает UI-слой, а не storage.
-- Legacy model лежит в `archive/legacy/model/` и не импортируется активным runtime.
-- Public candidate flow требует только `TMDB_TOKEN`; KP API и локальный IMDb dataset не нужны для candidate pool.
+- Runtime-фильтры поиска не должны менять сохранённый SQLite pool.
+- Поиск/ранжирование — по ready/complete кандидатам.
+- Public candidate flow: только `TMDB_TOKEN` (без KP/IMDb dataset).
+- Агент не берёт product direction из архивных планов и отчётов.

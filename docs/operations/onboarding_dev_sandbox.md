@@ -1,61 +1,61 @@
 # Onboarding Dev Sandbox
 
-Date: 2026-07-08
+Дата: 2026-07-08
 
-## Goal
+## Цель
 
-Repeat first-run onboarding safely during development without silently deleting real user data.
+Безопасно повторять first-run onboarding при разработке, не удаляя молча реальные пользовательские данные.
 
-## Explicit Flags
+## Явные флаги
 
 - `WATCHBANE_DEV_EMPTY_PROFILE=1`
 - `WATCHBANE_DEV_CLEAR_CANDIDATES_ON_START=1`
 
-Both flags are off by default.
+Оба флага по умолчанию выключены.
 
-## Startup Behavior
+## Поведение при старте
 
-`desktop.shell.bootstrap.main()` calls `storage.runtime.apply_dev_startup_reset_from_env()` before runtime initialization.
+`desktop.shell.bootstrap.main()` вызывает `storage.runtime.apply_dev_startup_reset_from_env()` до инициализации runtime.
 
-If either flag is enabled:
+Если включён любой из флагов:
 
-1. The active data root is backed up under `data/.../backups/dev_startup/`.
-2. `WATCHBANE_DEV_EMPTY_PROFILE=1` removes active SQLite DB files and legacy runtime JSON files.
-3. `WATCHBANE_DEV_CLEAR_CANDIDATES_ON_START=1` clears candidate/onboarding SQLite tables without clearing watched records.
-4. Runtime initialization recreates the SQLite schema and required directories.
+1. Активный data root копируется в backup под `data/.../backups/dev_startup/`.
+2. `WATCHBANE_DEV_EMPTY_PROFILE=1` удаляет активные файлы SQLite DB и legacy runtime JSON.
+3. `WATCHBANE_DEV_CLEAR_CANDIDATES_ON_START=1` очищает candidate/onboarding SQLite tables, не очищая watched records.
+4. Инициализация runtime заново создаёт SQLite schema и нужные directories.
 
-## Local Launcher
+## Локальный launcher
 
-For isolated pool rebuild checks without touching the active profile:
+Для изолированных проверок пересборки pool без затрагивания активного профиля:
 
 ```powershell
 py scripts\reports\run_onboarding_pool_rebuild.py --mock --all --output reports\onboarding\pool_mock_report.md
 py scripts\reports\run_onboarding_pool_rebuild.py --live --all --require-live --output reports\onboarding\pool_live_report.md
 ```
 
-The scenario runner writes each scenario into a temporary SQLite database and does not print TMDb credentials.
+Scenario runner пишет каждый сценарий во временную SQLite database и не печатает TMDb credentials.
 
-## Console GUI Mode
+## Режим Console GUI
 
-For repeated first-run checks without clearing watched records:
+Для повторных first-run проверок без очистки watched records:
 
 ```powershell
 py start_console.py
 # choose: 7 >> Dev GUI: empty candidate pool on startup
 ```
 
-This copies the active data root into `tmp/dev_gui/empty_candidate_pool/`, starts `start_app.py` with `WATCHBANE_DATA_DIR` pointed at that isolated runtime root, and enables `WATCHBANE_DEV_CLEAR_CANDIDATES_ON_START=1`. GUI bootstrap backs up the copied data root, clears candidate/onboarding tables there, then opens the onboarding flow from a zero candidate pool without touching the active profile.
+Это копирует активный data root в `tmp/dev_gui/empty_candidate_pool/`, запускает `start_app.py` с `WATCHBANE_DATA_DIR`, указывающим на этот изолированный runtime root, и включает `WATCHBANE_DEV_CLEAR_CANDIDATES_ON_START=1`. GUI bootstrap делает backup скопированного data root, очищает там candidate/onboarding tables, затем открывает onboarding flow с нулевым candidate pool, не трогая активный профиль.
 
-## Token Policy
+## Политика токена
 
-TMDb credentials are discovered from:
+TMDb credentials ищутся в:
 
 - `TMDB_ACCESS_TOKEN`
 - `TMDB_TOKEN`
 - `TMDB_API_KEY`
 
-Tokens are never printed. `TMDB_API_KEY` is sent as query `api_key`; access tokens are sent as Bearer auth.
+Токены никогда не печатаются. `TMDB_API_KEY` отправляется как query `api_key`; access tokens — как Bearer auth.
 
 ## Release Note
 
-The dev flags are development-only. The old `.codex-onboarding-fullscreen` helper prompt-pack has been removed; use the commands above for local checks. These flags must not be enabled in user startup environments.
+Dev-флаги только для разработки. Старый helper prompt-pack `.codex-onboarding-fullscreen` удалён; для локальных проверок используйте команды выше. Эти флаги нельзя включать в пользовательских startup-окружениях.

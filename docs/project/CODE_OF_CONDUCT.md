@@ -1,9 +1,9 @@
-# Code of Conduct
+# Кодекс поведения
 
-Be direct, respectful and useful.
+Будьте прямолинейны, уважительны и полезны.
 
-This project welcomes focused technical discussion, bug reports and pull requests. Keep feedback specific, avoid personal attacks, and assume people are trying to improve the project.
+Проект приветствует предметное техническое обсуждение, баг-репорты и pull request'ы. Делайте отзывы конкретными, избегайте личных нападок и исходите из того, что люди стараются улучшить проект.
 
-Unacceptable behavior includes harassment, threats, publishing private data, or repeatedly derailing technical work.
+Недопустимы домогательства, угрозы, публикация чужих личных данных и систематический срыв технической работы.
 
-Maintainers may close issues, edit comments or block users when needed to keep the project healthy.
+Мейнтейнеры могут закрывать issue, править комментарии или блокировать пользователей, если это нужно для здоровья проекта.

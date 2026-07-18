@@ -11,7 +11,7 @@
 - Не меняй формат SQLite candidate tables или legacy `candidate_pool.json` / `candidate_criteria.json` без отдельной задачи, миграции и тестов.
 - Не смешивай `sources/tmdb/genre_options.py` и `genres.py`.
 - Не меняй `models/keys.py` без понимания dedupe и merge legacy-ключей.
-- Не трогай candidate pool ради desktop GUI-polish. Визуальный контракт PyQt GUI живёт в [../docs/DESKTOP_STYLE_CONTRACT.md](../docs/DESKTOP_STYLE_CONTRACT.md).
+- Не трогай candidate pool ради desktop GUI-polish. Визуальный контракт PyQt GUI: [`docs/contracts/DESKTOP_STYLE_CONTRACT.md`](../docs/contracts/DESKTOP_STYLE_CONTRACT.md). Product canon: [`docs/contracts/PRODUCT_ROADMAP_CONTRACT.md`](../docs/contracts/PRODUCT_ROADMAP_CONTRACT.md).
 
 ## Быстрая карта
 

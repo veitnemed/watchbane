@@ -1,4 +1,4 @@
-# TMDb-Only Candidate Flow
+# Кандидатный flow только на TMDb
 
 ## Цель
 
@@ -11,9 +11,9 @@
 - TMDb TV Details;
 - локальную нормализацию, scoring и import.
 
-KP/IMDb rating enrichment не входит в public candidate flow. `imdb_id` может сохраняться только как external id из TMDb `external_ids`. Movie runtime uses `runtime_minutes`; legacy `imdb_runtime_minutes` is stripped.
+KP/IMDb rating enrichment не входит в public candidate flow. `imdb_id` может сохраняться только как external id из TMDb `external_ids`. Movie runtime использует `runtime_minutes`; legacy `imdb_runtime_minutes` удаляется.
 
-## Новый Flow
+## Новый flow
 
 1. UI/console запускает TMDb build.
 2. `candidates.sources.tmdb.discovery_strategy` строит discovery slices.
@@ -39,7 +39,7 @@ Watched add-title flow тоже public TMDb-only:
 
 KP API не нужен. IMDb local dataset не нужен. IMDb rating/votes не используются. `imdb_id` может храниться только как external id из TMDb `external_ids`.
 
-## Candidate Object Contract
+## Контракт объекта Candidate
 
 Required/core поля:
 
@@ -81,9 +81,9 @@ Optional metadata:
 - `runtime_minutes`;
 - `imdb_id`.
 
-## Removed Fields
+## Удалённые поля
 
-Candidate pool write-path strips old external rating fields:
+Write-path candidate pool удаляет старые external rating fields:
 
 - `kp_score`;
 - `kp_votes`;
@@ -102,7 +102,7 @@ Candidate pool write-path strips old external rating fields:
 - `imdb_is_adult`;
 - `imdb_found_in_sql`.
 
-Not removed:
+Не удаляются:
 
 - `imdb_id`;
 - `tmdb_id`;
@@ -111,29 +111,29 @@ Not removed:
 - `tmdb_popularity`;
 - `runtime_minutes`.
 
-## Migration Scripts
+## Скрипты миграции
 
-One-time migration for existing `data/candidates/pool.json`:
+Одноразовая миграция для существующего `data/candidates/pool.json`:
 
 ```powershell
 py scripts/migrations/migrate_candidate_pool_tmdb_only.py --dry-run
 py scripts/migrations/migrate_candidate_pool_tmdb_only.py --apply
 ```
 
-Behavior:
+Поведение:
 
-- finds the current candidate pool via repository/config helpers;
-- writes a backup before `--apply`;
-- strips removed fields;
-- sets `source`, `source_provider`, `source_version`;
-- recomputes `year`, completeness and missing fields;
-- keeps incomplete candidates instead of deleting them;
-- marks candidates without `tmdb_id` with `needs_tmdb_match=true`;
-- writes `data/diagnostics/candidate_pool_tmdb_only_migration_report.json`.
+- находит текущий candidate pool через repository/config helpers;
+- пишет backup перед `--apply`;
+- удаляет removed fields;
+- выставляет `source`, `source_provider`, `source_version`;
+- пересчитывает `year`, completeness и missing fields;
+- сохраняет incomplete candidates вместо удаления;
+- помечает кандидатов без `tmdb_id` флагом `needs_tmdb_match=true`;
+- пишет `data/diagnostics/candidate_pool_tmdb_only_migration_report.json`.
 
-## Refresh Scripts
+## Скрипты refresh
 
-Refresh current pool from TMDb Details:
+Обновить текущий pool из TMDb Details:
 
 ```powershell
 py scripts/tmdb/refresh_candidate_pool_from_tmdb.py --dry-run
@@ -143,32 +143,32 @@ py scripts/tmdb/refresh_candidate_pool_from_tmdb.py --apply --only-missing
 py scripts/tmdb/refresh_candidate_pool_from_tmdb.py --apply --force-refresh
 ```
 
-Behavior:
+Поведение:
 
-- candidates with `tmdb_id` are refreshed via TMDb TV Details;
-- candidates without `tmdb_id` are searched by title/year;
-- uncertain matches are reported as `needs_manual_match`;
-- local/user fields like `hidden`, `notes`, `criteria_name`, `added_at`, `source_trace` are preserved;
-- removed KP/IMDb rating fields are stripped;
-- scoring and completeness are recomputed;
-- `--apply` creates a backup before writing;
-- report path: `data/diagnostics/candidate_pool_tmdb_refresh_report.json`.
+- кандидаты с `tmdb_id` обновляются через TMDb TV Details;
+- кандидаты без `tmdb_id` ищутся по title/year;
+- неоднозначные matches помечаются как `needs_manual_match`;
+- локальные/пользовательские поля вроде `hidden`, `notes`, `criteria_name`, `added_at`, `source_trace` сохраняются;
+- удалённые KP/IMDb rating fields снимаются;
+- scoring и completeness пересчитываются;
+- `--apply` создаёт backup перед записью;
+- путь отчёта: `data/diagnostics/candidate_pool_tmdb_refresh_report.json`.
 
-Migrate watched raw scores to the TMDb-only schema:
+Мигрировать watched raw scores к схеме TMDb-only:
 
 ```powershell
 py scripts/migrations/migrate_watched_raw_scores_tmdb_only.py --dry-run
 py scripts/migrations/migrate_watched_raw_scores_tmdb_only.py --apply
 ```
 
-Behavior:
+Поведение:
 
-- strips watched/meta `kp_score`, `kp_votes`, `imdb_score`, `imdb_votes`;
-- keeps existing `tmdb_score`, `tmdb_votes`, `tmdb_popularity`;
-- recomputes watched `computed_scores`;
-- writes `data/diagnostics/watched_raw_scores_tmdb_only_migration_report.json`.
+- удаляет watched/meta `kp_score`, `kp_votes`, `imdb_score`, `imdb_votes`;
+- сохраняет существующие `tmdb_score`, `tmdb_votes`, `tmdb_popularity`;
+- пересчитывает watched `computed_scores`;
+- пишет `data/diagnostics/watched_raw_scores_tmdb_only_migration_report.json`.
 
-Refresh watched metadata and TMDb raw scores:
+Обновить watched metadata и TMDb raw scores:
 
 ```powershell
 py scripts/tmdb/refresh_watched_from_tmdb.py --dry-run
@@ -178,20 +178,20 @@ py scripts/tmdb/refresh_watched_from_tmdb.py --apply --only-missing
 py scripts/tmdb/refresh_watched_from_tmdb.py --apply --force-refresh
 ```
 
-Behavior:
+Поведение:
 
-- records with `meta.tmdb_id` are refreshed via TMDb TV Details;
-- records without `tmdb_id` are searched by title/year;
-- uncertain matches are reported as `needs_manual_match`;
-- updates meta `tmdb_id`, `imdb_id`, description and poster fields;
-- updates watched `raw_scores.tmdb_score`, `tmdb_votes`, `tmdb_popularity`;
-- does not touch `user_score`, vibe tags, manual genre markup or personal notes;
-- does not save KP/IMDb rating fields;
-- report path: `data/diagnostics/watched_tmdb_refresh_report.json`.
+- записи с `meta.tmdb_id` обновляются через TMDb TV Details;
+- записи без `tmdb_id` ищутся по title/year;
+- неоднозначные matches помечаются как `needs_manual_match`;
+- обновляет meta `tmdb_id`, `imdb_id`, description и poster fields;
+- обновляет watched `raw_scores.tmdb_score`, `tmdb_votes`, `tmdb_popularity`;
+- не трогает `user_score`, vibe tags, ручную genre markup или personal notes;
+- не сохраняет KP/IMDb rating fields;
+- путь отчёта: `data/diagnostics/watched_tmdb_refresh_report.json`.
 
 ## Scoring
 
-TMDb-only scoring uses:
+TMDb-only scoring использует:
 
 - Bayesian TMDb rating;
 - vote reliability;
@@ -199,43 +199,43 @@ TMDb-only scoring uses:
 - popularity component;
 - metadata completeness.
 
-Main scores:
+Основные scores:
 
-- `quality_score` - stable ranking for normal recommendations;
-- `hidden_gem_score` - boosts strong but less obvious titles;
-- `final_score` - default search/ranking score.
+- `quality_score` — стабильный ranking для обычных рекомендаций;
+- `hidden_gem_score` — поднимает сильные, но менее очевидные тайтлы;
+- `final_score` — score поиска/ranking по умолчанию.
 
-Known limitation: RU series often have low TMDb vote counts. Watchbane does not use a hard high minimum-votes gate for them. It uses softer Bayesian/reliability scoring so a good RU title with 20-50 votes can remain visible, while a title with 2 votes and a very high rating does not become the absolute top.
+Известное ограничение: у RU-сериалов часто мало голосов TMDb. Watchbane не использует для них жёсткий высокий minimum-votes gate. Использует более мягкий Bayesian/reliability scoring, чтобы хороший RU-тайтл с 20–50 голосами оставался видимым, а тайтл с 2 голосами и очень высоким рейтингом не становился абсолютным топом.
 
-## UI/Search Changes
+## Изменения UI/Search
 
-Public candidate search sort modes:
+Режимы сортировки public candidate search:
 
-- `final_score` - Итог;
-- `quality_score` - Качество;
-- `tmdb_score` - TMDb;
-- `tmdb_votes` - Голоса TMDb;
-- `tmdb_popularity` - Популярность TMDb;
-- `year` - Год.
+- `final_score` — Итог;
+- `quality_score` — Качество;
+- `tmdb_score` — TMDb;
+- `tmdb_votes` — Голоса TMDb;
+- `tmdb_popularity` — Популярность TMDb;
+- `year` — Год.
 
-Incomplete view now means missing TMDb/core metadata. It does not mean missing KP/IMDb enrichment.
+Incomplete view теперь означает отсутствие TMDb/core metadata. Это не означает отсутствие KP/IMDb enrichment.
 
-Candidate cards show TMDb rating/votes. KP/IMDb ratings are not part of the public candidate card.
+Карточки кандидатов показывают TMDb rating/votes. KP/IMDb ratings не входят в public candidate card.
 
-Watched detail cards also use the TMDb-only public display contract:
+Watched detail cards также используют TMDb-only public display contract:
 
-- the score ring shows `tmdb_score` with a `TMDb` label;
-- ring progress and color come from `final_score`;
-- the main-info block shows `tmdb_votes` as `Голоса TMDb`;
-- legacy `kp_score`, `kp_votes`, `imdb_score`, `imdb_votes` are not exposed in the card payload;
-- if an old watched record has no TMDb scores, the read-only card may fill them from watched meta or the current candidate pool without migrating JSON files.
+- score ring показывает `tmdb_score` с подписью `TMDb`;
+- progress и цвет кольца берутся из `final_score`;
+- блок main-info показывает `tmdb_votes` как `Голоса TMDb`;
+- legacy `kp_score`, `kp_votes`, `imdb_score`, `imdb_votes` не попадают в payload карточки;
+- если у старой watched-записи нет TMDb scores, read-only карточка может подставить их из watched meta или текущего candidate pool без миграции JSON-файлов.
 
-## Future
+## Будущее
 
-Planned directions:
+Планируемые направления:
 
-- better local ranker over saved candidate history;
-- optional LLM filters over local candidate metadata;
-- manual match UI for candidates without confident `tmdb_id`;
-- richer country/genre diagnostics;
-- watched-pool feedback loop for ranking.
+- лучший локальный ranker по сохранённой истории кандидатов;
+- optional LLM filters поверх локальных candidate metadata;
+- UI ручного match для кандидатов без уверенного `tmdb_id`;
+- более богатая диагностика country/genre;
+- feedback loop watched-pool для ranking.

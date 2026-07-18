@@ -8,7 +8,8 @@
 - [PROJECT_MAP.md](../architecture/PROJECT_MAP.md) - где какой код лежит сейчас.
 - [ADD_RECORD_RULES.md](../contracts/ADD_RECORD_RULES.md) - контракт добавления/изменения записей dataset.
 - [DESKTOP_STYLE_CONTRACT.md](../contracts/DESKTOP_STYLE_CONTRACT.md) - контракт внешнего вида PyQt desktop GUI.
-- [DESKTOP_GUI_ROADMAP.md](../desktop/DESKTOP_GUI_ROADMAP.md) - что и в каком порядке переносить в PyQt desktop GUI.
+- [PRODUCT_ROADMAP_CONTRACT.md](../contracts/PRODUCT_ROADMAP_CONTRACT.md) - канон продукта и фазы (читай сначала).
+- [DESKTOP_GUI_ROADMAP.md](../../internal/archive/docs/plans/DESKTOP_GUI_ROADMAP.md) - SUPERSEDED; в архиве.
 
 ## 1. Слои и направление зависимостей
 

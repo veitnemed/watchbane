@@ -1,58 +1,56 @@
-# Workspace Housekeeping
+# Поддержание порядка в workspace
 
-This project keeps generated data and visual-check artifacts out of git. The
-repository should stay small enough to clone and review without local caches,
-database dumps or one-off screenshots.
+Проект держит generated data и артефакты visual-check вне git. Репозиторий должен оставаться достаточно маленьким для clone и review без локальных кэшей, дампов БД и разовых скриншотов.
 
-## UI Screenshots
+## UI-скриншоты
 
-- Committed product screenshots live in `docs/assets/screens/`.
-- Temporary UI smoke screenshots live in `tmp/ui/`.
-- Files under `tmp/ui/` are ignored and can be deleted or regenerated.
+- Закоммиченные product-скриншоты живут в `docs/assets/screens/`.
+- Временные UI smoke-скриншоты живут в `tmp/ui/`.
+- Файлы в `tmp/ui/` игнорируются и могут быть удалены или перегенерированы.
 
-When checking desktop UI changes, keep screenshots grouped by task under
-`tmp/ui/tmp_ui_*` instead of creating root-level `tmp_ui_*` folders.
+При проверке desktop UI-изменений держите скриншоты сгруппированными по задаче в
+`tmp/ui/tmp_ui_*`, а не создавайте папки `tmp_ui_*` в корне.
 
-## Reports
+## Отчёты
 
-Generated reports belong in ignored output folders, not in the active `docs/`
-root. Default raw report locations are documented in
+Сгенерированные отчёты относятся к игнорируемым output-папкам, а не к активному
+корню `docs/`. Пути по умолчанию для сырых отчётов описаны в
 [REPORT_OUTPUT_POLICY.md](REPORT_OUTPUT_POLICY.md).
 
-Use `docs/reports/<topic>/` only for short curated summaries that should remain
-part of project documentation. Do not commit raw generated markdown, JSON dumps,
-network logs, visual smoke screenshots, cache snapshots or one-off audit
-transcripts.
+Используйте `docs/reports/` только как указатель на архив курируемых исторических
+сводков (`internal/archive/docs/reports/`). Не коммитьте сырой generated markdown,
+JSON dumps, network logs, visual smoke screenshots, cache snapshots или разовые
+audit transcripts.
 
-## Large Local Artifacts
+## Крупные локальные артефакты
 
-These paths are intentionally ignored and should not be committed:
+Эти пути намеренно игнорируются и не должны коммититься:
 
-- `datasets/` - local datasets, including IMDb sqlite databases.
-- `data/cache/` - rebuildable API/cache data.
-- `data/backups/` - local backup snapshots.
-- `data/exports/` - generated export archives and candidate-pool outputs.
-- `data/watchbane.sqlite3*` - local SQLite runtime data.
-- `data/candidates/*.json*` and `data/watched/*.json*` - legacy import/export or old local data.
-- `reports/` and `data/diagnostics/` - generated diagnostics.
-- `logs/` - generated local logs.
+- `datasets/` — локальные datasets, включая IMDb sqlite databases.
+- `data/cache/` — пересобираемые API/cache data.
+- `data/backups/` — локальные backup snapshots.
+- `data/exports/` — сгенерированные export archives и outputs candidate-pool.
+- `data/watchbane.sqlite3*` — локальные runtime-данные SQLite.
+- `data/candidates/*.json*` и `data/watched/*.json*` — legacy import/export или старые локальные данные.
+- `reports/` и `data/diagnostics/` — сгенерированная диагностика.
+- `logs/` — сгенерированные локальные логи.
 
-The public desktop and candidate flows are TMDb-only. A local IMDb sqlite
-database and KP API artifacts are not required for normal app use. If an
-internal legacy helper needs `datasets/dataset_sql_light/imdb_light.sqlite3`,
-restore it locally; do not commit it.
+Публичные desktop и candidate flows — TMDb-only. Локальная IMDb sqlite
+database и артефакты KP API не нужны для обычной работы приложения. Если
+внутреннему legacy helper нужен `datasets/dataset_sql_light/imdb_light.sqlite3`,
+восстановите его локально; не коммитьте.
 
-## Cleanup Candidates
+## Кандидаты на cleanup
 
-Safe cleanup targets when the workspace gets large:
+Безопасные цели очистки, когда workspace разрастается:
 
-- old `tmp/ui/tmp_ui_*` screenshot batches;
-- raw generated reports under `reports/`;
-- generated release zip files under `data/exports/`;
-- old `pool.before_*.json` snapshots after confirming the active pool is valid;
-- rebuildable TMDb cache files under `data/cache/tmdb/`;
-- local IMDb sqlite databases under `datasets/`.
+- старые батчи скриншотов `tmp/ui/tmp_ui_*`;
+- сырые сгенерированные отчёты в `reports/`;
+- сгенерированные release zip в `data/exports/`;
+- старые snapshots `pool.before_*.json` после подтверждения, что активный pool валиден;
+- пересобираемые файлы TMDb cache в `data/cache/tmdb/`;
+- локальные IMDb sqlite databases в `datasets/`.
 
-Do not delete `data/watchbane.sqlite3` unless you intentionally reset local
-data or have restored a backup. Legacy JSON files are not canonical runtime
-storage after the SQLite cutover.
+Не удаляйте `data/watchbane.sqlite3`, если вы намеренно не сбрасываете локальные
+данные или не восстановили backup. Legacy JSON-файлы не являются каноническим
+runtime storage после перехода на SQLite.

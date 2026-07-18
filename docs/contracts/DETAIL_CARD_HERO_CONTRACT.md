@@ -1,139 +1,139 @@
-# Detail Card Hero Contract
+# Контракт hero detail card
 
-This document defines the strict visual and layout contract for the cinematic detail card in the desktop GUI.
+Документ задаёт строгий визуальный и layout-контракт кинематографической detail card в desktop GUI.
 
-## 1. General Layout
+## 1. Общий layout
 
-- The detail view is one dark cinematic hero card with objectName `detailHeroCard`.
-- The top area is a two-column layout:
-  - fixed poster column on the left;
-  - right info column on the right.
-- The right info column order is:
-  1. title block: title, then compact title meta;
+- Detail view — одна тёмная кинематографическая hero card с objectName `detailHeroCard`.
+- Верхняя область — двухколоночный layout:
+  - фиксированная колонка постера слева;
+  - правая info-колонка справа.
+- Порядок правой info-колонки:
+  1. title block: title, затем compact title meta;
   2. genre chips;
   3. score summary;
   4. main info panel.
-- The overview and additional-info blocks start below the full top row.
-- The hero frame may occupy the full width of the detail panel.
-- The `detailContentContainer` block is centered horizontally inside the hero frame.
-- Title, chips, score summary, main info, overview, and additional info remain left-aligned relative to the content block edges.
-- Absolute positioning is forbidden.
-- Negative margins are forbidden.
-- Fixed right-column height that can clip the main info panel is forbidden.
-- If title, chips, score summary, or main info need more height, the layout must grow naturally.
+- Блоки overview и additional-info начинаются ниже всей верхней строки.
+- Hero frame может занимать всю ширину detail panel.
+- Блок `detailContentContainer` центрируется по горизонтали внутри hero frame.
+- Title, chips, score summary, main info, overview и additional info остаются выровненными по левому краю относительно границ content block.
+- Absolute positioning запрещён.
+- Negative margins запрещены.
+- Фиксированная высота правой колонки, которая может обрезать main info panel, запрещена.
+- Если title, chips, score summary или main info требуют больше высоты, layout должен расти естественно.
 
-## 2. Poster
+## 2. Постер
 
-- Poster column has a fixed logical poster size around `360x530` before user `ui_scale`.
-- Poster is rendered inside a poster shell with rounded corners.
-- Poster image uses cover-crop behavior.
-- Poster image must never be distorted.
-- Poster size is independent from title, chips, score summary, and main info height.
-- Missing-poster state must keep the same poster shell size.
+- Колонка постера имеет фиксированный логический размер постера около `360x530` до пользовательского `ui_scale`.
+- Постер рендерится внутри poster shell со скруглёнными углами.
+- Изображение постера использует поведение cover-crop.
+- Изображение постера никогда не должно искажаться.
+- Размер постера независим от высоты title, chips, score summary и main info.
+- Состояние missing-poster должно сохранять тот же размер poster shell.
 
-## 3. Candidate Actions
+## 3. Candidate actions
 
-- `candidateMarkWatchedButton` and `candidateHideButton` must be under the poster.
-- Candidate actions must never appear before the title.
-- Candidate actions must never be placed in the score summary row.
-- Candidate actions must not change poster size.
+- `candidateMarkWatchedButton` и `candidateHideButton` должны быть под постером.
+- Candidate actions никогда не должны появляться перед title.
+- Candidate actions никогда не должны размещаться в строке score summary.
+- Candidate actions не должны менять размер постера.
 
-## 4. Title Meta
+## 4. Title meta
 
-- Title text lives in `detailTitle`.
-- Title meta lives in `detailTitleMeta`, directly below the title.
-- Title meta format is compact: `2020 • 2 сезона / 20 серий`.
-- Missing year or missing seasons/episodes should simply remove that part.
-- Title meta must not be duplicated in main info.
-- Title meta must not be rendered as chips.
+- Текст title живёт в `detailTitle`.
+- Title meta живёт в `detailTitleMeta`, сразу под title.
+- Формат title meta компактный: `2020 • 2 сезона / 20 серий`.
+- Отсутствующий год или отсутствующие сезоны/серии просто убирают соответствующую часть.
+- Title meta не должен дублироваться в main info.
+- Title meta не должен рендериться как chips.
 
 ## 5. Chips
 
-- Chip input is genres only.
-- Year chips are forbidden.
-- Chips may use at most 2 rows.
-- A third chip row is forbidden.
-- If genres overflow the 2-row limit, show a compact `+N` overflow chip.
-- If chips wrap to the second row, score summary, main info, and overview move down through normal layout flow.
-- Chips must not overlap title, score summary, main info, or overview.
+- Вход для chips — только жанры.
+- Year chips запрещены.
+- Chips могут занимать не более 2 строк.
+- Третья строка chips запрещена.
+- Если жанры не помещаются в лимит 2 строк, показать компактный overflow chip `+N`.
+- Если chips переносятся на вторую строку, score summary, main info и overview сдвигаются вниз через обычный layout flow.
+- Chips не должны перекрывать title, score summary, main info или overview.
 
-## 6. Score Summary
+## 6. Score summary
 
-- Candidate score row contains:
+- Строка score кандидата содержит:
   - TMDb ring;
-  - final_score stars.
-- Watched score row contains:
+  - звёзды final_score.
+- Строка score watched содержит:
   - TMDb ring;
-  - final_score stars.
-- A separate "my score" ring is forbidden.
-- Score summary must not contain candidate action buttons.
-- Score summary must not use raw KP/IMDb rating fields.
+  - звёзды final_score.
+- Отдельное кольцо «моя оценка» запрещено.
+- Score summary не должен содержать кнопки candidate actions.
+- Score summary не должен использовать сырые поля рейтинга KP/IMDb.
 
-## 7. TMDb Ring
+## 7. TMDb ring
 
-- Ring display value is `tmdb_score` formatted to one decimal.
-- Ring label is `TMDb`.
-- Ring progress is `tmdb_score / 10`.
-- Ring color is based on `tmdb_score` progress in the theme cyan/teal palette.
-- `final_score` must not affect TMDb ring value, progress, or color.
-- The number inside the circle uses the normal text color, not rating yellow.
-- Footer text under the ring is forbidden.
-- `footer_label` values like `Итог 75` are forbidden.
-- If `tmdb_score` is missing, the TMDb ring may be hidden or show an explicit empty state, but it must not use `final_score` as fallback.
+- Отображаемое значение кольца — `tmdb_score`, отформатированный до одного знака после запятой.
+- Подпись кольца — `TMDb`.
+- Прогресс кольца — `tmdb_score / 10`.
+- Цвет кольца основан на прогрессе `tmdb_score` в cyan/teal палитре темы.
+- `final_score` не должен влиять на значение, прогресс или цвет TMDb ring.
+- Число внутри круга использует обычный цвет текста, не rating yellow.
+- Footer-текст под кольцом запрещён.
+- Значения `footer_label` вроде `Итог 75` запрещены.
+- Если `tmdb_score` отсутствует, TMDb ring может быть скрыт или показывать явный empty state, но не должен использовать `final_score` как fallback.
 
 ## 8. final_score
 
-- `final_score` is visible only as stars.
-- Optional qualitative text is allowed, for example `Отличный рейтинг`.
-- Raw numeric text like `Итог 75` is forbidden in the hero card.
-- Raw percent, raw `final_score`, and hidden debug score text are forbidden.
-- final_score stars must not change TMDb ring alignment.
+- `final_score` виден только как звёзды.
+- Опциональный качественный текст разрешён, например `Отличный рейтинг`.
+- Сырой числовой текст вроде `Итог 75` в hero card запрещён.
+- Сырой percent, сырой `final_score` и скрытый debug score text запрещены.
+- Звёзды final_score не должны менять выравнивание TMDb ring.
 
 ## 9. Watched user_score
 
-- `user_score` is shown only as a poster overlay badge.
-- Badge appears in the top-right corner of the poster.
-- Badge format is `★ 9.0`.
-- Badge is hidden when `user_score` is missing.
-- Badge must not affect poster size.
-- Badge must not affect right-column layout.
-- Do not show `Моя оценка: 9.0` near the title.
-- Do not show watched user score as a ring.
+- `user_score` показывается только как poster overlay badge.
+- Badge появляется в верхнем правом углу постера.
+- Формат badge: `★ 9.0`.
+- Badge скрыт, когда `user_score` отсутствует.
+- Badge не должен влиять на размер постера.
+- Badge не должен влиять на layout правой колонки.
+- Не показывать `Моя оценка: 9.0` рядом с title.
+- Не показывать watched user score как ring.
 
-## 10. Main Info
+## 10. Main info
 
-- Main info header text is `ОСНОВНАЯ ИНФОРМАЦИЯ`.
-- Main info is rendered as a rounded glass panel.
-- Rows use `label/value` structure.
-- Main info contains type, country, watch providers, and TMDb votes.
-- Year and seasons/episodes are title meta, not main-info rows.
-- Watch providers always render in main info; use `нет данных` when absent.
-- TMDb votes render in main info when positive.
-- Main info must not be clipped after title wraps.
-- Main info must not be clipped after chips wrap.
-- Main info must not depend on poster height.
-- Empty optional values should not create blank rows.
+- Текст заголовка main info — `ОСНОВНАЯ ИНФОРМАЦИЯ`.
+- Main info рендерится как rounded glass panel.
+- Строки используют структуру `label/value`.
+- Main info содержит type, country, watch providers и TMDb votes.
+- Год и сезоны/серии — это title meta, не строки main-info.
+- Watch providers всегда рендерятся в main info; при отсутствии использовать `нет данных`.
+- TMDb votes рендерятся в main info, когда значение положительное.
+- Main info не должен обрезаться после переноса title.
+- Main info не должен обрезаться после переноса chips.
+- Main info не должен зависеть от высоты постера.
+- Пустые optional values не должны создавать пустые строки.
 
 ## 11. Overview
 
-- Overview starts below the top row.
-- Overview has a divider.
-- Overview content starts from the left content edge of the hero card.
-- Overview is hidden when overview text is empty.
-- Overview must not overlap the poster, right column, or main info panel.
-- Overview must grow naturally with wrapped text.
+- Overview начинается ниже верхней строки.
+- У overview есть divider.
+- Содержимое overview начинается от левого края content hero card.
+- Overview скрыт, когда текст overview пустой.
+- Overview не должен перекрывать постер, правую колонку или main info panel.
+- Overview должен расти естественно вместе с перенесённым текстом.
 
-## 12. Additional Info
+## 12. Additional info
 
-- Additional info header text is `ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ`.
-- Additional info uses the same panel/grid system as main info.
-- Rows may include status and episode runtime.
-- Empty optional values should not create blank rows.
-- Additional info must have a visible top gap from overview content.
+- Текст заголовка additional info — `ДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ`.
+- Additional info использует ту же систему panel/grid, что и main info.
+- Строки могут включать status и episode runtime.
+- Пустые optional values не должны создавать пустые строки.
+- Additional info должен иметь видимый верхний отступ от содержимого overview.
 
-## Non-Goals
+## Non-goals
 
-- This contract does not change runtime data formats.
-- This contract does not change TMDb/KP/IMDb migration logic.
-- This contract does not change poster-cache download behavior.
-- This contract does not change candidate ranking or scoring.
+- Этот контракт не меняет runtime-форматы данных.
+- Этот контракт не меняет логику миграции TMDb/KP/IMDb.
+- Этот контракт не меняет поведение скачивания poster-cache.
+- Этот контракт не меняет candidate ranking или scoring.

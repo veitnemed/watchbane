@@ -1,4 +1,8 @@
-# Инструкции для агента в корне проекта
+# Инструкции для агента — слои проекта
+
+> **Product / DoD / фазы:** сначала корневой [`AGENTS.md`](../../AGENTS.md) и  
+> [`docs/contracts/PRODUCT_ROADMAP_CONTRACT.md`](../contracts/PRODUCT_ROADMAP_CONTRACT.md).  
+> Этот файл — только **логические зоны и правила слоёв**.
 
 Объясняй простым языком и по делу.
 
@@ -24,4 +28,4 @@
 - Infra не импортирует UI и не зависит от `desktop`.
 - `scripts/` — тонкие ручные entrypoints. Бизнес-логику выносить в Domain/Infra.
 
-Подробная карта: `LOGICAL_ARCHITECTURE.md`.
+Подробная карта: [`LOGICAL_ARCHITECTURE.md`](../architecture/LOGICAL_ARCHITECTURE.md).

@@ -42,7 +42,8 @@ desktop/theme/local_ui_tuning.py
 
 data/diagnostics/
 data/reports/
-docs/reports/curated/**/raw/
+# curated raw under archive (defensive; active docs/reports is pointer-only)
+internal/archive/docs/reports/curated/**/raw/
 logs/
 config/model_metrics.json
 config/rating_comparison_last_snapshot.json

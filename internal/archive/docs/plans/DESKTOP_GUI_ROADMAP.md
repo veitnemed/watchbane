@@ -1,10 +1,18 @@
 # Desktop GUI Roadmap
 
+> **SUPERSEDED (2026-07-17).**  
+> Product direction, daily path и фазы развития живут только в  
+> [`docs/contracts/PRODUCT_ROADMAP_CONTRACT.md`](../contracts/PRODUCT_ROADMAP_CONTRACT.md).  
+> Агент **не** читает этот файл как источник «зачем продукт» или «что делать дальше».  
+> Здесь остаётся **исторический / модульный reference** (что уже сделано в desktop).
+
 Roadmap описывает актуальный PyQt desktop для `Watchbane`: watched-база, карточка тайтла, аналитика и поиск кандидатов. Старые desktop-сценарии из `archive/legacy/` не возвращаются в активный GUI.
 
-## Цель
+## Цель (historical — не product daily path)
 
-Desktop должен быть рабочим интерфейсом для ежедневного сценария:
+Ранее desktop описывался как интерфейс вокруг watched-базы. **Актуальный daily path** (фаза C): вкладка **Рекомендации** → колода до 10 карточек с постерами → смотрел / сохранить / скрыть. См. PRODUCT_ROADMAP.
+
+Historical checklist (не использовать как direction):
 
 1. посмотреть watched-базу;
 2. найти тайтл или кандидата;
@@ -161,7 +169,7 @@ Console остаётся рабочим fallback и местом для pool mai
 - Cross-tab wiring остаётся в shell; feature views не импортируют другие tab views напрямую.
 - `desktop/` не импортирует `storage` или `web` напрямую, кроме documented whitelist.
 - Hardcoded fixed/min sizes без scaling helpers запрещены, кроме legacy whitelist с TODO.
-- Scale anchors `0.75`, `1.0`, `1.50` являются обязательными smoke/control режимами, но не pixel-perfect golden tests.
+- Для **новых** UI-задач фазы C агент проверяет scales **`1.0` и `1.25`** (см. PRODUCT_ROADMAP / UI_SCALE_CONTRACT). Якоря `0.75` / `1.50` — legacy full-matrix, не обязательны для агента, пока не закрыт блок C. Не pixel-perfect golden tests.
 
 ## Проверки
 

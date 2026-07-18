@@ -1,4 +1,4 @@
-﻿# Add Record Rules
+﻿# Правила добавления записи
 
 Документ фиксирует контракт добавления, обновления и удаления watched-записей в `Watchbane`.
 
@@ -13,7 +13,7 @@ dataset.storage_movie.add_movie(...)
 
 UI не пишет dataset/meta напрямую. Service path сохраняет через storage compatibility wrappers, которые по умолчанию используют SQLite backend.
 
-## UI-Слой
+## UI-слой
 
 UI отвечает за:
 
@@ -39,7 +39,7 @@ Relevant files:
 - `desktop/app.py`;
 - `desktop/watched/model.py`, `desktop/shared/detail/card.py`.
 
-## Service-Слой
+## Service-слой
 
 Service отвечает за:
 
@@ -110,7 +110,7 @@ add_dataset_record(
 6. синхронизирует poster-cache best-effort;
 7. если передан `pool_candidate`, удаляет watched-кандидата из pool через service cleanup.
 
-## Defaults Для Формы
+## Defaults для формы
 
 Defaults собираются через `dataset.title_resolve`.
 
@@ -189,7 +189,7 @@ UI печатает человекочитаемое сообщение из res
 update_dataset_record(title, patch_payload, source_name="") -> UpdateRecordResult
 ```
 
-Разрешенные patch-поля:
+Разрешённые patch-поля:
 
 - `main_info.user_score`;
 - `main_info.year`;
@@ -200,7 +200,7 @@ update_dataset_record(title, patch_payload, source_name="") -> UpdateRecordResul
 - менять key записи;
 - менять `main_info.title`.
 
-Переименование выполняется отдельным путем через `storage.data.rename_movie_title()`, который при SQLite backend обновляет dataset и meta в одной transaction.
+Переименование выполняется отдельным путём через `storage.data.rename_movie_title()`, который при SQLite backend обновляет dataset и meta в одной transaction.
 
 ## Delete Watched
 
@@ -212,7 +212,7 @@ dataset.delete_record.delete_watched_record(dataset_key)
 
 Service:
 
-- создает SQLite backup (`*.sqlite3`);
+- создаёт SQLite backup (`*.sqlite3`);
 - удаляет запись из dataset;
 - удаляет meta;
 - чистит poster-cache;

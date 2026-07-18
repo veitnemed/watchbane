@@ -1,6 +1,6 @@
-﻿# Desktop Style Contract
+﻿# Контракт стиля desktop
 
-Документ фиксирует визуальные и layout-правила PyQt desktop GUI для `Watchbane`. Он относится к watched/search/settings интерфейсу и не описывает legacy-сценарии из `archive/legacy/`.
+Документ фиксирует визуальные и layout-правила PyQt desktop GUI для `Watchbane`. Он относится к интерфейсу watched/search/settings и не описывает legacy-сценарии из `archive/legacy/`.
 
 ## Принципы
 
@@ -41,9 +41,9 @@ QSS builders — в `desktop/theme/styles/`.
 | Accent hover / teal | `#22D3C5` |
 | Rating / stars | `#F5B82E` |
 
-Detail-card правила зафиксированы в отдельном строгом контракте: [DETAIL_CARD_HERO_CONTRACT.md](DETAIL_CARD_HERO_CONTRACT.md). Если правила ниже конфликтуют с hero-contract, главным считается hero-contract.
+Правила detail-card зафиксированы в отдельном строгом контракте: [DETAIL_CARD_HERO_CONTRACT.md](DETAIL_CARD_HERO_CONTRACT.md). Если правила ниже конфликтуют с hero-contract, главным считается hero-contract.
 
-Score ring в карточке использует TMDb-only contract: число внутри круга - `tmdb_score`, подпись - `TMDb`, прогресс - `tmdb_score / 10`. Цвет обводки находится в cyan/teal палитре темы. `final_score` не влияет на круг и показывается только отдельной строкой звезд. Жёлтый используется только для рейтинговых звёзд и score badge, не для section headers.
+Score ring в карточке использует TMDb-only contract: число внутри круга — `tmdb_score`, подпись — `TMDb`, прогресс — `tmdb_score / 10`. Цвет обводки находится в cyan/teal палитре темы. `final_score` не влияет на круг и показывается только отдельной строкой звёзд. Жёлтый используется только для рейтинговых звёзд и score badge, не для section headers.
 
 ## Typography
 
@@ -72,9 +72,9 @@ Score ring в карточке использует TMDb-only contract: числ
 - ratings остаются read-only и не показывают legacy IMDb/KP поля;
 - watched user score показывается только как poster overlay badge `heart + 1..3`, не как ring и не как длинный текстовый label;
 - candidate actions находятся под poster и никогда не появляются перед title;
-- блок "Основная информация" показывает тип и страну; год и сезоны/серии находятся под title;
-- блок "Дополнительная информация" показывает providers/status/runtime/TMDb votes, если эти поля есть;
-- overview идет отдельным full-width блоком ниже верхней строки;
+- блок «Основная информация» показывает тип и страну; год и сезоны/серии находятся под title;
+- блок «Дополнительная информация» показывает providers/status/runtime/TMDb votes, если эти поля есть;
+- overview идёт отдельным full-width блоком ниже верхней строки;
 - если overview пустой, блок скрывается;
 - card root не должен прыгать по высоте при hover/action states.
 
@@ -92,7 +92,7 @@ Score ring в карточке использует TMDb-only contract: числ
 
 Правила:
 
-- sidebar width примерно 260-340px;
+- ширина sidebar примерно 260-340px;
 - filters collapsible;
 - counter показывает `N из M`;
 - list item содержит thumbnail, title, year, score;
@@ -100,32 +100,32 @@ Score ring в карточке использует TMDb-only contract: числ
 
 ## Poster Actions
 
-Read-only actions:
+Read-only действия:
 
 - открыть локальный poster file;
 - показать missing/local/remote state;
 - не менять poster-cache без отдельного write-сценария.
 
-## Removed Information Layout
+## Удалённый layout Information
 
 Вкладка `Информация` / `Information` удалена из активного desktop shell.
 
 Правила:
 
-- не добавлять `Information`/analytics tab в `build_main_tabs()` без уточненного нового требования;
-- не добавлять watched-entry cross-tab wiring для removed analytics tab;
+- не добавлять `Information`/analytics tab в `build_main_tabs()` без уточнённого нового требования;
+- не добавлять watched-entry cross-tab wiring для удалённой analytics tab;
 - если задача упоминает `Информация`, `Information`, `Analytics tab` или analytics как вкладку главного окна, сначала уточнить сценарий;
 - внутренние analytics helpers не считаются активным экраном desktop GUI.
 
 ## Search Layout
 
-Search screen должен быть пригоден для повторного использования:
+Экран поиска должен быть пригоден для повторного использования:
 
 - filters сверху или слева;
 - results list плотная, с быстрым сравнением rating/year/genres;
 - selected candidate показывает detail preview;
 - incomplete status виден сразу;
-- action `add to watched` требует confirmation и идет через service.
+- действие `add to watched` требует confirmation и идёт через service.
 
 ## Candidate Pool Layout
 
@@ -144,7 +144,7 @@ Write actions:
 
 Каждый write требует preview и confirmation dialog.
 
-## Запреты Для GUI-Polish
+## Запреты для GUI-polish
 
 GUI-polish не должен менять:
 
@@ -175,4 +175,4 @@ py -m compileall desktop dataset candidates storage ui tests
 py -m pytest tests/test_desktop.py
 ```
 
-Для layout/scaling-правок также снимаются и открываются screenshots на application scale `0.75`, `1.0` и `1.5`; временные PNG хранятся в `screens/tmp_ui/` и не коммитятся.
+Для layout/scaling-правок фазы C также снимаются и открываются screenshots на application scale **`1.0` и `1.25`**; временные PNG хранятся в `screens/tmp_ui/` и не коммитятся. Legacy full-matrix `0.75` / `1.5` — см. UI_SCALE_CONTRACT; не обязательны для агента, пока не закрыт блок C.

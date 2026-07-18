@@ -1,27 +1,27 @@
-# Security Policy
+# Политика безопасности
 
-## Supported Versions
+## Поддерживаемые версии
 
-The active `main` branch is supported.
+Поддерживается активная ветка `main`.
 
-## Reporting a Vulnerability
+## Сообщение об уязвимости
 
-Please open a private security advisory on GitHub if available, or create an issue without including secrets or private data.
+По возможности откройте приватный security advisory на GitHub либо создайте issue **без** секретов и персональных данных.
 
-Do not include:
+Не включайте:
 
-- API tokens;
-- local `data/` files;
-- private watched history;
-- logs containing credentials.
+- API-токены;
+- локальные файлы из `data/`;
+- личную историю просмотров;
+- логи с учётными данными.
 
-## Secrets
+## Секреты
 
-TMDb/KP/API tokens must stay outside git:
+Токены TMDb/KP/API не должны попадать в git. Храните их в:
 
-- environment variables;
+- переменных окружения;
 - `.env.local`;
 - `tmdb.env`;
-- local secret managers.
+- локальных менеджерах секретов.
 
-Runtime data under `data/` is user-owned local data and should not be committed.
+Runtime-данные под `data/` принадлежат пользователю и не коммитятся.

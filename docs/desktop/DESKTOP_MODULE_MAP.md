@@ -4,7 +4,8 @@
 
 Связанные документы:
 
-- [DESKTOP_GUI_ROADMAP.md](DESKTOP_GUI_ROADMAP.md) — roadmap функций.
+- [PRODUCT_ROADMAP_CONTRACT.md](../contracts/PRODUCT_ROADMAP_CONTRACT.md) — канон продукта и фазы.
+- [DESKTOP_GUI_ROADMAP.md](../../internal/archive/docs/plans/DESKTOP_GUI_ROADMAP.md) — SUPERSEDED; в архиве.
 - [DESKTOP_STYLE_CONTRACT.md](../contracts/DESKTOP_STYLE_CONTRACT.md) — визуальный контракт.
 - [ARCHITECTURE_TARGET.md](../architecture/ARCHITECTURE_TARGET.md) — общая архитектура проекта.
 

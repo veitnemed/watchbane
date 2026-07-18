@@ -1,22 +1,22 @@
-# UI Scale Contract
+# Контракт масштаба UI
 
-## Purpose
+## Назначение
 
-Watchbane supports user-controlled application UI scale.
+Watchbane поддерживает пользовательский масштаб интерфейса приложения.
 
-This scale is separate from Windows/OS DPI scale. Qt high-DPI behavior remains normal/default and continues to use the native device pixel ratio provided by the operating system.
+Этот масштаб отделён от масштаба Windows/OS DPI. Поведение Qt high-DPI остаётся обычным/по умолчанию и продолжает использовать нативный device pixel ratio операционной системы.
 
-`QT_SCALE_FACTOR` is not the persisted user setting for Watchbane. It is a Qt high-DPI testing/debugging override and must not be used as the implementation mechanism for application UI scale.
+`QT_SCALE_FACTOR` — не сохраняемая пользовательская настройка Watchbane. Это override Qt high-DPI для тестов/отладки; его нельзя использовать как механизм реализации масштаба UI приложения.
 
-## Setting
+## Настройка
 
-- Name: `ui_scale`
-- Type: `float`
-- Default: `1.0`
-- Minimum: `0.50`
-- Maximum: `2.00`
+- Имя: `ui_scale`
+- Тип: `float`
+- По умолчанию: `1.0`
+- Минимум: `0.50`
+- Максимум: `2.00`
 
-Presets:
+Пресеты:
 
 - `0.50`
 - `0.75`
@@ -29,125 +29,141 @@ Presets:
 - `1.75`
 - `2.00`
 
-## Scope
+## Область действия
 
-`ui_scale` should affect:
+`ui_scale` должен влиять на:
 
-- app font;
-- QSS font sizes;
+- шрифт приложения;
+- размеры шрифтов в QSS;
 - margins;
 - paddings;
 - spacing;
 - border radii;
-- fixed widget sizes;
-- main window default size;
-- detail card poster size;
-- rating rings;
+- фиксированные размеры виджетов;
+- размер главного окна по умолчанию;
+- размер постера в detail card;
+- кольца рейтинга;
 - chips;
-- buttons;
-- dialogs.
+- кнопки;
+- диалоги.
 
-## Scale Anchor Contract
+## Контракт якорных масштабов
 
-Three `ui_scale` values are mandatory control modes before the desktop architecture refactor:
+### Якоря QA агента в фазе C (обязательны сейчас)
 
-- `1.0` is the baseline reference for design proportions and default sizing.
-- `0.75` is the compact working mode.
-- `1.50` is a stress-check for readability, text clipping and overflow.
+Пока активен блок C в [PRODUCT_ROADMAP_CONTRACT.md](./PRODUCT_ROADMAP_CONTRACT.md), агент и ручная приёмка UI используют **только два** якоря:
 
-Scale anchors are not three separate desktop UIs. They are checkpoints for one UI system.
+- `1.0` — baseline: пропорции, default sizing.
+- `1.25` — stress: readability, clipping, overflow.
 
-Rules:
+Не требовать от агента прогоны `0.75` / `1.50` в фазе C.
 
-- Do not add separate QSS branches for `0.75`, `1.0` or `1.50`.
-- Do not make scale-specific widget implementations.
-- One system of design tokens, layout constants and scaling helpers must work across all three anchors.
-- Anchor checks should validate usability properties, not pixel-perfect geometry.
+### Legacy full-matrix (не обязательны в фазе C)
 
-Hard contract:
+Ранее три значения были mandatory control modes перед architecture refactor:
 
-- minimum sizes for list rows, buttons, cards and inputs;
-- min/max width and height where they affect usability;
-- `wordWrap` for long descriptive text;
-- no clipping of key labels and actions;
-- no widget overlap;
-- visibility and collapse/expanded state;
-- stable layout without abrupt jumps when switching tabs or expanding controls;
-- new dimensions go through scaling helpers or scaled token constants.
+- `1.0` — baseline.
+- `0.75` — compact working mode.
+- `1.50` — stress-check.
 
-Not a hard contract:
+Они остаются валидными пресетами runtime и могут использоваться в automated tests, но **не** являются обязательным DoD для agent UI-задач фазы C.
 
-- absolute coordinates of every widget;
-- exact pixels for every margin and padding at every scale;
+Якорные масштабы — не отдельные desktop UI. Это контрольные точки одной UI-системы.
+
+Правила:
+
+- Не добавлять отдельные ветки QSS для отдельных масштабов (`0.75`, `1.0`, `1.25`, `1.50`, …).
+- Не делать scale-specific реализации виджетов.
+- Одна система design tokens, layout constants и scaling helpers должна работать на всех якорях.
+- Проверки якорей должны валидировать свойства usability, а не pixel-perfect геометрию.
+
+Жёсткий контракт:
+
+- минимальные размеры для строк списка, кнопок, карточек и полей ввода;
+- min/max ширина и высота там, где они влияют на usability;
+- `wordWrap` для длинного описательного текста;
+- нет обрезки ключевых подписей и действий;
+- нет перекрытия виджетов;
+- видимость и состояние collapse/expanded;
+- стабильный layout без резких скачков при переключении вкладок или раскрытии контролов;
+- новые размеры проходят через scaling helpers или scaled token constants.
+
+Не жёсткий контракт:
+
+- абсолютные координаты каждого виджета;
+- точные пиксели каждого margin и padding на каждом масштабе;
 - per-scale QSS;
-- visual identity across all three scales.
+- визуальная идентичность на всех якорях Phase C / legacy.
 
 ## Non-goals
 
-- Do not scale data values.
-- Do not scale TMDb scores.
-- Do not scale JSON records.
-- Do not scale poster cache files.
-- Do not change API behavior.
-- Do not use absolute positioning to compensate for scale.
-- Do not change OS DPI awareness.
+- Не масштабировать значения данных.
+- Не масштабировать оценки TMDb.
+- Не масштабировать JSON-записи.
+- Не масштабировать файлы poster cache.
+- Не менять поведение API.
+- Не использовать absolute positioning для компенсации масштаба.
+- Не менять OS DPI awareness.
 
-## Architecture
+## Архитектура
 
-- All scaling goes through `desktop/theme/scaling.py`.
-- Local channel tuning lives in `desktop/theme/ui_tuning.py`.
-- For local-only experiments, copy `desktop/theme/local_ui_tuning.py.example` to ignored `desktop/theme/local_ui_tuning.py`.
-- Layout sizes, margins, spacing, fixed/min/max dimensions and scaled layout constants live in `desktop/theme/layout.py`.
-- `desktop/theme/shell_layout.py` is a compatibility facade for shell-sized constants; do not add new sizes there.
-- `desktop/theme/tokens.py` is for colors, fonts, radii and semantic visual names. Existing layout aliases may remain only for compatibility.
-- Detail-card profile composition lives in `desktop/shared/detail/profiles.py` and must use `desktop/theme/layout.py` geometry plus scaling helpers.
-- New tabs must take margins, spacing and fixed/min/max dimensions from `layout.py` helpers/constants, not hardcoded px.
-- Runtime widgets must not apply their own random multipliers.
-- Hardcoded fixed pixel sizes are prohibited unless there is a documented usability reason and a test/whitelist entry.
-- The persisted setting is stored as Watchbane application state, not as a Qt global DPR override.
-- `QT_SCALE_FACTOR` must not be written, read as the app setting, or recommended for normal use.
+- Всё масштабирование идёт через `desktop/theme/scaling.py`.
+- Локальная подстройка каналов — в `desktop/theme/ui_tuning.py`.
+- Для локальных экспериментов скопируйте `desktop/theme/local_ui_tuning.py.example` в игнорируемый `desktop/theme/local_ui_tuning.py`.
+- Размеры layout, margins, spacing, fixed/min/max dimensions и scaled layout constants живут в `desktop/theme/layout.py`.
+- `desktop/theme/shell_layout.py` — compatibility facade для shell-sized constants; новые размеры туда не добавлять.
+- `desktop/theme/tokens.py` — для цветов, шрифтов, radii и semantic visual names. Существующие layout aliases могут оставаться только для совместимости.
+- Композиция профиля detail-card — в `desktop/shared/detail/profiles.py` и должна использовать геометрию `desktop/theme/layout.py` плюс scaling helpers.
+- Новые вкладки должны брать margins, spacing и fixed/min/max dimensions из helpers/constants `layout.py`, а не hardcoded px.
+- Runtime-виджеты не должны применять собственные случайные множители.
+- Hardcoded фиксированные пиксельные размеры запрещены, если нет задокументированной причины usability и записи в test/whitelist.
+- Сохраняемая настройка хранится как состояние приложения Watchbane, а не как глобальный Qt DPR override.
+- `QT_SCALE_FACTOR` нельзя записывать, читать как настройку приложения или рекомендовать для обычного использования.
 
-## Removed Information Tab
+## Удалённая вкладка «Информация»
 
-- The `Информация` / `Information` tab is not part of the active desktop shell.
-- Scale anchor checks must not include a separate Information tab.
-- Requests that mention `Информация`, `Information`, `Analytics tab` or an analytics main-window tab are ambiguous and must be clarified before implementation.
-- Do not re-add this tab, its shell registration or watched-entry cross-tab wiring without an explicit clarified requirement.
+- Вкладка `Информация` / `Information` не входит в активный desktop shell.
+- Проверки якорных масштабов не должны включать отдельную вкладку Information.
+- Запросы, где упоминаются `Информация`, `Information`, `Analytics tab` или analytics-вкладка главного окна, неоднозначны и должны быть уточнены до реализации.
+- Не возвращать эту вкладку, её регистрацию в shell или watched-entry cross-tab wiring без явно уточнённого требования.
 
-## First Implementation
+## Первая реализация
 
-- Scale changes may require app restart.
-- Live apply is not required.
-- Bootstrap loads the setting once and calls `desktop.theme.scaling.set_ui_scale(...)`.
+- Смена масштаба может требовать перезапуска приложения.
+- Live apply не требуется.
+- Bootstrap один раз загружает настройку и вызывает `desktop.theme.scaling.set_ui_scale(...)`.
 
-## Interface Language
+## Язык интерфейса
 
-- `interface_language` is an application setting for UI labels, buttons, messages, placeholders and tooltips.
-- Interface translation applies after app restart; no scale anchor requires dynamic full-window retranslate.
-- `data_language` is independent and must not be used by UI scale/layout checks.
-- Scale anchors must validate translated UI text for wrapping/visibility, not pixel-perfect coordinates.
-- Language-dependent text length must keep `wordWrap`, minimum sizes and key action visibility stable at `0.75`, `1.0` and `1.50`.
-- Do not add language-specific or scale-specific QSS to compensate for longer translated strings.
+- `interface_language` — настройка приложения для подписей UI, кнопок, сообщений, placeholders и tooltips.
+- Перевод интерфейса применяется после перезапуска приложения; ни один якорный масштаб не требует динамического полного retranslate окна.
+- `data_language` независим и не должен использоваться проверками UI scale/layout.
+- Якорные масштабы должны валидировать переведённый текст UI на wrapping/visibility, а не pixel-perfect координаты.
+- Длина текста, зависящая от языка, должна сохранять `wordWrap`, минимальные размеры и видимость ключевых действий стабильными на якорях Phase C `1.0` и `1.25` (legacy full-matrix также проверял `0.75` / `1.50`).
+- Не добавлять language-specific или scale-specific QSS для компенсации более длинных переведённых строк.
 
-## Manual Smoke Checklist
+## Ручной smoke-чеклист
 
-Run this checklist at each anchor: `ui_scale=0.75`, `ui_scale=1.0`, `ui_scale=1.50`.
+**Phase C (агент):** запускать при `ui_scale=1.0` и `ui_scale=1.25`.
 
-- Моё / Watched: sidebar remains usable, watched list rows are readable, detail card does not clip key title/rating/action text.
-- Моё / Watched: expanded filters show score/year/genre controls, reset action is visible, collapse/expand state is stable.
-- Фильтры: intro copy wraps, Apply/Reset actions are visible, sliders and chip selectors keep usable height.
-- Кандидаты: list panel keeps usable min/max width, rows are readable, detail placeholder/card wraps long text and does not overlap the list.
-- Настройки: UI scale slider, value label, language controls, reset/save buttons and restart message remain visible and readable.
-- Настройки: restart/reload messages for interface/data language changes wrap without clipping.
-- Add-title search dialog: title input, country combo, search action, progress/status text fit in inactive and active states.
-- Add-title preview dialog: preview card, warning text, score input and confirm/back actions remain visible without overlap.
-- Window/tab switching does not produce abrupt layout jumps or zero-sized panels.
-- Posters, rating rings and chips scale through the shared tokens/helpers.
+**Legacy full-matrix (опционально):** `ui_scale=0.75`, `1.0`, `1.50`.
 
-## Automated Guardrails
+- Моё / Watched: sidebar остаётся usable, строки списка watched читаемы, detail card не обрезает ключевой title/rating/action текст.
+- Моё / Watched: раскрытые фильтры показывают контролы score/year/genre, действие reset видно, состояние collapse/expand стабильно.
+- Фильтры: intro-текст переносится, действия Apply/Reset видны, слайдеры и chip selectors сохраняют usable высоту.
+- Кандидаты: панель списка сохраняет usable min/max ширину, строки читаемы, detail placeholder/card переносит длинный текст и не перекрывает список.
+- Настройки: слайдер UI scale, label значения, контролы языка, кнопки reset/save и сообщение о перезапуске остаются видимыми и читаемыми.
+- Настройки: сообщения restart/reload при смене interface/data language переносятся без обрезки.
+- Диалог поиска add-title: поле title, country combo, действие поиска, progress/status текст помещаются в inactive и active состояниях.
+- Диалог preview add-title: preview card, warning-текст, поле score и действия confirm/back остаются видимыми без overlap.
+- Переключение окон/вкладок не даёт резких скачков layout и панелей нулевого размера.
+- Постеры, кольца рейтинга и chips масштабируются через общие tokens/helpers.
 
-- `tests/test_ui_scale_settings.py` parametrizes anchor checks for `0.75`, `1.0` and `1.50`.
-- Anchor tests validate layout properties: minimum/maximum sizes, non-zero dimensions, `wordWrap`, visibility and collapse/expanded state.
-- Anchor tests must not assert absolute coordinates for every widget or pixel-perfect margins/padding.
-- `test_hardcoded_px_guard_for_direct_sizing_calls` blocks new direct `setFixedWidth/Height` and `setMinimumWidth/Height` numeric calls unless added to the legacy TODO whitelist.
-- New dimensions must use `desktop/theme/layout.py` constants and scaling helpers.
+## Автоматические guardrails
+
+- `tests/test_ui_scale_settings.py` может по-прежнему параметризовать legacy-якоря `0.75`, `1.0` и `1.50` (код не менялся в docs-pass фазы C).
+- Agent DoD для UI-задач использует только якоря Phase C `1.0` и `1.25`.
+- Тесты якорей валидируют свойства layout: minimum/maximum sizes, ненулевые размеры, `wordWrap`, visibility и состояние collapse/expanded.
+- Тесты якорей не должны assert'ить абсолютные координаты каждого виджета или pixel-perfect margins/padding.
+- `test_hardcoded_px_guard_for_direct_sizing_calls` блокирует новые прямые числовые вызовы `setFixedWidth/Height` и `setMinimumWidth/Height`, если они не добавлены в legacy TODO whitelist.
+- Новые размеры должны использовать constants и scaling helpers из `desktop/theme/layout.py`.

@@ -298,7 +298,10 @@ def test_onboarding_report_output_hygiene_contract() -> None:
 
 
 def test_onboarding_final_report_template_contains_required_review_fields() -> None:
-    template = (PROJECT_ROOT / "docs/reports/curated/onboarding/analysis/final_report_template.md").read_text(encoding="utf-8")
+    template = (
+        PROJECT_ROOT
+        / "internal/archive/docs/reports/curated/onboarding/analysis/final_report_template.md"
+    ).read_text(encoding="utf-8")
     required_fragments = [
         "## Changed files",
         "## Discover filter confirmation",

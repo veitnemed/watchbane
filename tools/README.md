@@ -1,24 +1,21 @@
 # Tools
 
-Документ относится к **Watchbane 0.1.1-alpha.1 — Open Route** / **ReDeck v0.1.0**. Windows release собирается как folder-based onedir bundle.
+Документ относится к **Watchbane 0.1.1-alpha.1 — Open Route** / **ReDeck v0.1.0**.  
+Windows release собирается как folder-based onedir bundle.
 
-Manual entrypoints live here. Reusable application logic belongs in active
-packages such as `dataset/`, `candidates/`, `storage/`, `apis/` or `posters/`;
-scripts should stay thin CLI wrappers.
+Здесь лежат ручные entrypoints. Переиспользуемую логику держать в пакетах `dataset/`, `candidates/`, `storage/`, `apis/`, `posters/`; скрипты — тонкие CLI-обёртки.
 
-## Folders
+## Папки
 
-- `migrations/` - explicit one-off or compatibility data migrations.
-- `tmdb/` - TMDb build, refresh, backfill and network probe utilities.
-- `reports/` - report builders and quality diagnostics.
-- `screenshots/` - local UI screenshot capture helpers.
-- `jobs/` - long-running or background maintenance jobs.
-- `duplicates/` - manual duplicate inspection tools.
+- `migrations/` — разовые или compatibility-миграции данных.
+- `tmdb/` — сборка/refresh/backfill TMDb и network probe.
+- `reports/` — сборщики отчётов и quality diagnostics.
+- `screenshots/` — локальные helpers для UI-скриншотов.
+- `jobs/` — долгие/фоновые maintenance jobs.
+- `duplicates/` — ручная проверка дублей.
 
-## Output Policy
+## Политика вывода
 
-Raw reports should default to ignored paths under `data/reports/`, `data/diagnostics/`,
-`data/exports/` or `tmp/ui/`.
+Raw-отчёты по умолчанию — в игнорируемые пути: `data/reports/`, `data/diagnostics/`, `data/exports/`, `tmp/ui/`.
 
-Do not write generated raw reports into `docs/`. Curated summaries that should
-be committed belong under `docs/reports/<topic>/`.
+Не писать сгенерированные raw-отчёты в `docs/`. Исторические curated-отчёты — в [`internal/archive/docs/reports/`](../internal/archive/docs/reports/). Активный указатель: [`docs/reports/README.md`](../docs/reports/README.md). См. также [`docs/operations/REPORT_OUTPUT_POLICY.md`](../docs/operations/REPORT_OUTPUT_POLICY.md).

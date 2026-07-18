@@ -1,57 +1,64 @@
-# Report Output Policy
+# Политика вывода отчётов
 
-Generated reports must not be written into the active docs root. Keep `docs/`
-for curated, durable documentation and short summaries that are useful during
-normal development.
+Сгенерированные отчёты нельзя писать в активный корень docs. Держите `docs/`
+для курируемой долговечной документации и коротких сводок, полезных при обычной
+разработке.
 
-## Default Output Paths
+## Пути вывода по умолчанию
 
-Use these ignored locations for raw/generated outputs:
+Используйте эти игнорируемые расположения для сырых/сгенерированных outputs:
 
-| Report type | Output path |
+| Тип отчёта | Путь вывода |
 | --- | --- |
-| Onboarding rebuilds and quality runs | `reports/onboarding/` |
-| TMDb diagnostics and probes | `reports/tmdb/` |
-| UI visual notes that are not screenshots | `reports/ui/` |
-| Storage and SQLite diagnostics | `reports/storage/` or `data/diagnostics/` |
-| Network logs and probes | `reports/network/` |
-| General quality audits | `reports/quality/` |
+| Onboarding rebuilds и quality runs | `reports/onboarding/` |
+| TMDb diagnostics и probes | `reports/tmdb/` |
+| UI visual notes, которые не являются скриншотами | `reports/ui/` |
+| Storage и SQLite diagnostics | `reports/storage/` или `data/diagnostics/` |
+| Network logs и probes | `reports/network/` |
+| Общие quality audits | `reports/quality/` |
 
-Screenshots and visual smoke images go under:
+Скриншоты и visual smoke images кладутся в:
 
 ```text
 tmp/ui/<task-name>/
 ```
 
-Generated export data goes under:
+Сгенерированные export data кладутся в:
 
 ```text
 data/exports/
 ```
 
-## What Can Be Committed
+## Что можно коммитить
 
-Commit only curated summaries under:
+Курируемые исторические сводки больше не живут в активном `docs/reports/<topic>/`.
+Они перенесены в архив:
 
 ```text
-docs/reports/<topic>/
+internal/archive/docs/reports/
 ```
 
-A committed summary should be short and should include:
+Каталог `docs/reports/` содержит только README со ссылкой на этот архив.
 
-- date;
-- command or scenario;
-- key outcome;
-- known limitations;
-- link or path to regenerated raw output if relevant.
+Новые курируемые сводки, если их нужно сохранить в репозитории, добавляйте в
+`internal/archive/docs/reports/<topic>/` (или обновляйте README в `docs/reports/`,
+если меняется указатель). Сводка должна быть короткой и включать:
 
-Do not commit full raw dumps, large JSON payloads, local screenshots, cache
-snapshots, logs, or one-off audit transcripts.
+- дату;
+- команду или сценарий;
+- ключевой итог;
+- известные ограничения;
+- ссылку или путь к перегенерируемому сырому output, если это уместно.
 
-## Script Defaults
+Не коммитьте полные сырые dumps, большие JSON payloads, локальные скриншоты,
+cache snapshots, логи или разовые audit transcripts.
 
-New report scripts should default to ignored output paths under `reports/`,
-`data/diagnostics/`, `data/exports/` or `tmp/ui/`.
+## Defaults скриптов
 
-If a script supports `--output`, examples in docs should use ignored paths.
-Only explicitly curated reports should target `docs/reports/`.
+Новые report-скрипты должны по умолчанию писать в игнорируемые пути под
+`reports/`, `data/diagnostics/`, `data/exports/` или `tmp/ui/`.
+
+Если скрипт поддерживает `--output`, примеры в docs должны использовать
+игнорируемые пути. Явно курируемые отчёты не должны целиться в активный
+`docs/reports/` как в хранилище содержимого — только в архив или игнорируемые
+output-пути.

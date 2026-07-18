@@ -1,27 +1,36 @@
-# Watchbane architecture
+# Архитектура Watchbane
 
-Версия архитектурного среза: **Watchbane 0.1.1-alpha.1 — Open Route** / **ReDeck v0.1.0**. Канонический release contract: [../../VERSION.md](../../VERSION.md).
+Версия среза: **Watchbane 0.1.1-alpha.1 — Open Route** / **ReDeck v0.1.0**.  
+Канон релиза: [../../VERSION.md](../../VERSION.md).  
+Канон продукта: [../contracts/PRODUCT_ROADMAP_CONTRACT.md](../contracts/PRODUCT_ROADMAP_CONTRACT.md).
 
-Watchbane is a local-first PyQt6 application. The desktop UI delegates product operations to application use cases; domain services contain the recommendation and library flows; infrastructure modules own persistence and external API access.
+Watchbane — **local-first** приложение на PyQt6. Desktop UI вызывает use cases; доменные сервисы держат рекомендации и библиотеку; инфраструктура — хранение и внешние API.
 
 ```text
-desktop/             PyQt6 views, presenters, workers
-app/use_cases/       UI-facing product operations
-candidates/          candidate pool, search, onboarding, TMDb acquisition
-dataset/             watched library and derived read models
-posters/             poster resolution, cache, and downloads
-storage/             SQLite runtime and repositories
-apis/                remote service clients
-config/, common/     configuration and shared utilities
-tools/, diagnostics/    maintenance and diagnostics
+desktop/             экраны PyQt6, presenters, workers
+app/use_cases/       продуктовые операции для UI
+candidates/          пул кандидатов, поиск, onboarding, TMDb
+dataset/             коллекция watched и read-модели
+posters/             постеры: разрешение, кэш, загрузка
+storage/             SQLite runtime и репозитории
+apis/                клиенты внешних сервисов
+config/, common/     конфигурация и общие утилиты
+tools/, diagnostics/ обслуживание и диагностика
 ```
 
-## Candidate flow
+## Поток кандидатов
 
-`desktop/candidates` calls `app/use_cases/candidate_search.py`. The use case coordinates `candidates/pool_service.py` and `candidates/search_service.py`; writes are exposed through focused use cases such as `candidate_actions.py` and `onboarding.py`.
+`desktop/candidates` вызывает `app/use_cases/candidate_search.py`. Use case координирует `candidates/pool_service.py` и `candidates/search_service.py`; записи идут через узкие use cases (`candidate_actions.py`, `onboarding.py` и т.п.).
 
-`candidates/service.py` remains a compatibility facade for the existing console and integrations. New code should import a focused service or an `app/use_cases` module instead of adding logic to that facade.
+`candidates/service.py` — compatibility facade для консоли и старых интеграций. Новый код должен импортировать узкий сервис или `app/use_cases`, а не наращивать facade.
 
-## Dependency direction
+## Направление зависимостей
 
-Desktop modules must not import SQLite repositories, TMDb builders, or API compatibility modules directly. `tests/architecture/test_ui_import_boundaries.py` protects this rule.
+Модули `desktop/` не должны напрямую импортировать SQLite-репозитории, TMDb builders или API-compatibility. Правило охраняет `tests/architecture/test_ui_import_boundaries.py`.
+
+## Связанные документы
+
+- [LOGICAL_ARCHITECTURE.md](./LOGICAL_ARCHITECTURE.md) — зоны UI / Domain / Infra
+- [PROJECT_MAP.md](./PROJECT_MAP.md) — карта модулей
+- [ARCHITECTURE_TARGET.md](./ARCHITECTURE_TARGET.md) — целевые правила слоёв
+- [CANDIDATE_QUEUE_AND_POSTERS.md](./CANDIDATE_QUEUE_AND_POSTERS.md) — колода и постеры (техсправочник)

@@ -1,156 +1,156 @@
 # Watchbane
 
 [![Tests](https://github.com/veitnemed/watchbane/actions/workflows/tests.yml/badge.svg)](https://github.com/veitnemed/watchbane/actions/workflows/tests.yml)
-[![Windows](https://img.shields.io/badge/Windows-desktop-1677ff.svg)](#getting-started)
+[![Windows](https://img.shields.io/badge/Windows-desktop-1677ff.svg)](#быстрый-старт)
 [![Release](https://img.shields.io/badge/release-0.1.1--alpha.1-f39c12.svg)](VERSION.md)
 [![ReDeck](https://img.shields.io/badge/ReDeck-v0.1.0-20b2aa.svg)](VERSION.md)
-[![Local first](https://img.shields.io/badge/data-local--first-16a085.svg)](#your-data-stays-yours)
+[![Local first](https://img.shields.io/badge/data-local--first-16a085.svg)](#данные-остаются-у-вас)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-**A personal movie and series recommender that learns from your choices, not a streaming platform's agenda.**
+**Личная колода «что посмотреть дальше»** — не стриминг и не бесконечный каталог.
 
-Current release: **Watchbane 0.1.1-alpha.1 — Open Route**. Recommendation engine: **ReDeck v0.1.0**. See the [version contract](VERSION.md) and [release notes](RELEASE_NOTES.md).
+Текущий релиз: **Watchbane 0.1.1-alpha.1 — Open Route**. Движок рекомендаций: **ReDeck v0.1.0**. См. [контракт версии](VERSION.md) и [заметки о релизе](RELEASE_NOTES.md).
 
-Watchbane brings your watched collection, saved titles and a living recommendation deck into one focused Windows app. Choose a direction, adjust how adventurous the mix should be, and get a queue you can understand and control.
-
-<p align="center">
-  <img src="docs/assets/screens/candidates.png" alt="Watchbane recommendation deck featuring cult American series" width="100%">
-</p>
-
-## Find the next title, not another endless catalogue
-
-Watchbane is built around a simple idea: recommendations should feel personal without becoming mysterious.
-
-- **A fresh deck for you.** Get a focused set of recommendations instead of scrolling through thousands of titles.
-- **Taste controls you can feel.** Move from familiar to unusual, popular to rare, focused to diverse.
-- **Movies and series together.** Keep one collection while still controlling format, period, animation and mood.
-- **Clear reasons and signals.** See genres, country, release details, TMDb rating and recommendation strength.
-- **One-click decisions.** Mark a title watched, save it for later or hide it from future decks.
-- **Deck reserve at a glance.** A circular indicator in Recommendations shows how much of your current deck is still available (target 25) and turns red when it is time to refresh. Details: [deck reserve report](docs/reports/2026-07/otchet_deck_reserve_indicator.md).
-- **A persistent local pool.** Your candidate pool survives restarts and is not rebuilt every time the app opens.
-
-## Tune the recommendation, not the algorithm
-
-Start with a direction such as worldwide, Hollywood, Russian mainstream, anime, K-drama or European detective. Then shape the result with a small set of visual controls. Exact country, year, genre and TMDb filters remain available when you need them.
+Watchbane — локальное Windows-приложение: конечная колода кандидатов (фильм или сериал) с постерами, с учётом watched / saved / hidden и метаданных TMDb. Продуктовый target видимой колоды — **до 10** карточек; на карточке три действия: **смотрел / сохранить / скрыть**. Канон продукта: [PRODUCT_ROADMAP_CONTRACT](docs/contracts/PRODUCT_ROADMAP_CONTRACT.md). Карта документации: [docs/README.md](docs/README.md).
 
 <p align="center">
-  <img src="docs/assets/screens/filters.png" alt="Watchbane recommendation controls in English" width="100%">
+  <img src="docs/assets/screens/candidates.png" alt="Колода рекомендаций Watchbane" width="100%">
 </p>
 
-The default screen stays compact. Detailed filters open only on demand, so everyday use never feels like filling out a database form.
+## Найти следующий тайтл, а не ещё один каталог
 
-## Your collection, your rules
+Watchbane строится вокруг простой идеи: рекомендации должны быть личными и понятными.
 
-Watchbane keeps three practical lists:
+- **Своя колода.** Конечный набор кандидатов с постерами вместо бесконечного скролла.
+- **Три решения.** На карточке только **смотрел / сохранить / скрыть**.
+- **Фильмы и сериалы вместе.** Одна коллекция, при необходимости — формат, период, анимация и настроение.
+- **Понятные сигналы.** Жанры, страна, год, рейтинг TMDb и сила рекомендации.
+- **Запас колоды.** Круговой индикатор на вкладке Рекомендации показывает, сколько ещё доступно; краснеет, когда пора обновить. Подробности: [отчёт об индикаторе запаса](internal/archive/docs/reports/2026-07/otchet_deck_reserve_indicator.md).
+- **Локальный пул.** Кандидатный пул переживает перезапуск и не пересобирается при каждом открытии.
 
-| List | Purpose |
+## Настроить выдачу, а не алгоритм
+
+Можно выбрать направление (мир, Голливуд, российский мейнстрим, аниме, K-drama, европейский детектив) и слегка подкрутить «настроение» выдачи. Точные фильтры по стране, году, жанру и TMDb остаются доступны при необходимости.
+
+<p align="center">
+  <img src="docs/assets/screens/filters.png" alt="Элементы управления рекомендациями Watchbane" width="100%">
+</p>
+
+Главный экран остаётся компактным. Детальные фильтры открываются по запросу — повседневный путь не должен ощущаться как заполнение формы базы данных.
+
+## Коллекция — по вашим правилам
+
+Watchbane ведёт три практических списка:
+
+| Список | Назначение |
 | --- | --- |
-| **Watched** | Titles you have seen, including your personal rating |
-| **Saved** | Titles you may want to watch next |
-| **Hidden** | Recommendations you do not want to see again |
+| **Смотрел** | Уже виденные тайтлы, включая личную оценку |
+| **Сохранить** | То, что хочется посмотреть позже |
+| **Скрыть** | Рекомендации, которые не нужно показывать снова |
 
-Every action improves the working deck without deleting the original metadata. You can change direction, ask for another variation or return to saved titles later.
+Каждое действие улучшает рабочую колоду, не удаляя исходные метаданные. Можно сменить направление, запросить ещё варианты или вернуться к сохранённым.
 
-## Your data stays yours
+## Данные остаются у вас
 
-Watchbane is local-first. Your collection, ratings, candidate pool, settings and poster cache live on your computer. The app uses TMDb to find titles and enrich metadata, but your personal library is not uploaded to a Watchbane account.
+Watchbane — local-first. Коллекция, оценки, пул кандидатов, настройки и кэш постеров живут на вашем компьютере. Приложение обращается к TMDb за тайтлами и метаданными, но личная библиотека никуда не «загружается» в аккаунт Watchbane.
 
-The TMDb token entered during setup is stored locally. Watchbane does not bundle a shared token and does not send it anywhere except TMDb API requests.
+Токен TMDb, введённый при настройке, хранится локально. Watchbane не поставляет общий токен и не отправляет его никуда, кроме запросов к TMDb API.
 
-## Getting started
+## Быстрый старт
 
 ### Windows EXE
 
-Release builds are folder-based. Download and unpack `Watchbane-0.1.1-alpha.1-windows-x64.zip`, then run `Watchbane.exe` inside its `Watchbane/` folder. Keep `_internal/` beside it. On the first launch:
+Релизные сборки — папочные (onedir). Скачайте и распакуйте `Watchbane-0.1.1-alpha.1-windows-x64.zip`, затем запустите `Watchbane.exe` внутри папки `Watchbane/`. Держите `_internal/` рядом. При первом запуске:
 
-1. Watchbane checks whether TMDb is reachable.
-2. Paste your TMDb API Read Access Token (Bearer token).
-3. Choose a starting direction and a few taste preferences.
-4. Wait while the first candidate pool and poster cache are prepared.
-5. Open Recommendations and start rating, saving or hiding titles.
+1. Watchbane проверяет доступность TMDb.
+2. Вставьте TMDb API Read Access Token (Bearer).
+3. Выберите стартовое направление и несколько предпочтений.
+4. Дождитесь подготовки первого пула кандидатов и кэша постеров.
+5. Откройте Рекомендации и начинайте: смотрел / сохранить / скрыть.
 
-If TMDb resolves to `127.x`, use **Попробовать обход** on the token screen. Watchbane validates the fixed HTTPS endpoints, requests UAC, backs up `hosts`, applies only a marked temporary block and rolls it back automatically if the final API/poster check fails. Manual diagnostics and restore actions remain available under recovery tools.
+Если TMDb резолвится в `127.x`, на экране токена используйте **Попробовать обход**. Watchbane проверяет фиксированные HTTPS-эндпоинты, запрашивает UAC, делает бэкап `hosts`, применяет только помеченную временную блокировку и откатывает её, если финальная проверка API/постеров не прошла. Ручная диагностика и восстановление остаются в инструментах восстановления.
 
-### Run from source
+### Запуск из исходников
 
-Watchbane currently targets Python 3.13+ on Windows.
+Watchbane ориентирован на Python 3.13+ под Windows.
 
 ```powershell
 py -m pip install -r requirements.txt
 py start_app.py
 ```
 
-For development and tests, install the extended set:
+Для разработки и тестов поставьте расширенный набор:
 
 ```powershell
 py -m pip install -r requirements-dev.txt
 py -m pytest -q
 ```
 
-Plotly analytics, WebEngine charts and ML experiments are optional and can be installed separately:
+Plotly-аналитика, WebEngine-чарты и ML-эксперименты опциональны:
 
 ```powershell
 py -m pip install -r requirements-experiments.txt
 ```
 
-Without the optional set, the app remains usable and shows local UI fallbacks for unavailable analytics widgets.
+Без опционального набора приложение остаётся рабочим и показывает локальные UI-заглушки для недоступных виджетов аналитики.
 
-The maintenance console remains available through:
+Консоль обслуживания:
 
 ```powershell
 py start_console.py
 ```
 
-### Build a Windows release
+### Сборка Windows-релиза
 
-Watchbane 0.1.1-alpha.1 uses PyInstaller **onedir** mode, not a single-file executable. This keeps the executable and its bundled runtime/assets together in `dist/Watchbane/`.
+Watchbane 0.1.1-alpha.1 собирается PyInstaller в режиме **onedir**, не в один файл. Исполняемый файл и runtime/assets лежат вместе в `dist/Watchbane/`.
 
 ```powershell
 ./tools/build_desktop.ps1
 ./dist/Watchbane/Watchbane.exe
 ```
 
-Do not move `Watchbane.exe` out of that folder: it depends on the adjacent `_internal/` runtime directory.
+Не выносите `Watchbane.exe` из этой папки: ему нужна соседняя директория `_internal/`.
 
-## What Watchbane remembers
+## Что Watchbane помнит
 
-- watched titles and personal ratings;
-- saved and hidden decisions;
-- your candidate pool;
-- recommendation direction and vector settings;
-- interface scale and language;
-- downloaded poster previews;
-- the current local recommendation deck;
-- deck supply on the Recommendations tab (active + reserve + fresh locally eligible titles; ready at 45+).
+- просмотренные тайтлы и личные оценки;
+- решения сохранить и скрыть;
+- пул кандидатов;
+- направление рекомендаций и настройки векторов;
+- масштаб интерфейса и язык;
+- скачанные превью постеров;
+- текущую локальную колоду рекомендаций;
+- запас на вкладке Рекомендации (активные + резерв + свежие локально подходящие; готовность от 45+).
 
-Opening the application does **not** immediately refresh the pool. New TMDb candidates are requested after an explicit search/filter action or a later background maintenance check when automatic refill is enabled.
+Открытие приложения **не** обновляет пул сразу. Новые кандидаты TMDb запрашиваются после явного поиска/фильтра или фоновой проверки обслуживания, если включено автопополнение.
 
-## Languages and scale
+## Язык и масштаб
 
-The interface and title metadata can be switched independently between Russian and English. Application scale is also independent from Windows display scaling, which makes Watchbane usable on high-DPI displays without changing the operating system setting.
+Интерфейс и метаданные тайтлов переключаются независимо между русским и английским. Масштаб приложения независим от масштаба Windows — удобно на high-DPI без смены системной настройки.
 
-UI changes should be checked at application scales **0.75**, **1.0**, and **1.5**. Personal reactions use a three-level scale: `1` — not for me, `2` — okay, `3` — top; watched cards show it as a compact heart-and-number badge.
+UI-изменения проверяются на масштабах приложения **1.0** и **1.25** (QA фазы C для агента). Личная реакция — трёхуровневая шкала: `1` — не моё, `2` — норм, `3` — топ; на карточках «смотрел» это компактный бейдж с сердцем и числом.
 
-## For contributors
+## Для участников
 
-The product is a PyQt6 desktop application with a local SQLite runtime, TMDb integration and an extensive automated test suite.
+Watchbane — desktop-приложение на PyQt6 с локальным SQLite, интеграцией TMDb и большим набором автотестов.
 
 ```powershell
 py -m pytest
 ```
 
-Start with the documentation map for architecture, storage contracts, candidate flow and UI scaling:
+Начните с карты документации: архитектура, storage-контракты, flow кандидатов и UI scale:
 
-- [Architecture overview](docs/architecture/OVERVIEW.md)
-- [Documentation index](docs/README.md)
-- [Project map](docs/architecture/PROJECT_MAP.md)
-- [Candidate queue and posters](docs/architecture/CANDIDATE_QUEUE_AND_POSTERS.md)
-- [UI scale contract](docs/contracts/UI_SCALE_CONTRACT.md)
+- [Обзор архитектуры](docs/architecture/OVERVIEW.md)
+- [Индекс документации](docs/README.md)
+- [Карта проекта](docs/architecture/PROJECT_MAP.md)
+- [Очередь кандидатов и постеры](docs/architecture/CANDIDATE_QUEUE_AND_POSTERS.md)
+- [Контракт UI scale](docs/contracts/UI_SCALE_CONTRACT.md)
+- [Контракт продукта и roadmap](docs/contracts/PRODUCT_ROADMAP_CONTRACT.md)
 
-## TMDb attribution
+## Атрибуция TMDb
 
-This product uses the TMDb API but is not endorsed or certified by TMDb. Movie and series metadata, images and related content are provided through TMDb under its applicable terms.
+Продукт использует TMDb API, но не одобрен и не сертифицирован TMDb. Метаданные фильмов и сериалов, изображения и связанный контент предоставляются через TMDb на условиях этой службы.
 
-## License
+## Лицензия
 
-Watchbane is available under the [MIT License](LICENSE).
+Watchbane распространяется по [лицензии MIT](LICENSE).

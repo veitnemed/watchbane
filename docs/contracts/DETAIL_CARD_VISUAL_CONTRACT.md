@@ -1,22 +1,22 @@
-# Watchbane Detail Card Visual Contract
+# Визуальный контракт detail card Watchbane
 
-Status: strict UI contract for `desktop/shared/detail/*` and related desktop tests.
+Статус: строгий UI-контракт для `desktop/shared/detail/*` и связанных desktop-тестов.
 
-This contract exists because the detail card has already drifted through several incompatible states. Future agents must treat this file as the source of truth before changing the card layout, score rings, stars, or candidate actions.
+Контракт существует потому, что detail card уже успела пройти через несколько несовместимых состояний. Будущие агенты должны считать этот файл источником правды до изменения layout карточки, score rings, звёзд или candidate actions.
 
-## 1. Scope
+## 1. Область действия
 
-This contract applies to the PyQt detail card used by:
+Контракт применяется к PyQt detail card, используемой в:
 
-- watched library detail view;
-- candidate detail/preview view;
-- add-title preview when it reuses the same shared detail-card components.
+- detail view библиотеки watched;
+- detail/preview view кандидата;
+- add-title preview, когда он переиспользует те же shared detail-card компоненты.
 
-It does not authorize changes to dataset JSON formats, candidate pool JSON formats, TMDb API flows, poster cache storage, scoring formulas, metadata refresh scripts, console flows, or files under `archive/legacy/`.
+Он не разрешает менять JSON-форматы dataset, JSON-форматы candidate pool, TMDb API flows, хранение poster cache, формулы scoring, скрипты metadata refresh, console flows или файлы в `archive/legacy/`.
 
-## 2. Main visual model
+## 2. Основная визуальная модель
 
-The card has one fixed poster column and one flexible information column.
+У карточки одна фиксированная колонка постера и одна гибкая информационная колонка.
 
 ```text
 [ poster column ]   [ information column ]
@@ -30,39 +30,39 @@ The card has one fixed poster column and one flexible information column.
 [ additional information below overview ]
 ```
 
-The title row must contain only the title. Title meta (`year • seasons / episodes`) is a compact line directly below the title. Candidate actions must never be placed before the title or inside the title row.
+Строка title должна содержать только title. Title meta (`year • seasons / episodes`) — компактная строка сразу под title. Candidate actions никогда не должны размещаться перед title или внутри строки title.
 
-## 3. Rating and score semantics
+## 3. Семантика rating и score
 
-The detail card has three separate visual signals. They must not be merged.
+В detail card три отдельных визуальных сигнала. Их нельзя смешивать.
 
-| Visual element | Source field | Meaning | Allowed display |
+| Визуальный элемент | Поле-источник | Смысл | Допустимое отображение |
 | --- | --- | --- | --- |
-| TMDb circle | `tmdb_score` | External public TMDb rating, 0..10 | Number inside circle, label `TMDb`, ring progress, cyan/teal ring color |
-| User score badge | `user_score` | User's own rating, 0..10 | Poster overlay badge `★ 9.0` only |
-| Final stars | `final_score` | Internal recommendation/result score | 1..5 star scale only, no numeric `Итог 75` text |
+| TMDb circle | `tmdb_score` | Внешний публичный рейтинг TMDb, 0..10 | Число внутри круга, подпись `TMDb`, progress кольца, cyan/teal цвет кольца |
+| User score badge | `user_score` | Собственная оценка пользователя, 0..10 | Только poster overlay badge `★ 9.0` |
+| Final stars | `final_score` | Внутренний recommendation/result score | Только шкала 1..5 звёзд, без числового текста `Итог 75` |
 
-Hard rule: `final_score` must never control TMDb circle progress, TMDb circle color, or the number inside the TMDb circle.
+Жёсткое правило: `final_score` никогда не должен управлять progress TMDb circle, цветом TMDb circle или числом внутри TMDb circle.
 
-Hard rule: `tmdb_score` must never be described as `Итог`.
+Жёсткое правило: `tmdb_score` никогда не должен описываться как `Итог`.
 
-Hard rule: `quality_score` is an internal scoring signal and must not appear in this detail card unless a future task explicitly asks for a diagnostics/debug view.
+Жёсткое правило: `quality_score` — внутренний scoring-сигнал и не должен появляться в этой detail card, пока будущая задача явно не попросит diagnostics/debug view.
 
-## 4. TMDb circle contract
+## 4. Контракт TMDb circle
 
-The TMDb circle is the public-rating circle.
+TMDb circle — круг публичного рейтинга.
 
-Required behavior:
+Обязательное поведение:
 
-- display value: formatted `tmdb_score` with one decimal, or `—` when absent;
-- label: exactly `TMDb`;
-- progress: `clamp(float(tmdb_score) / 10, 0, 1)`, or `0` when absent/invalid;
-- color: derived from `tmdb_score`, not from `final_score`, using the current cyan/teal theme range;
-- value color: normal text color, not rating yellow;
-- footer text: none;
-- watched user score must not appear as a second ring.
+- display value: отформатированный `tmdb_score` с одним знаком после запятой, или `—` при отсутствии;
+- label: точно `TMDb`;
+- progress: `clamp(float(tmdb_score) / 10, 0, 1)`, или `0` при отсутствии/невалидности;
+- color: выводится из `tmdb_score`, не из `final_score`, в текущем диапазоне cyan/teal темы;
+- value color: обычный цвет текста, не rating yellow;
+- footer text: нет;
+- watched user score не должен появляться как второе кольцо.
 
-Regression examples:
+Примеры регрессий:
 
 ```python
 card = {"tmdb_score": 8.0, "final_score": 0.20}
@@ -74,37 +74,37 @@ card = {"tmdb_score": 4.0, "final_score": 0.90}
 # It must not change because final_score is high.
 ```
 
-## 5. User score badge contract
+## 5. Контракт user score badge
 
-The user's score is a poster overlay badge, not a circle.
+Оценка пользователя — poster overlay badge, не круг.
 
-Required behavior:
+Обязательное поведение:
 
-- display value: formatted `user_score` with one decimal;
+- display value: отформатированный `user_score` с одним знаком после запятой;
 - text format: `★ 9.0`;
 - location: top-right poster overlay;
-- missing/invalid value: hide badge;
-- badge must not affect poster size;
-- badge must not affect right-column layout.
+- missing/invalid value: скрыть badge;
+- badge не должен влиять на размер постера;
+- badge не должен влиять на layout правой колонки.
 
-Showing watched user score as a circle, title-row text, main-info row, or score-summary item is forbidden.
+Показ watched user score как круга, текста в title-row, строки main-info или элемента score-summary запрещён.
 
-## 6. Final score stars contract
+## 6. Контракт звёзд final score
 
-`final_score` is shown as stars, not as a number under a circle.
+`final_score` показывается как звёзды, а не как число под кругом.
 
-Required behavior:
+Обязательное поведение:
 
-- source: `final_score` only;
-- accepted source scale: either `0..1` or `0..100`;
-- normalization: values above `1` are treated as percent and divided by `100`;
-- visual scale: 1..5 stars, half-star steps are allowed;
-- missing/invalid value: hide the stars or show a quiet placeholder, but reserve enough vertical space to keep the circles aligned;
-- no text `Итог 75`, `Итог —`, `final_score`, or raw percent below the circles;
-- stars are a separate widget/row, not a footer inside `RatingCircleIndicator`.
-- the label above the stars in the watched film/series card is exactly `WatchBane`.
+- source: только `final_score`;
+- accepted source scale: либо `0..1`, либо `0..100`;
+- normalization: значения выше `1` трактуются как percent и делятся на `100`;
+- visual scale: 1..5 звёзд, half-star шаги разрешены;
+- missing/invalid value: скрыть звёзды или показать тихий placeholder, но зарезервировать достаточно вертикального места, чтобы круги оставались выровненными;
+- нет текста `Итог 75`, `Итог —`, `final_score` или сырого percent под кругами;
+- звёзды — отдельный widget/row, не footer внутри `RatingCircleIndicator`.
+- подпись над звёздами в карточке watched film/series — точно `WatchBane`.
 
-Suggested mapping:
+Рекомендуемый mapping:
 
 ```python
 normalized = normalize_final_score(final_score)  # 0..1
@@ -112,112 +112,112 @@ stars = round(normalized * 10) / 2               # half-star scale
 stars = max(1.0, min(5.0, stars))                # 1..5 when present
 ```
 
-Examples:
+Примеры:
 
 ```python
 final_score = 0.74  # 3.5 or 4.0 stars depending on rounding policy, but never text "Итог 74".
 final_score = 86    # normalized to 0.86, shown as stars only.
 ```
 
-The star widget must not widen either rating circle slot. It must not move the TMDb circle horizontally.
+Виджет звёзд не должен расширять ни один слот rating circle. Он не должен сдвигать TMDb circle по горизонтали.
 
-## 7. Rating block layout
+## 7. Layout блока rating
 
-The rating block has a TMDb ring slot and final-score stars:
+Блок rating имеет слот TMDb ring и звёзды final-score:
 
 ```text
 [ fixed TMDb slot ][ gap ][ final-score stars ]
 ```
 
-Required layout behavior:
+Обязательное поведение layout:
 
-- TMDb ring keeps a fixed slot;
-- final-score stars are a separate widget next to the ring;
-- final-score stars keep a fixed horizontal gap from the TMDb slot when main information is collapsed or expanded;
-- star width must not affect TMDb ring value/progress;
-- missing stars must not make the ring jump vertically;
-- candidate actions never enter this score row.
+- TMDb ring сохраняет фиксированный слот;
+- звёзды final-score — отдельный виджет рядом с кольцом;
+- звёзды final-score сохраняют фиксированный горизонтальный gap от слота TMDb, когда main information свёрнута или раскрыта;
+- ширина звёзд не должна влиять на value/progress TMDb ring;
+- отсутствующие звёзды не должны заставлять кольцо прыгать по вертикали;
+- candidate actions никогда не попадают в эту score row.
 
-Forbidden implementation patterns:
+Запрещённые паттерны реализации:
 
-- adding star text as `footer_label` in `RatingCircleIndicator`;
-- putting stars inside the TMDb circle widget;
-- increasing the TMDb widget width to fit stars;
-- using a temporary `tuning.py` module as the final committed state.
+- добавление текста звёзд как `footer_label` в `RatingCircleIndicator`;
+- размещение звёзд внутри виджета TMDb circle;
+- увеличение ширины TMDb widget, чтобы вписать звёзды;
+- использование временного модуля `tuning.py` как финального committed состояния.
 
-## 8. Candidate action buttons
+## 8. Кнопки candidate actions
 
-Candidate actions are poster actions, not title actions.
+Candidate actions — это poster actions, не title actions.
 
-Required behavior:
+Обязательное поведение:
 
-- buttons `candidateMarkWatchedButton` and `candidateHideButton` appear only when the candidate profile enables them;
-- they are placed under the poster in the poster column;
-- they are centered or left-aligned consistently under the poster, not before the title;
-- title row remains stable and starts with the title label;
-- watched view does not show these buttons.
+- кнопки `candidateMarkWatchedButton` и `candidateHideButton` появляются только когда candidate profile их включает;
+- они размещаются под постером в колонке постера;
+- они центрируются или выравниваются влево согласованно под постером, не перед title;
+- строка title остаётся стабильной и начинается с label title;
+- watched view эти кнопки не показывает.
 
-Button size may stay at the current compact size, but the row must be visually separate from the title.
+Размер кнопок может оставаться текущим compact size, но строка должна быть визуально отделена от title.
 
-## 9. Main information and overview
+## 9. Main information и overview
 
-The detail card must not sacrifice content to keep the top row the same height as the poster.
+Detail card не должна жертвовать контентом ради того, чтобы верхняя строка оставалась той же высоты, что и постер.
 
-Required behavior:
+Обязательное поведение:
 
-- `Основная информация` remains visible when it has items;
-- long values wrap instead of clipping;
-- the information column must not have a maximum height equal to the poster height;
-- overview is a full-width block below the top poster/info row;
-- empty overview hides the overview block.
+- `Основная информация` остаётся видимой, когда в ней есть элементы;
+- длинные значения переносятся вместо обрезки;
+- информационная колонка не должна иметь maximum height, равный высоте постера;
+- overview — full-width блок ниже верхней строки poster/info;
+- пустой overview скрывает блок overview.
 
-## 10. Film/series media badge
+## 10. Media badge фильм/сериал
 
-The poster media-type badge is a solid pill over the poster, not translucent text.
+Media-type badge постера — solid pill поверх постера, не translucent text.
 
-Required behavior:
+Обязательное поведение:
 
-- text: localized uppercase `ФИЛЬМ` or `СЕРИАЛ`;
+- text: локализованный uppercase `ФИЛЬМ` или `СЕРИАЛ`;
 - location: bottom-center poster overlay;
-- fill: opaque dark film palette fill, with the series variant using the series badge background token;
-- border: cyan/series border token from the film palette;
+- fill: непрозрачная тёмная заливка film palette; вариант series использует series badge background token;
+- border: cyan/series border token из film palette;
 - text color: film/series badge text token;
-- it must remain readable over bright and dark poster artwork at 75%, 100%, and 150% UI scale.
+- должен оставаться читаемым поверх светлых и тёмных постеров при UI scale 75%, 100% и 150%.
 
-Main information rows:
+Строки main information:
 
-- `Тип` from normalized `object_type` or TV-shape fallback;
-- `Страна` from `country` when present;
-- `Где смотреть` from watch providers, or `нет данных` when absent;
-- `Голоса TMDb` from `tmdb_votes` when positive.
+- `Тип` из нормализованного `object_type` или TV-shape fallback;
+- `Страна` из `country`, когда присутствует;
+- `Где смотреть` из watch providers, или `нет данных` при отсутствии;
+- `Голоса TMDb` из `tmdb_votes`, когда значение положительное.
 
 Title meta:
 
-- `Год` is shown under title, not in main information;
-- `Сезоны / серии` is shown under title, not in main information.
+- `Год` показывается под title, не в main information;
+- `Сезоны / серии` показываются под title, не в main information.
 
-Additional information rows:
+Строки additional information:
 
 - status;
 - episode runtime.
 
-## 10. Code ownership boundaries
+## 10. Границы владения кодом
 
-Expected files for UI changes:
+Ожидаемые файлы для UI-изменений:
 
-- `desktop/shared/detail/card.py` — layout structure and widget placement;
-- `desktop/shared/detail/rating_indicator.py` — circular rating widget only;
-- `desktop/shared/detail/card_pills.py` — creation/filling helpers for rating/meta widgets;
-- `desktop/shared/detail/presenters.py` — pure formatting/payload builders;
+- `desktop/shared/detail/card.py` — структура layout и размещение виджетов;
+- `desktop/shared/detail/rating_indicator.py` — только circular rating widget;
+- `desktop/shared/detail/card_pills.py` — helpers создания/заполнения для rating/meta widgets;
+- `desktop/shared/detail/presenters.py` — чистые formatting/payload builders;
 - `desktop/shared/detail/profiles.py` — sizing constants/profile values;
-- `desktop/theme/*` — shared visual tokens, only when truly needed;
-- `tests/test_desktop.py` and/or `tests/desktop/*` — regression tests for contract behavior.
+- `desktop/theme/*` — shared visual tokens, только когда действительно нужно;
+- `tests/test_desktop.py` и/или `tests/desktop/*` — regression-тесты поведения контракта.
 
-Do not change scoring formulas to satisfy a visual request. The visual layer consumes score fields; it does not redefine them.
+Не менять формулы scoring ради визуального запроса. Визуальный слой потребляет score fields; он их не переопределяет.
 
-## 11. Required regression tests
+## 11. Обязательные regression-тесты
 
-At minimum, tests must cover these cases:
+Как минимум тесты должны покрывать эти случаи:
 
 ```python
 def test_tmdb_ring_uses_tmdb_score_not_final_score():
@@ -260,18 +260,18 @@ def test_candidate_actions_are_not_in_title_row(qapp):
     ...
 ```
 
-If existing tests still assert `ring_progress == final_score` or `footer_label == "Итог 74"`, those tests are preserving the old bug and must be rewritten.
+Если существующие тесты всё ещё assert'ят `ring_progress == final_score` или `footer_label == "Итог 74"`, эти тесты сохраняют старый баг и должны быть переписаны.
 
-## 12. Agent instructions for future UI work
+## 12. Инструкции агенту для будущей UI-работы
 
-Before changing the detail card, an agent must state which invariant it is touching and which invariants it will not touch.
+Перед изменением detail card агент должен указать, какой инвариант он затрагивает и какие инварианты не трогает.
 
-Allowed response shape for an implementation task:
+Допустимая форма ответа для implementation-задачи:
 
-1. Identify current contract violations.
-2. Change the smallest number of files.
-3. Update tests so they assert the contract, not the previous bug.
-4. Run `py -m compileall desktop tests` and the relevant desktop tests.
-5. Report exact files changed and exact contract checks satisfied.
+1. Определить текущие нарушения контракта.
+2. Изменить минимальное число файлов.
+3. Обновить тесты так, чтобы они assert'или контракт, а не предыдущий баг.
+4. Запустить `py -m compileall desktop tests` и релевантные desktop-тесты.
+5. Отчитаться о точных изменённых файлах и точных проверках контракта, которые удовлетворены.
 
-The agent must stop and explain before making any change that would affect data formats, scoring formulas, TMDb refresh behavior, or poster cache behavior.
+Агент должен остановиться и объяснить, прежде чем делать любое изменение, которое затронет форматы данных, формулы scoring, поведение TMDb refresh или поведение poster cache.

@@ -1,33 +1,33 @@
-# TMDb Network Troubleshooting
+# Диагностика сети TMDb
 
-Watchbane uses two required network hosts:
+Watchbane использует два обязательных сетевых хоста:
 
-- `api.themoviedb.org` — search, Discover, details and token validation;
-- `image.tmdb.org` — poster delivery.
+- `api.themoviedb.org` — search, Discover, details и проверка токена;
+- `image.tmdb.org` — доставка постеров.
 
-`www.themoviedb.org` is used only as an HTTP `Referer` value and is not a required connection target. `wsrv.nl` is an optional poster fallback, not a requirement for normal API work.
+`www.themoviedb.org` используется только как значение HTTP `Referer` и не является обязательной целью соединения. `wsrv.nl` — optional poster fallback, не требование для обычной работы API.
 
-## What loopback DNS means
+## Что значит loopback DNS
 
-If `api.themoviedb.org` or `image.tmdb.org` resolves to `127.0.0.0/8`, `::1` or `0.0.0.0`, the request is being directed back to the local computer or to a null route. Common causes are a DNS filter, local proxy/VPN software, security software, a hosts entry or upstream DNS substitution.
+Если `api.themoviedb.org` или `image.tmdb.org` резолвится в `127.0.0.0/8`, `::1` или `0.0.0.0`, запрос направляется обратно на локальный компьютер или в null route. Частые причины — DNS-фильтр, локальный proxy/VPN, security software, запись в hosts или подмена upstream DNS.
 
-This does not prove that a VPN is required. DNS, TCP 443, TLS, HTTP, API authorization and poster delivery must be checked separately.
+Это не доказывает, что нужен VPN. DNS, TCP 443, TLS, HTTP, авторизацию API и доставку постеров нужно проверять отдельно.
 
-`ping` alone is insufficient: a CDN may ignore ICMP while HTTPS works, and a successful ping does not validate TLS, the HTTP endpoint, the token or poster delivery.
+Одного `ping` недостаточно: CDN может игнорировать ICMP при работающем HTTPS, а успешный ping не подтверждает TLS, HTTP endpoint, токен или доставку постеров.
 
-## Read-only diagnostics
+## Read-only диагностика
 
-On the token screen choose **TMDb connection diagnostics**. This does not change DNS, hosts, proxy or VPN settings.
+На экране токена выберите **TMDb connection diagnostics**. Это не меняет DNS, hosts, proxy или настройки VPN.
 
-The equivalent command is:
+Эквивалентная команда:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/tmdb-network-diagnose.ps1 -Label manual
 ```
 
-Source-tree reports are written under `.local/diagnostics/` as JSON and Markdown. Packaged Watchbane writes them to its per-user diagnostics directory. Reports never contain the token or Authorization header; they show only token presence and at most the last four characters.
+Отчёты из source-tree пишутся в `.local/diagnostics/` как JSON и Markdown. Упакованный Watchbane пишет их в свой per-user diagnostics directory. Отчёты никогда не содержат токен или Authorization header; показывают только наличие токена и максимум последние четыре символа.
 
-Possible failure classes include:
+Возможные классы сбоев включают:
 
 - `dns-loopback-or-null-route`, `nxdomain`, `dns-failed`, `timeout`;
 - `tcp-443-unavailable`;
@@ -35,11 +35,11 @@ Possible failure classes include:
 - `token-unauthorized`, `api-forbidden`;
 - `poster-host-unavailable`.
 
-HTTP `200` is full success. HTTP `401`, `403` and `404` still prove that DNS/TCP/TLS/HTTP reached a server; they must not be reported as a generic network outage.
+HTTP `200` — полный успех. HTTP `401`, `403` и `404` всё равно доказывают, что DNS/TCP/TLS/HTTP дошли до сервера; их нельзя сообщать как общий network outage.
 
-## VPN versus direct connection
+## VPN против прямого соединения
 
-Watchbane never enables or disables a VPN client. Run both measurements manually:
+Watchbane никогда не включает и не выключает VPN-клиент. Оба измерения выполняйте вручную:
 
 ```powershell
 # Disconnect the VPN first.
@@ -51,25 +51,25 @@ powershell -ExecutionPolicy Bypass -File scripts/tmdb-network-diagnose.ps1 -Vpn
 powershell -ExecutionPolicy Bypass -File scripts/tmdb-network-compare.ps1
 ```
 
-Interpretation:
+Интерпретация:
 
-- public DNS plus failed TCP/TLS/HTTP without VPN and success with VPN means a VPN/proxy/alternate route is required;
-- working HTTPS with `401` means the network works and the token must be checked;
-- working API plus failed poster probe means `image.tmdb.org` must be diagnosed separately;
-- the same failure in both modes means the VPN probably does not address the cause;
-- loopback system DNS plus public independent DNS suggests DNS/DoH repair before VPN or hosts changes.
+- публичный DNS плюс сбой TCP/TLS/HTTP без VPN и успех с VPN означают, что нужен VPN/proxy/alternate route;
+- работающий HTTPS с `401` означает, что сеть работает и нужно проверить токен;
+- работающий API плюс сбой poster probe означают, что `image.tmdb.org` нужно диагностировать отдельно;
+- один и тот же сбой в обоих режимах означает, что VPN, скорее всего, не устраняет причину;
+- loopback system DNS плюс рабочий независимый публичный DNS указывают на ремонт DNS/DoH до смены VPN или hosts.
 
-Do not label a report `-NoVpn` while a tunnel adapter or proxy is still active.
+Не помечайте отчёт как `-NoVpn`, пока всё ещё активен tunnel adapter или proxy.
 
-## DNS recovery
+## Восстановление DNS
 
-Open **Recovery tools** on the token screen. Status is read-only:
+Откройте **Recovery tools** на экране токена. Статус — read-only:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/tmdb-dns-recovery.ps1 -Status
 ```
 
-Applying or restoring DNS requires an elevated console and explicit typed confirmation:
+Применение или восстановление DNS требует elevated console и явного подтверждения вводом:
 
 ```powershell
 # Proposes 1.1.1.1 and 1.0.0.1 for the active IPv4 adapter.
@@ -79,13 +79,13 @@ powershell -ExecutionPolicy Bypass -File scripts/tmdb-dns-recovery.ps1 -Apply
 powershell -ExecutionPolicy Bypass -File scripts/tmdb-dns-recovery.ps1 -Restore
 ```
 
-Before applying, the tool displays the adapter and current DNS servers. It creates a timestamped backup, flushes the DNS cache and reruns TMDb diagnostics. Watchbane never changes DNS during normal startup.
+Перед применением инструмент показывает adapter и текущие DNS servers. Создаёт timestamped backup, сбрасывает DNS cache и повторно запускает TMDb diagnostics. Watchbane никогда не меняет DNS при обычном startup.
 
-## Temporary hosts override
+## Временный hosts override
 
-A hosts override is a last-resort diagnostic workaround because CDN addresses can change. The default action is preview-only:
+Hosts override — диагностический обход последнего resort, потому что адреса CDN могут меняться. Действие по умолчанию — только preview:
 
-On the startup token screen, **Попробовать обход** runs the guarded fixed route used by Watchbane 0.1.1-alpha.1. It validates `3.173.161.72` for `api.themoviedb.org` and `18.239.105.83` for `www.themoviedb.org` with TCP 443, correct TLS SNI and HTTPS before requesting UAC. The button then creates a backup, writes only the marked block, flushes DNS, verifies the API and poster path, and automatically restores the backup if the post-check fails.
+На стартовом экране токена **Попробовать обход** запускает guarded fixed route, используемый Watchbane 0.1.1-alpha.1. Он проверяет `3.173.161.72` для `api.themoviedb.org` и `18.239.105.83` для `www.themoviedb.org` по TCP 443, корректному TLS SNI и HTTPS до запроса UAC. Затем кнопка создаёт backup, пишет только помеченный блок, сбрасывает DNS, проверяет API и путь постеров и автоматически восстанавливает backup, если post-check не прошёл.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/tmdb-hosts-override.ps1 -Preview
@@ -93,9 +93,9 @@ powershell -ExecutionPolicy Bypass -File scripts/tmdb-hosts-override.ps1 -Status
 powershell -ExecutionPolicy Bypass -File scripts/tmdb-hosts-override.ps1 -TryBypass -Preview
 ```
 
-Preview obtains current public IPv4 candidates through an independent DNS query and accepts an address only after direct TCP 443, TLS with correct SNI and HTTPS validation. If validation fails, hosts is not changed.
+Preview получает текущие публичные IPv4-кандидаты через независимый DNS query и принимает адрес только после прямой проверки TCP 443, TLS с корректным SNI и HTTPS. Если валидация не прошла, hosts не меняется.
 
-Apply, remove and restore require administrator rights and explicit typed confirmation:
+Apply, remove и restore требуют права администратора и явное подтверждение вводом:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/tmdb-hosts-override.ps1 -Apply
@@ -103,7 +103,7 @@ powershell -ExecutionPolicy Bypass -File scripts/tmdb-hosts-override.ps1 -Remove
 powershell -ExecutionPolicy Bypass -File scripts/tmdb-hosts-override.ps1 -Restore
 ```
 
-Only the marked block is changed:
+Меняется только помеченный блок:
 
 ```text
 # BEGIN WATCHBANE TEMP TMDB
@@ -113,21 +113,21 @@ Only the marked block is changed:
 # END WATCHBANE TEMP TMDB
 ```
 
-Other user lines remain untouched. A timestamped backup is created first. Failed post-apply validation automatically restores the backup. `Status` warns when the stored addresses are older than 24 hours.
+Остальные пользовательские строки не трогаются. Сначала создаётся timestamped backup. Неудачная post-apply validation автоматически восстанавливает backup. `Status` предупреждает, когда сохранённые адреса старше 24 часов.
 
-## Token storage
+## Хранение токена
 
-The packaged app stores an accepted token in its per-user `data/.env.local`. For local diagnosis, the repository may contain either `local_tocen.txt` or `local_token.txt`. The first non-empty line may be:
+Упакованное приложение хранит принятый токен в своём per-user `data/.env.local`. Для локальной диагностики в репозитории может быть либо `local_tocen.txt`, либо `local_token.txt`. Первая непустая строка может быть:
 
-- a raw token;
+- сырой токен;
 - `Bearer <token>`;
-- `TMDB_ACCESS_TOKEN=<token>` or `TMDB_TOKEN=<token>`.
+- `TMDB_ACCESS_TOKEN=<token>` или `TMDB_TOKEN=<token>`.
 
-Both local token filenames are ignored by Git. Never add them to a commit, issue, report, screenshot or log.
+Оба локальных имени файлов токена игнорируются Git. Никогда не добавляйте их в commit, issue, отчёт, скриншот или лог.
 
-## Complete rollback
+## Полный откат
 
-- DNS: run `tmdb-dns-recovery.ps1 -Restore` and select the saved backup if prompted.
-- Hosts block: run `tmdb-hosts-override.ps1 -Remove`.
-- Full hosts backup: run `tmdb-hosts-override.ps1 -Restore`.
-- Application diagnostics are read-only; delete generated local reports if no longer needed.
+- DNS: выполните `tmdb-dns-recovery.ps1 -Restore` и выберите сохранённый backup, если будет запрос.
+- Hosts block: выполните `tmdb-hosts-override.ps1 -Remove`.
+- Полный hosts backup: выполните `tmdb-hosts-override.ps1 -Restore`.
+- Диагностика приложения — read-only; удалите сгенерированные локальные отчёты, если они больше не нужны.

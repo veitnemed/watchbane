@@ -1,0 +1,18 @@
+---
+description: Watchbane Phase C product canon and agent DoD for Composer
+alwaysApply: true
+---
+
+# Watchbane Phase C
+
+Перед задачей читай `docs/contracts/PRODUCT_ROADMAP_CONTRACT.md` и корневой `AGENTS.md`.
+
+- Продукт: колода до 10 с постерами; действия только смотрел / сохранить / скрыть.
+- Одна задача = один roadmap ID; после работы отметь прогресс в PRODUCT_ROADMAP.
+- Не брать direction из `internal/archive/docs/plans/DESKTOP_GUI_ROADMAP.md` (SUPERSEDED).
+- UI DoD: **сначала** `tools/screenshots/capture_*.py`, скрины в `screens/tmp_ui/<task_id>/`, **Read каждый PNG**; scales только **1.0 и 1.25**.
+- Нельзя закрывать UI только по pytest. Нельзя писать «UI ок» без скринов + Read.
+- Клики: capture/QTest; computer use — только если доступен; без live-кликов не врать.
+- Happy path Recommendations: вкладка → колода или «готовим» → 3 действия → без техтекста у табов.
+- TMDb с локальным токеном ок; токен не печатать. Sandbox отказ → permissions → повторить.
+- Запреты C: web, LLM/NL, filter algebra, like/dislike, commit без просьбы.
