@@ -8,7 +8,7 @@ alwaysApply: true
 Перед задачей читай `docs/contracts/PRODUCT_ROADMAP_CONTRACT.md` и корневой `AGENTS.md`.
 
 - Продукт (**вариант X**): inbox-колода до 10; действия смотрел / сохранить / скрыть. Не «выбор на вечер» (V0 parking).
-- Одна задача = один roadmap ID; после работы отметь прогресс в PRODUCT_ROADMAP.
+- Одна задача = один roadmap ID; после работы отметь прогресс в PRODUCT_ROADMAP и допиши `cursor-work.md`.
 - Не брать direction из `internal/archive/docs/plans/DESKTOP_GUI_ROADMAP.md` (SUPERSEDED).
 - UI DoD: **сначала** `tools/screenshots/capture_*.py`, скрины в `screens/tmp_ui/<task_id>/`, **Read каждый PNG**; scales только **1.0 и 1.25**.
 - Нельзя закрывать UI только по pytest. Нельзя писать «UI ок» без скринов + Read.
