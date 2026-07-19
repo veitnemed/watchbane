@@ -30,22 +30,29 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C1-02` (happy path 6 шагов) |
+| Активный фокус | `C1-03` (daily path без «Поиск настроек») |
 | UI QA scales | `1.0` и `1.25` |
-| Последний релевантный коммит | (C1-01 — см. журнал ниже) |
+| Последний релевантный коммит | _(после C1-02)_ |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** `C1-02` → … (см. PRODUCT §10), только после Scope Gate + «ок».
+**Дальше по плану:** `C1-03` → … (см. PRODUCT §10), только после Scope Gate + «ок».
 
 ---
 
 ## Журнал
 
+### 2026-07-19 — C1-02
+- **Запрос:** сделать C1-02, коммит, отдельный блок UX
+- **Сделано:** `docs/contracts/HAPPY_PATH_INBOX.md` — 6 шагов, маппинг смотрел→оценка / сохранить / скрыть, чеклист, разрывы → C1-03…C1-06; ссылки в PRODUCT §6 и AGENTS; C1-02 `[x]`; фокус → C1-03
+- **Файлы / коммит:** docs only (`HAPPY_PATH_INBOX.md`, PRODUCT, AGENTS, cursor-work)
+- **Проверка:** capture → `screens/tmp_ui/C1-02/` + Read (deck_list, deck_ready, rating); A–E: да/частично по таблице в HAPPY_PATH; код UI не меняли
+- **Не сделано / next:** C1-03; размер колоды 10 и одна CTA (C1-05); явные 3 кнопки (C1-06)
+
 ### 2026-07-19 — C1-01
 - **Запрос:** коммит docs (`cursor-work`) + первый шаг C1-01
 - **Сделано:** Recommendations = default shell tab; `DEFAULT_SHELL_TAB_ID`; focus после build и после TMDb gate без onboarding; PRODUCT + тесты
-- **Файлы / коммит:** `desktop/shell/tabs.py`, `desktop/shell/main_window.py`, tests, PRODUCT, cursor-work
+- **Файлы / коммит:** `25179cc` → `origin/main` (`tabs.py`, `main_window.py`, tests, PRODUCT, cursor-work)
 - **Проверка:** 6 pytest зелёные; скрин `screens/tmp_ui/C1-01/after_100.png` (Read): вкладка «Рекомендации» первая и активная; A да, B да (список), C н/д (не цель), D да, E 1.0 only (layout не трогали)
 - **Не сделано / next:** C1-02; колода 25→10; empty overlay
 

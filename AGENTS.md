@@ -6,7 +6,8 @@
 
 1. [`docs/contracts/PRODUCT_ROADMAP_CONTRACT.md`](docs/contracts/PRODUCT_ROADMAP_CONTRACT.md) — продукт, задача фазы C, колода до 10, «не делать», прогресс фаз.
 2. [`VERSION.md`](VERSION.md) — версия релиза.
-3. Нужный UI-контракт: [`DESKTOP_STYLE_CONTRACT`](docs/contracts/DESKTOP_STYLE_CONTRACT.md), [`UI_SCALE_CONTRACT`](docs/contracts/UI_SCALE_CONTRACT.md), detail-card contracts.
+3. Happy path inbox: [`docs/contracts/HAPPY_PATH_INBOX.md`](docs/contracts/HAPPY_PATH_INBOX.md) (6 шагов §6 PRODUCT).
+4. Нужный UI-контракт: [`DESKTOP_STYLE_CONTRACT`](docs/contracts/DESKTOP_STYLE_CONTRACT.md), [`UI_SCALE_CONTRACT`](docs/contracts/UI_SCALE_CONTRACT.md), detail-card contracts.
 
 **Не** брать product direction из [`internal/archive/docs/plans/DESKTOP_GUI_ROADMAP.md`](internal/archive/docs/plans/DESKTOP_GUI_ROADMAP.md) — он **SUPERSEDED** / в архиве.
 
