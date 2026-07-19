@@ -240,9 +240,10 @@ Daily path из **6 шагов** — эталон для всех фаз C.
 | D1-A | Архив reports + plans; хаб docs | [x] |
 | D1-B | Русский фасад: README + project/*.md | [x] |
 | D1-C | Битые ссылки → archive; тест template path | [x] |
+| D1-03 | Align public documentation with Phase C product contract | [x] |
 
 **Статус фазы:** ☐ не начата · ☐ в работе · ☑ **пройдена**  
-**Дата закрытия:** 2026-07-18
+**Дата закрытия:** 2026-07-19
 
 ---
 
@@ -490,6 +491,7 @@ C1-01 → C1-02 → C2-01 → C2-02 → C2-04 → C1-03 → C1-04 → C1-05 → 
 | 2026-07-19 | C1-06 | Действие «смотрел» названо явно рядом с оценкой; сохранить и скрыть остаются видимыми отдельными кнопками | targeted Qt pytest; capture + Read 1.0 / 1.25 |
 | 2026-07-19 | C2-03 | Перед reveal колоды остаётся один экран ожидания; первая партия постеров готовится до показа карточек | targeted Qt pytest; capture + Read 1.0 / 1.25 |
 | 2026-07-19 | C2-02 | Внешний Recommendations workflow теперь имеет только `preparing` и `ready`; `error` вынесен отдельно, а loading без карточек открывает общий preparing-screen | compileall; targeted Qt pytest; native capture + Read PNG 1.0 / 1.25 |
+| 2026-07-19 | D1-03 | Публичные docs выровнены с Phase C / вариант X: `main_agents` → pointer; `docs/README` индекс без битых ops и без «пул» как продукта; корневой README без pool/reserve/фильтров как user features | docs only; ссылки проверены вручную |
 | 2026-07-19 | C2-07 | Smoke S1–S6 на Recommendations; N_warm≈0.6с (preparing/list, gate skipped); фаза C2 закрыта; §3 S1–S6 ждут авторских 5 сессий | capture `screens/tmp_ui/C2-07/` + Read; timing smoke |
 | 2026-07-19 | C2-06 | Убран термин «пул»/pool из UI copy; replenish checkbox сеется из auto_pool_refill — Apply/«Обновить колоду» = одно действие | compileall; targeted pytest; capture Filters+Recommendations + Read 1.0/1.25 |
 | 2026-07-19 | C2-05 | Warm relaunch: saved TMDb token + network fail → local continue без token gate; completed onboarding не открывается | compileall; test_tmdb_startup_gate; capture + Read PNG 1.0 / 1.25 |
