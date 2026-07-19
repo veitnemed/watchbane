@@ -7602,6 +7602,32 @@ def test_candidate_list_view_wires_mark_watched_transfer() -> None:
     assert "reload_from_pool(force=True)" in actions_source
 
 
+def test_candidate_list_deck_uses_defaults_without_search_settings() -> None:
+    """C1-03: Recommendations can build a deck before any filter form is used."""
+    from desktop.candidates.list_view import CandidateListView
+    from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+
+    session = CandidateSearchSession()
+    view = CandidateListView.__new__(CandidateListView)
+    view._session = session
+
+    assert session.filters is None
+    assert session.startup_filters is None
+    assert view._deck_preferences() == DEFAULT_BROWSE_FILTERS
+
+
+def test_recommendations_main_surface_excludes_advanced_filter_controls() -> None:
+    """C1-04: presets and vibe controls stay in Search settings, not Recommendations."""
+    import inspect
+
+    from desktop.candidates.list_view import CandidateListView
+
+    source = inspect.getsource(CandidateListView)
+    assert "CandidateFiltersView" not in source
+    assert "candidateReplenishPreset" not in source
+    assert "candidateReplenishVibe" not in source
+
+
 def test_candidate_list_actions_transfer_refreshes_pool_and_notifies(monkeypatch, qapp) -> None:
     from types import SimpleNamespace
 

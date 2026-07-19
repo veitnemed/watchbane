@@ -692,6 +692,7 @@ class CandidateListView(CandidateListActionsMixin):
         }
 
     def _deck_preferences(self) -> dict:
+        """Return saved preferences or inbox defaults without visiting Search settings."""
         return dict(
             self._session.filters
             or self._session.startup_filters
