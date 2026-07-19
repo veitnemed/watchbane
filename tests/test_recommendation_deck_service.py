@@ -501,3 +501,42 @@ def test_new_releases_in_an_explicit_market_expand_unknown_rating_quota(tmp_path
 
     assert deck["unknown_rating_limit"] == min(EXPANDED_UNKNOWN_RATING_LIMIT, ACTIVE_DECK_SIZE)
     assert DEFAULT_UNKNOWN_RATING_LIMIT < unknown_count <= ACTIVE_DECK_SIZE
+
+
+def test_mood_any_hard_drops_junk_format_genres(tmp_path) -> None:
+    """C3-01: reality/talk/news/game_show/soap never enter the inbox deck."""
+    good = {
+        **_candidate(1, title="Solid Drama"),
+        "genres": ["Drama"],
+        "genre_keys": ["drama"],
+        "final_score": 95,
+        "tmdb_score": 8.2,
+        "tmdb_votes": 500,
+    }
+    junk_titles = {
+        "Reality Junk": ("reality", 10764),
+        "Talk Junk": ("talk_show", 10767),
+        "News Junk": ("news", 10763),
+        "Game Junk": ("game_show", None),
+        "Soap Junk": ("soap", 10766),
+    }
+    pool = {"good": good}
+    for index, (title, (genre_key, genre_id)) in enumerate(junk_titles.items(), start=10):
+        row = {
+            **_candidate(index, title=title, media_type="tv"),
+            "genres": [genre_key],
+            "genre_keys": [genre_key],
+            "final_score": 99,
+            "tmdb_score": 9.5,
+            "tmdb_votes": 9000,
+        }
+        if genre_id is not None:
+            row["genre_ids"] = [genre_id]
+        pool[f"junk-{index}"] = row
+
+    deck = _service(pool, tmp_path / "junk.sqlite3").build_deck({}, NOW)
+    titles = {item["title"] for item in deck["active"] + deck["reserve"]}
+
+    assert "Solid Drama" in titles
+    assert titles.isdisjoint(junk_titles)
+    assert int(deck["excluded"]["junk_genre"]) >= len(junk_titles)

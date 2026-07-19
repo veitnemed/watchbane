@@ -29,6 +29,7 @@ GENRE_KEY_TO_DISPLAY: dict[str, str] = {
     "talk_show": "Ток-шоу",
     "news": "Новости",
     "game_show": "Телеигра",
+    "soap": "Мыльная опера",
     "short": "Короткометражка",
     "film_noir": "Нуар",
 }
@@ -68,6 +69,7 @@ TMDB_GENRE_ID_TO_KEYS: dict[int, tuple[str, ...]] = {
     10763: ("news",),
     10764: ("reality",),
     10765: ("sci_fi_fantasy",),
+    10766: ("soap",),
     10767: ("talk_show",),
     10768: ("war",),
 }
@@ -118,6 +120,7 @@ _GENRE_ALIASES_BY_KEY: dict[str, list[str]] = {
     "talk_show": ["talk", "talk show", "talk-show", "ток-шоу", "ток шоу"],
     "news": ["news", "новости"],
     "game_show": ["game show", "game-show", "телеигра"],
+    "soap": ["soap", "soap opera", "мыльная опера", "мыльные оперы"],
     "short": ["short", "короткометражка"],
     "film_noir": ["film noir", "film-noir", "нуар"],
 }

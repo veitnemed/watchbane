@@ -30,17 +30,24 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C3-01` (качество выдачи) |
+| Активный фокус | `C3-02` (watched / saved / hidden в колоде) |
 | UI QA scales | `1.0` и `1.25` |
-| Последний релевантный docs ID | `D1-03` (публичные docs ↔ Phase C) |
+| Последний docs commit | `1af9bf5` (D1-03) |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** `C3-01` (см. PRODUCT §7), только после Scope Gate + «ок». §3 S1–S6 — авторские 5 сессий.
+**Дальше по плану:** `C3-02` (см. PRODUCT §7), только после Scope Gate + «ок». §3 S1–S6 — авторские 5 сессий.
 
 ---
 
 ## Журнал
+
+### 2026-07-19 — C3-01
+- **Запрос:** коммит/пуш D1-03 и следующий шаг по плану.
+- **Сделано:** в `_eligible_candidates` hard-drop junk genres (`reality`, `talk_show`, `news`, `game_show`, `soap`) даже при `mood=any`; soap в `genre_schema` (TMDb 10766).
+- **Файлы / commit:** `candidates/recommendation_deck_service.py`, `candidates/models/genre_schema.py`, deck tests, PRODUCT, `cursor-work.md`.
+- **Проверка:** compileall; 53 pytest passed (deck/intent/schema). UI не менялся.
+- **Не сделано / next:** C3-02 — сильнее опираться на watched/saved/hidden.
 
 ### 2026-07-19 — D1-03
 - **Запрос:** выровнять `main_agents.md`, `docs/README.md`, корневой `README.md` с PRODUCT Phase C; без кода.

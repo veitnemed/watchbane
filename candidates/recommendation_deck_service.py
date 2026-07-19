@@ -139,6 +139,7 @@ _MOOD_RELEVANCE_PROFILES = {
             "talk_show",
             "news",
             "game_show",
+            "soap",
         }),
     },
     "light": {
@@ -149,14 +150,23 @@ _MOOD_RELEVANCE_PROFILES = {
     "dynamic": {
         "exact": frozenset({"action_adventure", "thriller"}),
         "adjacent": frozenset({"crime", "sci_fi_fantasy", "war", "western"}),
-        "incompatible": frozenset({"reality", "talk_show", "news", "game_show"}),
+        "incompatible": frozenset({"reality", "talk_show", "news", "game_show", "soap"}),
     },
     "drama": {
         "exact": frozenset({"drama", "romance"}),
         "adjacent": frozenset({"crime", "mystery", "history", "biography"}),
-        "incompatible": frozenset({"reality", "talk_show", "news", "game_show"}),
+        "incompatible": frozenset({"reality", "talk_show", "news", "game_show", "soap"}),
     },
 }
+
+# C3-01: always drop format junk from the inbox deck, even when mood=any.
+_ALWAYS_IRRELEVANT_GENRES = frozenset({
+    "reality",
+    "talk_show",
+    "news",
+    "game_show",
+    "soap",
+})
 
 
 def _as_utc(value: datetime | date) -> datetime:
@@ -766,6 +776,7 @@ class RecommendationDeckService:
             "duplicate": 0,
             "preferences": 0,
             "quality_gate": 0,
+            "junk_genre": 0,
         }
         for raw_candidate in source:
             if not isinstance(raw_candidate, dict):
@@ -791,6 +802,12 @@ class RecommendationDeckService:
                 release_date is None and year is not None and int(year) > now.year
             ):
                 counters["future_release"] += 1
+                continue
+            genre_keys = set(
+                genre_schema.normalize_genre_filter_list(candidate.get("genre_keys") or [])
+            )
+            if genre_keys & _ALWAYS_IRRELEVANT_GENRES:
+                counters["junk_genre"] += 1
                 continue
             if not is_viable_unrated_candidate(candidate, current_year=now.year):
                 counters["quality_gate"] += 1
