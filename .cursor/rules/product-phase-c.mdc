@@ -16,3 +16,4 @@ alwaysApply: true
 - Happy path Recommendations: вкладка → колода или «готовим» → 3 действия → без техтекста у табов.
 - TMDb с локальным токеном ок; токен не печатать. Sandbox отказ → permissions → повторить.
 - Запреты C: web, LLM/NL, filter algebra, like/dislike, commit без просьбы.
+- **Scope Gate:** без roadmap ID + явного «ок» — не писать код; отклонять новые фичи/A/B/web с рисками размытия (см. `scope-gate.mdc` и AGENTS.md).

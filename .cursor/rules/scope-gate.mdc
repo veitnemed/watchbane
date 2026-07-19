@@ -1,0 +1,31 @@
+---
+description: Scope Gate — STOP before code; refuse product dilution
+alwaysApply: true
+---
+
+# Scope Gate (Watchbane)
+
+Перед правками **кода продукта** обязателен gate. Без явного «ок» / «делай» + roadmap ID — **ноль diff**.
+
+Выдать блок:
+
+```text
+Запрос: …
+Фаза / фокус: (см. PRODUCT_ROADMAP §7)
+Соответствует фазе C: да/нет
+Roadmap ID: C?-?? | НЕТ
+Риски размытия: …
+Предложение: выполнить / отклонить / сузить
+STOP: код не пишу без «ок» на этот ID
+```
+
+Классификация:
+
+- Есть ID C0–C4 → только этот ID после «ок»
+- Баг happy path → предложить ID, ждать «ок»
+- Новая фича / A / B / web / LLM / like-dislike → отклонить + риски, код не начинать
+- «Заодно» polish/refactor → отклонить или отдельный ID
+
+Отказ (кратко): запрос размывает продукт; могу отклонить / backlog / сузить до ID; код не начинаю.
+
+Канон: `docs/contracts/PRODUCT_ROADMAP_CONTRACT.md`, детали: корневой `AGENTS.md` (Scope Gate).

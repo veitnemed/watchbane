@@ -1,6 +1,6 @@
 # Контракт продукта и roadmap Watchbane
 
-**Версия:** `1.2`  
+**Версия:** `1.3`  
 **Язык:** русский  
 **Статус документа:** активен  
 **Последнее обновление:** 2026-07-18
@@ -146,7 +146,9 @@ Daily path из **6 шагов** — эталон для всех фаз C:
 
 ## 7. Roadmap — фазы
 
-**Текущая фаза:** `C0` — заморозка scope (канон документации D0 пройден)  
+**Текущая фаза:** `C0` → переход к `C1` (документация D0/D1 и Scope Gate готовы)  
+**Активный фокус:** `C1-01` (Recommendations — стартовая вкладка) — **не начинать без Scope Gate + «ок»**  
+**Запрещено до закрытия C2-07:** вектор A, вектор B, web, like/dislike, новые пресеты/вайб-крутилки, большой рефакторинг, смена размера колоды в коде без отдельного ID  
 **Следующая фаза:** `C1` — один сценарий
 
 Легенда: `[ ]` не начато · `[~]` в работе · `[x]` пройдено
@@ -406,6 +408,7 @@ C1-01 → C1-02 → C2-01 → C2-02 → C2-04 → C1-03 → C1-04 → C1-05 → 
 | 2026-07-18 | D1-B | Русский фасад: корневой README; CONTRIBUTING / SECURITY / CODE_OF_CONDUCT; PRODUCT v1.2 | ссылки на PRODUCT + archive deck-reserve; без `.py` UI |
 | 2026-07-18 | D1-C | Ссылки на archive; `.cursor` + `.gitignore`; template path в тесте | `py -m pytest tests/test_runtime_reports.py -q` зелёный |
 | 2026-07-18 | D1-D | AGENTS.md: UI DoD, capture-каталог, happy path, computer use; product-phase-c.mdc | docs only |
+| 2026-07-18 | S0 | Scope Gate: AGENTS + `.cursor/rules/scope-gate.mdc`; активный фокус C1-01 в PRODUCT v1.3 | docs only; код C1 не начат |
 
 ---
 
