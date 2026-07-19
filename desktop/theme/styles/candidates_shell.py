@@ -230,7 +230,7 @@ QFrame#recommendationsLoadingListPlaceholder {{
 QFrame#recommendationEmptyStateIconShell {{
     background-color: {FILM_ACCENT_DIM};
     border: 1px solid {FILM_BORDER};
-    border-radius: {list_px(36)}px;
+    border-radius: {list_px(72)}px;
 }}
 QLabel#recommendationEmptyStateIcon {{
     background: transparent;
@@ -254,7 +254,7 @@ QWidget#recommendationEmptyState[compact="true"] QLabel#recommendationEmptyState
     font-size: {font_px(FONT_BASE)}px;
 }}
 QFrame#recommendationEmptyStateIconShell[compactIcon="true"] {{
-    border-radius: {list_px(27)}px;
+    border-radius: {list_px(54)}px;
 }}
 QProgressBar#recommendationsDeckLoadingProgress {{
     background-color: {COLOR_CARD_ALT};

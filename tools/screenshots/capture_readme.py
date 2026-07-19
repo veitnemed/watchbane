@@ -25,6 +25,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime-root", type=Path, required=True)
     parser.add_argument("--tab", choices=("candidates", "watched", "filters"), required=True)
+    parser.add_argument(
+        "--candidates-state",
+        choices=("ready", "preparing"),
+        default="ready",
+        help="Force the Recommendations capture surface without changing runtime data.",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--width", type=int, default=1600)
     parser.add_argument("--height", type=int, default=960)
@@ -41,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from PyQt6.QtCore import Qt
     from PyQt6.QtGui import QFont, QFontDatabase
-    from PyQt6.QtWidgets import QApplication, QListView, QListWidget, QScrollArea
+    from PyQt6.QtWidgets import QApplication, QListView, QListWidget, QScrollArea, QStackedWidget, QWidget
 
     from desktop.shell.main_window import WatchedMoviesWindow
     from desktop.theme import FONT_APP, FONT_FAMILY, font_px
@@ -71,10 +77,17 @@ def main(argv: list[str] | None = None) -> int:
             watched.setCurrentRow(target_row)
             _process_events(app, 0.8)
     elif args.tab == "candidates":
-        candidates = window.findChild(QListView, "candidateListWidget")
-        if candidates is not None and candidates.model() is not None and candidates.model().rowCount() > 0:
-            candidates.setCurrentIndex(candidates.model().index(0, 0))
-            _process_events(app, 1.0)
+        if args.candidates_state == "preparing":
+            stack = window.findChild(QStackedWidget, "recommendationsDeckStack")
+            loading_page = window.findChild(QWidget, "recommendationsDeckLoadingPage")
+            if stack is not None and loading_page is not None:
+                stack.setCurrentWidget(loading_page)
+                _process_events(app, 0.4)
+        else:
+            candidates = window.findChild(QListView, "candidateListWidget")
+            if candidates is not None and candidates.model() is not None and candidates.model().rowCount() > 0:
+                candidates.setCurrentIndex(candidates.model().index(0, 0))
+                _process_events(app, 1.0)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     saved = window.grab().save(str(args.output))

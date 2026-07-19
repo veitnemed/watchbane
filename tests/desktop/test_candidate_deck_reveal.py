@@ -5,8 +5,10 @@ from threading import Event
 
 from PyQt6.QtWidgets import QStackedWidget
 
+from desktop.candidates.empty_state import RecommendationEmptyState
 from desktop.candidates import list_view as list_view_module
 from desktop.candidates.list_view import CandidateListView
+from desktop.i18n import tr
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
 
 
@@ -155,6 +157,19 @@ def _stack(view: CandidateListView) -> QStackedWidget:
     stack = view.widget.findChild(QStackedWidget, "recommendationsDeckStack")
     assert stack is not None
     return stack
+
+
+def test_deck_loading_page_uses_one_right_side_preparing_overlay(qtbot, monkeypatch) -> None:
+    view = _build_view(qtbot, monkeypatch)
+
+    view._begin_deck_preparation()
+
+    overlays = view._deck_loading_page.findChildren(RecommendationEmptyState)
+    assert overlays == [view._deck_loading_state]
+    assert view._deck_loading_state.objectName() == "recommendationsDeckLoadingOverlay"
+    assert view._deck_loading_state.title_label.text() == tr("recommendations.preparing.title")
+    assert view._deck_loading_state.subtitle_label.text() == tr("recommendations.preparing.detail")
+    assert _stack(view).currentWidget() is view._deck_loading_page
 
 
 def test_deck_content_is_revealed_after_the_poster_waiting_screen(qtbot, monkeypatch) -> None:

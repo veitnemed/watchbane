@@ -232,7 +232,12 @@ class CandidateListView(CandidateListActionsMixin):
         loading_list_layout.addWidget(loading_list_placeholder, stretch=1)
         loading_layout.addWidget(self._deck_loading_list_shell)
 
-        self._deck_loading_state = RecommendationEmptyState("loading")
+        self._deck_loading_state = RecommendationEmptyState(
+            "loading",
+            title=tr("recommendations.preparing.title"),
+            subtitle=tr("recommendations.preparing.detail"),
+        )
+        self._deck_loading_state.setObjectName("recommendationsDeckLoadingOverlay")
         self._deck_loading_progress = QProgressBar(self._deck_loading_page)
         self._deck_loading_progress.setObjectName("recommendationsDeckLoadingProgress")
         self._deck_loading_progress.setAccessibleName(tr("recommendations.state.loading"))
@@ -791,7 +796,11 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_loading_progress.setFormat(
             tr("recommendations.preparing.progress", settled=0, total=ACTIVE_DECK_SIZE)
         )
-        self._deck_loading_state.set_state("loading")
+        self._deck_loading_state.set_state(
+            "loading",
+            title=tr("recommendations.preparing.title"),
+            subtitle=tr("recommendations.preparing.detail"),
+        )
         self._deck_stack.setCurrentWidget(self._deck_loading_page)
         self._update_deck_reserve_indicator()
 

@@ -30,17 +30,24 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C2-01` (единый empty/loading overlay на Recommendations) |
+| Активный фокус | `C2-02` (два основных состояния колоды и отдельное error-состояние) |
 | UI QA scales | `1.0` и `1.25` |
 | Последний релевантный commit | C0-01…C0-03 (этот commit) |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** `C2-01` → `C2-02` → `C2-04` (см. PRODUCT §10), только после Scope Gate + «ок».
+**Дальше по плану:** `C2-02` → `C2-04` (см. PRODUCT §10), только после Scope Gate + «ок».
 
 ---
 
 ## Журнал
+
+### 2026-07-19 — C2-01
+- **Запрос:** сделать единый empty/loading overlay в правой области Recommendations.
+- **Сделано:** loading-экран использует один явно именованный overlay с copy «Подготавливаем рекомендации» и прогрессом постеров; capture умеет снять именно это состояние без подмены runtime-данных.
+- **Файлы / commit:** `desktop/candidates/list_view.py`, `tests/desktop/test_candidate_deck_reveal.py`, `tools/screenshots/capture_readme.py`, PRODUCT, happy path, `cursor-work.md`; commit будет создан отдельным шагом.
+- **Проверка:** compileall; targeted Qt pytest с `PYTEST_QT_API=pyqt6`; native capture + Read PNG 1.0 / 1.25.
+- **Не сделано / next:** C2-02 — закрепить только preparing / ready как основные состояния и отдельный error.
 
 ### 2026-07-19 — C2-03
 - **Запрос:** показывать колоду с постерами через один экран ожидания.

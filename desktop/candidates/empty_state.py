@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtGui import QRegion
 from PyQt6.QtWidgets import QFrame, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from desktop.candidates.filter_icon_assets import filter_icon_pixmap
@@ -169,6 +170,9 @@ class RecommendationEmptyState(QWidget):
         self._content_layout.setSpacing(spacing)
         icon_size = list_px(54 if self._compact else 72)
         self._icon_shell.setFixedSize(icon_size, icon_size)
+        self._icon_shell.setMask(
+            QRegion(self._icon_shell.rect(), QRegion.RegionType.Ellipse)
+        )
         self._icon_shell.setProperty("compactIcon", "true" if self._compact else "false")
         self._set_icon(self._icon_name)
         for widget in (self, self._icon_shell, self.title_label, self.subtitle_label):
