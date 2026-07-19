@@ -163,6 +163,8 @@ def test_variation_seed_changes_order_not_eligibility(tmp_path) -> None:
 
     first_ids = [item["tmdb_id"] for item in first["active"]]
     second_ids = [item["tmdb_id"] for item in second["active"]]
-    assert set(first_ids) == set(second_ids)
+    first_deck_ids = {item["tmdb_id"] for item in first["active"] + first["reserve"]}
+    second_deck_ids = {item["tmdb_id"] for item in second["active"] + second["reserve"]}
+    assert first_deck_ids == second_deck_ids
     assert first_ids != second_ids
     assert first["candidate_filters"] == second["candidate_filters"] == {}

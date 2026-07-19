@@ -49,7 +49,7 @@ from storage.sqlite.migrations import apply_migrations
 
 
 PoolLoader = Callable[[], dict]
-ACTIVE_DECK_SIZE = 25
+ACTIVE_DECK_SIZE = 10
 DEFAULT_ACTIVE_LIMIT = ACTIVE_DECK_SIZE
 DEFAULT_RESERVE_SIZE = 70
 DEFAULT_RECENT_DAYS = 30
@@ -57,7 +57,7 @@ DEFAULT_REFILL_THRESHOLD = 20
 DEFAULT_UNKNOWN_RATING_LIMIT = 6
 EXPANDED_UNKNOWN_RATING_LIMIT = 12
 DEFAULT_EXPLORATION_RATIO = 0.2
-DECK_STATE_SCHEMA_VERSION = 1
+DECK_STATE_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -1086,6 +1086,7 @@ class RecommendationDeckService:
         action: str,
         *,
         user_score: int | None = None,
+        refill_active: bool = True,
     ) -> dict:
         if deck_id not in self._decks:
             raise KeyError(f"Unknown recommendation deck: {deck_id}")
@@ -1126,7 +1127,7 @@ class RecommendationDeckService:
             item for item in deck["reserve"] if candidate_state_identity_key(item) != target_identity
         ]
         promoted = None
-        if len(deck["active"]) < deck["active_limit"] and deck["reserve"]:
+        if refill_active and len(deck["active"]) < deck["active_limit"] and deck["reserve"]:
             candidate_filters = dict(deck.get("candidate_filters") or deck.get("preferences") or {})
             vector = _coerce_vector(deck.get("recommendation_vector"), candidate_filters)
             explicit_relevance = _has_relevance_intent(vector)

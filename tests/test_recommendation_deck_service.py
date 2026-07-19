@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from candidates.models.keys import candidate_state_identity_key
 from candidates.recommendation_deck_service import (
+    ACTIVE_DECK_SIZE,
     DEFAULT_UNKNOWN_RATING_LIMIT,
     EXPANDED_UNKNOWN_RATING_LIMIT,
     RecommendationDeckService,
@@ -62,10 +63,28 @@ def _identities(items: list[dict]) -> list[str]:
 def test_deck_caps_active_and_reserve(tmp_path) -> None:
     deck = _service(_pool(150), tmp_path / "deck.sqlite3").build_deck({}, NOW)
 
-    assert len(deck["active"]) == 25
+    assert ACTIVE_DECK_SIZE == 10
+    assert len(deck["active"]) == ACTIVE_DECK_SIZE
     assert len(deck["reserve"]) == 70
     assert deck["refill_needed"] is False
     assert deck["underfilled_reason"] is None
+
+
+def test_finite_active_deck_does_not_promote_reserve_after_action(tmp_path) -> None:
+    service = _service(_pool(20), tmp_path / "deck.sqlite3")
+    deck = service.build_deck({}, NOW)
+    removed = deck["active"][0]
+
+    updated = service.apply_action_and_refill(
+        deck["deck_id"],
+        removed,
+        "hidden",
+        refill_active=False,
+    )
+
+    assert len(updated["active"]) == ACTIVE_DECK_SIZE - 1
+    assert len(updated["reserve"]) == len(deck["reserve"])
+    assert updated["last_action"]["promoted_identity"] is None
 
 
 def test_user_states_and_recent_impressions_are_excluded(tmp_path) -> None:
@@ -480,5 +499,5 @@ def test_new_releases_in_an_explicit_market_expand_unknown_rating_quota(tmp_path
     deck = _service(pool, tmp_path / "expanded.sqlite3").build_deck(preferences, NOW)
     unknown_count = sum(has_unknown_rating(item) for item in deck["active"])
 
-    assert deck["unknown_rating_limit"] == EXPANDED_UNKNOWN_RATING_LIMIT
-    assert DEFAULT_UNKNOWN_RATING_LIMIT < unknown_count <= EXPANDED_UNKNOWN_RATING_LIMIT
+    assert deck["unknown_rating_limit"] == min(EXPANDED_UNKNOWN_RATING_LIMIT, ACTIVE_DECK_SIZE)
+    assert DEFAULT_UNKNOWN_RATING_LIMIT < unknown_count <= ACTIVE_DECK_SIZE

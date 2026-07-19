@@ -178,16 +178,22 @@ class FakeRecommendationDeckService:
         candidates = self.service.sort_search_candidates(view["candidates"], "final_score")["candidates"]
         self._deck = {
             "deck_id": self.deck_id,
-            "active": candidates[:25],
-            "reserve": candidates[25:95],
-            "active_limit": 25,
+            "active": candidates[:10],
+            "reserve": candidates[10:80],
+            "active_limit": 10,
             "reserve_size": 70,
-            "underfilled_reason": "active_underfilled" if len(candidates) < 25 else None,
+            "underfilled_reason": "active_underfilled" if len(candidates) < 10 else None,
         }
         return deepcopy(self._deck)
 
     def apply_action_and_refill(
-        self, deck_id: str, candidate: dict, action: str, *, user_score: int | None = None
+        self,
+        deck_id: str,
+        candidate: dict,
+        action: str,
+        *,
+        user_score: int | None = None,
+        refill_active: bool = True,
     ) -> dict:
         assert deck_id == self.deck_id
         identity = candidate_detail_identity(candidate)
@@ -197,7 +203,11 @@ class FakeRecommendationDeckService:
         self._deck["active"] = [
             item for item in self._deck["active"] if candidate_detail_identity(item) != identity
         ]
-        promoted = self._deck["reserve"].pop(0) if self._deck["reserve"] else None
+        promoted = (
+            self._deck["reserve"].pop(0)
+            if refill_active and self._deck["reserve"]
+            else None
+        )
         if promoted is not None:
             self._deck["active"].append(promoted)
         self._deck["last_action"] = {
@@ -268,11 +278,11 @@ def _candidate_set(count: int, *, long_overview: bool = False) -> list[dict]:
     ]
 
 
-def test_recommendations_screen_displays_at_most_twenty_five_items(qtbot) -> None:
+def test_recommendations_screen_displays_at_most_ten_items(qtbot) -> None:
     service = FakeCandidateService(_candidate_set(45))
     _service, _session, _filters_view, list_view = _build_views(qtbot, service)
 
-    assert _listed_count(_candidate_list(list_view)) == 25
+    assert _listed_count(_candidate_list(list_view)) == 10
 
 
 def test_recommendations_hide_detail_panel_in_compact_layout(qtbot) -> None:
@@ -352,7 +362,7 @@ def test_recommendation_watched_action_uses_selected_reaction(qtbot) -> None:
     assert deck_service.action_calls[0][2] == 1
 
 
-def test_recommendation_action_promotes_reserve_item(qtbot) -> None:
+def test_recommendation_action_keeps_the_user_deck_finite(qtbot) -> None:
     service = FakeCandidateService(_candidate_set(31))
     deck_service = FakeRecommendationDeckService(service)
     _service, _session, _filters_view, list_view = _build_views(qtbot, service, deck_service)
@@ -370,13 +380,31 @@ def test_recommendation_action_promotes_reserve_item(qtbot) -> None:
     qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
 
     updated_titles = set(_listed_titles(list_widget))
-    assert _listed_count(list_widget) == 25
-    assert updated_titles - initial_titles == {"Recommendation 025"}
+    assert _listed_count(list_widget) == 9
+    assert updated_titles < initial_titles
     current_row = list_widget.currentIndex().row()
     assert list_view._selected_candidate == list_view._candidates[current_row]
     assert list_view._selected_identity == candidate_detail_identity(
         list_view._candidates[current_row]
     )
+
+
+def test_recommendation_shows_one_more_options_cta_after_last_card(qtbot) -> None:
+    service = FakeCandidateService(_candidate_set(1))
+    deck_service = FakeRecommendationDeckService(service)
+    _service, _session, _filters_view, list_view = _build_views(qtbot, service, deck_service)
+    list_widget = _candidate_list(list_view)
+    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
+    button = list_view.widget.findChild(QPushButton, "recommendationHiddenButton")
+    more_options = list_view.widget.findChild(QPushButton, "recommendationsNewDeckButton")
+
+    assert button is not None and more_options is not None
+    qtbot.waitUntil(button.isVisible)
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+
+    qtbot.waitUntil(more_options.isVisible)
+    assert _listed_count(list_widget) == 0
+    assert list_view._deck_refill_button.isHidden()
 
 
 def test_rapid_repeated_recommendation_action_is_applied_once(qtbot) -> None:

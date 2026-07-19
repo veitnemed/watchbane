@@ -311,12 +311,13 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_refill_button.clicked.connect(self._on_deck_refill_clicked)
         self._deck_refill_button.hide()
         feed_reserve_layout.addWidget(self._deck_refill_button)
-        feed_reserve_layout.addStretch(1)
-        feed_header_layout.addLayout(feed_reserve_layout)
         self._new_deck_button = QPushButton(tr("recommendations.new_deck"))
         self._new_deck_button.setObjectName("recommendationsNewDeckButton")
         self._new_deck_button.clicked.connect(self._on_new_deck_clicked)
         self._new_deck_button.hide()
+        feed_reserve_layout.addWidget(self._new_deck_button)
+        feed_reserve_layout.addStretch(1)
+        feed_header_layout.addLayout(feed_reserve_layout)
         list_layout.addWidget(feed_header)
 
         self._results_list = QListView()
@@ -520,8 +521,13 @@ class CandidateListView(CandidateListActionsMixin):
             refill_failed=self._deck_refill_failed,
         )
         indicator.apply_presentation(presentation)
-        self._deck_reserve_label.setVisible(presentation.mode != "idle")
-        snapshot = presentation.snapshot
+        deck_exhausted = (
+            presentation.mode == "ready"
+            and isinstance(self._deck, dict)
+            and not self._all_candidates
+        )
+        self._deck_reserve_label.setVisible(presentation.mode != "idle" and not deck_exhausted)
+        indicator.setVisible(presentation.mode != "idle" and not deck_exhausted)
         retry_build = presentation.mode == "error"
         retry_refill = presentation.mode == "offline" and self._deck_refill_failed
         self._deck_refill_button.setText(
@@ -534,13 +540,8 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_refill_button.setVisible(
             retry_build
             or retry_refill
-            or (
-                presentation.mode == "ready"
-                and snapshot is not None
-                and snapshot.remaining < 25
-                and self._on_refill_needed is not None
-            )
         )
+        self._new_deck_button.setVisible(deck_exhausted and not (retry_build or retry_refill))
 
     def _on_deck_refill_clicked(self) -> None:
         if self._deck is None:
@@ -1204,6 +1205,7 @@ class CandidateListView(CandidateListActionsMixin):
                 candidate,
                 action,
                 **action_kwargs,
+                refill_active=False,
             )
         except Exception:
             logger.exception("recommendation action failed: %s", action)
@@ -1212,15 +1214,6 @@ class CandidateListView(CandidateListActionsMixin):
             self._finish_action_guard()
             return
 
-        top_up = getattr(self._deck_service, "top_up_deck", None)
-        if updated.get("refill_needed") is True and callable(top_up):
-            try:
-                updated = top_up(
-                    str(updated["deck_id"]),
-                    datetime.now(timezone.utc),
-                )
-            except Exception:
-                logger.exception("local recommendation deck top-up failed")
         target_row = min(max(0, current_row), len(updated.get("active") or []) - 1)
         target_candidate = (
             (updated.get("active") or [])[target_row]
@@ -1389,33 +1382,13 @@ class CandidateListView(CandidateListActionsMixin):
         self._poster_request_seq += 1
         self._deck_dirty = True
         if self._recommendations_active and not self._session.is_loading:
-            top_up = getattr(self._deck_service, "top_up_deck", None)
             deck = self._deck
             if (
                 isinstance(deck, dict)
                 and dict(deck.get("candidate_filters") or deck.get("preferences") or {}) == self._deck_preferences()
                 and dict(deck.get("recommendation_vector") or {}) == self._deck_vector()
-                and callable(top_up)
             ):
-                try:
-                    updated = top_up(
-                        str(deck["deck_id"]),
-                        datetime.now(timezone.utc),
-                    )
-                except Exception:
-                    logger.exception("recommendation deck refresh top-up failed")
-                    self._load_recommendation_deck(force_new=False)
-                else:
-                    first_candidates_after_empty_deck = (
-                        len(deck.get("active") or []) == 0
-                        and len(updated.get("active") or []) > 0
-                    )
-                    if first_candidates_after_empty_deck:
-                        self._begin_deck_preparation()
-                    self._present_recommendation_deck(
-                        updated,
-                        prepare_posters=first_candidates_after_empty_deck,
-                    )
+                self._present_recommendation_deck(deck)
             else:
                 self._load_recommendation_deck(force_new=False)
 

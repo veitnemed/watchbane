@@ -357,7 +357,16 @@ class FakeDeckService:
         del force_new
         return deepcopy(self.initial_deck)
 
-    def apply_action_and_refill(self, deck_id: str, candidate: dict, action: str) -> dict:
+    def apply_action_and_refill(
+        self,
+        deck_id: str,
+        candidate: dict,
+        action: str,
+        *,
+        user_score: int | None = None,
+        refill_active: bool = True,
+    ) -> dict:
+        del user_score, refill_active
         self.action_calls.append((action, candidate_detail_identity(candidate)))
         assert deck_id == self.initial_deck["deck_id"]
         assert self.action_deck is not None
