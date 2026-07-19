@@ -431,6 +431,7 @@ def test_main_window_local_mode_skips_onboarding_and_network_refill(monkeypatch,
 
 def test_startup_gate_pass_marks_ready_and_opens_onboarding(monkeypatch, qapp) -> None:
     onboarding_calls = {"count": 0}
+    focus_calls = {"count": 0}
 
     class FakeGate(QWidget):
         passed = pyqtSignal()
@@ -473,7 +474,9 @@ def test_startup_gate_pass_marks_ready_and_opens_onboarding(monkeypatch, qapp) -
                     invalidate_pool_cache=lambda: None,
                 ),
                 refresh_candidate_filters=lambda: None,
-                focus_candidates=lambda: None,
+                focus_candidates=lambda: focus_calls.__setitem__(
+                    "count", focus_calls["count"] + 1
+                ),
             ),
         ),
     )
@@ -486,6 +489,8 @@ def test_startup_gate_pass_marks_ready_and_opens_onboarding(monkeypatch, qapp) -
         assert window._tmdb_gate_passed is True
         assert window._tmdb_gate_view is None
         assert onboarding_calls["count"] == 1
+        # C1-01: when onboarding is skipped, shell still focuses Recommendations.
+        assert focus_calls["count"] == 1
     finally:
         window.close()
 

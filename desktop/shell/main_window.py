@@ -426,9 +426,14 @@ class WatchedMoviesWindow(QMainWindow):
             self._tmdb_gate_view = None
             onboarding_started = start_onboarding and self.maybe_show_onboarding_autofill()
             if onboarding_started is False:
-                activate_current = getattr(self._tab_registry, "activate_current", None)
-                if callable(activate_current):
-                    activate_current()
+                # C1-01: land on Recommendations when startup skips onboarding.
+                focus_candidates = getattr(self._tabs_context, "focus_candidates", None)
+                if callable(focus_candidates):
+                    focus_candidates()
+                else:
+                    activate_current = getattr(self._tab_registry, "activate_current", None)
+                    if callable(activate_current):
+                        activate_current()
 
         def finish_gate() -> None:
             log_event("startup.tmdb_gate.passed")

@@ -6640,9 +6640,12 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     assert len(registry._specs) == len(set(registry._specs))
     assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
     assert all(hasattr(spec.view, "widget") for spec in registry._specs.values())
-    assert registry._specs["candidates"].view.activation_count == 0
-    registry.activate_current()
+    # C1-01: Recommendations is first and focused by default after build.
+    assert tabs.currentIndex() == 0
+    assert tabs.currentWidget() is registry._specs["candidates"].view.widget
     assert registry._specs["candidates"].view.activation_count == 1
+    registry.activate_current()
+    assert registry._specs["candidates"].view.activation_count == 2
     assert (
         registry._specs["filters"].view.replenish_state_listener.__self__
         is registry._specs["candidates"].view
@@ -6659,7 +6662,7 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     for index in range(tabs.count()):
         registry.on_current_changed(index)
 
-    assert registry._specs["candidates"].view.activation_count == 2
+    assert registry._specs["candidates"].view.activation_count == 3
 
 
 def test_main_tab_registry_focus_activates_current_view(qapp) -> None:
@@ -6732,6 +6735,22 @@ def test_add_title_duplicate_message_uses_interface_language(qapp, monkeypatch) 
 
     assert warnings == ["Этот фильм или сериал уже есть в коллекции просмотренного."]
     dialog.close()
+
+
+def test_main_window_starts_on_recommendations_tab(qapp) -> None:
+    """C1-01: after shell build, Recommendations is the selected tab."""
+    from desktop.shell.main_window import WatchedMoviesWindow
+    from desktop.shell.tabs import DEFAULT_SHELL_TAB_ID
+
+    window = WatchedMoviesWindow(initial_size=(900, 600))
+    try:
+        tabs = window._main_tabs
+        assert DEFAULT_SHELL_TAB_ID == "candidates"
+        assert tabs.currentIndex() == 0
+        assert tabs.tabText(0) in {"Recommendations", "Рекомендации"}
+        assert tabs.currentWidget() is window._tabs_context.candidate_list_view.widget
+    finally:
+        window.close()
 
 
 def test_onboarding_finish_invalidates_candidate_cache_before_focus(monkeypatch, qapp) -> None:
@@ -7059,7 +7078,8 @@ def test_cross_tab_wiring_stays_in_shell_tabs() -> None:
     assert "on_candidate_moved_to_watched" in shell_source
     assert "watched_tab_view.reload_entries" in shell_source
     assert "on_watched_added=on_candidate_moved_to_watched" in shell_source
-    assert "on_applied=lambda: registry.focus(\"candidates\")" in shell_source
+    assert "on_applied=lambda: registry.focus(DEFAULT_SHELL_TAB_ID)" in shell_source
+    assert 'DEFAULT_SHELL_TAB_ID = "candidates"' in shell_source
 
     forbidden_snippets = {
         "ShellTabSpec(",

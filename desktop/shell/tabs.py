@@ -19,6 +19,9 @@ from desktop.theme.scaling import control_px, layout_px
 from desktop.theme.tokens import SPACING_SMALL
 from desktop.watched.tab import WatchedTabView
 
+# C1-01: Recommendations (candidates) is the default shell tab after onboarding / startup.
+DEFAULT_SHELL_TAB_ID = "candidates"
+
 
 @dataclass(frozen=True)
 class ShellTabSpec:
@@ -115,7 +118,7 @@ def build_main_tabs(
 
     candidate_filters_view = CandidateFiltersView(
         candidate_session,
-        on_applied=lambda: registry.focus("candidates"),
+        on_applied=lambda: registry.focus(DEFAULT_SHELL_TAB_ID),
     )
     candidate_list_view = CandidateListView(
         candidate_session,
@@ -144,7 +147,10 @@ def build_main_tabs(
     )
     if callable(set_replenish_state_listener):
         set_replenish_state_listener(candidate_list_view.on_replenish_state_changed)
-    registry.register(ShellTabSpec("candidates", languages.tr("tabs.candidates"), candidate_list_view))
+    # Register Recommendations first so QTabWidget index 0 is the daily-path start.
+    registry.register(
+        ShellTabSpec(DEFAULT_SHELL_TAB_ID, languages.tr("tabs.candidates"), candidate_list_view)
+    )
     registry.register(ShellTabSpec("watched", languages.tr("tabs.watched"), watched_tab_view))
     registry.register(ShellTabSpec("filters", languages.tr("tabs.filters"), candidate_filters_view))
 
@@ -160,6 +166,7 @@ def build_main_tabs(
         on_pool_changed=on_pool_changed,
     )
     registry.register(ShellTabSpec("settings", languages.tr("tabs.settings"), settings_tab_view))
+    registry.focus(DEFAULT_SHELL_TAB_ID)
 
     context = AppTabsContext(
         watched_tab_view=watched_tab_view,
@@ -167,6 +174,6 @@ def build_main_tabs(
         settings_tab_view=settings_tab_view,
         candidate_session=candidate_session,
         refresh_candidate_filters=refresh_candidate_filters,
-        focus_candidates=lambda: registry.focus("candidates"),
+        focus_candidates=lambda: registry.focus(DEFAULT_SHELL_TAB_ID),
     )
     return registry, context
