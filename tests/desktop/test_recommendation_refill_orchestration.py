@@ -366,8 +366,8 @@ class FakeDeckService:
         user_score: int | None = None,
         refill_active: bool = True,
     ) -> dict:
-        del user_score, refill_active
-        self.action_calls.append((action, candidate_detail_identity(candidate)))
+        del user_score
+        self.action_calls.append((action, candidate_detail_identity(candidate), refill_active))
         assert deck_id == self.initial_deck["deck_id"]
         assert self.action_deck is not None
         return deepcopy(self.action_deck)
@@ -557,13 +557,93 @@ def test_candidate_list_action_waits_for_explicit_refill(qtbot, monkeypatch) -> 
 
     view._apply_recommendation_action("hidden")
 
-    assert deck_service.action_calls == [("hidden", candidate_detail_identity(candidate))]
+    assert deck_service.action_calls == [
+        ("hidden", candidate_detail_identity(candidate), True),
+    ]
     assert refill_calls == []
 
     view._on_deck_refill_clicked()
 
     assert len(refill_calls) == 1
     assert _intent_countries(refill_calls[0]) == {"RU"}
+
+
+def test_candidate_list_passes_refill_active_true_for_c3_09() -> None:
+    """C3-09: Recommendations promote from reserve after action."""
+    candidate = _candidate(1, country="RU", genres=["Crime"])
+    reserve = _candidate(2, country="RU", genres=["Crime"])
+    preferences = _dark_ru_preferences()
+    initial = _deck_payload(candidate, preferences, refill_needed=False)
+    initial["reserve"] = [reserve]
+    after_action = {
+        **_deck_payload(reserve, preferences, refill_needed=False),
+        "active": [reserve],
+        "reserve": [],
+        "last_action": {
+            "action": "hidden",
+            "transition": {"ok": True, "state": "hidden"},
+            "promoted_identity": candidate_detail_identity(reserve),
+        },
+    }
+    deck_service = FakeDeckService(initial, action_deck=after_action)
+    view = object.__new__(CandidateListView)
+    view._action_in_progress = False
+    view._selected_candidate = candidate
+    view._selected_identity = candidate_detail_identity(candidate)
+    view._deck = initial
+    view._deck_service = deck_service
+    view._candidates = [reserve]
+    view._on_watched_added = None
+
+    class _Index:
+        def row(self) -> int:
+            return 0
+
+    class _List:
+        def currentIndex(self) -> _Index:
+            return _Index()
+
+        def blockSignals(self, _value: bool) -> None:
+            return None
+
+        def setCurrentIndex(self, _index) -> None:
+            return None
+
+    class _Model:
+        def index(self, row: int, _column: int):
+            return row
+
+    class _Selector:
+        def clear(self) -> None:
+            return None
+
+    class _Label:
+        def setText(self, _text: str) -> None:
+            return None
+
+        def show(self) -> None:
+            return None
+
+    class _Timer:
+        def start(self, _ms: int) -> None:
+            return None
+
+    view._results_list = _List()
+    view._model = _Model()
+    view._candidate_rating_selector = _Selector()
+    view._deck_status_label = _Label()
+    view._action_unlock_timer = _Timer()
+    view._set_action_panel_enabled = lambda *_a, **_k: None
+    view._present_recommendation_deck = lambda *_a, **_k: None
+    view._on_result_selected = lambda *_a, **_k: None
+    view._clear_detail = lambda **_k: None
+    view._update_deck_status = lambda: None
+
+    CandidateListView._apply_recommendation_action(view, "hidden")
+
+    assert deck_service.action_calls == [
+        ("hidden", candidate_detail_identity(candidate), True),
+    ]
 
 
 def test_filter_replenish_rechecks_cancellation_before_import(monkeypatch) -> None:

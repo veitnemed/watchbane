@@ -1229,7 +1229,7 @@ class CandidateListView(CandidateListActionsMixin):
                 candidate,
                 action,
                 **action_kwargs,
-                refill_active=False,
+                refill_active=True,
             )
         except Exception:
             logger.exception("recommendation action failed: %s", action)

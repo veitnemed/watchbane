@@ -201,7 +201,7 @@ Daily path из **6 шагов** — эталон для всех фаз C.
 ## 7. Roadmap — фазы
 
 **Текущий рабочий контур:** `C3` (качество выдачи)
-**Активный фокус:** `C3-04` (сессии автора ≥5/10; сессия 1 ≈5/10) — **не начинать без Scope Gate + «ок»**; `C3-05`…`C3-08` выполнены
+**Активный фокус:** `C3-04` (сессии автора ≥5/10; сессия 1 ≈5/10) — **не начинать без Scope Gate + «ок»**; `C3-05`…`C3-09` выполнены
 **Продуктовый контур:** **X — inbox-колода** (не V0 «Сегодня»)  
 **Запрещено до явного открытия A/B/V0:** вектор A, вектор B, V0, web, like/dislike, новые пресеты/вайб-крутилки  
 **Следующий ID после C3-04:** закрытие C3 / переход к C4
@@ -323,6 +323,7 @@ Daily path из **6 шагов** — эталон для всех фаз C.
 | C3-06 | Safe isolated launcher for recommendation QA audits | [x] |
 | C3-07 | Block explicit sexual content from safe recommendation eligibility | [x] |
 | C3-08 | Consistent RU metadata selection and fallback | [x] |
+| C3-09 | Promote from reserve after recommendation action | [x] |
 
 **Статус фазы:** ☐ не начата · ☑ в работе · ☐ **пройдена**  
 **Дата закрытия:** _—_
@@ -476,6 +477,7 @@ C1-01 → C1-02 → C2-01 → C2-02 → C2-04 → C1-03 → C1-04 → C1-05 → 
 
 | Дата | Фаза / задача | Что сделано | Проверка |
 | --- | --- | --- | --- |
+| 2026-07-19 | C3-09 | После смотрел/сохранить/скрыть active добирается из reserve (`refill_active=True`); HAPPY_PATH §4 обновлён | deck + desktop pytest; captures C3-09 1.0/1.25 Read |
 | 2026-07-19 | C3-08 | RU metadata: merge localized title/overview без poster-gate; fallback selected→primary→en→original; legacy не штампует latin в `localized.ru`; закрывает QA-DEFECT-02 (C3-05) | `tests/test_data_language_display.py` + related; captures `screens/tmp_ui/C3-08/after_{100,125}.png` Read |
 | 2026-07-19 | C3-07 | Safety gate explicit sexual content: hard-drop в `_eligible_candidates` + soft reject replenish; закрывает QA-DEFECT-01 (C3-05 / TMDb 95897) без adult-toggle/UI | `tests/test_explicit_content_safety.py` + deck suite (44 passed) |
 | 2026-07-17 | C0 | Создан контракт `PRODUCT_ROADMAP_CONTRACT.md` | — |

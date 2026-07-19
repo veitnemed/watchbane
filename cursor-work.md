@@ -30,9 +30,9 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C3-04` [~]; C3-05…C3-08 [x] |
+| Активный фокус | `C3-04` [~]; C3-05…C3-09 [x] |
 | UI QA scales | `1.0` и `1.25` |
-| Последний docs commit | `05a2794` (C3-06) |
+| Последний docs commit | `89d0e6a` (C3-07/C3-08) |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
@@ -41,6 +41,21 @@
 ---
 
 ## Журнал
+
+### 2026-07-19 — C3-09
+- **Запрос:** ок, C3-09 — promote из reserve после recommendation action.
+- **Сделано:** `list_view` → `refill_active=True`; HAPPY_PATH §4; тесты promote + UI передаёт True; capture script `capture_recommendation_after_action.py`.
+- **Проверка:** pytest deck/desktop; captures `screens/tmp_ui/C3-09/after_{100,125}.png` + Read.
+- **Не сделано / next:** не TMDb auto-replenish; не C3-04.
+
+### 2026-07-19 — Диагностика: колода не обновляется после действия
+- **Запрос:** запас есть; после убирания карточки колода не обновляется («пул не пополняется»).
+- **Симптом:** reserve/запас есть; после смотрел/сохранить/скрыть active не добирается.
+- **Root cause:** UI вызывает `RecommendationDeckService.apply_action_and_refill(..., refill_active=False)` в `desktop/candidates/list_view.py` (~1227). Сервис умеет promote из reserve при `True`; Recommendations отключают это намеренно.
+- **Контракт:** HAPPY_PATH / C1-05 — конечная колода **уменьшается** после действия; тест `test_finite_active_deck_does_not_promote_reserve_after_action`.
+- **Не релевантно:** TMDb replenish / Apply / `auto_pool_refill` / C3-07 safety — другой контур.
+- **Код:** не менялся (диагностика only).
+- **Next:** если нужен UX «убрал → подтянул из запаса до 10» — Scope Gate + новый roadmap ID + правка HAPPY_PATH/теста; без явного `ок, <ID>` не делать.
 
 ### 2026-07-19 — C3-08
 - **Запрос:** ок/делай C3-08 — Consistent RU metadata selection and fallback (QA-DEFECT-02).

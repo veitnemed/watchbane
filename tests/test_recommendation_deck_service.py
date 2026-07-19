@@ -70,7 +70,28 @@ def test_deck_caps_active_and_reserve(tmp_path) -> None:
     assert deck["underfilled_reason"] is None
 
 
-def test_finite_active_deck_does_not_promote_reserve_after_action(tmp_path) -> None:
+def test_action_promotes_from_reserve_to_keep_active_full(tmp_path) -> None:
+    """C3-09: with reserve available, hide keeps active at the deck limit."""
+    service = _service(_pool(20), tmp_path / "deck.sqlite3")
+    deck = service.build_deck({}, NOW)
+    removed = deck["active"][0]
+    reserve_before = len(deck["reserve"])
+
+    updated = service.apply_action_and_refill(
+        deck["deck_id"],
+        removed,
+        "hidden",
+        refill_active=True,
+    )
+
+    assert len(updated["active"]) == ACTIVE_DECK_SIZE
+    assert len(updated["reserve"]) == reserve_before - 1
+    assert updated["last_action"]["promoted_identity"] is not None
+    assert candidate_state_identity_key(removed) not in _identities(updated["active"])
+
+
+def test_refill_active_false_still_shrinks_without_promote(tmp_path) -> None:
+    """API opt-out: refill_active=False keeps finite shrink behavior."""
     service = _service(_pool(20), tmp_path / "deck.sqlite3")
     deck = service.build_deck({}, NOW)
     removed = deck["active"][0]
