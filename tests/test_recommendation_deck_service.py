@@ -540,3 +540,119 @@ def test_mood_any_hard_drops_junk_format_genres(tmp_path) -> None:
     assert "Solid Drama" in titles
     assert titles.isdisjoint(junk_titles)
     assert int(deck["excluded"]["junk_genre"]) >= len(junk_titles)
+
+
+def test_genre_affinity_from_watched_saved_hidden_ranks_deck(tmp_path) -> None:
+    """C3-02: TOP/saved genres rise; NOT_FOR_ME/hidden genres fall; titles stay excluded."""
+    from dataset.models.user_rating import UserRating
+
+    comedy_seed = {
+        **_candidate(1, title="Seed Comedy"),
+        "genres": ["Comedy"],
+        "genre_keys": ["comedy"],
+        "genres_tmdb": ["Comedy"],
+        "final_score": 50,
+        "tmdb_score": 6.0,
+        "tmdb_votes": 100,
+    }
+    drama_seed = {
+        **_candidate(2, title="Seed Drama Bad"),
+        "genres": ["Drama"],
+        "genre_keys": ["drama"],
+        "genres_tmdb": ["Drama"],
+        "final_score": 50,
+        "tmdb_score": 6.0,
+        "tmdb_votes": 100,
+    }
+    action_seed = {
+        **_candidate(3, title="Seed Action Saved"),
+        "genres": ["Action"],
+        "genre_keys": ["action_adventure"],
+        "genres_tmdb": ["Action"],
+        "final_score": 50,
+        "tmdb_score": 6.0,
+        "tmdb_votes": 100,
+    }
+    scifi_seed = {
+        **_candidate(4, title="Seed SciFi Hidden"),
+        "genres": ["Sci-Fi"],
+        "genre_keys": ["sci_fi_fantasy"],
+        "genres_tmdb": ["Sci-Fi"],
+        "final_score": 50,
+        "tmdb_score": 6.0,
+        "tmdb_votes": 100,
+    }
+    comedy_new = {
+        **_candidate(10, title="Fresh Comedy"),
+        "genres": ["Comedy"],
+        "genre_keys": ["comedy"],
+        "genres_tmdb": ["Comedy"],
+        "final_score": 70,
+        "tmdb_score": 7.0,
+        "tmdb_votes": 200,
+    }
+    drama_new = {
+        **_candidate(11, title="Fresh Drama"),
+        "genres": ["Drama"],
+        "genre_keys": ["drama"],
+        "genres_tmdb": ["Drama"],
+        "final_score": 95,
+        "tmdb_score": 9.0,
+        "tmdb_votes": 900,
+    }
+    action_new = {
+        **_candidate(12, title="Fresh Action"),
+        "genres": ["Action"],
+        "genre_keys": ["action_adventure"],
+        "genres_tmdb": ["Action"],
+        "final_score": 72,
+        "tmdb_score": 7.1,
+        "tmdb_votes": 210,
+    }
+    scifi_new = {
+        **_candidate(13, title="Fresh SciFi"),
+        "genres": ["Sci-Fi"],
+        "genre_keys": ["sci_fi_fantasy"],
+        "genres_tmdb": ["Sci-Fi"],
+        "final_score": 96,
+        "tmdb_score": 9.1,
+        "tmdb_votes": 950,
+    }
+    pool = {
+        "comedy_seed": comedy_seed,
+        "drama_seed": drama_seed,
+        "action_seed": action_seed,
+        "scifi_seed": scifi_seed,
+        "comedy_new": comedy_new,
+        "drama_new": drama_new,
+        "action_new": action_new,
+        "scifi_new": scifi_new,
+    }
+    db_path = tmp_path / "affinity.sqlite3"
+    title_state_service.mark_watched(comedy_seed, int(UserRating.TOP), path=db_path)
+    title_state_service.mark_watched(drama_seed, int(UserRating.NOT_FOR_ME), path=db_path)
+    title_state_service.add_to_watchlist(action_seed, path=db_path)
+    title_state_service.hide_candidate(scifi_seed, path=db_path)
+
+    service = _service(pool, db_path)
+    affinity = service._genre_affinity_profile()
+    assert affinity.get("comedy", 0) > 0
+    assert affinity.get("drama", 0) < 0
+    assert affinity.get("action_adventure", 0) > 0
+    assert affinity.get("sci_fi_fantasy", 0) < 0
+
+    deck = service.build_deck({}, NOW)
+    titles = [item["title"] for item in deck["active"] + deck["reserve"]]
+    assert "Seed Comedy" not in titles
+    assert "Seed Drama Bad" not in titles
+    assert "Seed Action Saved" not in titles
+    assert "Seed SciFi Hidden" not in titles
+
+    ranked = _rank_candidates(
+        [comedy_new, drama_new, action_new, scifi_new],
+        "affinity-test",
+        affinity=affinity,
+    )
+    ranked_titles = [item["title"] for item in ranked]
+    assert ranked_titles.index("Fresh Comedy") < ranked_titles.index("Fresh Drama")
+    assert ranked_titles.index("Fresh Action") < ranked_titles.index("Fresh SciFi")

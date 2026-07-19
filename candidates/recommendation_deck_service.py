@@ -38,14 +38,15 @@ from candidates.scoring.rating_confidence import has_unknown_rating, is_viable_u
 from candidates.sources.tmdb.scoring import compute_tmdb_quality_score
 from candidates import title_state_service
 from dataset.models.media_type import normalize_media_type
-from dataset.models.user_rating import normalize_user_rating
 from storage.sqlite import (
     action_repository,
     impression_repository,
     recommendation_deck_repository,
 )
 from storage.sqlite.connection import connect
+from storage.sqlite.json_codec import loads_json
 from storage.sqlite.migrations import apply_migrations
+from dataset.models.user_rating import UserRating, normalize_user_rating
 
 
 PoolLoader = Callable[[], dict]
@@ -237,13 +238,61 @@ def _base_score(candidate: dict) -> float:
     return 0.0
 
 
-def _personal_fit_score(candidate: dict) -> float:
-    """Use only explicit per-candidate fit fields; watched alone is never positive."""
+# C3-02: genre weights from watched ratings + saved/hidden (title still hard-excluded).
+_AFFINITY_WATCHED_TOP = 3.0
+_AFFINITY_WATCHED_OK = 1.0
+_AFFINITY_WATCHED_NOT_FOR_ME = -2.5
+_AFFINITY_WATCHED_UNSCORED = 0.5
+_AFFINITY_SAVED = 2.0
+_AFFINITY_HIDDEN = -2.0
+
+
+def _candidate_genre_keys(candidate: dict) -> set[str]:
+    normalized = normalize_candidate_record(candidate)
+    return set(genre_schema.normalize_genre_filter_list(normalized.get("genre_keys") or []))
+
+
+def _genres_from_watched_payload(payload: dict) -> set[str]:
+    """Extract genre keys from a watched record payload."""
+    if not isinstance(payload, dict):
+        return set()
+    for key in ("genre_keys", "genres", "genres_tmdb"):
+        if key in payload and payload.get(key) not in (None, "", [], ()):
+            return set(genre_schema.normalize_genre_filter_list(payload.get(key) or []))
+    main_info = payload.get("main_info")
+    if isinstance(main_info, dict):
+        for key in ("genre_keys", "genres", "genres_tmdb"):
+            if key in main_info and main_info.get(key) not in (None, "", [], ()):
+                return set(genre_schema.normalize_genre_filter_list(main_info.get(key) or []))
+    return set()
+
+
+def _watched_rating_affinity_weight(user_score: Any) -> float:
+    rating = normalize_user_rating(user_score)
+    if rating == int(UserRating.TOP):
+        return _AFFINITY_WATCHED_TOP
+    if rating == int(UserRating.OK):
+        return _AFFINITY_WATCHED_OK
+    if rating == int(UserRating.NOT_FOR_ME):
+        return _AFFINITY_WATCHED_NOT_FOR_ME
+    return _AFFINITY_WATCHED_UNSCORED
+
+
+def _personal_fit_score(
+    candidate: dict,
+    affinity: dict[str, float] | None = None,
+) -> float:
+    """Prefer explicit fit fields; otherwise use genre affinity from user actions."""
     for field_name in ("personal_fit_score", "preference_score", "affinity_score"):
         value = _number(candidate.get(field_name))
         if value is not None:
             return _score_percent(field_name, value)
-    return 0.0
+    if not affinity:
+        return 0.0
+    genres = _candidate_genre_keys(candidate)
+    if not genres:
+        return 0.0
+    return float(sum(float(affinity.get(genre, 0.0)) for genre in genres))
 
 
 def _preference_values(preferences: dict, *field_names: str) -> list[str]:
@@ -484,6 +533,8 @@ def _rank_candidates(
     candidates: list[dict],
     day_seed: str,
     vector: RecommendationVector | dict | None = None,
+    *,
+    affinity: dict[str, float] | None = None,
 ) -> list[dict]:
     current_vector = _coerce_vector(vector)
     if current_vector.diversity_level != 2:
@@ -491,7 +542,7 @@ def _rank_candidates(
             candidates,
             key=lambda candidate: (
                 int(_relevance_tier(candidate, current_vector)),
-                -_personal_fit_score(candidate),
+                -_personal_fit_score(candidate, affinity),
                 -_vector_score(candidate, current_vector),
                 _stable_hash(day_seed, candidate),
             ),
@@ -505,7 +556,7 @@ def _rank_candidates(
     for candidate in candidates:
         group_key = (
             int(_relevance_tier(candidate, current_vector)),
-            round(_personal_fit_score(candidate), 6),
+            round(_personal_fit_score(candidate, affinity), 6),
             round(_vector_score(candidate, current_vector), 6),
         )
         quality_groups.setdefault(group_key, []).append(candidate)
@@ -730,6 +781,39 @@ class RecommendationDeckService:
         finally:
             conn.close()
 
+    def _genre_affinity_profile(self) -> dict[str, float]:
+        """Build genre affinity from watched ratings + saved/hidden (C3-02)."""
+        affinity: dict[str, float] = {}
+
+        def _bump(genres: set[str], weight: float) -> None:
+            for genre in genres:
+                affinity[genre] = float(affinity.get(genre, 0.0)) + float(weight)
+
+        conn = connect(self._db_path)
+        try:
+            apply_migrations(conn)
+            for row in conn.execute(
+                "SELECT user_score, payload_json FROM watched_records WHERE payload_json != '{}'"
+            ):
+                genres = _genres_from_watched_payload(loads_json(row["payload_json"], {}))
+                if not genres:
+                    continue
+                _bump(genres, _watched_rating_affinity_weight(row["user_score"]))
+        finally:
+            conn.close()
+
+        for candidate in title_state_service.load_action_candidates(
+            action_repository.ACTION_WATCHLIST,
+            path=self._db_path,
+        ):
+            _bump(_candidate_genre_keys(candidate), _AFFINITY_SAVED)
+        for candidate in title_state_service.load_action_candidates(
+            action_repository.ACTION_HIDDEN,
+            path=self._db_path,
+        ):
+            _bump(_candidate_genre_keys(candidate), _AFFINITY_HIDDEN)
+        return affinity
+
     def _excluded_action_identities(
         self,
     ) -> tuple[set[str], set[tuple[str, int]]]:
@@ -852,12 +936,14 @@ class RecommendationDeckService:
             current_filters,
             current,
         )
+        affinity = self._genre_affinity_profile()
         selection_pool = eligible
         ranked = _automatic_ranked_candidates(
             _rank_candidates(
                 selection_pool,
                 rank_seed,
                 current_vector,
+                affinity=affinity,
             ),
             current_vector,
             capacity=active_limit + reserve_limit,
@@ -870,6 +956,7 @@ class RecommendationDeckService:
                     selection_pool,
                     rank_seed,
                     current_vector,
+                    affinity=affinity,
                 ),
                 current_vector,
                 capacity=active_limit + reserve_limit,
@@ -991,6 +1078,7 @@ class RecommendationDeckService:
         eligible, recent_fallback, excluded = self._eligible_candidates(candidate_filters, current)
         valid_candidates = list(eligible) + list(recent_fallback)
         valid_identities = {_stable_identity(candidate) for candidate in valid_candidates}
+        affinity = self._genre_affinity_profile()
 
         active: list[dict] = []
         active_identities: set[tuple[str, str, str]] = set()
@@ -1038,7 +1126,7 @@ class RecommendationDeckService:
             used_aliases.update(aliases)
             new_candidates.append(candidate)
         ranked_new = _automatic_ranked_candidates(
-            _rank_candidates(new_candidates, rank_seed, vector),
+            _rank_candidates(new_candidates, rank_seed, vector, affinity=affinity),
             vector,
             capacity=int(deck["active_limit"]) + int(deck["reserve_size"]),
         )
@@ -1147,6 +1235,7 @@ class RecommendationDeckService:
         if refill_active and len(deck["active"]) < deck["active_limit"] and deck["reserve"]:
             candidate_filters = dict(deck.get("candidate_filters") or deck.get("preferences") or {})
             vector = _coerce_vector(deck.get("recommendation_vector"), candidate_filters)
+            affinity = self._genre_affinity_profile()
             explicit_relevance = _has_relevance_intent(vector)
             exploration_ratio = resolve_exploration_ratio(vector.openness_level)
             unknown_count = sum(has_unknown_rating(item) for item in deck["active"])
@@ -1193,7 +1282,7 @@ class RecommendationDeckService:
                             promotion_index = min(
                                 comparable,
                                 key=lambda index: (
-                                    -_personal_fit_score(deck["reserve"][index]),
+                                    -_personal_fit_score(deck["reserve"][index], affinity),
                                     -_vector_score(deck["reserve"][index], vector),
                                     index,
                                 ),
