@@ -32,13 +32,28 @@ class FakePosterPrefetchController:
         self.batch_progress = _Signal()
         self.batch_finished = _Signal()
         self.background_calls: list[list[dict]] = []
+        self.batch_calls: list[list[dict]] = []
         self.cancel_count = 0
+        self._next_batch_id = 0
 
     def allow_failed_retries(self, **_kwargs) -> None:
         return None
 
     def enqueue_candidates(self, candidates: list[dict], **_kwargs) -> None:
         self.background_calls.append(deepcopy(candidates))
+
+    def start_batch(self, candidates: list[dict], **_kwargs) -> int:
+        self._next_batch_id += 1
+        batch_id = self._next_batch_id
+        snapshot = deepcopy(candidates)
+        self.batch_calls.append(snapshot)
+        self.batch_started.emit(batch_id, len(snapshot))
+        for settled, candidate in enumerate(snapshot, start=1):
+            identity = str(candidate["pool_entry_key"])
+            self.candidate_settled.emit(batch_id, identity, "poster.png", False, True)
+            self.batch_progress.emit(batch_id, settled, 0, settled, len(snapshot), settled)
+        self.batch_finished.emit(batch_id, len(snapshot), 0, len(snapshot), len(snapshot))
+        return batch_id
 
     def enqueue(self, *_args, **_kwargs) -> None:
         return None
@@ -95,7 +110,7 @@ def _candidate(index: int) -> dict:
 
 
 def _deck() -> dict:
-    active = [_candidate(index) for index in range(25)]
+    active = [_candidate(index) for index in range(10)]
     return {
         "deck_id": "progressive-deck",
         "preferences": deepcopy(DEFAULT_BROWSE_FILTERS),
@@ -103,7 +118,7 @@ def _deck() -> dict:
         "variation_seed": 0,
         "active": active,
         "reserve": [_candidate(100 + index) for index in range(70)],
-        "active_limit": 25,
+        "active_limit": 10,
         "reserve_size": 70,
         "refill_needed": False,
         "underfilled_reason": None,
@@ -142,17 +157,19 @@ def _stack(view: CandidateListView) -> QStackedWidget:
     return stack
 
 
-def test_deck_content_is_revealed_without_waiting_for_posters(qtbot, monkeypatch) -> None:
+def test_deck_content_is_revealed_after_the_poster_waiting_screen(qtbot, monkeypatch) -> None:
     view = _build_view(qtbot, monkeypatch)
 
     view.on_tab_activated()
     qtbot.waitUntil(lambda: view._deck_worker is None and view._deck is not None)
 
     controller = view._poster_prefetch
+    assert _stack(view).currentWidget() is view._deck_loading_page
+    qtbot.waitUntil(lambda: _stack(view).currentWidget() is view._deck_content_page)
     assert _stack(view).currentWidget() is view._deck_content_page
-    assert len(view._all_candidates) == 25
-    assert len(controller.background_calls) == 1
-    assert len(controller.background_calls[0]) == 25
+    assert len(view._all_candidates) == 10
+    assert len(controller.batch_calls) == 1
+    assert len(controller.batch_calls[0]) == 10
 
 
 def test_replaced_deck_cancels_stale_poster_requests(qtbot, monkeypatch) -> None:
@@ -167,6 +184,8 @@ def test_replaced_deck_cancels_stale_poster_requests(qtbot, monkeypatch) -> None
     qtbot.waitUntil(lambda: view._deck_worker is None and view._deck["deck_id"] == "replacement")
 
     assert view._poster_prefetch.cancel_count == initial_cancel_count + 1
+    assert _stack(view).currentWidget() is view._deck_loading_page
+    qtbot.waitUntil(lambda: _stack(view).currentWidget() is view._deck_content_page)
     assert _stack(view).currentWidget() is view._deck_content_page
 
 

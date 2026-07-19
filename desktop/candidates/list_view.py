@@ -828,6 +828,8 @@ class CandidateListView(CandidateListActionsMixin):
             )
         )
         self._deck_deadline_timer.start(POSTER_REVEAL_DEADLINE_MS)
+        if self._deck_prepare_total == 0:
+            self._request_deck_reveal(batch_id, "empty_deck")
 
     def _on_deck_deadline(self) -> None:
         batch_id = self._deck_prepare_batch_id
@@ -1145,11 +1147,11 @@ class CandidateListView(CandidateListActionsMixin):
             len(deck.get("reserve") or []),
             replacement,
         )
+        self._begin_deck_preparation()
         self._present_recommendation_deck(
             deck,
-            prepare_posters=False,
+            prepare_posters=True,
         )
-        self._show_deck_content()
         self._deck_build_in_progress = False
         self._deck_build_failed = False
         self._initial_deck_loaded = True
