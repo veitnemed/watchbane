@@ -30,17 +30,38 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C3-04` (≥5 из 10 «мог бы посмотреть») |
+| Активный фокус | `C3-04` [~]; C3-05/C3-06 [x] |
 | UI QA scales | `1.0` и `1.25` |
-| Последний docs commit | `1af9bf5` (D1-03) |
+| Последний docs commit | `223ab92` (C3-03) |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** `C3-04` (см. PRODUCT §7), только после Scope Gate + «ок». §3 S1–S6 — авторские 5 сессий.
+**Дальше по плану:** C3-04 сессии 2–3; отдельные ID на adult hard-drop / RU l10n из C3-05.
 
 ---
 
 ## Журнал
+
+### 2026-07-19 — C3-06
+- **Запрос:** ок, C3-06 — Safe isolated launcher for recommendation QA audits.
+- **Сделано:** `tools/qa/run_recommendation_audit.py` + `isolation.py` + `verify_isolation_child.py` + README; parent не импортирует `config.constant`; child доказывает `APP_DATA_DIR` внутри runtime; отказ на real APPDATA / пустой root.
+- **Проверка:** 7 pytest `tests/test_qa_isolated_launcher.py`; CLI smoke ok/fail. Journal: предотвращает повтор QA-DEFECT-03; **не** чистит возможное загрязнение реального профиля.
+- **Не сделано / next:** не DEFECT-01/02; не полный re-run C3-05.
+
+### 2026-07-19 — C3-05
+- **Запрос:** ок, C3-05 — полный QA audit без фиксов.
+- **Сделано:** изолированный runtime; сценарии S1–S10 + N/A; safety repro Overflow 95897 2×; UI capture 1.0/1.25 + Read; отчёт `screens/tmp_ui/C3-05/AUDIT_REPORT.md`.
+- **Дефекты:** QA-DEFECT-01 high (erotic in pool/DEFAULT eligibility); QA-DEFECT-02 medium (EN metadata on RU UI); QA-DEFECT-03 process isolation miss на первых runners.
+- **Проверка:** product `.py` / UI / tests не менялись ради фиксов.
+- **Не сделано / next:** не чинить; C3-04 сессии автора; новые ID на фиксы.
+
+### 2026-07-19 — C3-04 (сессия 1/3)
+- **Запрос:** ок, делай C3-04.
+- **Сделано:** собрана live-колода DEFAULT-режима из локального пула (184; watched=0, actioned=17, recently_seen=157 → 10 eligible, reserve пуст). Agent-proxy оценка «сохранить/смотрел»: **6/10** (порог ≥5). Артефакты: `screens/tmp_ui/C3-04/session1_deck.json`, `session1_eval.json`.
+- **Да (6):** Красота в тёмных тонах; Шугар; Агентство; Ты; Эль; Уидоус-Бэй.
+- **Нет (4):** Медики Чикаго; В поисках Персефоны; Календарь Отоги (1961, tmdb=0); Smartypants.
+- **Проверка:** код не менялся; UI capture не требовался (не UI-задача). Acceptance PRODUCT: нужны **3 сессии автора** — пока provisional.
+- **Не сделано / next:** подтверждение автора по сессии 1 + ещё 2 сессии → `[x]` C3-04 / закрытие C3.
 
 ### 2026-07-19 — C3-03
 - **Запрос:** начинай (после gate на C3-03).
