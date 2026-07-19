@@ -330,6 +330,20 @@ class TmdbStartupGateView(QWidget):
         if self._network_worker is None:
             self._start_network_probe()
 
+    def _has_saved_credentials(self) -> bool:
+        try:
+            from apis import tmdb_api
+
+            return bool(tmdb_api.has_tmdb_credentials())
+        except Exception:  # noqa: BLE001 - gate must stay resilient at startup
+            return False
+
+    def _network_probe_failed(self, result: dict, network: dict) -> bool:
+        error_code = str(result.get("error") or "")
+        if error_code in {"network_unreachable", "dns_blocked"}:
+            return True
+        return isinstance(network, dict) and network.get("ok") is not True
+
     def _on_token_changed(self, _text: str) -> None:
         if self._busy:
             return
@@ -346,6 +360,15 @@ class TmdbStartupGateView(QWidget):
             return
 
         network = result.get("network") if isinstance(result.get("network"), dict) else result
+        # C2-05: warm relaunch with a saved token must not reopen the token form
+        # when TMDb is only unreachable (DNS/network). Continue locally instead.
+        if self._network_probe_failed(result, network) and self._has_saved_credentials():
+            self._network_ok = False
+            self._token_input.setEnabled(False)
+            self._continue_button.setEnabled(False)
+            self.localModeRequested.emit()
+            return
+
         if network.get("ok") is True:
             self._network_ok = True
             self._network_label.setText(tr("startup.tmdb.network.ok"))

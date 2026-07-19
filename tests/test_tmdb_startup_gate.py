@@ -372,6 +372,174 @@ def test_startup_gate_becomes_visible_only_when_attention_is_required(monkeypatc
         window.close()
 
 
+def test_relaunch_with_saved_token_skips_gate_when_network_fails(monkeypatch, qapp) -> None:
+    """C2-05: warm start with credentials must not reopen the token form on network failure."""
+    from desktop.startup.tmdb_gate import TmdbStartupGateView
+
+    focus_calls = {"count": 0}
+    monkeypatch.setattr(TmdbStartupGateView, "_start_network_probe", lambda self: None)
+    monkeypatch.setattr(
+        "apis.tmdb_api.has_tmdb_credentials",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        main_window_module.candidate_service,
+        "should_show_onboarding_autofill",
+        lambda: (_ for _ in ()).throw(AssertionError("warm start opened onboarding")),
+    )
+    monkeypatch.setattr(
+        main_window_module,
+        "build_main_tabs",
+        lambda tabs, parent, *, on_status_message: (
+            object(),
+            SimpleNamespace(
+                candidate_session=SimpleNamespace(
+                    reload_from_pool=lambda force=False: None,
+                    invalidate_pool_cache=lambda: None,
+                ),
+                refresh_candidate_filters=lambda: None,
+                focus_candidates=lambda: focus_calls.__setitem__(
+                    "count", focus_calls["count"] + 1
+                ),
+            ),
+        ),
+    )
+
+    window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
+    try:
+        window.maybe_show_tmdb_startup_gate()
+        gate = window._tmdb_gate_view
+        assert isinstance(gate, TmdbStartupGateView)
+        assert window._root_stack.currentWidget() is window._main_tabs
+
+        gate._on_network_probe_finished({
+            "ready": False,
+            "error": "network_unreachable",
+            "network": {"ok": False, "error": "network_unreachable"},
+        })
+
+        assert window._tmdb_local_mode is True
+        assert window._tmdb_gate_passed is True
+        assert window._tmdb_gate_view is None
+        assert window._root_stack.currentWidget() is window._main_tabs
+        assert window._onboarding_view is None
+        assert focus_calls["count"] == 1
+    finally:
+        window.close()
+
+
+def test_relaunch_missing_token_still_shows_gate_when_network_fails(monkeypatch, qapp) -> None:
+    """C2-05 regression: without credentials, network failure still requires the gate."""
+    from desktop.startup.tmdb_gate import TmdbStartupGateView
+
+    monkeypatch.setattr(TmdbStartupGateView, "_start_network_probe", lambda self: None)
+    monkeypatch.setattr(
+        "apis.tmdb_api.has_tmdb_credentials",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        main_window_module,
+        "build_main_tabs",
+        lambda tabs, parent, *, on_status_message: (
+            object(),
+            SimpleNamespace(
+                candidate_session=SimpleNamespace(
+                    reload_from_pool=lambda force=False: None,
+                    invalidate_pool_cache=lambda: None,
+                ),
+                refresh_candidate_filters=lambda: None,
+                focus_candidates=lambda: None,
+            ),
+        ),
+    )
+
+    window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
+    try:
+        window.maybe_show_tmdb_startup_gate()
+        gate = window._tmdb_gate_view
+        assert window._root_stack.currentWidget() is window._main_tabs
+
+        gate._on_network_probe_finished({
+            "ready": False,
+            "error": "network_unreachable",
+            "network": {"ok": False, "error": "network_unreachable"},
+        })
+
+        assert window._root_stack.currentWidget() is gate
+        assert window._tmdb_gate_passed is False
+        assert window._tmdb_local_mode is False
+    finally:
+        window.close()
+
+
+def test_relaunch_completed_onboarding_skips_wizard_after_gate_pass(monkeypatch, qapp) -> None:
+    """C2-05: completed onboarding must not reopen after a successful warm gate pass."""
+    focus_calls = {"count": 0}
+
+    class FakeGate(QWidget):
+        passed = pyqtSignal()
+        localModeRequested = pyqtSignal()
+        attentionRequired = pyqtSignal()
+
+        def __init__(self, parent=None, *, autostart: bool = True) -> None:
+            super().__init__(parent)
+
+        def setWindowFlag(self, *_args, **_kwargs) -> None:
+            return None
+
+        def start_readiness_probe(self) -> None:
+            return None
+
+    fake_gate = None
+
+    def gate_factory(parent=None, *, autostart: bool = True):
+        nonlocal fake_gate
+        fake_gate = FakeGate(parent=parent, autostart=autostart)
+        return fake_gate
+
+    monkeypatch.setattr(main_window_module, "TmdbStartupGateView", gate_factory)
+    monkeypatch.setattr("apis.tmdb_api.reload_tmdb_env", lambda: None)
+    monkeypatch.setattr(
+        main_window_module.candidate_service,
+        "should_show_onboarding_autofill",
+        lambda: False,
+    )
+    monkeypatch.setattr(
+        main_window_module,
+        "OnboardingAutofillDialog",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("onboarding should stay closed")),
+    )
+    monkeypatch.setattr(
+        main_window_module,
+        "build_main_tabs",
+        lambda tabs, parent, *, on_status_message: (
+            object(),
+            SimpleNamespace(
+                candidate_session=SimpleNamespace(
+                    reload_from_pool=lambda force=False: None,
+                    invalidate_pool_cache=lambda: None,
+                ),
+                refresh_candidate_filters=lambda: None,
+                focus_candidates=lambda: focus_calls.__setitem__(
+                    "count", focus_calls["count"] + 1
+                ),
+            ),
+        ),
+    )
+
+    window = main_window_module.WatchedMoviesWindow(initial_size=(900, 600))
+    try:
+        window.maybe_show_tmdb_startup_gate()
+        assert fake_gate is not None
+        fake_gate.passed.emit()
+        assert window._tmdb_gate_passed is True
+        assert window._onboarding_view is None
+        assert window._root_stack.currentWidget() is window._main_tabs
+        assert focus_calls["count"] == 1
+    finally:
+        window.close()
+
+
 def test_main_window_local_mode_skips_onboarding_and_network_refill(monkeypatch, qapp) -> None:
     class FakeGate(QWidget):
         passed = pyqtSignal()

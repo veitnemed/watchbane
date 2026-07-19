@@ -30,22 +30,29 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C2-05` (повторный запуск без напоминаний про токен/фильтры) |
+| Активный фокус | `C2-06` (пополнение без «локальный пул» в UI) |
 | UI QA scales | `1.0` и `1.25` |
-| Последний релевантный commit | C0-01…C0-03 (этот commit) |
+| Последний релевантный commit | `c4cbc27` (C2-04) |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** `C2-05` → `C2-06` (см. PRODUCT §10), только после Scope Gate + «ок».
+**Дальше по плану:** `C2-06` → `C2-07` (см. PRODUCT §10), только после Scope Gate + «ок».
 
 ---
 
 ## Журнал
 
+### 2026-07-19 — C2-05
+- **Запрос:** коммит C2-04 и следующий шаг — повторный запуск без напоминаний про токен/фильтры.
+- **Сделано:** при сохранённом TMDb-токене и сбое сети gate больше не открывает форму токена, а уходит в local continue; completed onboarding по-прежнему не открывается после pass. Добавлены regression-тесты warm/missing token и skip wizard.
+- **Файлы / commit:** `desktop/startup/tmdb_gate.py`, `tests/test_tmdb_startup_gate.py`, PRODUCT, `cursor-work.md`; commit C2-04 уже `c4cbc27`, C2-05 — отдельным commit.
+- **Проверка:** compileall; `tests/test_tmdb_startup_gate.py` 20 passed; capture `screens/tmp_ui/C2-05/` + Read PNG 1.0 / 1.25.
+- **Не сделано / next:** C2-06 — пополнение без термина «локальный пул» в UI.
+
 ### 2026-07-19 — C2-04
 - **Запрос:** заменить технические status-сообщения на человеческие RU.
 - **Сделано:** в `desktop/i18n/catalog.py` убраны «пул» / «локальн*» / CDN / «источник кандидатов» из status, empty, deck_reserve, discovery status и replenish progress copy (RU+EN); regression test на жаргон.
-- **Файлы / commit:** `desktop/i18n/catalog.py`, `tests/desktop/test_candidate_search_behavior.py`, PRODUCT, `cursor-work.md`; commit по запросу.
+- **Файлы / commit:** `desktop/i18n/catalog.py`, `tests/desktop/test_candidate_search_behavior.py`, PRODUCT, `cursor-work.md`; commit `c4cbc27`.
 - **Проверка:** compileall; 6 pytest passed; capture `screens/tmp_ui/C2-04/` (preparing/error/after × 1.0/1.25) + Read PNG.
 - **Не сделано / next:** C2-05 — повторный запуск не напоминает про токен и фильтры.
 
