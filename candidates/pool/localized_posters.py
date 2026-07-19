@@ -12,6 +12,8 @@ from dataset.language import normalize_data_language, tmdb_locale_for_data_langu
 from dataset.tmdb_localized import localized_blocks_from_tmdb_details
 
 TMDB_DETAIL_FIELDS_CHECKED_AT = "tmdb_detail_fields_checked_at"
+# C3-08: one-shot marker so localization enrich does not refetch forever when TMDb has no RU poster.
+TMDB_LOCALIZED_CHECKED_AT = "tmdb_localized_checked_at"
 INTERACTIVE_DETAIL_TIMEOUT_SECONDS = 8
 TV_METADATA_TRIGGER_FIELDS = (
     "number_of_seasons",
@@ -63,14 +65,23 @@ MOVIE_DETAIL_FIELDS = (
 )
 
 
-def _localized_poster_available(record: dict | None, data_language: str) -> bool:
+def _localized_block(record: dict | None, data_language: str) -> dict:
     if isinstance(record, dict) is False:
-        return False
+        return {}
     localized = record.get("localized") if isinstance(record.get("localized"), dict) else {}
     block = localized.get(normalize_data_language(data_language))
-    if isinstance(block, dict) is False:
-        return False
+    return block if isinstance(block, dict) else {}
+
+
+def _localized_poster_available(record: dict | None, data_language: str) -> bool:
+    block = _localized_block(record, data_language)
     return any(block.get(key) not in (None, "") for key in ("poster_url", "poster_path"))
+
+
+def _localized_display_text_available(record: dict | None, data_language: str) -> bool:
+    """True when title or overview exists for the selected data language."""
+    block = _localized_block(record, data_language)
+    return any(block.get(key) not in (None, "") for key in ("title", "overview"))
 
 
 def _any_localized_poster_available(record: dict | None) -> bool:
@@ -81,6 +92,15 @@ def _any_localized_poster_available(record: dict | None) -> bool:
         if isinstance(block, dict) is False:
             continue
         if any(block.get(key) not in (None, "") for key in ("poster_url", "poster_path")):
+            return True
+    return False
+
+
+def _localized_blocks_nonempty(blocks: dict | None) -> bool:
+    if isinstance(blocks, dict) is False:
+        return False
+    for block in blocks.values():
+        if isinstance(block, dict) and any(value not in (None, "") for value in block.values()):
             return True
     return False
 
@@ -139,10 +159,17 @@ def candidate_needs_tmdb_detail_enrichment(candidate: dict | None, data_language
     """Return True when a pool record should fetch TMDb details lazily."""
     if isinstance(candidate, dict) is False:
         return False
-    return (
-        _localized_poster_available(candidate, data_language) is False
-        or _candidate_needs_tv_metadata(candidate)
+    needs_tv_metadata = _candidate_needs_tv_metadata(candidate)
+    if candidate.get(TMDB_LOCALIZED_CHECKED_AT) not in (None, ""):
+        return needs_tv_metadata
+    language = normalize_data_language(data_language)
+    has_language_surface = (
+        _localized_poster_available(candidate, language)
+        or _localized_display_text_available(candidate, language)
     )
+    if has_language_surface:
+        return needs_tv_metadata
+    return True
 
 
 def _merge_localized_blocks(candidate: dict, blocks: dict) -> dict:
@@ -262,9 +289,11 @@ def ensure_candidate_localized_poster(
     details = _fetch_details(int(tmdb_id), media_type, language, details_func)
     blocks = localized_blocks_from_tmdb_details(details, current_language=language)
     updated_candidate = deepcopy(candidate)
-    if _any_localized_poster_available({"localized": blocks}):
+    # C3-08 / QA-DEFECT-02: merge title/overview even when no language-tagged poster.
+    if _localized_blocks_nonempty(blocks):
         updated_candidate = _merge_localized_blocks(updated_candidate, blocks)
     updated_candidate = _merge_detail_fields(updated_candidate, details, media_type, language)
+    updated_candidate[TMDB_LOCALIZED_CHECKED_AT] = datetime.now().isoformat(timespec="seconds")
 
     changed = updated_candidate != candidate
     if changed is False:
@@ -278,9 +307,17 @@ def ensure_candidate_localized_poster(
         if key is not None:
             pool_candidate = pool[key] if isinstance(pool[key], dict) else {}
             updated_pool_candidate = deepcopy(pool_candidate)
-            if _any_localized_poster_available({"localized": blocks}):
+            if _localized_blocks_nonempty(blocks):
                 updated_pool_candidate = _merge_localized_blocks(updated_pool_candidate, blocks)
-            updated_pool_candidate = _merge_detail_fields(updated_pool_candidate, details, media_type, language)
+            updated_pool_candidate = _merge_detail_fields(
+                updated_pool_candidate,
+                details,
+                media_type,
+                language,
+            )
+            updated_pool_candidate[TMDB_LOCALIZED_CHECKED_AT] = updated_candidate[
+                TMDB_LOCALIZED_CHECKED_AT
+            ]
             if updated_pool_candidate != pool_candidate:
                 pool[key] = updated_pool_candidate
                 pool_repository.save_candidate_pool(pool)

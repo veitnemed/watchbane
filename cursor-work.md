@@ -30,17 +30,30 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C3-04` [~]; C3-05/C3-06 [x] |
+| Активный фокус | `C3-04` [~]; C3-05…C3-08 [x] |
 | UI QA scales | `1.0` и `1.25` |
-| Последний docs commit | `223ab92` (C3-03) |
+| Последний docs commit | `05a2794` (C3-06) |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** C3-04 сессии 2–3; отдельные ID на adult hard-drop / RU l10n из C3-05.
+**Дальше по плану:** C3-04 сессии 2–3; затем закрытие C3 → C4.
 
 ---
 
 ## Журнал
+
+### 2026-07-19 — C3-08
+- **Запрос:** ок/делай C3-08 — Consistent RU metadata selection and fallback (QA-DEFECT-02).
+- **Сделано:** enrichment мержит `localized` title/overview без требования poster; `tmdb_localized_checked_at`; `choose_display_*` / legacy builder: selected → primary → en → original; пустые строки skip; `--data-language` в `capture_readme.py`.
+- **Проверка:** 16 targeted pytest; captures `after_100.png` / `after_125.png` Read — Breaking Bad как «Во все тяжкие» + RU overview; chrome RU; без mass migration.
+- **Не сделано / next:** не C3-04; не ranking/safety; screens не коммитить.
+
+### 2026-07-19 — C3-07
+- **Запрос:** ок, C3-07 — Block explicit sexual content from safe recommendation eligibility (QA-DEFECT-01).
+- **Сделано:** `candidates/safety/explicit_content.py` (strong structural + cautious text); hard-drop в `_eligible_candidates`; soft reject в filter replenish; reason codes; fixtures для 95897 / romance / same-sex / ambiguous words; deck size + watched/hidden; локальный 2/2 PASS.
+- **Файлы:** `candidates/safety/*`, `recommendation_deck_service.py`, `filter_replenisher.py`, `result.py`, `tests/test_explicit_content_safety.py`, PRODUCT + cursor-work.
+- **Проверка:** 44 pytest (safety + deck) green.
+- **Не сделано / next:** не DEFECT-02; не C3-04; не wipe pool; не adult UI.
 
 ### 2026-07-19 — C3-06
 - **Запрос:** ок, C3-06 — Safe isolated launcher for recommendation QA audits.

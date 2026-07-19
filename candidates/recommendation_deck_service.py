@@ -34,6 +34,7 @@ from candidates.preferences import (
     resolve_rarity_weights,
 )
 from candidates.repositories.pool_repository import load_candidate_pool
+from candidates.safety.explicit_content import is_blocked_explicit_sexual_content
 from candidates.scoring.rating_confidence import has_unknown_rating, is_viable_unrated_candidate
 from candidates.sources.tmdb.scoring import compute_tmdb_quality_score
 from candidates import title_state_service
@@ -861,6 +862,7 @@ class RecommendationDeckService:
             "preferences": 0,
             "quality_gate": 0,
             "junk_genre": 0,
+            "explicit_content": 0,
         }
         for raw_candidate in source:
             if not isinstance(raw_candidate, dict):
@@ -892,6 +894,10 @@ class RecommendationDeckService:
             )
             if genre_keys & _ALWAYS_IRRELEVANT_GENRES:
                 counters["junk_genre"] += 1
+                continue
+            # C3-07 / QA-DEFECT-01: hard-drop explicit sexual content from inbox eligibility.
+            if is_blocked_explicit_sexual_content(candidate):
+                counters["explicit_content"] += 1
                 continue
             if not is_viable_unrated_candidate(candidate, current_year=now.year):
                 counters["quality_gate"] += 1

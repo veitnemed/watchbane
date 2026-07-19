@@ -21,6 +21,7 @@ class FilterReplenishResult:
     watched_skipped: int = 0
     hidden_skipped: int = 0
     rejected_count: int = 0
+    explicit_content_skipped: int = 0
     raw_seen_count: int = 0
     api_requests: int = 0
     details_requests: int = 0

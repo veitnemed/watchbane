@@ -13,6 +13,7 @@ from candidates.replenish.filter_discover import build_filter_discover_params
 from candidates.replenish.filter_intent import FilterReplenishIntent
 from candidates.replenish.filter_plan import build_filter_replenish_plan
 from candidates.replenish.result import FilterReplenishResult
+from candidates.safety.explicit_content import is_blocked_explicit_sexual_content
 from candidates.sources.tmdb.scoring import (
     compute_metadata_completeness_score,
     compute_tmdb_final_score,
@@ -157,6 +158,13 @@ def _candidate_quality_reject_reason(candidate: dict[str, Any]) -> str | None:
     return None
 
 
+def _candidate_safety_reject_reason(candidate: dict[str, Any]) -> str | None:
+    """C3-07 defense-in-depth: skip explicit sexual content before pool upsert."""
+    if is_blocked_explicit_sexual_content(candidate):
+        return "explicit_sexual_content"
+    return None
+
+
 def _sort_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(
         candidates,
@@ -284,6 +292,7 @@ def replenish_candidates_for_filters(
         "watched_skipped": 0,
         "hidden_skipped": 0,
         "rejected_count": 0,
+        "explicit_content_skipped": 0,
         "raw_seen_count": 0,
         "api_requests": 0,
         "details_requests": 0,
@@ -317,6 +326,7 @@ def replenish_candidates_for_filters(
             "watched_skipped": 0,
             "hidden_skipped": 0,
             "rejected_count": 0,
+            "explicit_content_skipped": 0,
             "api_requests": 0,
         }
         bucket_target = min(int(bucket.get("quota") or 0), safe_limit - len(selected))
@@ -388,6 +398,12 @@ def replenish_candidates_for_filters(
                         counters["details_requests"] += 1
                         candidate = detailed_candidate
                 if _candidate_quality_reject_reason(candidate) is not None:
+                    counters["rejected_count"] += 1
+                    bucket_counter["rejected_count"] += 1
+                    continue
+                if _candidate_safety_reject_reason(candidate) is not None:
+                    counters["explicit_content_skipped"] += 1
+                    bucket_counter["explicit_content_skipped"] += 1
                     counters["rejected_count"] += 1
                     bucket_counter["rejected_count"] += 1
                     continue

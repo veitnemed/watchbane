@@ -1216,7 +1216,8 @@ def test_build_watched_movie_card_respects_data_language() -> None:
     assert ru_card["country"] == "Россия"
     assert ru_card["genres"] == ["Драма"]
     assert en_card["title"] == "Trigger"
-    assert en_card["overview"] == "Русское описание"
+    # C3-08: data_language=en does not fall back to RU overview (selected → en → original).
+    assert en_card.get("overview") in (None, "")
     assert en_card["country"] == "Russia"
     assert en_card["genres"] == ["Drama"]
 

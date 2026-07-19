@@ -118,7 +118,7 @@ def _localized_text(record: dict, language: str, field: str) -> str | None:
 
 
 def localized_value(record: dict, field: str, language: str, fallbacks=()) -> str | None:
-    """Return localized field value with selected-language -> ru -> legacy fallback."""
+    """Return localized field: selected language → primary fallbacks → en → remaining."""
     source = _as_dict(record)
     normalized = normalize_data_language(language)
 
@@ -126,12 +126,19 @@ def localized_value(record: dict, field: str, language: str, fallbacks=()) -> st
     if selected is not None:
         return selected
 
-    if normalized != "ru":
-        ru_value = _localized_text(source, "ru", field)
-        if ru_value is not None:
-            return ru_value
+    primary = _first_text(source, fallbacks)
+    if normalized == "en":
+        return primary
 
-    return _first_text(source, fallbacks)
+    if primary is not None:
+        return primary
+
+    if normalized != "en":
+        en_value = _localized_text(source, "en", field)
+        if en_value is not None:
+            return en_value
+
+    return None
 
 
 def _translation_text(record: dict, language: str, *field_names: str) -> str | None:
@@ -183,34 +190,40 @@ def _set_localized_if_missing(localized: dict, language: str, field: str, value:
 
 
 def build_localized_block_from_legacy(record: dict, default_language: str = "ru") -> dict:
-    """Build/extend a localized block from existing fields only."""
+    """Build/extend a localized block from existing fields only.
+
+    C3-08: do not stamp latin-only Discover/top-level text into ``localized.ru`` —
+    prefer ``en`` so choose_display can apply ru → en → original without mislabel.
+    """
     source = _as_dict(record)
     default = normalize_data_language(default_language)
     localized = deepcopy(_as_dict(source.get("localized")))
 
-    _set_localized_if_missing(
-        localized,
-        default,
-        "title",
-        _first_text(source, ("main_info.title", "title", "name")),
-    )
-    _set_localized_if_missing(
-        localized,
-        default,
-        "overview",
-        _first_text(
-            source,
-            (
-                "overview",
-                "description",
-                "tmdb_overview",
-                "short_description",
-                "shortDescription",
-                "plot",
-                "meta.description",
-            ),
+    top_title = _first_text(source, ("main_info.title", "title", "name"))
+    top_overview = _first_text(
+        source,
+        (
+            "overview",
+            "description",
+            "tmdb_overview",
+            "short_description",
+            "shortDescription",
+            "plot",
+            "meta.description",
         ),
     )
+
+    title_target = default
+    overview_target = default
+    if default == "ru":
+        if _is_latinish_text(top_title):
+            title_target = "en"
+        if _is_latinish_text(top_overview):
+            overview_target = "en"
+
+    _set_localized_if_missing(localized, title_target, "title", top_title)
+    _set_localized_if_missing(localized, overview_target, "overview", top_overview)
+
     en_title = _first_text(
         source,
         (
@@ -251,12 +264,18 @@ def build_localized_block_from_legacy(record: dict, default_language: str = "ru"
 
 
 def choose_display_title(record: dict, language: str) -> str | None:
-    """Choose a display title for data language, falling back to legacy title."""
+    """Choose display title: selected localized → primary snapshot → en → original."""
     source = _as_dict(record)
     normalized = normalize_data_language(language)
 
+    selected = _localized_text(source, normalized, "title")
+    if selected is not None:
+        return selected
+
+    primary = _first_text(source, ("main_info.title", "title", "name"))
+
     if normalized == "en":
-        en_value = _localized_text(source, "en", "title") or _first_text(
+        en_value = _first_text(
             source,
             (
                 "enName",
@@ -269,42 +288,42 @@ def choose_display_title(record: dict, language: str) -> str | None:
         if en_value is None:
             original_title = _first_text(source, ("original_title", "original_name"))
             en_value = original_title if _is_latinish_text(original_title) else None
-        if en_value is not None:
-            return en_value
+        return en_value or primary or _first_text(source, ("original_title", "original_name"))
 
-    return localized_value(
+    # data_language=ru (default): keep Discover/storage primary before cross-language fallback.
+    if primary is not None:
+        return primary
+
+    en_value = _localized_text(source, "en", "title") or _first_text(
         source,
-        "title",
-        normalized,
-        ("main_info.title", "title", "name", "original_title", "original_name"),
+        (
+            "enName",
+            "alternative_title",
+            "alternativeName",
+            "title_en",
+            "name_en",
+        ),
     )
+    if en_value is None:
+        original_title = _first_text(source, ("original_title", "original_name"))
+        en_value = original_title if _is_latinish_text(original_title) else None
+    if en_value is not None:
+        return en_value
+
+    return _first_text(source, ("original_title", "original_name"))
 
 
 def choose_display_overview(record: dict, language: str) -> str | None:
-    """Choose overview/description text for data language with safe fallback."""
+    """Choose overview: selected localized → primary snapshot → en → original. Empty skips."""
     source = _as_dict(record)
     normalized = normalize_data_language(language)
 
-    if normalized == "en":
-        en_value = _localized_text(source, "en", "overview") or _first_text(
-            source,
-            (
-                "overview_en",
-                "description_en",
-                "tmdb_overview_en",
-                "plot_en",
-                "short_description_en",
-                "shortDescription_en",
-            ),
-        )
-        en_value = en_value or _translation_text(source, "en", "overview", "description", "plot")
-        if en_value is not None:
-            return en_value
+    selected = _localized_text(source, normalized, "overview")
+    if selected is not None:
+        return selected
 
-    return localized_value(
+    primary = _first_text(
         source,
-        "overview",
-        normalized,
         (
             "overview",
             "description",
@@ -315,6 +334,33 @@ def choose_display_overview(record: dict, language: str) -> str | None:
             "meta.description",
         ),
     )
+
+    en_explicit = _first_text(
+        source,
+        (
+            "overview_en",
+            "description_en",
+            "tmdb_overview_en",
+            "plot_en",
+            "short_description_en",
+            "shortDescription_en",
+        ),
+    )
+    en_explicit = en_explicit or _translation_text(source, "en", "overview", "description", "plot")
+    en_localized = _localized_text(source, "en", "overview")
+
+    if normalized == "en":
+        return en_localized or en_explicit or primary
+
+    if primary is not None:
+        return primary
+
+    if en_localized is not None:
+        return en_localized
+    if en_explicit is not None:
+        return en_explicit
+
+    return None
 
 
 def choose_genre_labels(genre_keys, language: str) -> list[str]:
