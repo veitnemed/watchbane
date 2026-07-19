@@ -35,6 +35,7 @@ from desktop.candidates.filters_controls import (
 )
 from desktop.candidates.session import DEFAULT_BROWSE_FILTERS
 from desktop.i18n import tr
+from desktop.settings.app_settings import load_app_settings
 from desktop.shared.widgets.country_chip_selector import CountryChipSelector
 from desktop.shared.widgets.genre_chip_selector import GenreChipSelector
 from desktop.shared.widgets.range_slider import RangeSlider
@@ -508,7 +509,8 @@ def build_filters_form(
     replenish_origin_preference_combo = add_combo(ORIGIN_OPTIONS, "candidateReplenishOriginPreference")
     replenish_enabled_check = QCheckBox(tr("candidates.filters.replenish.enable"))
     replenish_enabled_check.setObjectName("candidateReplenishEnabled")
-    replenish_enabled_check.setChecked(False)
+    # C2-06: one Apply action — seed from settings so users do not re-enable “pool refill”.
+    replenish_enabled_check.setChecked(bool(load_app_settings().auto_pool_refill))
     replenish_advanced_override_check = QCheckBox(tr("candidates.filters.replenish.advanced_override"))
     replenish_advanced_override_check.setObjectName("candidateReplenishAdvancedOverride")
     replenish_advanced_override_check.setChecked(False)

@@ -56,7 +56,8 @@ def test_replenish_controls_exist_and_default_safe(qtbot) -> None:
     assert form.replenish_vibe_combo.currentData() == "mixed"
     assert form.replenish_release_preference_combo.currentData() == "mixed"
     assert form.replenish_origin_preference_combo.currentData() == "any"
-    assert form.replenish_enabled_check.isChecked() is False
+    # C2-06: checkbox seeds from auto_pool_refill (default True) so Apply is one action.
+    assert form.replenish_enabled_check.isChecked() is True
     assert form.replenish_advanced_override_check.isChecked() is False
 
 

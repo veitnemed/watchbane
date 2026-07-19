@@ -628,7 +628,7 @@ def test_recommendation_copy_is_available_in_ru_and_en() -> None:
 
 
 def test_recommendation_status_copy_avoids_technical_jargon() -> None:
-    """C2-04: Recommendations status/empty copy stays human, without pool/CDN jargon."""
+    """C2-04/C2-06: Recommendations + replenish copy stays human, without pool jargon."""
     from desktop.i18n import translate
 
     status_keys = (
@@ -647,6 +647,14 @@ def test_recommendation_status_copy_avoids_technical_jargon() -> None:
         "recommendations.discovery.status.failed",
         "recommendations.discovery.status.complete",
         "candidates.filters.replenish.status.fetching",
+        "candidates.filters.replenish.enable",
+        "candidates.filters.subtitle",
+        "candidates.filters.empty.stats",
+        "settings.pool.title",
+        "settings.pool.ops.title",
+        "settings.pool.ops.clear",
+        "settings.pool.auto_refill_hint",
+        "pool.auto_refill.failed",
     )
     forbidden_ru = (
         "пул",
@@ -659,14 +667,18 @@ def test_recommendation_status_copy_avoids_technical_jargon() -> None:
     forbidden_en = (
         "local pool",
         "candidate pool",
+        "common pool",
         "cdn",
         "tmdb candidate",
         "candidate source",
         "tmdb request",
+        " replenish pool",
+        "build the pool",
+        "clear pool",
     )
     for key in status_keys:
-        ru = translate(key, interface_language="ru", remaining=3, active=2).casefold()
-        en = translate(key, interface_language="en", remaining=3, active=2).casefold()
+        ru = translate(key, interface_language="ru", remaining=3, active=2, count=1).casefold()
+        en = translate(key, interface_language="en", remaining=3, active=2, count=1).casefold()
         assert all(token not in ru for token in forbidden_ru), f"{key} ru={ru!r}"
         assert all(token not in en for token in forbidden_en), f"{key} en={en!r}"
 

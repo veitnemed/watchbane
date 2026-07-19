@@ -245,6 +245,7 @@ def test_apply_with_replenish_unchecked_keeps_old_behavior(qtbot) -> None:
     assert checkbox is not None
     assert progress is not None
     assert progress.accessibleName()
+    checkbox.setChecked(False)
     assert checkbox.isChecked() is False
 
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)

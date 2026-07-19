@@ -184,5 +184,15 @@ def test_underfilled_replenish_reports_added_count(qtbot) -> None:
     qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
 
     qtbot.waitUntil(lambda: len(service.replenish_calls) == 1)
-    qtbot.waitUntil(lambda: "Добавлено 1 из 30" in stats.text())
+    qtbot.waitUntil(
+        lambda: tr(
+            "recommendations.discovery.status.complete_partial",
+            before=1,
+            added=1,
+            requested=30,
+            visible=2,
+        )
+        in stats.text()
+        or "Добавили 1 из 30" in stats.text()
+    )
     assert states == ["loading", "finished"]
