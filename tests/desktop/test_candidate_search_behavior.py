@@ -618,9 +618,57 @@ def test_recommendation_copy_is_available_in_ru_and_en() -> None:
         "recommendations.action.watchlist",
         "recommendations.action.hidden",
         "recommendations.state.empty",
+        "recommendations.state.loading",
+        "recommendations.state.replenishing",
+        "recommendations.state.local_available",
+        "recommendations.state.local_error",
     )
     for language in ("ru", "en"):
         assert all(translate(key, interface_language=language) != key for key in keys)
+
+
+def test_recommendation_status_copy_avoids_technical_jargon() -> None:
+    """C2-04: Recommendations status/empty copy stays human, without pool/CDN jargon."""
+    from desktop.i18n import translate
+
+    status_keys = (
+        "recommendations.state.empty",
+        "recommendations.state.loading",
+        "recommendations.state.replenishing",
+        "recommendations.state.local_available",
+        "recommendations.state.local_error",
+        "recommendations.empty_state.pool_empty.subtitle",
+        "recommendations.empty_state.no_results.subtitle",
+        "recommendations.empty_state.error.subtitle",
+        "recommendations.deck_reserve.offline",
+        "recommendations.deck_reserve.refill_failed",
+        "recommendations.feed.posters_unavailable_hint",
+        "recommendations.reason.local_fallback",
+        "recommendations.discovery.status.failed",
+        "recommendations.discovery.status.complete",
+        "candidates.filters.replenish.status.fetching",
+    )
+    forbidden_ru = (
+        "пул",
+        "локальн",
+        "cdn",
+        "tmdb-кандидат",
+        "источник кандидатов",
+        "запрос tmdb",
+    )
+    forbidden_en = (
+        "local pool",
+        "candidate pool",
+        "cdn",
+        "tmdb candidate",
+        "candidate source",
+        "tmdb request",
+    )
+    for key in status_keys:
+        ru = translate(key, interface_language="ru", remaining=3, active=2).casefold()
+        en = translate(key, interface_language="en", remaining=3, active=2).casefold()
+        assert all(token not in ru for token in forbidden_ru), f"{key} ru={ru!r}"
+        assert all(token not in en for token in forbidden_en), f"{key} en={en!r}"
 
 
 def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> None:
