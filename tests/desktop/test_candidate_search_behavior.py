@@ -634,6 +634,7 @@ def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> Non
     overview_section = list_view.widget.findChild(QFrame, "detailOverviewSection")
     overview_footer = list_view.widget.findChild(QWidget, "detailOverviewFooter")
     overview_text = list_view.widget.findChild(QLabel, "detailOverviewText")
+    rating_prompt = list_view.widget.findChild(QLabel, "recommendationUserRatingPrompt")
     watchlist_button = list_view.widget.findChild(QPushButton, "recommendationWatchlistButton")
     hidden_button = list_view.widget.findChild(QPushButton, "recommendationHiddenButton")
     rating_buttons = list(list_view._candidate_rating_selector.buttons())
@@ -655,10 +656,13 @@ def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> Non
     assert decision_cluster.parentWidget().objectName() == "detailMainInfoSection"
     assert decision_cluster.geometry().top() >= main_info_panel.geometry().bottom()
     assert list_view._detail_panel.layout().contentsMargins().top() == LEFT_PANEL_TOP_COMPENSATION_PX
+    assert rating_prompt is not None and "Смотрел" in rating_prompt.text()
     rating_widths = [button.width() for button in rating_buttons]
     assert max(rating_widths) - min(rating_widths) <= 1
     assert len({button.height() for button in rating_buttons}) == 1
     assert watchlist_button is not None and hidden_button is not None
+    assert all(button.isVisible() for button in rating_buttons)
+    assert watchlist_button.isVisible() and hidden_button.isVisible()
     assert watchlist_button.size() == hidden_button.size()
     assert detail_scroll.verticalScrollBar().maximum() > 0
 
