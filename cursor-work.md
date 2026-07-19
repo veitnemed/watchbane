@@ -30,24 +30,31 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C2-07` (ручной прогон S1–S6 + N) → затем `C3-01` |
+| Активный фокус | `C3-01` (качество выдачи) |
 | UI QA scales | `1.0` и `1.25` |
-| Последний релевантный commit | `445f73e` (C2-05); C2-06 pending commit |
+| Последний релевантный commit | `f825ce0` (C2-06); C2-07 pending commit |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** закрыть C2-06 commit → C2-07 → `C3-01` (см. PRODUCT §10), только после Scope Gate + «ок».
+**Дальше по плану:** `C3-01` (см. PRODUCT §7), только после Scope Gate + «ок». §3 S1–S6 — авторские 5 сессий.
 
 ---
 
 ## Журнал
 
+### 2026-07-19 — C2-07
+- **Запрос:** сразу C2-06 + C2-07, коммит между ними.
+- **Сделано:** smoke S1–S6 на Recommendations; зафиксирован **N≈0.6 с** (warm, gate skipped → preparing/list); фаза C2 отмечена пройденной. §3 S1–S6 не отмечались — нужны 5 авторских сессий в разные дни.
+- **Файлы / commit:** PRODUCT, `cursor-work.md`; скрины `screens/tmp_ui/C2-07/` (не в commit).
+- **Проверка:** timing smoke + capture preparing/ready 1.0/1.25 + Read PNG. A–E: да по smoke/prior C1–C2.
+- **Не сделано / next:** C3-01; авторские 5 сессий для §3.
+
 ### 2026-07-19 — C2-06
 - **Запрос:** сразу C2-06 и C2-07, между ними коммит.
 - **Сделано:** UI copy без «пул»/pool (Filters + Settings + counters); checkbox пополнения сеется из `auto_pool_refill` (default on) — одно действие «Обновить колоду» / «Ещё варианты».
-- **Файлы / commit:** `desktop/i18n/catalog.py`, `desktop/candidates/filters_form.py`, targeted tests, PRODUCT, `cursor-work.md`.
+- **Файлы / commit:** `desktop/i18n/catalog.py`, `desktop/candidates/filters_form.py`, targeted tests, PRODUCT, `cursor-work.md`; commit `f825ce0`.
 - **Проверка:** 17 pytest passed; capture `screens/tmp_ui/C2-06/` + Read PNG.
-- **Не сделано / next:** commit C2-06 → C2-07.
+- **Не сделано / next:** C2-07.
 
 ### 2026-07-19 — C2-05
 - **Запрос:** коммит C2-04 и следующий шаг — повторный запуск без напоминаний про токен/фильтры.
