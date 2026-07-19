@@ -201,10 +201,10 @@ Daily path из **6 шагов** — эталон для всех фаз C.
 ## 7. Roadmap — фазы
 
 **Текущий рабочий контур:** `C3` (качество выдачи)
-**Активный фокус:** `C3-03` (один режим по умолчанию вместо распыления по пресетам) — **не начинать без Scope Gate + «ок»**
+**Активный фокус:** `C3-04` (≥5 из 10 «мог бы посмотреть» — субъективная проверка автора) — **не начинать без Scope Gate + «ок»**
 **Продуктовый контур:** **X — inbox-колода** (не V0 «Сегодня»)  
 **Запрещено до явного открытия A/B/V0:** вектор A, вектор B, V0, web, like/dislike, новые пресеты/вайб-крутилки  
-**Следующий ID после C3-03:** `C3-04`
+**Следующий ID после C3-04:** закрытие C3 / переход к C4
 
 Легенда: `[ ]` не начато · `[~]` в работе · `[x]` пройдено
 
@@ -317,7 +317,7 @@ Daily path из **6 шагов** — эталон для всех фаз C.
 | --- | --- | --- |
 | C3-01 | Жёстче отсекать явно нерелевантное из колоды (в рамках текущего ranker) | [x] |
 | C3-02 | Сильнее опираться на watched / saved / hidden при формировании колоды | [x] |
-| C3-03 | Один режим по умолчанию вместо распыления по пресетам | [ ] |
+| C3-03 | Один режим по умолчанию вместо распыления по пресетам | [x] |
 | C3-04 | Из 10 карточек ≥ 5 вызывают «мог бы посмотреть» (субъективная проверка автора) | [ ] |
 
 **Статус фазы:** ☐ не начата · ☑ в работе · ☐ **пройдена**  
@@ -478,6 +478,7 @@ C1-01 → C1-02 → C2-01 → C2-02 → C2-04 → C1-03 → C1-04 → C1-05 → 
 | 2026-07-18 | D1-B | Русский фасад: корневой README; CONTRIBUTING / SECURITY / CODE_OF_CONDUCT; PRODUCT v1.2 | ссылки на PRODUCT + archive deck-reserve; без `.py` UI |
 | 2026-07-18 | D1-C | Ссылки на archive; `.cursor` + `.gitignore`; template path в тесте | `py -m pytest tests/test_runtime_reports.py -q` зелёный |
 | 2026-07-18 | D1-D | AGENTS.md: UI DoD, capture-каталог, happy path, computer use; product-phase-c.mdc | docs only |
+| 2026-07-19 | C3-03 | Inbox Recommendations: один DEFAULT режим до Apply; saved presets/directions только в форме Search settings | compileall; targeted pytest (deck defaults / FiltersView seed) |
 | 2026-07-19 | C3-02 | Genre affinity из watched (TOP/OK/NOT_FOR_ME) + saved/hidden влияет на rank колоды; title exclusion без изменений | compileall; 31 pytest deck service |
 | 2026-07-18 | S0 | Scope Gate: AGENTS + `.cursor/rules/scope-gate.mdc`; активный фокус C1-01 в PRODUCT v1.3 | docs only; код C1 не начат |
 | 2026-07-19 | X | Канон **вариант X**: продукт = inbox-колода (смотрел/сохранить/скрыть); V0/A/B = parking; убрано обещание «выбор на вечер» | docs only |

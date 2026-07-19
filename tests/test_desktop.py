@@ -7603,9 +7603,13 @@ def test_candidate_list_view_wires_mark_watched_transfer() -> None:
 
 
 def test_candidate_list_deck_uses_defaults_without_search_settings() -> None:
-    """C1-03: Recommendations can build a deck before any filter form is used."""
+    """C1-03 / C3-03: Recommendations uses one inbox mode before Apply."""
     from desktop.candidates.list_view import CandidateListView
-    from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+    from desktop.candidates.session import (
+        CandidateSearchSession,
+        DEFAULT_BROWSE_FILTERS,
+        DEFAULT_RECOMMENDATION_VECTOR,
+    )
 
     session = CandidateSearchSession()
     view = CandidateListView.__new__(CandidateListView)
@@ -7614,6 +7618,65 @@ def test_candidate_list_deck_uses_defaults_without_search_settings() -> None:
     assert session.filters is None
     assert session.startup_filters is None
     assert view._deck_preferences() == DEFAULT_BROWSE_FILTERS
+    assert view._deck_vector() == DEFAULT_RECOMMENDATION_VECTOR
+
+
+def test_candidate_list_deck_ignores_unapplied_startup_filters() -> None:
+    """C3-03: leftover startup_filters must not scatter the inbox deck."""
+    from desktop.candidates.list_view import CandidateListView
+    from desktop.candidates.session import (
+        CandidateSearchSession,
+        DEFAULT_BROWSE_FILTERS,
+        DEFAULT_RECOMMENDATION_VECTOR,
+    )
+
+    session = CandidateSearchSession()
+    session.startup_filters = {
+        **DEFAULT_BROWSE_FILTERS,
+        "media_type": "tv",
+        "country": ["JP"],
+        "include_genres": ["anime"],
+    }
+    session.recommendation_vector = {
+        **DEFAULT_RECOMMENDATION_VECTOR,
+        "mood": "dark",
+        "rarity_level": 4,
+    }
+    view = CandidateListView.__new__(CandidateListView)
+    view._session = session
+
+    assert session.filters is None
+    assert view._deck_preferences() == DEFAULT_BROWSE_FILTERS
+    assert view._deck_vector() == DEFAULT_RECOMMENDATION_VECTOR
+
+
+def test_applied_search_settings_do_drive_inbox_deck() -> None:
+    """C3-03: after Apply, Recommendations follows the chosen filters/vector."""
+    from desktop.candidates.list_view import CandidateListView
+    from desktop.candidates.session import (
+        CandidateSearchSession,
+        DEFAULT_BROWSE_FILTERS,
+        DEFAULT_RECOMMENDATION_VECTOR,
+    )
+
+    session = CandidateSearchSession()
+    session.filters = {
+        **DEFAULT_BROWSE_FILTERS,
+        "media_type": "tv",
+        "country": ["JP"],
+    }
+    session.recommendation_vector = {
+        **DEFAULT_RECOMMENDATION_VECTOR,
+        "mood": "dark",
+        "rarity_level": 4,
+    }
+    view = CandidateListView.__new__(CandidateListView)
+    view._session = session
+
+    assert view._deck_preferences()["media_type"] == "tv"
+    assert view._deck_preferences()["country"] == ["JP"]
+    assert view._deck_vector()["mood"] == "dark"
+    assert view._deck_vector()["rarity_level"] == 4
 
 
 def test_recommendations_main_surface_excludes_advanced_filter_controls() -> None:

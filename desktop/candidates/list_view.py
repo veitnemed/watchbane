@@ -43,7 +43,11 @@ from desktop.candidates.presenters import (
     candidate_detail_identity,
     candidate_poster_url_for_download,
 )
-from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.candidates.session import (
+    CandidateSearchSession,
+    DEFAULT_BROWSE_FILTERS,
+    DEFAULT_RECOMMENDATION_VECTOR,
+)
 from desktop.candidates.workers.poster_worker import CandidateLocalizedPosterWorker
 from desktop.candidates.workers.deck_worker import RecommendationDeckWorker
 from desktop.i18n import get_interface_language, tr
@@ -700,15 +704,16 @@ class CandidateListView(CandidateListActionsMixin):
         }
 
     def _deck_preferences(self) -> dict:
-        """Return saved preferences or inbox defaults without visiting Search settings."""
-        return dict(
-            self._session.filters
-            or self._session.startup_filters
-            or DEFAULT_BROWSE_FILTERS
-        )
+        """Inbox defaults until Search settings are explicitly Applied (C3-03)."""
+        if self._session.filters is not None:
+            return dict(self._session.filters)
+        return dict(DEFAULT_BROWSE_FILTERS)
 
     def _deck_vector(self) -> dict:
-        return dict(self._session.recommendation_vector)
+        """One default ranking mode until Search settings are explicitly Applied."""
+        if self._session.filters is not None:
+            return dict(self._session.recommendation_vector)
+        return dict(DEFAULT_RECOMMENDATION_VECTOR)
 
     def _set_action_panel_enabled(self, enabled: bool) -> None:
         self._decision_cluster.setVisible(enabled)

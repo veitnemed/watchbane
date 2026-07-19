@@ -113,15 +113,24 @@ def test_simple_preferences_are_default_and_advanced_filters_remain_available(qt
     assert any(section.isHidden() is False for section in advanced_sections)
 
 
-def test_saved_discovery_preferences_seed_startup_deck_filters(qtbot, monkeypatch) -> None:
+def test_saved_discovery_preferences_do_not_override_inbox_defaults(monkeypatch, qapp) -> None:
+    """C3-03: saved presets seed the form, not the Recommendations deck."""
     from candidates.preferences import (
         CandidateDiscoveryPreferences,
         RecommendationVector,
         SimpleRecommendationPreferences,
     )
+    from desktop.candidates.list_view import CandidateListView
+    from desktop.candidates.session import DEFAULT_RECOMMENDATION_VECTOR
     import desktop.candidates.filters_view as filters_module
 
-    discovery = CandidateDiscoveryPreferences(media_type="tv", countries=("RU",))
+    discovery = CandidateDiscoveryPreferences(
+        preset_id="anime",
+        media_type="tv",
+        countries=("JP",),
+        include_genres=("anime",),
+    )
+    vector = RecommendationVector(mood="dark", rarity_level=4)
     monkeypatch.setattr(
         filters_module,
         "load_simple_recommendation_preferences",
@@ -130,17 +139,22 @@ def test_saved_discovery_preferences_seed_startup_deck_filters(qtbot, monkeypatc
     monkeypatch.setattr(
         filters_module,
         "load_recommendation_preferences",
-        lambda: (discovery, RecommendationVector()),
+        lambda: (discovery, vector),
     )
 
     session = CandidateSearchSession(service=SimplePreferenceService(30))
     view = filters_module.CandidateFiltersView(session, service=session.service)
-    qtbot.addWidget(view.widget)
+
+    list_view = CandidateListView.__new__(CandidateListView)
+    list_view._session = session
 
     assert session.filters is None
-    assert session.startup_filters is not None
-    assert session.startup_filters["media_type"] == "tv"
-    assert session.startup_filters["country"] == ["RU"]
+    assert session.startup_filters is None
+    assert session.recommendation_vector == DEFAULT_RECOMMENDATION_VECTOR
+    assert list_view._deck_preferences() == DEFAULT_BROWSE_FILTERS
+    assert list_view._deck_vector() == DEFAULT_RECOMMENDATION_VECTOR
+    assert view._discovery_preferences.preset_id == "anime"
+    assert view._form.discovery_media_control.value() == "tv"
 
 
 def test_recommendation_controls_fit_russian_labels_at_desktop_width(qtbot) -> None:

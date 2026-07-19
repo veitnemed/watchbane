@@ -29,6 +29,9 @@ DEFAULT_BROWSE_FILTERS = {
     "hide_hidden": False,
 }
 
+# C3-03: one inbox ranking mode until the user explicitly Applies Search settings.
+DEFAULT_RECOMMENDATION_VECTOR = RecommendationVector().to_dict()
+
 
 class CandidateSearchSession:
     """Runtime candidate search state shared across desktop tabs."""
@@ -41,7 +44,7 @@ class CandidateSearchSession:
         self.filtered_count: int = 0
         self.hidden_duplicates: int = 0
         self.sort_mode: str = DEFAULT_SORT_MODE
-        self.recommendation_vector: dict = RecommendationVector().to_dict()
+        self.recommendation_vector: dict = dict(DEFAULT_RECOMMENDATION_VECTOR)
         self.variation_seed: int = 0
         self.is_loading: bool = False
         self.last_error: str | None = None
