@@ -482,9 +482,10 @@ def test_compact_recommendations_show_visible_loading_state(qtbot) -> None:
     assert list_view._deck_status_label.isHidden()
     assert list_view._active_workspace_state == "loading"
     assert list_view._list_body_stack.currentWidget() is list_view._compact_workspace_state
-    assert list_view._compact_workspace_state.isVisible()
-    assert list_view._compact_workspace_state.title_label.text() == tr(
-        "recommendations.empty_state.loading.title"
+    assert list_view._deck_stack.currentWidget() is list_view._deck_loading_page
+    assert list_view._deck_loading_state.isVisible()
+    assert list_view._deck_loading_state.title_label.text() == tr(
+        "recommendations.preparing.title"
     )
     assert list_view._decision_cluster.isHidden()
 
@@ -551,6 +552,7 @@ def test_recommendation_deck_error_uses_non_modal_workspace_state(qtbot) -> None
     assert list_view._deck_status_label.isHidden()
     assert list_view._deck_refill_button.isVisible()
     assert list_view._deck_refill_button.text() == tr("recommendations.deck_reserve.retry")
+    assert list_view._deck_stack.property("workflowState") == "error"
 
 
 def test_filter_replenish_lifecycle_updates_empty_recommendation_workspace(qtbot) -> None:
@@ -560,14 +562,18 @@ def test_filter_replenish_lifecycle_updates_empty_recommendation_workspace(qtbot
 
     list_view.on_replenish_state_changed("loading")
     assert list_view._active_workspace_state == "loading"
+    assert list_view._deck_stack.currentWidget() is list_view._deck_loading_page
+    assert list_view._deck_stack.property("workflowState") == "preparing"
 
     list_view.on_replenish_state_changed("error")
     assert list_view._active_workspace_state == "error"
     assert list_view._deck_stack.currentWidget() is list_view._deck_content_page
+    assert list_view._deck_stack.property("workflowState") == "error"
 
     list_view._deck = {"active": [], "reserve": [], "excluded": {"pool_total": 0}}
     list_view.on_replenish_state_changed("finished")
     assert list_view._active_workspace_state == "pool_empty"
+    assert list_view._deck_stack.property("workflowState") == "ready"
 
 
 def test_recommendation_empty_state_accepts_custom_presentation(qtbot) -> None:

@@ -170,6 +170,7 @@ def test_deck_loading_page_uses_one_right_side_preparing_overlay(qtbot, monkeypa
     assert view._deck_loading_state.title_label.text() == tr("recommendations.preparing.title")
     assert view._deck_loading_state.subtitle_label.text() == tr("recommendations.preparing.detail")
     assert _stack(view).currentWidget() is view._deck_loading_page
+    assert _stack(view).property("workflowState") == "preparing"
 
 
 def test_deck_content_is_revealed_after_the_poster_waiting_screen(qtbot, monkeypatch) -> None:
@@ -180,8 +181,10 @@ def test_deck_content_is_revealed_after_the_poster_waiting_screen(qtbot, monkeyp
 
     controller = view._poster_prefetch
     assert _stack(view).currentWidget() is view._deck_loading_page
+    assert _stack(view).property("workflowState") == "preparing"
     qtbot.waitUntil(lambda: _stack(view).currentWidget() is view._deck_content_page)
     assert _stack(view).currentWidget() is view._deck_content_page
+    assert _stack(view).property("workflowState") == "ready"
     assert len(view._all_candidates) == 10
     assert len(controller.batch_calls) == 1
     assert len(controller.batch_calls[0]) == 10

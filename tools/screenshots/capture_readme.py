@@ -27,7 +27,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tab", choices=("candidates", "watched", "filters"), required=True)
     parser.add_argument(
         "--candidates-state",
-        choices=("ready", "preparing"),
+        choices=("ready", "preparing", "error"),
         default="ready",
         help="Force the Recommendations capture surface without changing runtime data.",
     )
@@ -83,6 +83,11 @@ def main(argv: list[str] | None = None) -> int:
             if stack is not None and loading_page is not None:
                 stack.setCurrentWidget(loading_page)
                 _process_events(app, 0.4)
+        elif args.candidates_state == "error":
+            candidates_view = window._tabs_context.candidate_list_view
+            candidates_view._clear_detail(show_filters_hint=False, error=True)
+            candidates_view._show_deck_error()
+            _process_events(app, 0.4)
         else:
             candidates = window.findChild(QListView, "candidateListWidget")
             if candidates is not None and candidates.model() is not None and candidates.model().rowCount() > 0:

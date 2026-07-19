@@ -30,17 +30,24 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C2-02` (два основных состояния колоды и отдельное error-состояние) |
+| Активный фокус | `C2-04` (человеческие RU status-сообщения) |
 | UI QA scales | `1.0` и `1.25` |
 | Последний релевантный commit | C0-01…C0-03 (этот commit) |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** `C2-02` → `C2-04` (см. PRODUCT §10), только после Scope Gate + «ок».
+**Дальше по плану:** `C2-04` → `C2-05` (см. PRODUCT §10), только после Scope Gate + «ок».
 
 ---
 
 ## Журнал
+
+### 2026-07-19 — C2-02
+- **Запрос:** оставить два основных состояния колоды и отдельное error-состояние.
+- **Сделано:** `recommendationsDeckStack.workflowState` явно фиксирует `preparing` до reveal и `ready` после него; `error` выделен отдельно. Для пустой Recommendations replenishment теперь использует общий preparing-screen и не создаёт третью основную поверхность.
+- **Файлы / commit:** `desktop/candidates/list_view.py`, targeted Qt tests, `tools/screenshots/capture_readme.py`, PRODUCT, happy path, `cursor-work.md`; commit будет создан отдельным шагом.
+- **Проверка:** compileall; targeted Qt pytest с `PYTEST_QT_API=pyqt6`; native capture + Read PNG 1.0 / 1.25.
+- **Не сделано / next:** C2-04 — заменить технические status-сообщения на человеческие RU-формулировки.
 
 ### 2026-07-19 — C2-01
 - **Запрос:** сделать единый empty/loading overlay в правой области Recommendations.

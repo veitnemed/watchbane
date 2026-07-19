@@ -262,6 +262,7 @@ class CandidateListView(CandidateListActionsMixin):
         content_layout.addWidget(splitter)
         self._deck_stack.addWidget(self._deck_content_page)
         self._deck_stack.setCurrentWidget(self._deck_content_page)
+        self._deck_stack.setProperty("workflowState", "ready")
 
         list_panel = QWidget()
         list_panel.setObjectName("candidateSearchResultsPanel")
@@ -669,11 +670,12 @@ class CandidateListView(CandidateListActionsMixin):
         if self._candidates:
             return
         if state == "loading":
+            self._begin_deck_preparation()
             self._clear_detail(show_filters_hint=False, loading=True)
             return
         if state == "error":
             self._clear_detail(show_filters_hint=False, error=True)
-            self._show_deck_content()
+            self._show_deck_error()
             return
         if state == "finished":
             self._clear_detail(show_filters_hint=False)
@@ -802,6 +804,7 @@ class CandidateListView(CandidateListActionsMixin):
             subtitle=tr("recommendations.preparing.detail"),
         )
         self._deck_stack.setCurrentWidget(self._deck_loading_page)
+        self._deck_stack.setProperty("workflowState", "preparing")
         self._update_deck_reserve_indicator()
 
     def _show_deck_content(self) -> None:
@@ -809,7 +812,12 @@ class CandidateListView(CandidateListActionsMixin):
         self._deck_minimum_timer.stop()
         self._deck_prepare_active = False
         self._deck_stack.setCurrentWidget(self._deck_content_page)
+        self._deck_stack.setProperty("workflowState", "ready")
         self._update_deck_reserve_indicator()
+
+    def _show_deck_error(self) -> None:
+        self._show_deck_content()
+        self._deck_stack.setProperty("workflowState", "error")
 
     def _on_poster_batch_started(self, batch_id: int, total: int) -> None:
         if not self._deck_prepare_active:
@@ -1099,7 +1107,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._clear_detail(show_filters_hint=False, error=True)
         self._deck_build_in_progress = False
         self._deck_build_failed = True
-        self._show_deck_content()
+        self._show_deck_error()
         self._update_deck_reserve_indicator()
 
     def _on_deck_built(
@@ -1574,6 +1582,8 @@ class CandidateListView(CandidateListActionsMixin):
             self._counter_label.setText(tr("recommendations.state.replenishing"))
             self._deck_status_label.setText(tr("recommendations.state.replenishing"))
             self._deck_status_label.hide()
+            if not self._candidates:
+                self._begin_deck_preparation()
             self._clear_detail(show_filters_hint=False, loading=True)
         else:
             self._deck_replenishing_active = False
