@@ -53,3 +53,21 @@ def test_settings_tab_exposes_full_profile_reset_panel(qapp) -> None:
         assert view.widget.findChild(QPushButton, "factoryResetButton") is not None
     finally:
         view.widget.deleteLater()
+
+
+def test_factory_reset_panel_shows_the_active_runtime_path(monkeypatch, qapp) -> None:
+    from desktop.settings.factory_reset_panel import FactoryResetPanel
+
+    monkeypatch.setattr("app.use_cases.profile_management.active_profile", lambda: "main")
+    monkeypatch.setattr(
+        "app.use_cases.profile_management.active_profile_runtime_path",
+        lambda: "C:/runtime/data",
+    )
+    panel = FactoryResetPanel()
+    try:
+        description = panel.findChild(type(panel._description), "factoryResetDescription")
+        assert description is not None
+        assert "C:/runtime/data" in description.text()
+        assert "main" in description.text()
+    finally:
+        panel.deleteLater()

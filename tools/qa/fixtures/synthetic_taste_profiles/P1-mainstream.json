@@ -1,0 +1,34 @@
+{
+  "profile_id": "P1-mainstream",
+  "description": "Popular drama, crime and science-fiction films and series.",
+  "media_types": ["movie", "tv"],
+  "include": {
+    "genres": ["drama", "crime", "sci-fi"],
+    "countries": ["US", "GB"],
+    "year_from": 2010,
+    "year_to": 2026,
+    "keywords": [],
+    "min_tmdb_score": 7.0,
+    "min_tmdb_votes": 300
+  },
+  "exclude": {"genres": [], "keywords": []},
+  "hard_exclusions": {
+    "adult": true,
+    "explicit_sexual_content": true,
+    "watched": true,
+    "hidden": true
+  },
+  "preferences": {"popularity": 4, "novelty": 1, "diversity": 2},
+  "history": {"watched": [1001, 1002], "saved": [1003], "hidden": [1004]},
+  "vibe_alignment": {
+    "description": "Popular English-language drama, crime or science-fiction; not a light school or romance outlier.",
+    "required_any_genres": ["drama", "crime", "sci_fi_fantasy"],
+    "required_all_genres": [],
+    "required_any_countries": ["US", "GB"],
+    "forbidden_genres": ["comedy", "romance"],
+    "forbidden_keywords": ["school", "coming of age"],
+    "minimum_matching_cards": 8,
+    "minimum_distinct_countries": 2,
+    "minimum_distinct_genres": 2
+  }
+}

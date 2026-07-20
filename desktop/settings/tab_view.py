@@ -94,6 +94,7 @@ class SettingsTabView:
         self._scale_panel.load_from_settings()
         self._tmdb_credentials_panel.refresh_state()
         self._profile_reset_panel.refresh_state()
+        self._factory_reset_panel.refresh_state()
         self._pool_ops_panel.refresh_stats()
 
     def _on_pool_changed_signal(self) -> None:

@@ -201,12 +201,12 @@ Daily path из **6 шагов** — эталон для всех фаз C.
 ## 7. Roadmap — фазы
 
 **Текущий рабочий контур:** `C3` (качество выдачи)
-**Активный фокус:** `C3-04` (сессии автора ≥5/10; сессия 1 ≈5/10) — **не начинать без Scope Gate + «ок»**; `C3-05`…`C3-09` выполнены
+**Активный фокус:** `C3-04` закрыта решением без подтверждения acceptance: методика «мог бы посмотреть» не даёт воспроизводимой оценки качества. `C3-05`…`C3-12` выполнены; переход к C4 требует отдельного продуктового решения.
 **Продуктовый контур:** **X — inbox-колода** (не V0 «Сегодня»)  
 **Запрещено до явного открытия A/B/V0:** вектор A, вектор B, V0, web, like/dislike, новые пресеты/вайб-крутилки  
-**Следующий ID после C3-04:** закрытие C3 / переход к C4
+**Следующий ID после C3-04:** отдельное продуктовое решение о методике качества / допуске к C4
 
-Легенда: `[ ]` не начато · `[~]` в работе · `[x]` пройдено
+Легенда: `[ ]` не начато · `[~]` в работе · `[x]` пройдено · `[!]` закрыто без прохождения acceptance
 
 ---
 
@@ -244,6 +244,19 @@ Daily path из **6 шагов** — эталон для всех фаз C.
 
 **Статус фазы:** ☐ не начата · ☐ в работе · ☑ **пройдена**  
 **Дата закрытия:** 2026-07-19
+
+---
+
+### Фаза D2 — Безопасность локального runtime
+
+**Цель:** destructive-действия в Settings очищают именно указанный runtime и не оставляют legacy-артефакты, которые могут выглядеть как «не сброшенный» профиль.
+
+| ID | Задача | Статус |
+| --- | --- | --- |
+| D2-01 | Factory Reset очищает current runtime, включая legacy SQLite/watched/candidates в app root; путь виден до подтверждения | [x] |
+
+**Статус фазы:** ☐ не начата · ☐ в работе · ☑ **пройдена**
+**Дата закрытия:** 2026-07-20
 
 ---
 
@@ -318,17 +331,20 @@ Daily path из **6 шагов** — эталон для всех фаз C.
 | C3-01 | Жёстче отсекать явно нерелевантное из колоды (в рамках текущего ranker) | [x] |
 | C3-02 | Сильнее опираться на watched / saved / hidden при формировании колоды | [x] |
 | C3-03 | Один режим по умолчанию вместо распыления по пресетам | [x] |
-| C3-04 | Из 10 карточек ≥ 5 вызывают «мог бы посмотреть» (субъективная проверка автора) | [~] |
+| C3-04 | Из 10 карточек ≥ 5 вызывают «мог бы посмотреть» (субъективная проверка автора) | [!] методика закрыта решением: субъективная оценка не признана достаточным критерием качества |
 | C3-05 | Recommendation output quality and safety audit (QA, без фиксов) | [x] |
 | C3-06 | Safe isolated launcher for recommendation QA audits | [x] |
 | C3-07 | Block explicit sexual content from safe recommendation eligibility | [x] |
 | C3-08 | Consistent RU metadata selection and fallback | [x] |
 | C3-09 | Promote from reserve after recommendation action | [x] |
+| C3-10 | Synthetic taste profile evaluation harness (QA-only) | [x] |
+| C3-11 | Vibe-alignment audit rubric (QA-only, без изменения ranker) | [x] |
+| C3-12 | Output-defect audit: все onboarding presets + synthetic top-10 (QA-only) | [x] |
 
 **Статус фазы:** ☐ не начата · ☑ в работе · ☐ **пройдена**  
 **Дата закрытия:** _—_
 
-**Acceptance (inbox):** качество разбора не хуже «случайный Discover»; из 10 карточек ≥ 5 автор готов **сохранить или отметить смотрел** (не «обязательно посмотрю сегодня»). Автор подтверждает 3 сессии подряд.
+**Acceptance (inbox):** качество разбора не хуже «случайный Discover»; из 10 карточек ≥ 5 автор готов **сохранить или отметить смотрел** (не «обязательно посмотрю сегодня»). Автор подтверждает 3 сессии подряд. **Не подтверждено:** C3-04 закрыта без прохождения этого критерия из-за отсутствия согласованной методики.
 
 ---
 
@@ -477,6 +493,11 @@ C1-01 → C1-02 → C2-01 → C2-02 → C2-04 → C1-03 → C1-04 → C1-05 → 
 
 | Дата | Фаза / задача | Что сделано | Проверка |
 | --- | --- | --- | --- |
+| 2026-07-20 | C3-04 | Закрыта продуктовым решением **без прохождения acceptance**: единственная авторская сессия дала 1/10, а методика «мог бы посмотреть» не признана воспроизводимым измерением качества. C3 acceptance остаётся неподтверждённым; C4 не открывается автоматически | `screens/tmp_ui/C3-04/session1_*.json`; решение автора, кода нет |
+| 2026-07-20 | C3-12 | Offline QA для всех 8 onboarding presets: существующий preset→profile→fetch/discover contract, непустые bucket plans и `include_adult=False`. Synthetic top-10 проверены на placeholder/mojibake/пустые поля и adult/explicit/hentai/porn markers из title/overview/keywords через существующий safety gate; дефектов в фиксированном наборе не найдено. Ranking/filter/safety/UI не менялись; на момент аудита C3-04 ещё не была закрыта | `py -m tools.qa.run_output_defect_audit --runtime-root screens/tmp_ui/C3-12/runtime --output-dir screens/tmp_ui/C3-12`; `py -m pytest tests/test_output_defect_audit.py tests/test_synthetic_taste_profiles.py tests/test_qa_isolated_launcher.py -q` (20 passed); evidence: `screens/tmp_ui/C3-12/output_defect_audit.json` |
+| 2026-07-20 | C3-11 | В C3-10 synthetic reports добавлен строгий audit-only vibe rubric: required/forbidden metadata signals, причины mismatch по карточке, пороги matching cards и разнообразия стран/жанров. Пример heavy Russian drama может требовать RU+drama и отмечать school/fan-service mismatch; ranker/filter/safety/UI не менялись; на момент аудита C3-04 ещё не была закрыта | `py -m tools.qa.run_synthetic_taste_profile_evaluation --runtime-root screens/tmp_ui/C3-11/runtime --output-dir screens/tmp_ui/C3-11`; `py -m pytest tests/test_synthetic_taste_profiles.py tests/test_qa_isolated_launcher.py -q` (17 passed); evidence: `screens/tmp_ui/C3-11/{P1-mainstream,P2-dark_anime,P3-diversity_explorer,summary,isolation_meta,child_isolation_proof}.json` |
+| 2026-07-20 | D2-01 | Factory Reset теперь удаляет legacy `watchbane.sqlite3` (+ WAL/SHM), `watched/`, `candidates/` и credential-файлы из app root наряду с текущим runtime; единственный TMDb credential переносится в новый main runtime. В Settings до подтверждения видны активный профиль и точный путь очистки. QA `WATCHBANE_DATA_DIR` не менялся | `py -m pytest tests/test_data_profiles.py tests/desktop/test_profile_reset_flow.py -q` (19 passed); native Windows captures `screens/tmp_ui/D2-01/after_{100,125}.png` Read, Segoe UI available; live Qt-confirmation `DELETE ALL` на main runtime → reopen: watched=0, candidates=0, onboarding required |
+| 2026-07-19 | C3-10 | Детерминированный QA-only runner трёх строгих JSON-профилей: адаптер в существующие filters/vector, изолированный runtime до импортов, synthetic watched/saved/hidden, реальный deck service, top-10 JSON и hard-checks; ranking/UI/safety не менялись; на момент аудита C3-04 ещё не была закрыта | `py -m tools.qa.run_synthetic_taste_profile_evaluation --runtime-root screens/tmp_ui/C3-10/runtime --output-dir screens/tmp_ui/C3-10`; `py -m pytest tests/test_synthetic_taste_profiles.py tests/test_qa_isolated_launcher.py -q` (16 passed); evidence: `screens/tmp_ui/C3-10/{P1-mainstream,P2-dark_anime,P3-diversity_explorer,summary,isolation_meta,child_isolation_proof}.json` |
 | 2026-07-19 | C3-09 | После смотрел/сохранить/скрыть active добирается из reserve (`refill_active=True`); HAPPY_PATH §4 обновлён | deck + desktop pytest; captures C3-09 1.0/1.25 Read |
 | 2026-07-19 | C3-08 | RU metadata: merge localized title/overview без poster-gate; fallback selected→primary→en→original; legacy не штампует latin в `localized.ru`; закрывает QA-DEFECT-02 (C3-05) | `tests/test_data_language_display.py` + related; captures `screens/tmp_ui/C3-08/after_{100,125}.png` Read |
 | 2026-07-19 | C3-07 | Safety gate explicit sexual content: hard-drop в `_eligible_candidates` + soft reject replenish; закрывает QA-DEFECT-01 (C3-05 / TMDb 95897) без adult-toggle/UI | `tests/test_explicit_content_safety.py` + deck suite (44 passed) |
@@ -488,7 +509,7 @@ C1-01 → C1-02 → C2-01 → C2-02 → C2-04 → C1-03 → C1-04 → C1-05 → 
 | 2026-07-18 | D1-D | AGENTS.md: UI DoD, capture-каталог, happy path, computer use; product-phase-c.mdc | docs only |
 | 2026-07-19 | C3-06 | Safe isolated QA launcher: env+checks до child; отказ на real APPDATA; тесты; предотвращает повтор QA-DEFECT-03; **без** auto-cleanup реального профиля | `tools/qa/*`; `tests/test_qa_isolated_launcher.py` (7 passed) |
 | 2026-07-19 | C3-05 | QA audit качества/safety выдачи на изолированном runtime; DEFECT-01 erotic Overflow (95897) в pool+DEFAULT eligibility 2×; DEFECT-02 EN metadata при RU UI; фиксы не делались | `screens/tmp_ui/C3-05/AUDIT_REPORT.md` + evidence; PNG Read 1.0/1.25 |
-| 2026-07-19 | C3-04 | Сессия 1/3: live deck DEFAULT-режима, 10 карточек; agent proxy 6/10 ≥5 (pass provisional); ждём 3× подтверждение автора | `screens/tmp_ui/C3-04/session1_*.json`; код не менялся |
+| 2026-07-19 | C3-04 | Авторская сессия 1/3: live deck DEFAULT-режима, 10 карточек; интерес 1/10 (ниже порога ≥5). Agent-proxy 6/10 сохранён отдельно и не считается подтверждением автора | `screens/tmp_ui/C3-04/session1_*.json`; код не менялся |
 | 2026-07-19 | C3-03 | Inbox Recommendations: один DEFAULT режим до Apply; saved presets/directions только в форме Search settings | compileall; targeted pytest (deck defaults / FiltersView seed) |
 | 2026-07-19 | C3-02 | Genre affinity из watched (TOP/OK/NOT_FOR_ME) + saved/hidden влияет на rank колоды; title exclusion без изменений | compileall; 31 pytest deck service |
 | 2026-07-18 | S0 | Scope Gate: AGENTS + `.cursor/rules/scope-gate.mdc`; активный фокус C1-01 в PRODUCT v1.3 | docs only; код C1 не начат |

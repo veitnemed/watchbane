@@ -33,6 +33,11 @@ def active_profile() -> str:
     return profiles.get_active_profile()
 
 
+def active_profile_runtime_path() -> str:
+    """Return the exact data directory affected by profile reset actions."""
+    return str(profiles.get_active_data_dir())
+
+
 def request_active_profile_reset() -> None:
     profile_reset.request_full_profile_reset()
 

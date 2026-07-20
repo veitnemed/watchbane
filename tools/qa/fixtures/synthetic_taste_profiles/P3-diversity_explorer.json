@@ -1,0 +1,35 @@
+{
+  "profile_id": "P3-diversity_explorer",
+  "description": "Cross-country and cross-genre explorer focused on less obvious titles.",
+  "media_types": ["movie", "tv"],
+  "include": {
+    "genres": [],
+    "countries": [],
+    "year_from": null,
+    "year_to": null,
+    "keywords": [],
+    "min_tmdb_score": null,
+    "min_tmdb_votes": null
+  },
+  "exclude": {"genres": [], "keywords": []},
+  "hard_exclusions": {
+    "adult": true,
+    "explicit_sexual_content": true,
+    "watched": true,
+    "hidden": true,
+    "franchise_duplicates": true
+  },
+  "preferences": {"popularity": 0, "novelty": 4, "diversity": 4},
+  "history": {"watched": [3001], "saved": [3002], "hidden": [3003]},
+  "vibe_alignment": {
+    "description": "Explorer deck should demonstrate cross-country and cross-genre breadth, rather than a single familiar lane.",
+    "required_any_genres": [],
+    "required_all_genres": [],
+    "required_any_countries": [],
+    "forbidden_genres": [],
+    "forbidden_keywords": [],
+    "minimum_matching_cards": 10,
+    "minimum_distinct_countries": 5,
+    "minimum_distinct_genres": 5
+  }
+}

@@ -45,16 +45,26 @@ class FactoryResetPanel(QWidget):
         title.setObjectName("factoryResetTitle")
         layout.addWidget(title)
 
-        description = QLabel(tr("settings.factory_reset.description"))
-        description.setObjectName("factoryResetDescription")
-        description.setWordWrap(True)
-        layout.addWidget(description)
+        self._description = QLabel()
+        self._description.setObjectName("factoryResetDescription")
+        self._description.setWordWrap(True)
+        layout.addWidget(self._description)
 
         self._reset_button = QPushButton(tr("settings.factory_reset.action"))
         self._reset_button.setObjectName("factoryResetButton")
         self._reset_button.clicked.connect(self._request_reset)
         layout.addWidget(self._reset_button)
         root.addWidget(section)
+        self.refresh_state()
+
+    def refresh_state(self) -> None:
+        self._description.setText(
+            tr(
+                "settings.factory_reset.description",
+                profile=profile_management.active_profile(),
+                path=profile_management.active_profile_runtime_path(),
+            )
+        )
 
     def _request_reset(self) -> None:
         answer = QMessageBox.warning(

@@ -30,17 +30,54 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C3-04` [~]; C3-05…C3-09 [x] |
+| Активный фокус | `C3-04` [!] закрыта без acceptance; C3-05…C3-12 [x]; C4 требует отдельного продуктового решения |
 | UI QA scales | `1.0` и `1.25` |
 | Последний docs commit | `89d0e6a` (C3-07/C3-08) |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** C3-04 сессии 2–3; затем закрытие C3 → C4.
+**Дальше по плану:** согласовать воспроизводимую методику качества либо отдельно принять решение о допуске к C4.
 
 ---
 
 ## Журнал
+
+### 2026-07-20 — C3-04 (закрыта без acceptance)
+- **Решение автора:** не продолжать C3-04 по критерию «мог бы посмотреть». Одна сессия дала 1/10; методика не признана воспроизводимой оценкой качества.
+- **Сделано:** в PRODUCT задача получила статус `[!]` — закрыта без прохождения acceptance; C3 acceptance явно оставлен неподтверждённым, автоматический переход к C4 запрещён.
+- **Файлы / commit:** PRODUCT, `cursor-work.md`; commit не создан.
+- **Проверка:** `screens/tmp_ui/C3-04/session1_*.json`; код не менялся.
+- **Не сделано / next:** новая методика качества или отдельное продуктовое решение о допуске к C4.
+
+### 2026-07-20 — C3-12
+- **Запрос:** провести output QA всех пресетов: странные названия, пустые metadata и возможные porn/hentai-сигналы в title/overview/keywords.
+- **Сделано:** `output_defect_audit.py` проверяет все 8 current onboarding `PRESETS` через существующие `TastePreset → OnboardingTasteProfile → fetch buckets → discover request`: plans непустые, страны/media согласованы, `include_adult=False`. Synthetic top-10 отдельно проверяются на placeholders, mojibake, пустые visible fields и explicit/hentai/porn; используется текущий explicit safety gate. Новый runner сохраняет единый JSON-отчёт в isolated runtime.
+- **Результат:** 8/8 preset contracts PASS; P1/P2/P3 top-10 — 0 defects, 0 suspicious sexual markers. Negative fixture `Hentai Academy` / `pornographic anime` доказательно отмечается как explicit + marker.
+- **Файлы / commit:** `tools/qa/{output_defect_audit.py,run_output_defect_audit.py,README.md}`, `tools/qa/synthetic_taste_profiles.py`, `tests/test_output_defect_audit.py`, PRODUCT; commit не создан.
+- **Проверка:** `py -m tools.qa.run_output_defect_audit --runtime-root screens/tmp_ui/C3-12/runtime --output-dir screens/tmp_ui/C3-12`; targeted pytest — 20 passed. Evidence: `screens/tmp_ui/C3-12/output_defect_audit.json`.
+- **Не сделано / next:** offline fixture audit не доказывает live TMDb availability/metadata и не заменяет методику качества; нет ranking/UI/safety fixes.
+
+### 2026-07-20 — C3-11
+- **Запрос:** оценивать не только «понравилось», но и соответствие карточек заданному вайбу; mismatch вроде school drama для heavy Russian drama должен быть виден отдельно.
+- **Сделано:** в synthetic taste profile schema добавлен strict `vibe_alignment`: required/forbidden genres, countries, keywords и пороги matching cards / distinct countries / distinct genres. Runner сохраняет per-card reasons (`wrong_country`, `missing_required_all_genres`, `forbidden_keyword` и т.д.) + deck summary; это audit-only после существующего RecommendationDeckService, без нового filter algebra, ranker, safety или UI.
+- **Файлы / commit:** `tools/qa/synthetic_taste_profiles.py`, три fixtures, `tests/test_synthetic_taste_profiles.py`, `tools/qa/README.md`, PRODUCT; commit не создан.
+- **Проверка:** `py -m tools.qa.run_synthetic_taste_profile_evaluation --runtime-root screens/tmp_ui/C3-11/runtime --output-dir screens/tmp_ui/C3-11` → P1/P2/P3 PASS; `py -m pytest tests/test_synthetic_taste_profiles.py tests/test_qa_isolated_launcher.py -q` — 17 passed. Evidence: `screens/tmp_ui/C3-11/`.
+- **Не сделано / next:** это не доказательство полезности и не замена авторской C3-04; на момент этой записи C3-04 оставалась [~].
+
+### 2026-07-20 — D2-01
+- **Запрос:** Factory Reset в Settings должен действительно очищать текущий пользовательский runtime; не удалять QA-sandbox из-за путаницы путей.
+- **Причина:** стандартный runtime `C:\Users\super\AppData\Local\Watchbane\data` очищался, но legacy-артефакты в `C:\Users\super\AppData\Local\Watchbane\` (`watchbane.sqlite3`, `watched/`, `candidates/`) оставались и выглядели как несброшенный профиль.
+- **Сделано:** Factory Reset удаляет эти legacy-файлы и credential-файлы app root вместе с текущими managed paths; TMDb credential переносится в новый main runtime. Панель показывает active profile + exact runtime path до destructive confirmation; QA launcher и `WATCHBANE_DATA_DIR` не менялись.
+- **Файлы / commit:** `storage/profile_reset.py`, `app/use_cases/profile_management.py`, `desktop/settings/{factory_reset_panel,tab_view}.py`, `desktop/i18n/catalog.py`, tests, `tools/screenshots/capture_factory_reset_panel.py`, PRODUCT; commit не создан.
+- **Проверка:** `py -m pytest tests/test_data_profiles.py tests/desktop/test_profile_reset_flow.py -q` — 19 passed; native Windows captures `screens/tmp_ui/D2-01/after_{100,125}.png` открыты: нет clipping/overlap/mojibake, путь и кнопка видимы; platform `windows`, Segoe UI available. Пользователь разрешил live destructive check: Qt-диалог подтвердил `DELETE ALL`, startup reset применён к `main`; после `ensure_runtime_data_layout()` watched=0, candidates=0, onboarding required.
+- **Не сделано / next:** не удалены/не переработаны profiles или QA-sandbox; это отдельное архитектурное решение. На момент этой записи C3-04 оставалась [~].
+
+### 2026-07-19 — C3-10
+- **Запрос:** Synthetic taste profile evaluation harness: воспроизводимый QA-only контур для трёх JSON-профилей.
+- **Сделано:** строгая валидация (unknown fields → ошибка), адаптер в существующие candidate filters/vector, fixture pool и synthetic watched/saved/hidden через storage API, isolated launcher до import, единый RecommendationDeckService, сохранение actual top-10 и hard checks. Keywords/franchise, для которых нет current filter contract, помечены audit-only; parallel filtering не добавлен.
+- **Файлы / commit:** `tools/qa/{synthetic_taste_profiles.py,synthetic_taste_profiles_child.py,run_synthetic_taste_profile_evaluation.py,fixtures/synthetic_taste_profiles/*,README.md}`, `tests/test_synthetic_taste_profiles.py`, PRODUCT; commit не создан.
+- **Проверка:** `py -m tools.qa.run_synthetic_taste_profile_evaluation --runtime-root screens/tmp_ui/C3-10/runtime --output-dir screens/tmp_ui/C3-10` → 3 reports + `child_isolation_proof.json`; `py -m compileall desktop tests scripts tools`; targeted pytest (16 passed). Evidence: `screens/tmp_ui/C3-10/`.
+- **Не сделано / next:** не менялись ranking/UI/safety, не добавлены LLM/embeddings/внешний evaluator; на момент этой записи `C3-04` оставалась [~].
 
 ### 2026-07-19 — C3-09
 - **Запрос:** ок, C3-09 — promote из reserve после recommendation action.
@@ -83,13 +120,12 @@
 - **Проверка:** product `.py` / UI / tests не менялись ради фиксов.
 - **Не сделано / next:** не чинить; C3-04 сессии автора; новые ID на фиксы.
 
-### 2026-07-19 — C3-04 (сессия 1/3)
+### 2026-07-19 — C3-04 (авторская сессия 1/3)
 - **Запрос:** ок, делай C3-04.
-- **Сделано:** собрана live-колода DEFAULT-режима из локального пула (184; watched=0, actioned=17, recently_seen=157 → 10 eligible, reserve пуст). Agent-proxy оценка «сохранить/смотрел»: **6/10** (порог ≥5). Артефакты: `screens/tmp_ui/C3-04/session1_deck.json`, `session1_eval.json`.
-- **Да (6):** Красота в тёмных тонах; Шугар; Агентство; Ты; Эль; Уидоус-Бэй.
-- **Нет (4):** Медики Чикаго; В поисках Персефоны; Календарь Отоги (1961, tmdb=0); Smartypants.
-- **Проверка:** код не менялся; UI capture не требовался (не UI-задача). Acceptance PRODUCT: нужны **3 сессии автора** — пока provisional.
-- **Не сделано / next:** подтверждение автора по сессии 1 + ещё 2 сессии → `[x]` C3-04 / закрытие C3.
+- **Сделано:** собрана live-колода DEFAULT-режима из локального пула (184; watched=0, actioned=17, recently_seen=157 → 10 eligible, reserve пуст). Автор отметил интерес только к «В поисках Персефоны»: **1/10** при пороге ≥5. Агентская proxy-оценка 6/10 сохранена отдельно и не считается авторским результатом.
+- **Артефакты:** `screens/tmp_ui/C3-04/session1_deck.json`, `session1_eval.json`, `session1_author_eval.json`.
+- **Проверка:** код не менялся; ответ автора записан без подмены оценкой агента.
+- **Не сделано / next:** ещё 2 авторские сессии; при повторном провале не закрывать C3-04 и разбирать причины отдельным roadmap ID.
 
 ### 2026-07-19 — C3-03
 - **Запрос:** начинай (после gate на C3-03).

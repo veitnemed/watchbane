@@ -159,25 +159,26 @@ def _reset_main_profile() -> Path:
     return backup_path
 
 
-def _tmdb_credential_lines(data_dir: Path) -> list[str]:
+def _tmdb_credential_lines(*data_dirs: Path) -> list[str]:
     credentials: dict[str, str] = {}
-    for name in (".env.local", "tmdb.env", ".env"):
-        path = data_dir / name
-        if path.is_file() is False:
-            continue
-        try:
-            lines = path.read_text(encoding="utf-8-sig").splitlines()
-        except OSError:
-            continue
-        for raw_line in lines:
-            stripped = raw_line.strip()
-            if stripped.startswith("#") or "=" not in stripped:
+    for data_dir in data_dirs:
+        for name in (".env.local", "tmdb.env", ".env"):
+            path = data_dir / name
+            if path.is_file() is False:
                 continue
-            key, value = stripped.split("=", 1)
-            key = key.strip()
-            value = value.strip()
-            if key in TMDB_CREDENTIAL_KEYS and value:
-                credentials[key] = value
+            try:
+                lines = path.read_text(encoding="utf-8-sig").splitlines()
+            except OSError:
+                continue
+            for raw_line in lines:
+                stripped = raw_line.strip()
+                if stripped.startswith("#") or "=" not in stripped:
+                    continue
+                key, value = stripped.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                if key in TMDB_CREDENTIAL_KEYS and value:
+                    credentials[key] = value
     return [f"{key}={value}" for key, value in credentials.items()]
 
 
@@ -199,8 +200,22 @@ def _factory_reset_paths() -> list[Path]:
     installed = get_app_paths()
     if base.resolve() != installed.data_dir.resolve():
         return [base]
+    legacy_root_paths: list[Path] = []
+    for name in DATABASE_NAMES:
+        database = installed.root / name
+        legacy_root_paths.extend((database, Path(f"{database}-wal"), Path(f"{database}-shm")))
+    legacy_root_paths.extend(
+        (
+            installed.root / "watched",
+            installed.root / "candidates",
+            installed.root / ".env.local",
+            installed.root / "tmdb.env",
+            installed.root / ".env",
+        )
+    )
     return [
         installed.data_dir,
+        *legacy_root_paths,
         installed.cache_dir,
         installed.posters_dir,
         installed.config_dir,
@@ -227,7 +242,12 @@ def _assert_factory_path_safe(path: Path) -> None:
 def _reset_factory_keep_token() -> None:
     base = profiles.get_base_data_dir()
     active_data_dir = profiles.get_active_data_dir()
-    credentials = _tmdb_credential_lines(active_data_dir)
+    installed = get_app_paths()
+    # Older builds kept their runtime and credentials directly under the app
+    # root. Preserve a credential from there only when the active profile has
+    # none, then delete those stale artifacts with the rest of the reset.
+    credential_dirs = [installed.root, active_data_dir]
+    credentials = _tmdb_credential_lines(*credential_dirs)
     paths = _factory_reset_paths()
     for path in paths:
         _assert_factory_path_safe(path)

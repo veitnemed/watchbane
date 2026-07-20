@@ -42,11 +42,14 @@ def isolated_profiles(monkeypatch, tmp_path):
             if hasattr(module, attr_name):
                 module_attrs.append((module, attr_name, getattr(module, attr_name)))
 
+    previous_profile_base = profiles._BASE_DATA_DIR_OVERRIDE
     data_root = tmp_path / "data"
     monkeypatch.setattr(constant, "APP_DATA_DIR", str(data_root))
+    profiles.set_base_data_dir(data_root)
     profiles.apply_profile_to_constants(profiles.MAIN_PROFILE)
     yield data_root
 
+    profiles.set_base_data_dir(previous_profile_base)
     for name, value in original_constants.items():
         setattr(constant, name, value)
     for module, attr_name, value in module_attrs:
@@ -276,6 +279,38 @@ def test_factory_reset_deletes_everything_without_backup_and_keeps_token(
     assert should_show_onboarding_autofill() is True
     assert (isolated_profiles / ".env.local").read_text(encoding="utf-8") == (
         "TMDB_ACCESS_TOKEN=keep-me\n"
+    )
+
+
+def test_factory_reset_removes_legacy_runtime_artifacts_under_app_root(
+    isolated_profiles,
+    monkeypatch,
+) -> None:
+    from config.app_paths import build_app_paths
+    from storage import profile_reset
+
+    runtime_root = isolated_profiles.parent
+    paths = build_app_paths(runtime_root)
+    monkeypatch.setattr(profile_reset, "get_app_paths", lambda: paths)
+    monkeypatch.setattr(profiles, "get_app_paths", lambda: paths)
+
+    for name in ("watchbane.sqlite3", "watchbane.sqlite3-wal", "watchbane.sqlite3-shm"):
+        (runtime_root / name).write_bytes(b"legacy-db")
+    for directory in (runtime_root / "watched", runtime_root / "candidates"):
+        directory.mkdir()
+        (directory / "stale.json").write_text("{}", encoding="utf-8")
+    (runtime_root / "tmdb.env").write_text("TMDB_TOKEN=legacy-token\n", encoding="utf-8")
+
+    profile_reset.request_factory_reset_keep_token()
+    profile_reset.process_pending_profile_reset()
+
+    for name in ("watchbane.sqlite3", "watchbane.sqlite3-wal", "watchbane.sqlite3-shm"):
+        assert (runtime_root / name).exists() is False
+    assert (runtime_root / "watched").exists() is False
+    assert (runtime_root / "candidates").exists() is False
+    assert (runtime_root / "tmdb.env").exists() is False
+    assert (isolated_profiles / ".env.local").read_text(encoding="utf-8") == (
+        "TMDB_TOKEN=legacy-token\n"
     )
 
 
