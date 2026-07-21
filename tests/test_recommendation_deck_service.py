@@ -459,6 +459,27 @@ def test_persisted_deck_restart_skips_full_build_rerank(tmp_path) -> None:
     assert _identities(restored["active"]) == _identities(first["active"])
 
 
+def test_bounded_details_enricher_marks_success_and_rechecks_adult_safety(tmp_path) -> None:
+    pool = _pool(30)
+    calls: list[int] = []
+
+    def enrich(candidate):
+        calls.append(int(candidate["tmdb_id"]))
+        if len(calls) == 1:
+            candidate["adult"] = True
+        else:
+            candidate["runtime"] = 100
+        return candidate
+
+    service = RecommendationDeckService(pool_loader=lambda: pool, db_path=tmp_path / "deck.sqlite3", candidate_enricher=enrich)
+    deck = service.build_deck({}, NOW, limit_active=2, reserve_size=3)
+
+    assert len(calls) == 5
+    assert deck["details_enrichment"]["details_success"] == 5
+    assert all(not item.get("adult") for item in deck["active"] + deck["reserve"])
+    assert any(item.get("details_enrichment_contract_version") == 1 for item in deck["active"] + deck["reserve"])
+
+
 @pytest.mark.parametrize("bucket", ["active", "reserve"])
 def test_persisted_deck_revalidates_blocked_card_on_restart_without_full_rebuild(tmp_path, bucket: str) -> None:
     from storage.sqlite import action_repository, recommendation_deck_repository

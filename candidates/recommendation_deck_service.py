@@ -51,6 +51,7 @@ from dataset.models.user_rating import UserRating, normalize_user_rating
 
 
 PoolLoader = Callable[[], dict]
+CandidateEnricher = Callable[[dict], dict | None]
 ACTIVE_DECK_SIZE = 10
 DEFAULT_ACTIVE_LIMIT = ACTIVE_DECK_SIZE
 DEFAULT_RESERVE_SIZE = 70
@@ -645,14 +646,40 @@ class RecommendationDeckService:
         db_path: str | Path | None = None,
         recent_days: int = DEFAULT_RECENT_DAYS,
         refill_threshold: int = DEFAULT_REFILL_THRESHOLD,
+        candidate_enricher: CandidateEnricher | None = None,
     ) -> None:
         self._pool_loader = pool_loader
         self._db_path = db_path
         self._recent_days = max(0, int(recent_days))
         self._refill_threshold = max(0, int(refill_threshold))
+        self._candidate_enricher = candidate_enricher
         self._decks: dict[str, dict] = {}
         self._latest_cache_key: str | None = None
         self._latest_deck_id: str | None = None
+
+    def _enrich_selected_candidates(self, candidates: list[dict], *, capacity: int) -> tuple[list[dict], dict[str, int]]:
+        """Enrich only the bounded preliminary deck set through an injected callable."""
+        counters = {"details_considered": 0, "details_requests": 0, "details_success": 0, "details_failed": 0, "details_reused": 0}
+        if self._candidate_enricher is None:
+            return candidates, counters
+        enriched: list[dict] = []
+        for candidate in candidates[:max(0, capacity)]:
+            if candidate.get("details_enrichment_contract_version") == 1 and candidate.get("details_enrichment_status") == "success":
+                counters["details_reused"] += 1; enriched.append(candidate); continue
+            counters["details_considered"] += 1
+            try:
+                updated = self._candidate_enricher(deepcopy(candidate))
+            except Exception:
+                counters["details_failed"] += 1; enriched.append(candidate); continue
+            counters["details_requests"] += 1
+            if isinstance(updated, dict):
+                updated["details_enrichment_contract_version"] = 1
+                updated["details_enrichment_status"] = "success"
+                counters["details_success"] += 1; enriched.append(normalize_candidate_record(updated))
+            else:
+                counters["details_failed"] += 1; enriched.append(candidate)
+        enriched.extend(candidates[max(0, capacity):])
+        return enriched, counters
 
     @staticmethod
     def _material_signature(
@@ -954,6 +981,8 @@ class RecommendationDeckService:
             current_vector,
             capacity=active_limit + reserve_limit,
         )
+        ranked, enrichment = self._enrich_selected_candidates(ranked, capacity=active_limit + reserve_limit)
+        ranked = [candidate for candidate in ranked if not is_blocked_explicit_sexual_content(candidate)]
         reused_recent = len(ranked) == 0 and len(recent_fallback) > 0
         if reused_recent:
             selection_pool = recent_fallback
@@ -1028,6 +1057,7 @@ class RecommendationDeckService:
             ),
             "recently_seen_reused": len(active) + len(reserve) if reused_recent else 0,
             "excluded": excluded,
+            "details_enrichment": enrichment,
         }
         self._remember_deck(deck, reason="new_deck")
         return deepcopy(deck)
