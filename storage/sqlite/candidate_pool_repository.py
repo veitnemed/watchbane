@@ -81,6 +81,21 @@ def merge_candidate_pool_dict(
             for pool_key, candidate in incoming.items():
                 media_type = str(candidate.get("media_type") or "tv").strip().casefold()
                 tmdb_id = candidate.get("tmdb_id")
+                existing_row = active.execute(
+                    "SELECT payload_json FROM candidate_records WHERE pool_key = ?",
+                    (pool_key,),
+                ).fetchone()
+                if existing_row is not None:
+                    existing = loads_json(existing_row["payload_json"], {})
+                    if isinstance(existing, dict) and existing.get("details_enrichment_status") == "success":
+                        for field_name in (
+                            "adult", "runtime", "runtime_minutes", "episode_run_time",
+                            "number_of_seasons", "number_of_episodes", "content_rating",
+                            "keywords", "details_enrichment_contract_version",
+                            "details_enrichment_status", "details_enriched_at",
+                        ):
+                            if field_name in existing and field_name not in candidate:
+                                candidate[field_name] = existing[field_name]
                 active.execute("DELETE FROM candidate_records WHERE pool_key = ?", (pool_key,))
                 if tmdb_id not in (None, ""):
                     active.execute(

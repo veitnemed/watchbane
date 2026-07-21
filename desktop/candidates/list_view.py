@@ -112,9 +112,13 @@ class CandidateListView(CandidateListActionsMixin):
     ) -> None:
         self._session = session
         self._service = service or session.service
-        self._deck_service = deck_service or RecommendationDeckService(
-            pool_loader=self._load_pool_for_deck,
-        )
+        if deck_service is None:
+            from candidates.onboarding_service import build_deck_details_enricher
+            deck_service = RecommendationDeckService(
+                pool_loader=self._load_pool_for_deck,
+                candidate_enricher=build_deck_details_enricher(),
+            )
+        self._deck_service = deck_service
         self._on_watched_added = on_watched_added
         self._on_refill_needed = on_refill_needed
         self._data_language = get_persisted_data_language()

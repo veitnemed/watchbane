@@ -153,6 +153,17 @@ def _build_filter_replenish_tmdb_client() -> _FilterReplenishTmdbClient:
     )
 
 
+def build_deck_details_enricher(*, data_language: str = "ru-RU"):
+    """Return the production Details callable for bounded deck orchestration."""
+    from candidates.replenish.filter_replenisher import _maybe_fetch_details
+    client = _build_filter_replenish_tmdb_client()
+
+    def enrich(candidate: dict) -> dict | None:
+        return _maybe_fetch_details(client, candidate, language=data_language)
+
+    return enrich
+
+
 def replenish_candidate_pool_for_filters(intent: dict, *, limit: int = 30, tmdb_client=None, progress_callback=None, cancel_checker=None, dry_run: bool = False) -> dict:
     """Replenish the shared candidate pool from explicit GUI filter intent."""
     before_pool = load_candidate_pool()

@@ -19,6 +19,7 @@ from candidates.models.keys import (
     candidate_state_identity_key,
     candidate_state_identity_keys,
     title_identity_key,
+    pool_entry_key,
 )
 from candidates.models.schema import (
     coerce_candidate_number,
@@ -34,6 +35,7 @@ from candidates.preferences import (
     resolve_rarity_weights,
 )
 from candidates.repositories.pool_repository import load_candidate_pool
+from storage.sqlite.candidate_pool_repository import merge_candidate_pool_dict
 from candidates.safety.explicit_content import is_blocked_explicit_sexual_content
 from candidates.scoring.rating_confidence import has_unknown_rating, is_viable_unrated_candidate
 from candidates.sources.tmdb.scoring import compute_tmdb_quality_score
@@ -657,13 +659,14 @@ class RecommendationDeckService:
         self._latest_cache_key: str | None = None
         self._latest_deck_id: str | None = None
 
-    def _enrich_selected_candidates(self, candidates: list[dict], *, capacity: int) -> tuple[list[dict], dict[str, int]]:
-        """Enrich only the bounded preliminary deck set through an injected callable."""
-        counters = {"details_considered": 0, "details_requests": 0, "details_success": 0, "details_failed": 0, "details_reused": 0}
+    def _enrich_selected_candidates(self, candidates: list[dict], *, capacity: int, now: datetime) -> tuple[list[dict], dict[str, int]]:
+        """Enrich a bounded ranked window and replace candidates rejected by Details."""
+        request_cap = min(len(candidates), max(0, capacity) + max(10, int(capacity and min(capacity, DEFAULT_ACTIVE_LIMIT))))
+        counters = {"preliminary_candidates": len(candidates), "details_request_cap": request_cap, "details_considered": 0, "details_requests": 0, "details_success": 0, "details_failed": 0, "details_reused": 0, "rejected_after_details": 0, "request_cap_reached": 0}
         if self._candidate_enricher is None:
             return candidates, counters
         enriched: list[dict] = []
-        for candidate in candidates[:max(0, capacity)]:
+        for candidate in candidates[:request_cap]:
             if candidate.get("details_enrichment_contract_version") == 1 and candidate.get("details_enrichment_status") == "success":
                 counters["details_reused"] += 1; enriched.append(candidate); continue
             counters["details_considered"] += 1
@@ -675,10 +678,26 @@ class RecommendationDeckService:
             if isinstance(updated, dict):
                 updated["details_enrichment_contract_version"] = 1
                 updated["details_enrichment_status"] = "success"
-                counters["details_success"] += 1; enriched.append(normalize_candidate_record(updated))
+                updated["details_enriched_at"] = now.isoformat(timespec="seconds")
+                normalized = normalize_candidate_record(updated)
+                counters["details_success"] += 1
+                if is_blocked_explicit_sexual_content(normalized):
+                    counters["rejected_after_details"] += 1
+                    continue
+                enriched.append(normalized)
             else:
                 counters["details_failed"] += 1; enriched.append(candidate)
-        enriched.extend(candidates[max(0, capacity):])
+        if request_cap < len(candidates):
+            counters["request_cap_reached"] = 1
+        successful = {
+            pool_entry_key(candidate): candidate
+            for candidate in enriched
+            if candidate.get("details_enrichment_contract_version") == 1
+            and candidate.get("details_enrichment_status") == "success"
+        }
+        if successful:
+            merge_candidate_pool_dict(successful, path=self._db_path)
+        counters["persisted_successes"] = len(successful)
         return enriched, counters
 
     @staticmethod
@@ -979,9 +998,9 @@ class RecommendationDeckService:
                 affinity=affinity,
             ),
             current_vector,
-            capacity=active_limit + reserve_limit,
+            capacity=active_limit + reserve_limit + max(active_limit, 10),
         )
-        ranked, enrichment = self._enrich_selected_candidates(ranked, capacity=active_limit + reserve_limit)
+        ranked, enrichment = self._enrich_selected_candidates(ranked, capacity=active_limit + reserve_limit, now=current)
         ranked = [candidate for candidate in ranked if not is_blocked_explicit_sexual_content(candidate)]
         reused_recent = len(ranked) == 0 and len(recent_fallback) > 0
         if reused_recent:
@@ -1020,6 +1039,8 @@ class RecommendationDeckService:
             vector=current_vector,
         )
         reserve = remaining[:reserve_limit]
+        enrichment["active_saved"] = len(active)
+        enrichment["reserve_saved"] = len(reserve)
         if not active:
             underfilled_reason = "no_eligible_candidates" if excluded["pool_total"] else "pool_empty"
         elif len(active) < active_limit:

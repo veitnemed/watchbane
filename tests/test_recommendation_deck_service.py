@@ -474,10 +474,49 @@ def test_bounded_details_enricher_marks_success_and_rechecks_adult_safety(tmp_pa
     service = RecommendationDeckService(pool_loader=lambda: pool, db_path=tmp_path / "deck.sqlite3", candidate_enricher=enrich)
     deck = service.build_deck({}, NOW, limit_active=2, reserve_size=3)
 
-    assert len(calls) == 5
-    assert deck["details_enrichment"]["details_success"] == 5
+    assert len(calls) == 15
+    assert deck["details_enrichment"]["details_success"] == 15
     assert all(not item.get("adult") for item in deck["active"] + deck["reserve"])
     assert any(item.get("details_enrichment_contract_version") == 1 for item in deck["active"] + deck["reserve"])
+
+
+@pytest.mark.parametrize("media_type,detail_fields", [
+    ("movie", {"runtime": 120, "runtime_minutes": 120, "content_rating": "16+", "keywords": ["drama"], "adult": False}),
+    ("tv", {"episode_run_time": [45], "number_of_seasons": 2, "number_of_episodes": 20, "content_rating": "16", "keywords": ["mystery"], "adult": None}),
+])
+def test_enriched_payload_survives_sqlite_reload(tmp_path, media_type, detail_fields) -> None:
+    from storage.sqlite.candidate_pool_repository import load_candidate_pool_dict
+    candidate = {**_candidate(77, title="Partial", media_type=media_type), **detail_fields,
+                 "details_enrichment_contract_version": 1, "details_enrichment_status": "success",
+                 "details_enriched_at": "2026-07-21T00:00:00+00:00"}
+    service = RecommendationDeckService(pool_loader=lambda: {"candidate": candidate}, db_path=tmp_path / "deck.sqlite3",
+                                        candidate_enricher=lambda item: item)
+    service.build_deck({}, NOW, limit_active=1, reserve_size=0)
+    reloaded = next(iter(load_candidate_pool_dict(path=tmp_path / "deck.sqlite3").values()))
+    for key, value in detail_fields.items():
+        assert reloaded.get(key) == value
+    assert reloaded["details_enrichment_status"] == "success"
+    assert reloaded["details_enriched_at"] == "2026-07-21T00:00:00+00:00"
+
+
+@pytest.mark.parametrize("adult", [True, False, None])
+def test_partial_discover_upsert_does_not_downgrade_enriched_payload(tmp_path, adult) -> None:
+    from candidates.models.keys import pool_entry_key
+    from storage.sqlite.candidate_pool_repository import load_candidate_pool_dict, merge_candidate_pool_dict
+    enriched = {**_candidate(501, title="Enriched"), "adult": adult, "runtime": 100,
+                "content_rating": "16+", "keywords": ["thriller"],
+                "details_enrichment_contract_version": 1, "details_enrichment_status": "success",
+                "details_enriched_at": "2026-07-21T00:00:00+00:00"}
+    key = pool_entry_key(enriched)
+    db = tmp_path / "deck.sqlite3"
+    merge_candidate_pool_dict({key: enriched}, path=db)
+    merge_candidate_pool_dict({key: _candidate(501, title="Enriched")}, path=db)
+    value = load_candidate_pool_dict(path=db)[key]
+    assert value["adult"] is adult
+    assert value["runtime"] == 100
+    assert value["content_rating"] == "16+"
+    assert value["keywords"] == ["thriller"]
+    assert value["details_enrichment_status"] == "success"
 
 
 @pytest.mark.parametrize("bucket", ["active", "reserve"])
