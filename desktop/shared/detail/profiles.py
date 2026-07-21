@@ -165,9 +165,12 @@ from desktop.theme.layout import (
 from desktop.theme.scaling import get_ui_scale
 
 DETAIL_COMPACT_UI_SCALE = 1.10
-DETAIL_STACKED_UI_SCALE = 1.25
+# At the mandatory 1.25 QA anchor, the compact two-column card still fits the
+# detail pane. Stacking here creates an avoidable blank gap between poster and
+# title, pushing the information panel below the first viewport.
+DETAIL_STACKED_UI_SCALE = 1.50
 DETAIL_STACKED_INFO_UI_SCALE = 1.00
-DETAIL_COMPACT_POSTER_WIDTH = 300
+DETAIL_COMPACT_POSTER_WIDTH = 260
 DETAIL_STACKED_POSTER_WIDTH = 245
 
 
@@ -254,6 +257,7 @@ class DetailCardLayoutProfile:
     show_recommendation_strength: bool = False
     show_mark_watched_button: bool = False
     show_hide_candidate_button: bool = False
+    overview_in_poster_column: bool = False
     include_bottom_stretch: bool = True
     detail_hero_card_radius: int = detail_px(DETAIL_HERO_CARD_RADIUS)
     detail_hero_card_padding: int = detail_px(DETAIL_HERO_CARD_PADDING)
@@ -372,4 +376,7 @@ CANDIDATE_DETAIL_CARD_PROFILE = replace(
     show_recommendation_strength=True,
     show_mark_watched_button=False,
     show_hide_candidate_button=False,
+    overview_in_poster_column=True,
+    detail_overview_top_gap=0,
+    detail_overview_left_inset=0,
 )

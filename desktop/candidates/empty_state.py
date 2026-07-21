@@ -79,7 +79,10 @@ class RecommendationEmptyState(QWidget):
 
         self._content = QWidget()
         self._content.setObjectName("recommendationEmptyStateContent")
-        self._content.setMinimumWidth(layout_px(360))
+        # The state is used in both the full detail pane and compact list pane.
+        # A scaled fixed minimum can force its copy across a splitter boundary
+        # at the 1.25 QA anchor; allow the layout to wrap it within its pane.
+        self._content.setMinimumWidth(UNCONSTRAINED_MINIMUM_HEIGHT)
         self._content.setMaximumWidth(layout_px(680))
         self._content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self._content_layout = QVBoxLayout(self._content)

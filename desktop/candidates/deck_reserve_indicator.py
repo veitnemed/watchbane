@@ -52,9 +52,10 @@ class DeckReserveIndicator(QWidget):
         self._progress = 0.0
         self._center_text = ""
         self._spinner_angle = 0
-        self._widget_size = list_px(48)
-        self._circle_diameter = list_px(40)
-        self._ring_pen_width = max(list_px(3), 1)
+        # Keep the reserve as a secondary status beside the feed title.
+        self._widget_size = list_px(40)
+        self._circle_diameter = list_px(32)
+        self._ring_pen_width = max(list_px(2), 1)
         self._value_font_pixel = max(list_px(7), int(round(self._circle_diameter * 0.20)))
         self._spinner_timer: QTimer | None = None
         self.setFixedSize(self._widget_size, self._widget_size)

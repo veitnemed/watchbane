@@ -31,6 +31,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--height", type=int, default=960)
     parser.add_argument("--interface-language", choices=("ru", "en"), default="ru")
     parser.add_argument("--data-language", choices=("ru", "en"), default="ru")
+    parser.add_argument(
+        "--empty-state",
+        choices=("pool_empty", "no_results", "error"),
+        help="Capture a Recommendations workspace empty state instead of an action result.",
+    )
     args = parser.parse_args(argv)
 
     runtime = args.runtime_root.resolve()
@@ -44,36 +49,38 @@ def main(argv: list[str] | None = None) -> int:
     from storage.sqlite.candidate_pool_repository import save_candidate_pool_dict
 
     pool: dict = {}
-    for index in range(30):
-        key = f"c3-09-{index}|2020"
-        pool[key] = {
-            "pool_entry_key": key,
-            "title": f"Карточка {index + 1}",
-            "year": 2010 + (index % 10),
-            "media_type": "tv",
-            "tmdb_id": 90_000 + index,
-            "tmdb_score": 8.0 - index * 0.01,
-            "tmdb_votes": 500 + index,
-            "tmdb_popularity": 50.0 - index,
-            "final_score": 90 - index,
-            "overview": f"Описание {index + 1}",
-            "poster_path": f"/c309-{index}.jpg",
-            "genre_keys": ["drama"],
-            "genres": ["Drama"],
-            "country_codes": ["US"],
-            "localized": {
-                "ru": {
-                    "title": f"Карточка {index + 1}",
-                    "overview": f"Описание {index + 1}",
-                }
-            },
-        }
+    if args.empty_state is None:
+        for index in range(30):
+            key = f"c3-09-{index}|2020"
+            pool[key] = {
+                "pool_entry_key": key,
+                "title": f"Карточка {index + 1}",
+                "year": 2010 + (index % 10),
+                "media_type": "tv",
+                "tmdb_id": 90_000 + index,
+                "tmdb_score": 8.0 - index * 0.01,
+                "tmdb_votes": 500 + index,
+                "tmdb_popularity": 50.0 - index,
+                "final_score": 90 - index,
+                "overview": f"Описание {index + 1}",
+                "poster_path": f"/c309-{index}.jpg",
+                "genre_keys": ["drama"],
+                "genres": ["Drama"],
+                "country_codes": ["US"],
+                "localized": {
+                    "ru": {
+                        "title": f"Карточка {index + 1}",
+                        "overview": f"Описание {index + 1}",
+                    }
+                },
+            }
     save_candidate_pool_dict(pool)
 
     from desktop.theme.scaling import set_ui_scale
 
     set_ui_scale(args.scale)
 
+    from PyQt6.QtGui import QFontDatabase
     from PyQt6.QtWidgets import QApplication, QListView
 
     from desktop.shell.main_window import WatchedMoviesWindow
@@ -87,6 +94,39 @@ def main(argv: list[str] | None = None) -> int:
     _process_events(app, 3.0)
 
     list_view = window._tabs_context.candidate_list_view
+    if args.empty_state is not None:
+        list_view._candidates = []
+        list_view._deck = {
+            "active": [],
+            "reserve": [],
+            "excluded": {"pool_total": 0},
+        }
+        list_view._clear_detail(
+            show_filters_hint=False,
+            search_active=args.empty_state == "no_results",
+            error=args.empty_state == "error",
+        )
+        _process_events(app, 0.6)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        saved = window.grab().save(str(args.output))
+        state = list_view._workspace_state
+        content = state._content
+        detail_panel = list_view._detail_panel
+        print(f"empty_state={args.empty_state} saved={saved} path={args.output}")
+        families = set(QFontDatabase.families())
+        print(
+            f"platform={app.platformName()} "
+            f"font_probe={{'family_count': {len(families)}, 'has_segoe_ui': {'Segoe UI' in families}}}"
+        )
+        print(
+            "empty_geometry="
+            f"state={state.geometry().getRect()} content={content.geometry().getRect()} "
+            f"detail_panel={detail_panel.geometry().getRect()}"
+        )
+        window.close()
+        _process_events(app, 0.2)
+        return 0 if saved else 1
+
     deck = list_view._deck if isinstance(getattr(list_view, "_deck", None), dict) else None
     if not isinstance(deck, dict) or not deck.get("active"):
         # Force a local deck build if shell has not materialized yet.

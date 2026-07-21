@@ -30,17 +30,39 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C3-04` [!] закрыта без acceptance; C3-05…C3-12 [x]; C4 требует отдельного продуктового решения |
+| Активный фокус | `C3-04` [!] закрыта без acceptance; C4 [x]; весь блок C ещё не закрыт |
 | UI QA scales | `1.0` и `1.25` |
 | Последний docs commit | `89d0e6a` (C3-07/C3-08) |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** согласовать воспроизводимую методику качества либо отдельно принять решение о допуске к C4.
+**Дальше по плану:** отдельное продуктовое решение об acceptance C3 и направлении после блока C.
 
 ---
 
 ## Журнал
+
+### 2026-07-20 — C4-03
+- **Запрос:** «ок, C4-03».
+- **Сделано:** reserve ring уменьшен с 48/40 до 40/32 scaled px — это спокойный вторичный status рядом с «Для вас». Presentation, tooltip, accessibility и refill/new-deck actions не менялись.
+- **Файлы / commit:** `desktop/candidates/deck_reserve_indicator.py`, PRODUCT, `cursor-work.md`; commit не создан.
+- **Проверка:** `py -m compileall desktop tests scripts tools`; deck presentation/snapshot — 12 passed. Native Windows PNG открыты: `screens/tmp_ui/C4-03/{after_100,after_125}.png`; platform `windows`, Segoe UI available; ring читаем, но не конкурирует с title. Widget tests не стартуют из-за Qt binding mismatch в `pytest-qt`.
+- **Не сделано / next:** C4 пройдена. Весь блок C не закрывается автоматически: C3 acceptance остаётся неподтверждённым.
+
+### 2026-07-20 — C4-02
+- **Запрос:** «ок, C4-02».
+- **Сделано:** `RecommendationEmptyState` больше не получает scaled fixed minimum width. В узкой detail panel его title/subtitle переносятся внутри собственных границ; `--empty-state` в isolated `capture_recommendation_after_action.py` покрывает pool-empty/no-results и печатает geometry/platform/font evidence.
+- **Файлы / commit:** `desktop/candidates/empty_state.py`, `tools/screenshots/capture_recommendation_after_action.py`, `tests/test_desktop.py`, PRODUCT, `cursor-work.md`; commit не создан.
+- **Проверка:** `py -m compileall desktop tests scripts tools`; 3 targeted direct layout tests — passed. Qtbot Candidates tests не дошли до assertions: `pytest-qt` не распознаёт PyQt6 QWidget. Native Windows screenshots открыты: `screens/tmp_ui/C4-02/{after_empty_100,after_empty_125,after_no_results_125}.png`; platform `windows`, Segoe UI available. Нет clipping/overlap/mojibake; long no-results copy wraps.
+- **Happy path:** A да (Recommendations активна через capture); B да (одно ясное empty state); C n/a (колода сознательно пуста); D да (нет technical tab text или top clipping); E да (1.0/1.25 без overlap).
+- **Не сделано / next:** не менялись deck/ranking/safety/filters; C4-03 отдельно.
+
+### 2026-07-20 — C4-01
+- **Запрос:** «ок, C4-01» после отдельного решения открыть C4.
+- **Сделано:** на UI scale 1.25 detail card остаётся compact two-column; poster в compact profile уменьшен. Overview больше не находится внутри poster-column: он всегда расположен после полного hero-row на ширину detail section, поэтому не конкурирует с main info.
+- **Файлы / commit:** `desktop/shared/detail/{profiles,card_layout}.py`, `tests/{test_desktop,test_ui_scale_settings}.py`, PRODUCT, `cursor-work.md`; commit не создан.
+- **Проверка:** `py -m compileall desktop tests scripts`; 5 targeted detail/scale tests — passed. Native Windows `capture_film_card.py` 1.0/1.25, PNG открыты: `screens/tmp_ui/C4-01/{after_100,after_125}.png`; Segoe UI available, нет clipping title/chips/main-info header, overview не overlap main info. Full pytest: 1569 passed, 117 failed из-за массового Qt binding mismatch в pytest-qt; три старых overview expectations затем исправлены targeted-тестами.
+- **Не сделано / next:** не менялись ranking, safety, filters, data; C4-02 отдельно.
 
 ### 2026-07-20 — C3-04 (закрыта без acceptance)
 - **Решение автора:** не продолжать C3-04 по критерию «мог бы посмотреть». Одна сессия дала 1/10; методика не признана воспроизводимой оценкой качества.
@@ -71,6 +93,26 @@
 - **Файлы / commit:** `storage/profile_reset.py`, `app/use_cases/profile_management.py`, `desktop/settings/{factory_reset_panel,tab_view}.py`, `desktop/i18n/catalog.py`, tests, `tools/screenshots/capture_factory_reset_panel.py`, PRODUCT; commit не создан.
 - **Проверка:** `py -m pytest tests/test_data_profiles.py tests/desktop/test_profile_reset_flow.py -q` — 19 passed; native Windows captures `screens/tmp_ui/D2-01/after_{100,125}.png` открыты: нет clipping/overlap/mojibake, путь и кнопка видимы; platform `windows`, Segoe UI available. Пользователь разрешил live destructive check: Qt-диалог подтвердил `DELETE ALL`, startup reset применён к `main`; после `ensure_runtime_data_layout()` watched=0, candidates=0, onboarding required.
 - **Не сделано / next:** не удалены/не переработаны profiles или QA-sandbox; это отдельное архитектурное решение. На момент этой записи C3-04 оставалась [~].
+
+### 2026-07-20 — D2-02
+- **Запрос:** `DELETE ALL` визуально подтверждается, но после повторного открытия профиль остаётся заполненным.
+- **Причина:** bootstrap создаёт `watchbane.instance.lock` в runtime до обработки отложенного Factory Reset. На Windows попытка удалить всю `data` завершалась `WinError 32` на занятом lock-файле, поэтому SQLite и пользовательские данные оставались на месте.
+- **Сделано:** Factory Reset сохраняет только технический lock текущего процесса, удаляет всё остальное содержимое runtime и затем возвращает main profile; при обычном завершении `SingleInstanceGuard` удаляет сохранённый lock. UI, ranking и `WATCHBANE_DATA_DIR` не менялись.
+- **Файлы / commit:** `storage/profile_reset.py`, `tests/test_data_profiles.py`, PRODUCT; commit не создан.
+- **Проверка:** `py -m compileall storage tests`; `py -m pytest tests/test_data_profiles.py tests/desktop/test_profile_reset_flow.py -q` — 19 passed. Изолированный Windows `QLockFile` harness воспроизвёл старый `WinError 32`, после исправления: SQLite, watched и reset request удалены; lock исчез после `release()`.
+- **Не сделано / next:** основной пользовательский runtime намеренно не очищался агентом; повторите `DELETE ALL` в уже запущенном приложении и откройте его снова.
+
+### 2026-07-20 — C4-04
+- **Статус:** отменено по решению автора 2026-07-21: оформление возвращено к C4-01…C4-03.
+- **Откат:** удалено размещение overview в recommendation info-column; description снова следует за полной hero-row. Порядок metadata возвращён: страна → где смотреть → голоса TMDb. C4-01…C4-03, ranking, filters и safety не менялись.
+- **Файлы / commit:** `desktop/shared/detail/{profiles,card_layout,main_info}.py`, `tests/test_desktop.py`, `tools/screenshots/capture_recommendation_after_action.py`, PRODUCT; commit не создан.
+- **Проверка:** `py -m compileall desktop tests scripts`; main-info/overview subset — 29 passed, movie detail — 4 passed. Native Windows captures `screens/tmp_ui/C4-04/reverted_{100,125}.png` открыты: исходная композиция восстановлена, нет clipping/overlap; platform `windows`, Segoe UI available.
+
+### 2026-07-21 — C4-05
+- **Запрос:** description в Recommendations должен быть в левой колонке карточки, сразу под постером и не заходить в правую metadata-column.
+- **Сделано:** один candidate-only layout flag перенёс `detailOverviewSection` и `detailOverviewTopGap` в `detailPosterColumn`. Overview шириной ровно с постер; присоединён сразу после poster primary без вертикального gap. Watched detail сохранил общую overview-section после full hero row.
+- **Файлы / commit:** `desktop/shared/detail/{profiles,card_layout}.py`, `tests/test_desktop.py`, PRODUCT; commit не создан.
+- **Проверка:** `py -m compileall desktop tests scripts`; targeted detail overview tests — 5 passed. Native Windows captures `screens/tmp_ui/C4-05/{after_100,after_125}.png` открыты: description находится под постером, не пересекается с правой колонкой; clipping/overlap/mojibake не увидены. Platform `windows`, Segoe UI available.
 
 ### 2026-07-19 — C3-10
 - **Запрос:** Synthetic taste profile evaluation harness: воспроизводимый QA-only контур для трёх JSON-профилей.

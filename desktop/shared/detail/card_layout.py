@@ -717,13 +717,16 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._overview_frame = QFrame()
     owner._overview_frame.setObjectName("detailOverviewSection")
     owner._overview_frame.setFrameShape(QFrame.Shape.NoFrame)
-    if stacked_top_row:
+    if profile.overview_in_poster_column:
+        # Recommendation descriptions stay with the poster.  The fixed width
+        # is deliberate: it prevents text from entering the metadata column.
+        owner._overview_frame.setFixedWidth(profile.detail_poster_width)
+        owner._overview_frame.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
+    else:
+        # Watched/detail views retain the full-width section below the hero row.
         owner._overview_frame.setMinimumWidth(UNCONSTRAINED_MINIMUM_WIDTH)
         owner._overview_frame.setMaximumWidth(profile.detail_section_max_width)
         owner._overview_frame.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
-    else:
-        owner._overview_frame.setFixedWidth(profile.detail_poster_width)
-        owner._overview_frame.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Minimum)
     overview_layout = QVBoxLayout(owner._overview_frame)
     overview_layout.setContentsMargins(profile.detail_overview_left_inset, 0, 0, 0)
     overview_layout.setSpacing(0)
@@ -782,7 +785,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
     owner._overview_gap_widget.setFixedHeight(profile.detail_overview_top_gap)
     owner._overview_gap_widget.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
     owner._overview_gap_widget.hide()
-    if not stacked_top_row:
+    if profile.overview_in_poster_column:
         poster_column.addWidget(owner._overview_gap_widget)
         poster_column.addWidget(owner._overview_frame, alignment=Qt.AlignmentFlag.AlignLeft)
     poster_column.addStretch(1)
@@ -800,10 +803,10 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         poster_alignment |= Qt.AlignmentFlag.AlignHCenter
     top_row.addWidget(owner._poster_column_widget, alignment=poster_alignment)
     top_row.addWidget(owner._info_column_widget, stretch=1, alignment=Qt.AlignmentFlag.AlignTop)
-    if stacked_top_row:
-        top_row.addWidget(owner._overview_gap_widget)
-        top_row.addWidget(owner._overview_frame)
     content_layout.addWidget(owner._top_row_widget)
+    if not profile.overview_in_poster_column:
+        content_layout.addWidget(owner._overview_gap_widget)
+        content_layout.addWidget(owner._overview_frame, alignment=Qt.AlignmentFlag.AlignLeft)
     if profile.include_bottom_stretch:
         content_layout.addStretch(1)
 

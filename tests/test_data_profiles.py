@@ -237,6 +237,7 @@ def test_factory_reset_deletes_everything_without_backup_and_keeps_token(
     isolated_profiles,
 ) -> None:
     from candidates.onboarding_service import should_show_onboarding_autofill
+    from desktop.shell.single_instance import SingleInstanceGuard
     from storage import profile_reset, runtime
 
     isolated_profiles.mkdir(parents=True, exist_ok=True)
@@ -254,8 +255,16 @@ def test_factory_reset_deletes_everything_without_backup_and_keeps_token(
         encoding="utf-8",
     )
 
-    request_path = profile_reset.request_factory_reset_keep_token()
-    result = profile_reset.process_pending_profile_reset()
+    # Bootstrap takes the runtime lock before it applies the persisted active
+    # profile to legacy path constants, so the lock belongs to the main root.
+    profiles.apply_profile_to_constants(profiles.MAIN_PROFILE)
+    instance_guard = SingleInstanceGuard()
+    assert instance_guard.acquire() is True
+    try:
+        request_path = profile_reset.request_factory_reset_keep_token()
+        result = profile_reset.process_pending_profile_reset()
+    finally:
+        instance_guard.release()
 
     assert request_path.exists() is False
     assert result == {
@@ -269,6 +278,7 @@ def test_factory_reset_deletes_everything_without_backup_and_keeps_token(
     assert (isolated_profiles / "watchbane.sqlite3").exists() is False
     assert (isolated_profiles / "backups").exists() is False
     assert (isolated_profiles / "profiles").exists() is False
+    assert (isolated_profiles / "watchbane.instance.lock").exists() is False
     assert (isolated_profiles / ".env.local").read_text(encoding="utf-8") == (
         "TMDB_ACCESS_TOKEN=keep-me\n"
     )

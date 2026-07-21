@@ -1342,6 +1342,22 @@ def test_ui_scale_125_updates_shell_and_list_constants() -> None:
     assert profiles.LIST_TITLE_FONT_POINT == 18
 
 
+def test_detail_card_keeps_two_column_layout_at_125() -> None:
+    import importlib
+
+    import desktop.shared.detail.profiles as profiles
+    import desktop.theme.scaling as scaling
+
+    scaling.set_ui_scale(1.25)
+    profiles = importlib.reload(profiles)
+
+    assert profiles.use_compact_detail_content() is True
+    assert profiles.use_stacked_detail_layout() is False
+
+    scaling.set_ui_scale(1.50)
+    assert profiles.use_stacked_detail_layout() is True
+
+
 def test_ui_scale_125_updates_analytics_chart_height() -> None:
     import importlib
 

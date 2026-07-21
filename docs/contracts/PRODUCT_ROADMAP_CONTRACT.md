@@ -201,10 +201,10 @@ Daily path из **6 шагов** — эталон для всех фаз C.
 ## 7. Roadmap — фазы
 
 **Текущий рабочий контур:** `C3` (качество выдачи)
-**Активный фокус:** `C3-04` закрыта решением без подтверждения acceptance: методика «мог бы посмотреть» не даёт воспроизводимой оценки качества. `C3-05`…`C3-12` выполнены; переход к C4 требует отдельного продуктового решения.
+**Активный фокус:** `C3-04` закрыта решением без подтверждения acceptance: методика «мог бы посмотреть» не даёт воспроизводимой оценки качества. `C4-01`…`C4-03` и `C4-05` выполнены; весь блок C остаётся незакрытым, пока не принято отдельное решение об acceptance C3.
 **Продуктовый контур:** **X — inbox-колода** (не V0 «Сегодня»)  
 **Запрещено до явного открытия A/B/V0:** вектор A, вектор B, V0, web, like/dislike, новые пресеты/вайб-крутилки  
-**Следующий ID после C3-04:** отдельное продуктовое решение о методике качества / допуске к C4
+**Следующий ID:** НЕТ — требуется отдельное продуктовое решение об acceptance C3 / дальнейшем направлении
 
 Легенда: `[ ]` не начато · `[~]` в работе · `[x]` пройдено · `[!]` закрыто без прохождения acceptance
 
@@ -254,6 +254,7 @@ Daily path из **6 шагов** — эталон для всех фаз C.
 | ID | Задача | Статус |
 | --- | --- | --- |
 | D2-01 | Factory Reset очищает current runtime, включая legacy SQLite/watched/candidates в app root; путь виден до подтверждения | [x] |
+| D2-02 | Factory Reset не прерывается на Windows из-за active `watchbane.instance.lock`; после следующего запуска SQLite и пользовательские данные действительно удалены | [x] |
 
 **Статус фазы:** ☐ не начата · ☐ в работе · ☑ **пройдена**
 **Дата закрытия:** 2026-07-20
@@ -354,12 +355,14 @@ Daily path из **6 шагов** — эталон для всех фаз C.
 
 | ID | Задача | Статус |
 | --- | --- | --- |
-| C4-01 | Карточки и detail view без визуальных конфликтов (в т.ч. настройки не «залезают» на карточку) | [ ] |
-| C4-02 | Empty states, типографика, масштабы UI (**1.0 / 1.25**) | [ ] |
-| C4-03 | Deck reserve indicator и вторичные элементы не отвлекают от колоды | [ ] |
+| C4-01 | Карточки и detail view без визуальных конфликтов (в т.ч. настройки не «залезают» на карточку) | [x] |
+| C4-02 | Empty states, типографика, масштабы UI (**1.0 / 1.25**) | [x] |
+| C4-03 | Deck reserve indicator и вторичные элементы не отвлекают от колоды | [x] |
+| C4-04 | Отменена по решению автора: возвращено оформление detail view после C4-01…C4-03 | [!] |
+| C4-05 | Description в Recommendations под постером в левой колонке, с жёсткой шириной poster-column | [x] |
 
-**Статус фазы:** ☐ не начата · ☐ в работе · ☐ **пройдена**  
-**Дата закрытия:** _—_
+**Статус фазы:** ☐ не начата · ☐ в работе · ☑ **пройдена**
+**Дата закрытия:** 2026-07-21
 
 ---
 
@@ -493,6 +496,12 @@ C1-01 → C1-02 → C2-01 → C2-02 → C2-04 → C1-03 → C1-04 → C1-05 → 
 
 | Дата | Фаза / задача | Что сделано | Проверка |
 | --- | --- | --- | --- |
+| 2026-07-21 | C4-05 | Recommendation description перемещено непосредственно под постер: только candidate profile использует overview внутри fixed-width poster-column. Правая metadata-column и watched detail view не изменены; ranking, filters и safety не менялись | `py -m compileall desktop tests scripts`; `py -m pytest tests/test_desktop.py -q -k "candidate_detail_keeps_overview_under_poster_in_left_column or detail_overview_follows_complete_hero_row or detail_overview_section"` (5 passed); Native Windows Read: `screens/tmp_ui/C4-05/{after_100,after_125}.png`; `platform=windows`, Segoe UI available |
+| 2026-07-21 | C4-04 | По решению автора отменено: description снова находится после полной hero-row, а `Голоса TMDb` возвращены после `Где смотреть`. C4-01…C4-03, ranking, filters и safety не менялись | `py -m compileall desktop tests scripts`; main-info/overview subset 29 passed + movie detail 4 passed; Native Windows Read: `screens/tmp_ui/C4-04/reverted_{100,125}.png`; `platform=windows`, Segoe UI available |
+| 2026-07-20 | D2-02 | Найдена и исправлена причина несброшенного профиля: bootstrap берёт `watchbane.instance.lock` до обработки reset request, а Factory Reset пытался удалить всю `data` вместе с занятым lock-файлом и получал `WinError 32`. Во время startup reset сохраняется только текущий технический lock, остальное содержимое runtime удаляется; lock снимается штатно при выходе процесса. Ranking, UI и QA-sandbox не менялись | `py -m compileall storage tests`; `py -m pytest tests/test_data_profiles.py tests/desktop/test_profile_reset_flow.py -q` (19 passed); isolated Windows `QLockFile` harness: SQLite, watched и request удалены, lock снят после release |
+| 2026-07-20 | C4-03 | Reserve indicator в Recommendations уменьшен с 48/40 до 40/32 scaled px: это вторичный status рядом с feed title, без изменения reserve presentation, tooltip или действий. C4 пройдена; весь C не закрыт из-за неподтверждённого acceptance C3 | `py -m compileall desktop tests scripts tools`; deck presentation/snapshot: 12 passed. Qtbot widget tests блокируются до assertions конфликтом Qt bindings. Native Windows Read: `screens/tmp_ui/C4-03/{after_100,after_125}.png`; `platform=windows`, Segoe UI available |
+| 2026-07-20 | C4-02 | Recommendation empty state больше не имеет scaled fixed minimum width: copy переносится в пределах detail panel на 1.0/1.25, не пересекая splitter. Existing isolated capture расширен режимом `--empty-state` и geometry/font evidence; ranking/filter/safety/data не менялись | `py -m compileall desktop tests scripts tools`; targeted direct layout tests: 3 passed. Existing qtbot Candidates tests блокируются до assertions конфликтом Qt bindings. Native Windows Read: `screens/tmp_ui/C4-02/{after_empty_100,after_empty_125,after_no_results_125}.png`; `platform=windows`, Segoe UI available; `empty_geometry` внутри detail panel |
+| 2026-07-20 | C4-01 | Detail card: на UI scale 1.25 сохранён compact two-column hero layout; compact poster уменьшен, а overview вынесен из poster-column и всегда идёт после полного top row. Это убирает blank gap, конкуренцию overview с main info и clipping заголовка. Ranking/filter/safety/data не менялись | `py -m compileall desktop tests scripts`; targeted: 5 passed (`test_detail_card_keeps_two_column_layout_at_125` + detail layout tests); native Windows Read: `screens/tmp_ui/C4-01/{after_100,after_125}.png`, Segoe UI available. Full `py -m pytest -q`: 1569 passed, 117 failed — массовый pre-existing Qt binding mismatch в pytest-qt плюс три устаревших overview-expectations, которые затем обновлены и прошли targeted |
 | 2026-07-20 | C3-04 | Закрыта продуктовым решением **без прохождения acceptance**: единственная авторская сессия дала 1/10, а методика «мог бы посмотреть» не признана воспроизводимым измерением качества. C3 acceptance остаётся неподтверждённым; C4 не открывается автоматически | `screens/tmp_ui/C3-04/session1_*.json`; решение автора, кода нет |
 | 2026-07-20 | C3-12 | Offline QA для всех 8 onboarding presets: существующий preset→profile→fetch/discover contract, непустые bucket plans и `include_adult=False`. Synthetic top-10 проверены на placeholder/mojibake/пустые поля и adult/explicit/hentai/porn markers из title/overview/keywords через существующий safety gate; дефектов в фиксированном наборе не найдено. Ranking/filter/safety/UI не менялись; на момент аудита C3-04 ещё не была закрыта | `py -m tools.qa.run_output_defect_audit --runtime-root screens/tmp_ui/C3-12/runtime --output-dir screens/tmp_ui/C3-12`; `py -m pytest tests/test_output_defect_audit.py tests/test_synthetic_taste_profiles.py tests/test_qa_isolated_launcher.py -q` (20 passed); evidence: `screens/tmp_ui/C3-12/output_defect_audit.json` |
 | 2026-07-20 | C3-11 | В C3-10 synthetic reports добавлен строгий audit-only vibe rubric: required/forbidden metadata signals, причины mismatch по карточке, пороги matching cards и разнообразия стран/жанров. Пример heavy Russian drama может требовать RU+drama и отмечать school/fan-service mismatch; ranker/filter/safety/UI не менялись; на момент аудита C3-04 ещё не была закрыта | `py -m tools.qa.run_synthetic_taste_profile_evaluation --runtime-root screens/tmp_ui/C3-11/runtime --output-dir screens/tmp_ui/C3-11`; `py -m pytest tests/test_synthetic_taste_profiles.py tests/test_qa_isolated_launcher.py -q` (17 passed); evidence: `screens/tmp_ui/C3-11/{P1-mainstream,P2-dark_anime,P3-diversity_explorer,summary,isolation_meta,child_isolation_proof}.json` |

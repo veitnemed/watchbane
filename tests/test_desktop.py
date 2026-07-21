@@ -3250,7 +3250,7 @@ def test_detail_overview_section_hides_without_description(qapp) -> None:
     assert gap.isHidden() is True
 
 
-def test_detail_overview_section_uses_space_below_poster(qapp) -> None:
+def test_detail_overview_section_uses_space_below_complete_top_row(qapp) -> None:
     from PyQt6.QtWidgets import QFrame, QWidget
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
@@ -3269,17 +3269,17 @@ def test_detail_overview_section_uses_space_below_poster(qapp) -> None:
     )
     qapp.processEvents()
 
-    poster_column = detail.widget.findChild(QWidget, "detailPosterColumn")
-    poster = detail.widget.findChild(QFrame, "detailPosterShell")
+    content = detail.widget.findChild(QWidget, "detailContentContainer")
+    top_row = detail.widget.findChild(QWidget, "detailTopRow")
     section = detail.widget.findChild(QFrame, "detailOverviewSection")
     gap = detail.widget.findChild(QWidget, "detailOverviewTopGap")
 
-    assert poster_column is not None
-    assert poster is not None
+    assert content is not None
+    assert top_row is not None
     assert section is not None
     assert gap is not None
-    poster_layout = poster_column.layout()
-    assert poster_layout.indexOf(poster) < poster_layout.indexOf(gap) < poster_layout.indexOf(section)
+    content_layout = content.layout()
+    assert content_layout.indexOf(top_row) < content_layout.indexOf(gap) < content_layout.indexOf(section)
     assert gap.height() == DETAIL_CARD_LAYOUT_PROFILE.detail_overview_top_gap
 
 
@@ -3297,8 +3297,8 @@ def test_detail_card_uses_profile_composition_widths(qapp) -> None:
 
     assert content.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_content_max_width
     assert info_column.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_info_column_max_width
-    assert overview.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
-    assert overview.minimumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
+    assert overview.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
+    assert overview.minimumWidth() == 0
     assert main_info.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
 
 
@@ -3350,7 +3350,7 @@ def test_detail_overview_uses_profile_left_inset(qapp) -> None:
     assert margins.left() == DETAIL_CARD_LAYOUT_PROFILE.detail_overview_left_inset
 
 
-def test_detail_overview_width_is_fixed_to_poster_width(qapp) -> None:
+def test_detail_overview_spans_the_detail_section(qapp) -> None:
     from PyQt6.QtWidgets import QFrame
 
     from desktop.shared.detail import DETAIL_CARD_LAYOUT_PROFILE, WatchedDetailCard
@@ -3359,8 +3359,8 @@ def test_detail_overview_width_is_fixed_to_poster_width(qapp) -> None:
     section = detail.widget.findChild(QFrame, "detailOverviewSection")
 
     assert section is not None
-    assert section.minimumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
-    assert section.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_poster_width
+    assert section.minimumWidth() == 0
+    assert section.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
 
 
 def test_detail_overview_has_no_absolute_positioning() -> None:
@@ -3376,6 +3376,23 @@ def test_detail_overview_has_no_absolute_positioning() -> None:
 
     assert ".move(" not in overview_source
     assert "setGeometry(" not in overview_source
+
+
+def test_recommendation_empty_state_stays_inside_narrow_pane(qapp) -> None:
+    from PyQt6.QtWidgets import QWidget
+
+    from desktop.candidates.empty_state import RecommendationEmptyState
+
+    state = RecommendationEmptyState("pool_empty")
+    state.resize(300, 480)
+    state.show()
+    qapp.processEvents()
+
+    content = state.findChild(QWidget, "recommendationEmptyStateContent")
+    assert content is not None
+    assert content.minimumWidth() == 0
+    assert content.geometry().left() >= state.contentsRect().left()
+    assert content.geometry().right() <= state.contentsRect().right()
 
 
 def test_watched_detail_card_renders_main_info_block() -> None:
@@ -4677,7 +4694,7 @@ def test_detail_card_movie_mode_sets_film_theme_properties(qapp) -> None:
     assert media_badge.isHidden() is True
 
 
-def test_high_scale_detail_overview_follows_main_content(monkeypatch, qapp) -> None:
+def test_detail_overview_follows_complete_hero_row(monkeypatch, qapp) -> None:
     from PyQt6.QtWidgets import QWidget
 
     import desktop.shared.detail.card_layout as card_layout
@@ -4690,10 +4707,44 @@ def test_high_scale_detail_overview_follows_main_content(monkeypatch, qapp) -> N
     poster_column = detail.widget.findChild(QWidget, "detailPosterColumn")
 
     assert overview is not None and top_row is not None and poster_column is not None
-    assert overview.parentWidget() is top_row
+    assert overview.parentWidget() is detail._content_container
     assert overview.parentWidget() is not poster_column
     assert overview.minimumWidth() == 0
     assert overview.maximumWidth() == DETAIL_CARD_LAYOUT_PROFILE.detail_section_max_width
+
+
+def test_candidate_detail_keeps_overview_under_poster_in_left_column(qapp) -> None:
+    from PyQt6.QtWidgets import QFrame, QWidget
+
+    from desktop.shared.detail import CANDIDATE_DETAIL_CARD_PROFILE, WatchedDetailCard
+
+    detail = WatchedDetailCard(profile=CANDIDATE_DETAIL_CARD_PROFILE)
+    detail.show_entry(
+        (
+            "Alpha",
+            {},
+            {
+                "title": "Alpha",
+                "overview": "A compact recommendation description.",
+            },
+        )
+    )
+    qapp.processEvents()
+
+    poster_column = detail.widget.findChild(QWidget, "detailPosterColumn")
+    poster_primary = detail.widget.findChild(QWidget, "detailPosterPrimary")
+    overview_gap = detail.widget.findChild(QWidget, "detailOverviewTopGap")
+    overview = detail.widget.findChild(QFrame, "detailOverviewSection")
+
+    assert poster_column is not None and poster_primary is not None
+    assert overview_gap is not None and overview is not None
+    assert overview.parentWidget() is poster_column
+    assert overview.minimumWidth() == CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width
+    assert overview.maximumWidth() == CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width
+
+    poster_layout = poster_column.layout()
+    assert poster_layout.indexOf(poster_primary) < poster_layout.indexOf(overview_gap)
+    assert poster_layout.indexOf(overview_gap) < poster_layout.indexOf(overview)
 
 
 def test_detail_card_movie_style_uses_film_tokens() -> None:
@@ -7577,6 +7628,8 @@ def test_candidate_list_view_uses_readonly_detail_builder() -> None:
     assert DETAIL_CARD_LAYOUT_PROFILE.show_recommendation_strength is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_mark_watched_button is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_hide_candidate_button is False
+    assert CANDIDATE_DETAIL_CARD_PROFILE.overview_in_poster_column is True
+    assert DETAIL_CARD_LAYOUT_PROFILE.overview_in_poster_column is False
     assert CANDIDATE_DETAIL_CARD_PROFILE.include_bottom_stretch == DETAIL_CARD_LAYOUT_PROFILE.include_bottom_stretch
     assert module.CANDIDATE_LIST_STRETCH == 0
     assert module.CANDIDATE_DETAIL_STRETCH == 1

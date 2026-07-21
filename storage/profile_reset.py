@@ -15,6 +15,7 @@ from storage import profiles
 
 RESET_REQUEST_JSON = "profile_reset_request.json"
 SELECTION_REQUIRED_JSON = "profile_selection_required.json"
+INSTANCE_LOCK_FILE = "watchbane.instance.lock"
 DATABASE_NAMES = ("watchbane.sqlite3", "watchbane.sqlite", "watchbane.db")
 RESET_MODE_PROFILE_BACKUP = "profile_backup"
 RESET_MODE_FACTORY_KEEP_TOKEN = "factory_keep_token"
@@ -239,6 +240,24 @@ def _assert_factory_path_safe(path: Path) -> None:
         raise RuntimeError(f"Factory reset path escapes profile registry: {resolved}")
 
 
+def _delete_factory_path(path: Path, *, preserve_instance_lock: bool) -> None:
+    """Delete one reset target while keeping the current process lock releasable."""
+    if path.is_dir() is False:
+        if path.exists():
+            path.unlink()
+        return
+    if preserve_instance_lock is False or (path / INSTANCE_LOCK_FILE).is_file() is False:
+        shutil.rmtree(path)
+        return
+    for child in path.iterdir():
+        if child.name == INSTANCE_LOCK_FILE:
+            continue
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+
+
 def _reset_factory_keep_token() -> None:
     base = profiles.get_base_data_dir()
     active_data_dir = profiles.get_active_data_dir()
@@ -252,10 +271,7 @@ def _reset_factory_keep_token() -> None:
     for path in paths:
         _assert_factory_path_safe(path)
     for path in paths:
-        if path.is_dir():
-            shutil.rmtree(path)
-        elif path.exists():
-            path.unlink()
+        _delete_factory_path(path, preserve_instance_lock=path.resolve() == base.resolve())
     _write_tmdb_credentials(base, credentials)
     profiles.apply_profile_to_constants(profiles.MAIN_PROFILE)
 
