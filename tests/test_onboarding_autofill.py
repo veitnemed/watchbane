@@ -150,6 +150,9 @@ class FakeTmdbClient:
             "popularity": 60,
             "poster_path": f"/dm{int(tmdb_id)}.jpg",
             "external_ids": {"imdb_id": f"tt{int(tmdb_id):07d}"},
+            "runtime": 120,
+            "release_dates": {"results": [{"iso_3166_1": "RU", "release_dates": [{"certification": "16+"}]}]},
+            "keywords": {"keywords": [{"name": "drama"}]},
         }
 
     def tv_details(self, tmdb_id: int, language: str = "en", *, append_to_response=None) -> dict:
@@ -2075,6 +2078,28 @@ def test_details_enrichment_dedupes_before_details_requests(tmp_path, monkeypatc
     assert [(media, tmdb_id) for media, tmdb_id, _language, _appends in client.details_calls] == [(MEDIA_MOVIE, 101)]
     assert result.candidates[0]["details_enriched"] is True
     assert result.candidates[0]["imdb_id"] == "tt0000101"
+    assert result.candidates[0]["runtime"] == 120
+    assert result.candidates[0]["content_rating"] == "16+"
+    assert result.candidates[0]["keywords"] == ["drama"]
+
+
+@pytest.mark.parametrize(
+    ("media_type", "details", "expected"),
+    [
+        (MEDIA_MOVIE, {"runtime": 120, "release_dates": {"results": [{"iso_3166_1": "RU", "release_dates": [{"certification": "16+"}]}]}, "keywords": {"keywords": [{"name": "noir"}]}}, {"runtime": 120, "runtime_minutes": 120, "content_rating": "16+", "keywords": ["noir"]}),
+        (MEDIA_TV, {"episode_run_time": [45], "content_ratings": {"results": [{"iso_3166_1": "RU", "rating": "16"}]}, "keywords": {"results": [{"name": "mystery"}]}}, {"episode_run_time": [45], "content_rating": "16", "keywords": ["mystery"]}),
+    ],
+)
+def test_details_merge_persists_enrichment_contract_fields(media_type, details, expected) -> None:
+    merged = autofill._merge_details_into_discover_result(
+        {"id": 1, "title" if media_type == MEDIA_MOVIE else "name": "Discover"},
+        details,
+        media_type=media_type,
+    )
+    assert {key: merged[key] for key in expected} == expected
+    appends = autofill._details_append_to_response(autofill.DetailsEnrichmentConfig(), media_type=media_type)
+    assert "keywords" in appends
+    assert ("release_dates" if media_type == MEDIA_MOVIE else "content_ratings") in appends
 
 
 def test_details_enrichment_dedupes_raw_tmdb_id_across_pages_before_details(tmp_path, monkeypatch) -> None:

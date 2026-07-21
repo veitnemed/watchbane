@@ -1845,8 +1845,12 @@ def compute_candidate_score(
     return float(debug["final_score"])
 
 
-def _details_append_to_response(config: DetailsEnrichmentConfig) -> tuple[str, ...]:
-    appends: list[str] = []
+def _details_append_to_response(config: DetailsEnrichmentConfig, *, media_type: str) -> tuple[str, ...]:
+    appends: list[str] = ["keywords"]
+    if media_type == MEDIA_MOVIE:
+        appends.append("release_dates")
+    else:
+        appends.append("content_ratings")
     if config.fetch_external_ids:
         appends.append("external_ids")
     return tuple(appends)
@@ -1864,7 +1868,7 @@ def _fetch_details_for_result(
     tmdb_id = result.get("id")
     if str(tmdb_id or "").strip().isdigit() is False:
         return None, 0
-    append_to_response = _details_append_to_response(config)
+    append_to_response = _details_append_to_response(config, media_type=bucket.media_type)
     request_language = language or _ui_language_to_tmdb_locale(profile.ui_language)
     details_method = (
         getattr(client, "movie_details", None)
@@ -1942,6 +1946,22 @@ def _merge_details_into_discover_result(
         updated["external_ids"] = dict(external_ids)
         if external_ids.get("imdb_id"):
             updated["imdb_id"] = external_ids.get("imdb_id")
+    if media_type == MEDIA_MOVIE:
+        runtime = details.get("runtime")
+        if runtime not in (None, ""):
+            updated["runtime"] = runtime
+            updated["runtime_minutes"] = runtime
+        content_rating = tmdb_api.get_movie_content_rating(details)
+    else:
+        episode_runtime = details.get("episode_run_time")
+        if episode_runtime not in (None, "", []):
+            updated["episode_run_time"] = list(episode_runtime) if isinstance(episode_runtime, (list, tuple)) else episode_runtime
+        content_rating = tmdb_api.get_content_rating(details)
+    if content_rating not in (None, ""):
+        updated["content_rating"] = content_rating
+    keywords = tmdb_api.extract_keywords(details)
+    if keywords:
+        updated["keywords"] = keywords
     updated["_details_enriched"] = True
     return updated
 
@@ -2203,6 +2223,10 @@ def build_candidate_record_from_result(
         },
         "signals": ["onboarding_autofill"],
     }
+    for field_name in ("runtime", "runtime_minutes", "episode_run_time", "content_rating", "keywords"):
+        value = result.get(field_name)
+        if value not in (None, "", []):
+            candidate[field_name] = list(value) if field_name == "episode_run_time" and isinstance(value, tuple) else value
     candidate["quality_score"] = compute_tmdb_quality_score(candidate)
     candidate["hidden_gem_score"] = compute_tmdb_hidden_gem_score(candidate)
     candidate["final_score"] = compute_tmdb_final_score(candidate)
