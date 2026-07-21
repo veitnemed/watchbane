@@ -1,6 +1,13 @@
 from candidates.replenish.filter_intent import FilterReplenishIntent
-from candidates.replenish.filter_replenisher import replenish_candidates_for_filters
-from tests.fixtures.filter_replenish_tmdb import build_mock_tmdb_client
+import pytest
+
+from candidates.replenish.filter_replenisher import (
+    _candidate_from_discover,
+    _candidate_safety_reject_reason,
+    _merge_details_into_candidate,
+    replenish_candidates_for_filters,
+)
+from tests.fixtures.filter_replenish_tmdb import build_mock_tmdb_client, mock_details
 
 
 FORBIDDEN_DISCOVER_KEYS = {
@@ -13,6 +20,26 @@ FORBIDDEN_DISCOVER_KEYS = {
     "broad_origin_fallback",
     "without_origin_country",
 }
+
+
+@pytest.mark.parametrize("media_type", ["movie", "tv"])
+@pytest.mark.parametrize("adult", [True, False, None])
+def test_detail_merge_preserves_tri_state_adult_for_movie_and_tv(media_type: str, adult: bool | None) -> None:
+    details = mock_details(7_001, media_type=media_type)
+    details["adult"] = adult
+    discover_candidate = _candidate_from_discover(
+        details,
+        media_type=media_type,
+        bucket={"bucket_id": "adult-trace", "country": "US"},
+    )
+
+    merged = _merge_details_into_candidate(discover_candidate, details, language="ru-RU")
+
+    assert "adult" in merged
+    assert merged["adult"] is adult
+    assert _candidate_safety_reject_reason(merged) == (
+        "explicit_sexual_content" if adult is True else None
+    )
 
 
 def test_blocking_compatibility_returns_without_tmdb_calls() -> None:

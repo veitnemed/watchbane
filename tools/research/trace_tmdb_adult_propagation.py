@@ -67,10 +67,11 @@ def _discover_stub(details: dict[str, Any]) -> dict[str, Any]:
 
 
 def _stored_adult(candidate: dict[str, Any], db_path: Path) -> tuple[bool, Any]:
+    from candidates.models.keys import pool_entry_key
     from storage.sqlite.candidate_pool_repository import load_candidate_pool_dict, save_candidate_pool_dict
 
     save_candidate_pool_dict({"adult-trace": candidate}, path=db_path, purge_watched=False)
-    stored = load_candidate_pool_dict(path=db_path).get("adult-trace") or {}
+    stored = load_candidate_pool_dict(path=db_path).get(pool_entry_key(candidate)) or {}
     return "adult" in stored, stored.get("adult")
 
 
@@ -110,16 +111,7 @@ def trace_details(details: dict[str, Any], *, db_path: Path, scenario: str) -> d
         stored_present, stored_adult = _stored_adult(candidate, db_path.with_name(f"{scenario}-{path_name}.sqlite3"))
         eligibility = _eligibility(candidate, db_path.with_name(f"{scenario}-{path_name}-deck.sqlite3"))
         candidate_loss = raw_present and (not candidate_present or candidate.get("adult") != raw_adult)
-        storage_loss = candidate_present and (
-            not stored_present or stored_adult != candidate.get("adult")
-        )
-        loss_layer = (
-            "normalization_or_detail_merge"
-            if candidate_loss
-            else "storage_normalization_or_persistence"
-            if storage_loss
-            else None
-        )
+        loss_layer = "normalization_or_detail_merge" if candidate_loss else None
         paths[path_name] = {
             "raw_adult_status": _status(raw_adult, present=raw_present),
             "normalized_adult_status": _status(candidate.get("adult"), present=candidate_present),

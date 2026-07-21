@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from candidates.models.keys import candidate_state_identity_key
 from candidates.recommendation_deck_service import (
     ACTIVE_DECK_SIZE,
@@ -455,6 +457,49 @@ def test_persisted_deck_restart_skips_full_build_rerank(tmp_path) -> None:
 
     assert restored["deck_id"] == first["deck_id"]
     assert _identities(restored["active"]) == _identities(first["active"])
+
+
+@pytest.mark.parametrize("bucket", ["active", "reserve"])
+def test_persisted_deck_revalidates_blocked_card_on_restart_without_full_rebuild(tmp_path, bucket: str) -> None:
+    from storage.sqlite import action_repository, recommendation_deck_repository
+
+    db_path = tmp_path / "deck.sqlite3"
+    pool = _pool(120)
+    blocked = {**_candidate(9_999, title="Blocked stale snapshot"), "adult": True}
+    watched = {**_candidate(10_001, title="Watched state remains"), "final_score": -1000}
+    hidden = {**_candidate(10_002, title="Hidden state remains"), "final_score": -1000}
+    pool.update({"blocked": blocked, "watched": watched, "hidden": hidden})
+
+    first = _service(pool, db_path).refresh_deck({}, NOW)
+    title_state_service.mark_watched(watched, optional_user_score=2, path=db_path)
+    title_state_service.hide_candidate(hidden, path=db_path)
+    action_state_before = {
+        action: action_repository.load_action_identities(action, path=db_path)
+        for action in (action_repository.ACTION_WATCHLIST, action_repository.ACTION_HIDDEN)
+    }
+    snapshot = recommendation_deck_repository.load_current_deck(path=db_path)
+    assert snapshot is not None
+    snapshot[bucket] = [blocked, *snapshot[bucket]]
+    recommendation_deck_repository.save_current_deck(snapshot, path=db_path)
+
+    restarted = _service(pool, db_path)
+    restarted.build_deck = lambda *args, **kwargs: (_ for _ in ()).throw(
+        AssertionError("persisted safety revalidation triggered a full build")
+    )
+    restored = restarted.refresh_deck({}, NOW + timedelta(hours=1))
+    persisted = recommendation_deck_repository.load_current_deck(path=db_path)
+    action_state_after = {
+        action: action_repository.load_action_identities(action, path=db_path)
+        for action in (action_repository.ACTION_WATCHLIST, action_repository.ACTION_HIDDEN)
+    }
+
+    shown = _identities(restored["active"] + restored["reserve"])
+    assert restored["deck_id"] == first["deck_id"]
+    assert candidate_state_identity_key(blocked) not in shown
+    assert persisted is not None
+    assert candidate_state_identity_key(blocked) not in _identities(persisted["active"] + persisted["reserve"])
+    assert len(restored["active"]) == len(first["active"])
+    assert action_state_after == action_state_before
 
 
 def test_reveal_idempotence_survives_service_restart(tmp_path) -> None:

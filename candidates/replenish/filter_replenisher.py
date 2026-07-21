@@ -229,6 +229,11 @@ def _merge_details_into_candidate(
         if _has_value(value):
             updated[field_name] = deepcopy(value)
 
+    # ``adult`` is tri-state TMDb safety data: unlike optional display metadata,
+    # an explicit null is meaningful and must not be discarded by _has_value.
+    if "adult" in detail_candidate:
+        updated["adult"] = deepcopy(detail_candidate["adult"])
+
     return _finalize_candidate(updated)
 
 
