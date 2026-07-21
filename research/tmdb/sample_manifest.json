@@ -1,0 +1,8 @@
+{
+  "manifest_version": "1.0",
+  "fixtures": [
+    {"file": "fixtures/movie_watched_refresh_losses.json", "snapshot_id": "movie-watched-refresh-losses", "media_type": "movie", "sample_group": "watched_refresh_movie"},
+    {"file": "fixtures/tv_content_ratings_aggregate_credits.json", "snapshot_id": "tv-content-ratings-aggregate-credits", "media_type": "tv", "sample_group": "candidate_tv"},
+    {"file": "fixtures/localization_en_fallback.json", "snapshot_id": "localization-en-fallback", "media_type": "tv", "sample_group": "localization_fallback"}
+  ]
+}

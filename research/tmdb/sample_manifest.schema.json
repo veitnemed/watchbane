@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Watchbane TMDb snapshot sample manifest",
+  "type": "object",
+  "required": ["manifest_version", "fixtures"],
+  "properties": {
+    "manifest_version": {"const": "1.0"},
+    "fixtures": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["file", "snapshot_id", "media_type", "sample_group"],
+        "properties": {
+          "file": {"type": "string", "pattern": "^fixtures/.+\\.json$"},
+          "snapshot_id": {"type": "string", "minLength": 1},
+          "media_type": {"enum": ["movie", "tv"]},
+          "sample_group": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

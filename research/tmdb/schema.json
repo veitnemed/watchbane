@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://watchbane.local/research/tmdb/schema.json",
+  "title": "Watchbane TMDb tracing snapshot",
+  "type": "object",
+  "required": ["snapshot_schema_version", "snapshot_id", "record_id", "tmdb_id", "media_type", "sample_group", "fetched_at", "app_commit", "app_version", "request", "layers", "field_traces", "provenance", "diagnostics"],
+  "properties": {
+    "snapshot_schema_version": {"const": "1.0"},
+    "snapshot_id": {"type": "string", "minLength": 1},
+    "record_id": {"type": "string", "minLength": 1},
+    "tmdb_id": {"type": ["integer", "null"], "minimum": 1},
+    "media_type": {"enum": ["movie", "tv"]},
+    "sample_group": {"type": "string", "minLength": 1},
+    "fetched_at": {"type": "string", "format": "date-time"},
+    "app_commit": {"type": "string", "minLength": 1},
+    "app_version": {"type": "string", "minLength": 1},
+    "request": {
+      "type": "object",
+      "required": ["endpoint", "append_to_response", "request_language", "request_region", "original_language"],
+      "properties": {
+        "endpoint": {"type": "string", "minLength": 1},
+        "append_to_response": {"type": "array", "items": {"type": "string"}},
+        "request_language": {"type": ["string", "null"]},
+        "request_region": {"type": ["string", "null"]},
+        "original_language": {"type": ["string", "null"]}
+      },
+      "additionalProperties": true
+    },
+    "layers": {
+      "type": "object",
+      "required": ["raw_api", "normalized", "stored", "ui_projection"],
+      "properties": {
+        "raw_api": {"type": "object"},
+        "normalized": {"type": "object"},
+        "stored": {
+          "type": "object",
+          "required": ["sql_columns", "payload_fields", "meta_fields"],
+          "properties": {
+            "sql_columns": {"type": "object"},
+            "payload_fields": {"type": "object"},
+            "meta_fields": {"type": "object"}
+          },
+          "additionalProperties": true
+        },
+        "ui_projection": {"type": "object"}
+      },
+      "additionalProperties": false
+    },
+    "field_traces": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/fieldTrace"}
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["title", "overview", "poster", "certification", "providers"],
+      "properties": {
+        "title": {"$ref": "#/$defs/selection"},
+        "overview": {"$ref": "#/$defs/selection"},
+        "poster": {"$ref": "#/$defs/selection"},
+        "certification": {"$ref": "#/$defs/selection"},
+        "providers": {"$ref": "#/$defs/selection"}
+      },
+      "additionalProperties": true
+    },
+    "diagnostics": {
+      "type": "object",
+      "required": ["adult", "certification", "countries", "tv_runtime", "providers", "credits"],
+      "properties": {
+        "adult": {
+          "type": "object",
+          "required": ["raw_adult", "normalized_adult", "stored_adult", "safety_adult_signal_used", "adult_lost_in_normalization"],
+          "properties": {
+            "raw_adult": {"type": ["boolean", "null"]},
+            "normalized_adult": {"type": ["boolean", "null"]},
+            "stored_adult": {"type": ["boolean", "null"]},
+            "safety_adult_signal_used": {"type": "boolean"},
+            "adult_lost_in_normalization": {"type": "boolean"}
+          }
+        },
+        "certification": {
+          "type": "object",
+          "required": ["available_ratings", "selected_rating", "selected_country", "selection_reason"],
+          "properties": {
+            "available_ratings": {"type": "array", "items": {"type": "object", "required": ["country", "rating"], "properties": {"country": {"type": "string"}, "rating": {"type": "string"}}}},
+            "selected_rating": {"type": ["string", "null"]},
+            "selected_country": {"type": ["string", "null"]},
+            "selection_reason": {"type": "string"}
+          }
+        },
+        "countries": {
+          "type": "object",
+          "required": ["origin_country_codes", "production_country_codes", "normalized_country_codes"],
+          "properties": {
+            "origin_country_codes": {"$ref": "#/$defs/stringArray"},
+            "production_country_codes": {"$ref": "#/$defs/stringArray"},
+            "normalized_country_codes": {"$ref": "#/$defs/stringArray"}
+          }
+        },
+        "tv_runtime": {
+          "type": "object",
+          "required": ["episode_run_time_raw", "episode_run_time_selected", "selection_strategy"],
+          "properties": {
+            "episode_run_time_raw": {"type": "array", "items": {"type": "number"}},
+            "episode_run_time_selected": {"type": ["number", "null"]},
+            "selection_strategy": {"enum": ["first_value", "none", "not_applicable"]}
+          }
+        },
+        "providers": {
+          "type": "object",
+          "required": ["provider_region", "provider_checked_at", "providers"],
+          "properties": {
+            "provider_region": {"type": ["string", "null"]},
+            "provider_checked_at": {"type": ["string", "null"], "format": "date-time"},
+            "providers": {"type": "array", "items": {"type": "object", "required": ["provider_type", "provider_names"], "properties": {"provider_type": {"enum": ["flatrate", "free", "ads", "rent", "buy"]}, "provider_names": {"$ref": "#/$defs/stringArray"}}}}
+          }
+        },
+        "credits": {
+          "type": "object",
+          "required": ["raw_credits_type", "actors_extracted", "crew_extracted", "extraction_strategy"],
+          "properties": {
+            "raw_credits_type": {"enum": ["credits", "aggregate_credits", "not_requested"]},
+            "actors_extracted": {"$ref": "#/$defs/stringArray"},
+            "crew_extracted": {"$ref": "#/$defs/stringArray"},
+            "extraction_strategy": {"type": "string"}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "state": {"enum": ["present", "null", "empty", "not_requested", "not_applicable", "request_failed", "lost_in_normalization", "lost_in_storage", "not_exposed_to_ui", "not_available_in_local_snapshot"]},
+    "layerValue": {"type": "object", "required": ["state", "value"], "properties": {"state": {"$ref": "#/$defs/state"}, "value": {}, "source_field": {"type": ["string", "null"]}}, "additionalProperties": true},
+    "fieldTrace": {"type": "object", "required": ["raw_api", "normalized", "stored", "ui_projection"], "properties": {"raw_api": {"$ref": "#/$defs/layerValue"}, "normalized": {"$ref": "#/$defs/layerValue"}, "stored": {"$ref": "#/$defs/layerValue"}, "ui_projection": {"$ref": "#/$defs/layerValue"}}, "additionalProperties": false},
+    "selection": {"type": "object", "required": ["selected_value", "source_field", "source_language", "source_region", "fallback_level", "selection_reason"], "properties": {"selected_value": {"type": ["string", "null"]}, "source_field": {"type": ["string", "null"]}, "source_language": {"type": ["string", "null"]}, "source_region": {"type": ["string", "null"]}, "fallback_level": {"enum": ["requested", "original", "english", "first_available", "none"]}, "selection_reason": {"type": "string"}}},
+    "stringArray": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

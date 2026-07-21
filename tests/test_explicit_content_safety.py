@@ -14,6 +14,7 @@ from candidates.safety.explicit_content import (
     evaluate_explicit_sexual_content,
     is_blocked_explicit_sexual_content,
 )
+from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate
 from candidates import title_state_service
 
 
@@ -120,6 +121,33 @@ def test_adult_flag_blocks_alone() -> None:
     decision = evaluate_explicit_sexual_content(candidate)
     assert decision.blocked is True
     assert decision.reason_code == REASON_ADULT_FLAG
+
+
+def test_normalized_tmdb_adult_flag_is_excluded_from_deck(tmp_path) -> None:
+    raw_details = {
+        "id": 985_001,
+        "adult": True,
+        "name": "Adult source title",
+        "original_name": "Adult source title",
+        "first_air_date": "2020-01-01",
+        "genres": [{"id": 18, "name": "Drama"}],
+        "origin_country": ["US"],
+        "production_countries": [],
+        "original_language": "en",
+        "vote_average": 9.0,
+        "vote_count": 10_000,
+        "popularity": 100.0,
+        "poster_path": "/adult.jpg",
+    }
+    normalized = prepare_tmdb_candidate(raw_details)
+    pool = {f"safe-{i}": _safe_base(i) for i in range(15)}
+    pool["adult-source"] = {**normalized, "final_score": 100}
+
+    deck = _service(pool, tmp_path / "deck.sqlite3").build_deck({}, NOW)
+
+    assert normalized["adult"] is True
+    assert 985_001 not in _deck_tmdb_ids(deck)
+    assert int(deck["excluded"]["explicit_content"]) >= 1
 
 
 def test_explicit_content_rating_blocks() -> None:

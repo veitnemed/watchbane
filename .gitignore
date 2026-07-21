@@ -50,6 +50,7 @@ config/rating_comparison_last_snapshot.json
 data/rating_order_drafts/*.json
 /web/data/*.json
 /reports/
+/evidence/
 _safety_audit/
 
 # Local UI screenshot smoke outputs

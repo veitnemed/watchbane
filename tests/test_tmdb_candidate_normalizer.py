@@ -6,6 +6,7 @@ from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate, prepare_t
 def _raw_details(**overrides) -> dict:
     payload = {
         "id": 101,
+        "adult": True,
         "name": "Метод",
         "original_name": "Metod",
         "first_air_date": "2015-10-18",
@@ -101,6 +102,7 @@ def test_ru_show_with_20_tmdb_votes_is_complete() -> None:
     assert candidate["is_complete"] is True
     assert candidate["missing_fields"] == []
     assert candidate["tmdb_id"] == 101
+    assert candidate["adult"] is True
     assert candidate["title"] == "Метод"
     assert candidate["year"] == 2015
     assert candidate["tmdb_score"] == 7.4
@@ -181,6 +183,7 @@ def test_movie_candidate_maps_release_runtime_and_media_type() -> None:
     candidate = prepare_tmdb_movie_candidate(
         {
             "id": 202,
+            "adult": False,
             "title": "Watchmen",
             "original_title": "Watchmen",
             "release_date": "2009-03-06",
@@ -215,6 +218,7 @@ def test_movie_candidate_maps_release_runtime_and_media_type() -> None:
 
     assert candidate["media_type"] == "movie"
     assert candidate["tmdb_id"] == 202
+    assert candidate["adult"] is False
     assert candidate["title"] == "Watchmen"
     assert candidate["year"] == 2009
     assert candidate["release_date"] == "2009-03-06"

@@ -1,0 +1,38 @@
+{
+  "snapshot_schema_version": "1.0",
+  "snapshot_id": "movie-watched-refresh-losses",
+  "record_id": "watched:movie:900101",
+  "tmdb_id": 900101,
+  "media_type": "movie",
+  "sample_group": "watched_refresh_movie",
+  "fetched_at": "2026-07-21T00:00:00Z",
+  "app_commit": "fixture",
+  "app_version": "fixture",
+  "request": {"endpoint": "/movie/900101", "append_to_response": ["release_dates", "credits", "keywords", "watch/providers", "images", "translations", "external_ids"], "request_language": "ru-RU", "request_region": "RU", "original_language": "en"},
+  "layers": {
+    "raw_api": {"adult": false, "title": "Fixture movie", "production_countries": [{"iso_3166_1": "US"}], "release_dates": {"results": [{"iso_3166_1": "US", "release_dates": [{"certification": "R"}]}]}, "credits": {"cast": [{"name": "Actor One"}], "crew": [{"name": "Director One"}]}, "watch/providers": {"results": {"RU": {"flatrate": [{"provider_name": "Fixture Stream"}]}}}},
+    "normalized": {"adult": false, "title": "Fixture movie", "country_codes": ["US"], "content_rating": null, "actors_top": [], "crew_top": []},
+    "stored": {"sql_columns": {"tmdb_id": 900101, "media_type": "movie"}, "payload_fields": {"adult": false, "title": "Fixture movie"}, "meta_fields": {"content_rating": null, "actors_top": [], "crew_top": []}},
+    "ui_projection": {"title": "Fixture movie", "content_rating": null, "watch_providers": ["Fixture Stream"]}
+  },
+  "field_traces": {
+    "adult": {"raw_api": {"state": "present", "value": false, "source_field": "adult"}, "normalized": {"state": "present", "value": false, "source_field": "adult"}, "stored": {"state": "present", "value": false, "source_field": "payload_json.adult"}, "ui_projection": {"state": "not_exposed_to_ui", "value": null, "source_field": null}},
+    "certification": {"raw_api": {"state": "present", "value": "R", "source_field": "release_dates.results"}, "normalized": {"state": "lost_in_normalization", "value": null, "source_field": null}, "stored": {"state": "lost_in_normalization", "value": null, "source_field": null}, "ui_projection": {"state": "not_exposed_to_ui", "value": null, "source_field": null}},
+    "credits": {"raw_api": {"state": "present", "value": "credits", "source_field": "credits"}, "normalized": {"state": "lost_in_normalization", "value": [], "source_field": "aggregate_credits"}, "stored": {"state": "lost_in_normalization", "value": [], "source_field": "meta_json.actors_top"}, "ui_projection": {"state": "not_exposed_to_ui", "value": null, "source_field": null}}
+  },
+  "provenance": {
+    "title": {"selected_value": "Fixture movie", "source_field": "title", "source_language": "ru", "source_region": "RU", "fallback_level": "requested", "selection_reason": "base detail title"},
+    "overview": {"selected_value": "Fixture overview", "source_field": "overview", "source_language": "ru", "source_region": "RU", "fallback_level": "requested", "selection_reason": "base detail overview"},
+    "poster": {"selected_value": "/fixture-movie.jpg", "source_field": "poster_path", "source_language": null, "source_region": null, "fallback_level": "requested", "selection_reason": "base poster path"},
+    "certification": {"selected_value": null, "source_field": null, "source_language": null, "source_region": null, "fallback_level": "none", "selection_reason": "watched refresh currently applies TV extractor to movie release_dates"},
+    "providers": {"selected_value": "Fixture Stream", "source_field": "watch/providers.results.RU.flatrate", "source_language": null, "source_region": "RU", "fallback_level": "requested", "selection_reason": "RU flatrate provider names"}
+  },
+  "diagnostics": {
+    "adult": {"raw_adult": false, "normalized_adult": false, "stored_adult": false, "safety_adult_signal_used": true, "adult_lost_in_normalization": false},
+    "certification": {"available_ratings": [{"country": "US", "rating": "R"}], "selected_rating": null, "selected_country": null, "selection_reason": "known watched-refresh movie loss"},
+    "countries": {"origin_country_codes": [], "production_country_codes": ["US"], "normalized_country_codes": ["US"]},
+    "tv_runtime": {"episode_run_time_raw": [], "episode_run_time_selected": null, "selection_strategy": "not_applicable"},
+    "providers": {"provider_region": "RU", "provider_checked_at": "2026-07-21T00:00:00Z", "providers": [{"provider_type": "flatrate", "provider_names": ["Fixture Stream"]}]},
+    "credits": {"raw_credits_type": "credits", "actors_extracted": [], "crew_extracted": [], "extraction_strategy": "known loss: watched refresh calls aggregate-credit extractor for movie credits"}
+  }
+}

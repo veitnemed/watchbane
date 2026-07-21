@@ -1,0 +1,39 @@
+{
+  "snapshot_schema_version": "1.0",
+  "snapshot_id": "localization-en-fallback",
+  "record_id": "candidate:tv:900103",
+  "tmdb_id": 900103,
+  "media_type": "tv",
+  "sample_group": "localization_fallback",
+  "fetched_at": "2026-07-21T00:00:00Z",
+  "app_commit": "fixture",
+  "app_version": "fixture",
+  "request": {"endpoint": "/tv/900103", "append_to_response": ["content_ratings", "aggregate_credits", "keywords", "watch/providers", "images", "translations", "external_ids"], "request_language": "ru-RU", "request_region": "RU", "original_language": "en"},
+  "layers": {
+    "raw_api": {"adult": false, "name": "", "overview": "", "translations": {"translations": [{"iso_639_1": "en", "iso_3166_1": "US", "data": {"name": "English fallback title", "overview": "English fallback overview"}}]}, "origin_country": ["GB"], "production_countries": [{"iso_3166_1": "GB"}], "episode_run_time": [45], "content_ratings": {"results": []}, "aggregate_credits": {"cast": [], "crew": []}, "watch/providers": {"results": {}}},
+    "normalized": {"adult": false, "title": "English fallback title", "overview": "English fallback overview", "country_codes": ["GB"], "episode_run_time": [45], "content_rating": null},
+    "stored": {"sql_columns": {"tmdb_id": 900103, "media_type": "tv"}, "payload_fields": {"adult": false, "title": "English fallback title", "overview": "English fallback overview"}, "meta_fields": {"content_rating": null}},
+    "ui_projection": {"title": "English fallback title", "overview": "English fallback overview", "content_rating": null}
+  },
+  "field_traces": {
+    "adult": {"raw_api": {"state": "present", "value": false, "source_field": "adult"}, "normalized": {"state": "present", "value": false, "source_field": "adult"}, "stored": {"state": "present", "value": false, "source_field": "payload_json.adult"}, "ui_projection": {"state": "not_exposed_to_ui", "value": null, "source_field": null}},
+    "title": {"raw_api": {"state": "empty", "value": "", "source_field": "name"}, "normalized": {"state": "present", "value": "English fallback title", "source_field": "translations.translations[en].data.name"}, "stored": {"state": "present", "value": "English fallback title", "source_field": "payload_json.title"}, "ui_projection": {"state": "present", "value": "English fallback title", "source_field": "detail.title"}},
+    "overview": {"raw_api": {"state": "empty", "value": "", "source_field": "overview"}, "normalized": {"state": "present", "value": "English fallback overview", "source_field": "translations.translations[en].data.overview"}, "stored": {"state": "present", "value": "English fallback overview", "source_field": "payload_json.overview"}, "ui_projection": {"state": "present", "value": "English fallback overview", "source_field": "detail.overview"}},
+    "certification": {"raw_api": {"state": "empty", "value": [], "source_field": "content_ratings.results"}, "normalized": {"state": "null", "value": null, "source_field": "content_rating"}, "stored": {"state": "null", "value": null, "source_field": "meta_json.content_rating"}, "ui_projection": {"state": "not_exposed_to_ui", "value": null, "source_field": null}}
+  },
+  "provenance": {
+    "title": {"selected_value": "English fallback title", "source_field": "translations.translations[en].data.name", "source_language": "en", "source_region": "US", "fallback_level": "english", "selection_reason": "requested RU title empty; English translation available"},
+    "overview": {"selected_value": "English fallback overview", "source_field": "translations.translations[en].data.overview", "source_language": "en", "source_region": "US", "fallback_level": "english", "selection_reason": "requested RU overview empty; English translation available"},
+    "poster": {"selected_value": null, "source_field": null, "source_language": null, "source_region": null, "fallback_level": "none", "selection_reason": "fixture has no poster"},
+    "certification": {"selected_value": null, "source_field": null, "source_language": null, "source_region": null, "fallback_level": "none", "selection_reason": "no rating available"},
+    "providers": {"selected_value": null, "source_field": null, "source_language": null, "source_region": "RU", "fallback_level": "none", "selection_reason": "no RU providers available"}
+  },
+  "diagnostics": {
+    "adult": {"raw_adult": false, "normalized_adult": false, "stored_adult": false, "safety_adult_signal_used": true, "adult_lost_in_normalization": false},
+    "certification": {"available_ratings": [], "selected_rating": null, "selected_country": null, "selection_reason": "empty content ratings"},
+    "countries": {"origin_country_codes": ["GB"], "production_country_codes": ["GB"], "normalized_country_codes": ["GB"]},
+    "tv_runtime": {"episode_run_time_raw": [45], "episode_run_time_selected": 45, "selection_strategy": "first_value"},
+    "providers": {"provider_region": "RU", "provider_checked_at": "2026-07-21T00:00:00Z", "providers": []},
+    "credits": {"raw_credits_type": "aggregate_credits", "actors_extracted": [], "crew_extracted": [], "extraction_strategy": "aggregate credits top people"}
+  }
+}

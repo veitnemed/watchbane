@@ -1,0 +1,39 @@
+{
+  "snapshot_schema_version": "1.0",
+  "snapshot_id": "tv-content-ratings-aggregate-credits",
+  "record_id": "candidate:tv:900102",
+  "tmdb_id": 900102,
+  "media_type": "tv",
+  "sample_group": "candidate_tv",
+  "fetched_at": "2026-07-21T00:00:00Z",
+  "app_commit": "fixture",
+  "app_version": "fixture",
+  "request": {"endpoint": "/tv/900102", "append_to_response": ["content_ratings", "aggregate_credits", "keywords", "watch/providers", "images", "translations", "external_ids"], "request_language": "ru-RU", "request_region": "RU", "original_language": "ja"},
+  "layers": {
+    "raw_api": {"adult": false, "name": "Fixture TV", "origin_country": ["JP"], "production_countries": [{"iso_3166_1": "JP"}], "episode_run_time": [24, 48], "content_ratings": {"results": [{"iso_3166_1": "RU", "rating": "16+"}]}, "aggregate_credits": {"cast": [{"name": "Actor Two"}], "crew": [{"name": "Director Two"}]}, "watch/providers": {"results": {"RU": {"flatrate": [{"provider_name": "Fixture Anime"}]}}}},
+    "normalized": {"adult": false, "title": "Fixture TV", "country_codes": ["JP"], "episode_run_time": [24, 48], "content_rating": "16+", "actors_top": ["Actor Two"], "crew_top": ["Director Two"]},
+    "stored": {"sql_columns": {"tmdb_id": 900102, "media_type": "tv"}, "payload_fields": {"adult": false, "episode_run_time": [24, 48]}, "meta_fields": {"content_rating": "16+", "actors_top": ["Actor Two"], "crew_top": ["Director Two"]}},
+    "ui_projection": {"title": "Fixture TV", "content_rating": "16+", "watch_providers": ["Fixture Anime"]}
+  },
+  "field_traces": {
+    "adult": {"raw_api": {"state": "present", "value": false, "source_field": "adult"}, "normalized": {"state": "present", "value": false, "source_field": "adult"}, "stored": {"state": "present", "value": false, "source_field": "payload_json.adult"}, "ui_projection": {"state": "not_exposed_to_ui", "value": null, "source_field": null}},
+    "certification": {"raw_api": {"state": "present", "value": "16+", "source_field": "content_ratings.results"}, "normalized": {"state": "present", "value": "16+", "source_field": "content_rating"}, "stored": {"state": "present", "value": "16+", "source_field": "meta_json.content_rating"}, "ui_projection": {"state": "present", "value": "16+", "source_field": "detail.content_rating"}},
+    "runtime": {"raw_api": {"state": "present", "value": [24, 48], "source_field": "episode_run_time"}, "normalized": {"state": "present", "value": [24, 48], "source_field": "episode_run_time"}, "stored": {"state": "present", "value": [24, 48], "source_field": "payload_json.episode_run_time"}, "ui_projection": {"state": "not_exposed_to_ui", "value": null, "source_field": null}},
+    "credits": {"raw_api": {"state": "present", "value": "aggregate_credits", "source_field": "aggregate_credits"}, "normalized": {"state": "present", "value": ["Actor Two"], "source_field": "actors_top"}, "stored": {"state": "present", "value": ["Actor Two"], "source_field": "meta_json.actors_top"}, "ui_projection": {"state": "not_exposed_to_ui", "value": null, "source_field": null}}
+  },
+  "provenance": {
+    "title": {"selected_value": "Fixture TV", "source_field": "name", "source_language": "ru", "source_region": "RU", "fallback_level": "requested", "selection_reason": "base detail name"},
+    "overview": {"selected_value": "Fixture TV overview", "source_field": "overview", "source_language": "ru", "source_region": "RU", "fallback_level": "requested", "selection_reason": "base detail overview"},
+    "poster": {"selected_value": "/fixture-tv.jpg", "source_field": "poster_path", "source_language": null, "source_region": null, "fallback_level": "requested", "selection_reason": "base poster path"},
+    "certification": {"selected_value": "16+", "source_field": "content_ratings.results", "source_language": null, "source_region": "RU", "fallback_level": "requested", "selection_reason": "RU rating selected"},
+    "providers": {"selected_value": "Fixture Anime", "source_field": "watch/providers.results.RU.flatrate", "source_language": null, "source_region": "RU", "fallback_level": "requested", "selection_reason": "RU flatrate provider names"}
+  },
+  "diagnostics": {
+    "adult": {"raw_adult": false, "normalized_adult": false, "stored_adult": false, "safety_adult_signal_used": true, "adult_lost_in_normalization": false},
+    "certification": {"available_ratings": [{"country": "RU", "rating": "16+"}], "selected_rating": "16+", "selected_country": "RU", "selection_reason": "RU first"},
+    "countries": {"origin_country_codes": ["JP"], "production_country_codes": ["JP"], "normalized_country_codes": ["JP"]},
+    "tv_runtime": {"episode_run_time_raw": [24, 48], "episode_run_time_selected": 24, "selection_strategy": "first_value"},
+    "providers": {"provider_region": "RU", "provider_checked_at": "2026-07-21T00:00:00Z", "providers": [{"provider_type": "flatrate", "provider_names": ["Fixture Anime"]}]},
+    "credits": {"raw_credits_type": "aggregate_credits", "actors_extracted": ["Actor Two"], "crew_extracted": ["Director Two"], "extraction_strategy": "aggregate credits top people"}
+  }
+}
