@@ -1,11 +1,11 @@
 ---
-description: Scope Gate — STOP before code; refuse product dilution
+description: Autonomous scope note; refuse product dilution without blocking safe work
 alwaysApply: true
 ---
 
-# Scope Gate (Watchbane)
+# Autonomous Scope (Watchbane)
 
-Перед правками **кода продукта** обязателен gate. Без явного «ок» / «делай» + roadmap ID — **ноль diff**.
+Перед правками **кода продукта** агент определяет roadmap ID и публикует scope note. Отдельное «ок» / «делай» не требуется: безопасную ограниченную работу в рамках ID нужно начинать автоматически.
 
 Выдать блок:
 
@@ -16,16 +16,18 @@ alwaysApply: true
 Roadmap ID: C?-?? | НЕТ
 Риски размытия: …
 Предложение: выполнить / отклонить / сузить
-STOP: код не пишу без «ок» на этот ID
+Режим: начинаю выполнение автоматически
 ```
 
 Классификация:
 
-- Есть ID C0–C4 → только этот ID после «ок»
-- Баг happy path → предложить ID, ждать «ок»
+- Есть ID C0–C4 → зафиксировать scope и выполнять только этот ID
+- Баг happy path → определить ближайший ID и выполнять
 - Новая фича / A / B / V0 «Сегодня» / web / LLM / like-dislike → отклонить + риски, код не начинать
 - «Заодно» polish/refactor → отклонить или отдельный ID
 
-Отказ (кратко): запрос размывает продукт; могу отклонить / backlog / сузить до ID; код не начинаю.
+Подтверждение всё ещё нужно для `git commit` / `push`, удаления пользовательских данных, Factory Reset, публикации или иных необратимых внешних действий.
+
+Отказ (кратко): запрос размывает продукт; могу отклонить / backlog / сузить до ID; без направления не меняю scope продукта.
 
 Канон: `docs/contracts/PRODUCT_ROADMAP_CONTRACT.md`, детали: корневой `AGENTS.md` (Scope Gate).
