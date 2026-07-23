@@ -110,7 +110,21 @@ def _genre_keys(genres: list[str]) -> list[str]:
     return keys
 
 
-def _meta_fields_from_details(raw_details: dict[str, Any]) -> dict[str, Any]:
+def _people_from_details(raw_details: dict[str, Any], *, media_type: str) -> tuple[list, list]:
+    """Movie uses regular credits; TV uses aggregate_credits."""
+    if media_type == MEDIA_TYPE_MOVIE:
+        credits = raw_details.get("credits") or {}
+        if isinstance(credits, dict) is False:
+            credits = {}
+        return (
+            tmdb_api.normalize_people(credits.get("cast"), 8, "character"),
+            tmdb_api.normalize_people(credits.get("crew"), 5, "job"),
+        )
+    aggregate_credits = tmdb_api.extract_aggregate_credits_top(raw_details, limit=10)
+    return aggregate_credits["actors_top"], aggregate_credits["crew_top"]
+
+
+def _meta_fields_from_details(raw_details: dict[str, Any], *, media_type: str) -> dict[str, Any]:
     poster_path = tmdb_api.extract_best_poster_path(raw_details)
     overview = tmdb_api.extract_best_overview(raw_details)
     external_ids = tmdb_api.extract_external_ids(raw_details)
@@ -118,7 +132,12 @@ def _meta_fields_from_details(raw_details: dict[str, Any]) -> dict[str, Any]:
     origin_country = _unique_non_empty(raw_details.get("origin_country") or [])
     production_country_names = tmdb_api.names_from_items(raw_details.get("production_countries"))
     production_country_codes = tmdb_api.country_codes_from_items(raw_details.get("production_countries"))
-    aggregate_credits = tmdb_api.extract_aggregate_credits_top(raw_details, limit=10)
+    actors_top, crew_top = _people_from_details(raw_details, media_type=media_type)
+    content_rating = (
+        tmdb_api.get_movie_content_rating(raw_details)
+        if media_type == MEDIA_TYPE_MOVIE
+        else tmdb_api.get_content_rating(raw_details)
+    )
     fields: dict[str, Any] = {
         "source": "tmdb",
         "tmdb_id": raw_details.get("id"),
@@ -145,16 +164,19 @@ def _meta_fields_from_details(raw_details: dict[str, Any]) -> dict[str, Any]:
         "genre_keys": _genre_keys(genres),
         "networks": tmdb_api.names_from_items(raw_details.get("networks")),
         "production_companies": tmdb_api.names_from_items(raw_details.get("production_companies")),
-        "content_rating": tmdb_api.get_content_rating(raw_details),
+        "content_rating": content_rating,
         "watch_providers": tmdb_api.get_watch_providers(raw_details),
-        "actors_top": aggregate_credits["actors_top"],
-        "crew_top": aggregate_credits["crew_top"],
+        "actors_top": actors_top,
+        "crew_top": crew_top,
         "keywords": tmdb_api.extract_keywords(raw_details),
     }
+    # adult is tri-state TMDb safety data: explicit null must survive filtering.
+    if "adult" in raw_details:
+        fields["adult"] = raw_details.get("adult")
     return {
         key: value
         for key, value in fields.items()
-        if value not in (None, "", [])
+        if key == "adult" or value not in (None, "", [])
     }
 
 
@@ -183,6 +205,7 @@ _DETAIL_META_SOURCES = {
     "aggregate_credits": ("actors_top", "crew_top"),
     "credits": ("actors_top", "crew_top"),
     "keywords": ("keywords",),
+    "adult": ("adult",),
 }
 
 
@@ -276,7 +299,8 @@ def _apply_details_to_record(
     updated_meta.setdefault(scheme.MAIN_INFO, main_info)
     updated_meta[scheme.RAW_SCORES] = dict(new_raw_scores)
     _clear_explicitly_refreshed_meta(updated_meta, raw_details)
-    for key, value in _meta_fields_from_details(raw_details).items():
+    media_type = _watched_media_type(updated_movie)
+    for key, value in _meta_fields_from_details(raw_details, media_type=media_type).items():
         updated_meta[key] = value
     updated_meta.update(_tmdb_score_fields_for_meta(updated_meta, new_raw_scores))
 

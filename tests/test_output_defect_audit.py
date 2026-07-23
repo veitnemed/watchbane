@@ -46,7 +46,7 @@ def test_deck_audit_flags_explicit_description_and_hentai_keyword() -> None:
 
 
 def test_all_current_onboarding_presets_have_safe_nonempty_fetch_plans() -> None:
-    report = build_output_defect_audit([])
+    report = build_output_defect_audit()
 
     assert report["passed"] is True
     assert len(report["preset_contracts"]) == 8
@@ -56,3 +56,5 @@ def test_all_current_onboarding_presets_have_safe_nonempty_fetch_plans() -> None
         for preset in report["preset_contracts"]
         for bucket in preset["buckets"]
     )
+    assert report["deck_output"]["passed"] is True
+    assert report["deck_output"]["cards"] == []

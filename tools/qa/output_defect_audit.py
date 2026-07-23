@@ -1,4 +1,4 @@
-"""QA-only checks for onboarding preset output contracts and synthetic deck metadata."""
+"""QA-only checks for onboarding preset output contracts and deck card metadata."""
 
 from __future__ import annotations
 
@@ -22,6 +22,8 @@ SEXUAL_TEXT_MARKERS = (
     "explicit sex",
     "явный секс",
 )
+
+
 def _has_readable_character(value: str) -> bool:
     return any(character.isalnum() for character in value)
 
@@ -130,24 +132,18 @@ def _preset_entry(preset: TastePreset) -> dict[str, Any]:
     }
 
 
-def build_output_defect_audit(profile_reports: Iterable[dict[str, Any]]) -> dict[str, Any]:
+def build_output_defect_audit(deck_cards: Iterable[dict[str, Any]] | None = None) -> dict[str, Any]:
     """Build a deterministic QA report. It does not fetch or rerank candidates."""
     presets = [_preset_entry(preset) for _, preset in sorted(PRESETS.items())]
-    deck_reports = [
-        {
-            "profile_id": report.get("profile_id"),
-            "deck_output": audit_deck_cards(report.get("top_10") or []),
-        }
-        for report in profile_reports
-    ]
+    cards = list(deck_cards or [])
+    deck_output = audit_deck_cards(cards) if cards else {"cards": [], "passed": True, "defect_count": 0}
     return {
         "scope": {
             "onboarding_presets": "All current PRESETS are checked through the existing fetch/discover builders; no network call is made.",
-            "deck_output": "Synthetic top-10 reports are checked for visible metadata and safety signals using the existing explicit-content gate.",
+            "deck_output": "Optional in-memory cards are checked for visible metadata and safety signals using the existing explicit-content gate.",
             "limitation": "This audit does not prove live TMDb availability or subjective usefulness, and it does not alter product ranking, filtering, safety, or UI.",
         },
         "preset_contracts": presets,
-        "synthetic_decks": deck_reports,
-        "passed": all(item["passed"] for item in presets)
-        and all(item["deck_output"]["passed"] for item in deck_reports),
+        "deck_output": deck_output,
+        "passed": all(item["passed"] for item in presets) and bool(deck_output["passed"]),
     }

@@ -1,5 +1,7 @@
 from copy import deepcopy
 
+import pytest
+
 from tools.migrations import migrate_watched_raw_scores_tmdb_only as migrate_script
 from tools.tmdb import refresh_watched_from_tmdb as refresh_script
 
@@ -113,6 +115,118 @@ def test_refresh_watched_by_existing_tmdb_id_updates_meta_and_raw_scores() -> No
     assert meta_obj["final_score"] > 0
     assert meta_obj["personal_notes"] == "keep me"
     assert movie["main_info"]["user_score"] == 8.0
+
+
+def _movie_details(tmdb_id: int = 501, title: str = "Film", *, adult) -> dict:
+    """Movie-shaped Details: release_dates + credits, no TV appends."""
+    return {
+        "id": tmdb_id,
+        "adult": adult,
+        "title": title,
+        "original_title": title,
+        "release_date": "2024-02-03",
+        "runtime": 132,
+        "vote_average": 8.2,
+        "vote_count": 1200,
+        "popularity": 40.0,
+        "overview": "Movie overview",
+        "poster_path": "/movie.jpg",
+        "external_ids": {"imdb_id": "tt501"},
+        "origin_country": ["US"],
+        "original_language": "en",
+        "production_countries": [{"iso_3166_1": "US", "name": "United States of America"}],
+        "genres": [{"id": 18, "name": "Drama"}],
+        "production_companies": [{"name": "Studio"}],
+        "release_dates": {
+            "results": [
+                {
+                    "iso_3166_1": "RU",
+                    "release_dates": [{"certification": "16+", "type": 3}],
+                }
+            ]
+        },
+        "watch/providers": {"results": {"RU": {"flatrate": [{"provider_name": "Kinopoisk"}]}}},
+        "credits": {
+            "cast": [{"id": 11, "name": "Lead Actor", "character": "Hero"}],
+            "crew": [{"id": 12, "name": "Director", "job": "Director"}],
+        },
+        "keywords": {"keywords": [{"name": "heist"}]},
+    }
+
+
+@pytest.mark.parametrize("adult", [True, False, None])
+def test_refresh_watched_movie_preserves_adult_certification_and_credits(adult) -> None:
+    dataset = {"Film": _movie("Film", 2024, media_type="movie")}
+    meta = {"Film": {"tmdb_id": 501, "personal_notes": "keep", "adult": True, "content_rating": "old"}}
+
+    updated_dataset, updated_meta, report = refresh_script.refresh_watched(
+        dataset,
+        meta,
+        details_func=lambda tmdb_id, **kwargs: _movie_details(tmdb_id, adult=adult),
+    )
+
+    meta_obj = updated_meta["Film"]
+    assert report["refreshed_by_tmdb_id"] == 1
+    assert "adult" in meta_obj
+    assert meta_obj["adult"] is adult
+    assert meta_obj["content_rating"] == "16+"
+    assert meta_obj["actors_top"] == [{"name": "Lead Actor", "role": "Hero"}]
+    assert meta_obj["crew_top"] == [{"name": "Director", "role": "Director"}]
+    assert meta_obj["runtime"] == 132
+    assert meta_obj["personal_notes"] == "keep"
+    assert updated_dataset["Film"]["main_info"]["user_score"] == 8.0
+
+
+def test_refresh_watched_movie_ignores_tv_shaped_rating_and_aggregate_credits() -> None:
+    """Movie path must not treat content_ratings / aggregate_credits as primary sources."""
+    dataset = {"Film": _movie("Film", 2024, media_type="movie")}
+    meta = {"Film": {"tmdb_id": 501}}
+    details = _movie_details(501, adult=False)
+    details["content_ratings"] = {"results": [{"iso_3166_1": "US", "rating": "TV-MA"}]}
+    details["aggregate_credits"] = {
+        "cast": [{"id": 99, "name": "TV Actor", "roles": [{"character": "Extra", "episode_count": 1}]}],
+        "crew": [{"id": 98, "name": "TV Creator", "jobs": [{"job": "Creator", "episode_count": 1}]}],
+    }
+
+    _updated_dataset, updated_meta, report = refresh_script.refresh_watched(
+        dataset,
+        meta,
+        details_func=lambda tmdb_id, **kwargs: details,
+    )
+
+    meta_obj = updated_meta["Film"]
+    assert report["refreshed_by_tmdb_id"] == 1
+    assert meta_obj["content_rating"] == "16+"
+    assert meta_obj["actors_top"][0]["name"] == "Lead Actor"
+    assert meta_obj["crew_top"][0]["name"] == "Director"
+    assert meta_obj["adult"] is False
+
+
+def test_refresh_watched_tv_keeps_content_ratings_and_aggregate_credits() -> None:
+    dataset = {"Show": _movie()}
+    meta = {"Show": {"tmdb_id": 123}}
+    details = _details(123)
+    details["adult"] = False
+    details["credits"] = {
+        "cast": [{"id": 50, "name": "Wrong Movie Actor", "character": "X"}],
+        "crew": [{"id": 51, "name": "Wrong Movie Crew", "job": "Writer"}],
+    }
+    details["release_dates"] = {
+        "results": [{"iso_3166_1": "RU", "release_dates": [{"certification": "18+", "type": 3}]}]
+    }
+
+    _updated_dataset, updated_meta, report = refresh_script.refresh_watched(
+        dataset,
+        meta,
+        details_func=lambda tmdb_id, **kwargs: details,
+    )
+
+    meta_obj = updated_meta["Show"]
+    assert report["refreshed_by_tmdb_id"] == 1
+    assert meta_obj["adult"] is False
+    assert meta_obj["content_rating"] == "US: TV-MA"
+    assert meta_obj["actors_top"][0]["name"] == "Actor"
+    assert meta_obj["crew_top"][0]["name"] == "Creator"
 
 
 def test_refresh_watched_uses_stable_movie_identity_and_movie_api(monkeypatch) -> None:

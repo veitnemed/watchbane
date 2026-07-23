@@ -31,16 +31,38 @@
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
 | Активный фокус | `C3-04` [!] закрыта без acceptance; C4 [x]; весь блок C ещё не закрыт |
+| TMDb | **1.5 + 1.6 closed**; канон [`docs/research/tmdb_data_contract.md`](docs/research/tmdb_data_contract.md); next **TMDB-1.7** |
 | UI QA scales | `1.0` и `1.25` |
 | Последний docs commit | `89d0e6a` (C3-07/C3-08) |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** отдельное продуктовое решение об acceptance C3 и направлении после блока C.
+**Дальше по плану:** TMDB-1.7 Onboarding Details field parity.
 
 ---
 
 ## Журнал
+
+### 2026-07-23 — HOUSEKEEP-TMDB-QA
+- **Запрос:** убрать synthetic taste profiles P1–P3 и одноразовые TMDb-отчёты; оставить isolation.
+- **Сделано:** один контракт `docs/research/tmdb_data_contract.md`; удалены baseline/partial/inventory/snapshot md; удалены P1–P3 harness + runners + `screens/tmp_ui/C3-10|11|12`; slim `tools/qa/README`; `tests/helpers/candidate_factory.py`; isolation launcher сохранён.
+- **Файлы / commit:** docs/research, tools/qa, tests/helpers, PRODUCT journal, cursor-work; commit не создан.
+- **Проверка:** `py -m pytest tests/test_qa_isolated_launcher.py tests/test_output_defect_audit.py tests/test_refresh_watched_from_tmdb.py tests/test_recommendation_deck_service.py -q` — 63 passed; `compileall tools/qa tests/helpers`.
+- **Не сделано / next:** TMDB-1.7; не reopen 1.5/1.6.
+
+### 2026-07-23 — TMDB-1.6 (Watched Details parity)
+- **Запрос:** одинаково корректные TMDb-данные в Recommendations и Collection после watched refresh.
+- **Сделано:** `_meta_fields_from_details` media-aware: tri-state `adult`; movie `get_movie_content_rating` / `release_dates`; movie `credits` + `normalize_people`; TV без регрессии на `content_ratings` / `aggregate_credits`. Ranking/deck/UI/schema не менялись.
+- **Файлы / commit:** `tools/tmdb/refresh_watched_from_tmdb.py`, `tests/test_refresh_watched_from_tmdb.py`, research docs, PRODUCT journal, `cursor-work.md`; commit не создан.
+- **Проверка:** `py -m pytest tests/test_refresh_watched_from_tmdb.py -q` — 13 passed.
+- **Не сделано / next:** historical watched backfill; TMDB-1.7 Onboarding Details field parity.
+
+### 2026-07-23 — TMDB-1.5F (docs freeze)
+- **Запрос:** дальнейший план TMDb после 1.5 — freeze + backlog.
+- **Сделано:** 1.5 помечен closed в research docs; backlog 1.6→1.7→1.8 зафиксирован; research tooling оставлен как audit harness (не product dependency). Product deck/onboarding/watched не менялись.
+- **Файлы / commit:** `docs/research/tmdb_snapshot_contract.md`, `tmdb_partial_enrichment_audit.md`, `tmdb_field_inventory.md`, `PRODUCT_ROADMAP_CONTRACT.md` journal, `cursor-work.md`; commit не создан.
+- **Проверка:** docs-only; без product diff.
+- **Не сделано / next:** следующий product ID — **TMDB-1.6** Watched Details parity (`adult`, movie certification, movie credits). Не reopen 1.5; не backfill pool.
 
 ### 2026-07-20 — C4-03
 - **Запрос:** «ок, C4-03».
