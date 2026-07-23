@@ -46,8 +46,8 @@
 ### 2026-07-23 — TMDB-1.7 (Onboarding Details field parity)
 - **Запрос:** onboarding Details merge на уровне deck/watched: runtime/rating/keywords + TV shape + adult.
 - **Сделано:** `_merge_details_into_discover_result` копирует TV `number_of_seasons`/`number_of_episodes` и tri-state `adult`; `build_candidate_record_from_result` персистит их. Runtime/content_rating/keywords уже были с cc96ff8. Ranking/quotas/historical backfill не трогались.
-- **Файлы / commit:** `candidates/onboarding/autofill.py`, `tests/test_onboarding_autofill.py`, `tmdb_data_contract.md`, cursor-work, PRODUCT; commit отдельно.
-- **Проверка:** targeted onboarding enrichment tests.
+- **Файлы / commit:** `candidates/onboarding/autofill.py`, `tests/test_onboarding_autofill.py`, `tmdb_data_contract.md`, cursor-work, PRODUCT; `d674e2f`.
+- **Проверка:** `py -m pytest tests/test_onboarding_autofill.py -q -k "details_merge_persists or keeps_adult_and_tv_shape or details_enrichment_dedupes_before"` — 6 passed.
 - **Не сделано / next:** TMDB-1.8 условный; historical backfill не планируется.
 
 ### 2026-07-23 — HOUSEKEEP-TMDB-QA
