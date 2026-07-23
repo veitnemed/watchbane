@@ -1,6 +1,6 @@
 # TMDb data contract (Watchbane)
 
-Актуальный канон TMDb-путей после TMDB-1.5 / TMDB-1.6. Это не журнал аудитов и не
+Актуальный канон TMDb-путей после TMDB-1.5 / TMDB-1.6 / TMDB-1.7. Это не журнал аудитов и не
 полная матрица API: только то, что продукт делает сейчас и чего сознательно не делает.
 
 **Ветка / контекст:** `polya-tmdb` и далее. Research tooling в `tools/research/` и
@@ -10,7 +10,7 @@
 
 | Path | Entry | Details? | Persist |
 | --- | --- | --- | --- |
-| Onboarding autofill | Discover buckets → optional Details merge | частично; field parity backlog **TMDB-1.7** | candidate pool |
+| Onboarding autofill | Discover buckets → Details merge | **TMDB-1.7 closed:** runtime / content_rating / keywords + TV shape + adult | candidate pool |
 | Filter replenish | Discover → optional Details merge | да, через `_maybe_fetch_details` | candidate pool |
 | Bounded deck enrichment (**TMDB-1.5**) | `build_deck_details_enricher` → `RecommendationDeckService` | только ranked-окно колоды | markers + Details fields via merge |
 | Watched refresh (**TMDB-1.6**) | `tools/tmdb/refresh_watched_from_tmdb.py` | media-aware parse | watched meta |
@@ -30,6 +30,17 @@ Composition для колоды (сеть не в repository / ranking / present
 Reuse: запись с version=1 и status=success не запрашивается повторно.
 Partial Discover upsert не должен downgrade уже enriched payload (adult /
 runtime / content_rating / keywords и родственные поля).
+
+## Onboarding Details parity (TMDB-1.7)
+
+`_merge_details_into_discover_result` + `build_candidate_record_from_result`:
+
+- movie: `runtime` / `runtime_minutes`, `get_movie_content_rating`, keywords, adult
+- TV: `episode_run_time`, `number_of_seasons`, `number_of_episodes`, `get_content_rating`,
+  keywords, adult
+- adult tri-state preserved when the Details key is present
+- appends: `keywords` + `release_dates` (movie) or `content_ratings` (TV) (+ optional `external_ids`)
+- no historical pool backfill; quotas/ranking unchanged
 
 ## Bounded Details rule
 
@@ -67,8 +78,8 @@ crew_top, adult (где path поддерживает). SQL индексируе
 | --- | --- | --- |
 | TMDB-1.5 | closed | bounded deck Details + live acceptance |
 | TMDB-1.6 | closed | watched Details parity |
-| **TMDB-1.7** | next | onboarding Details field parity (`runtime` / `content_rating` / `keywords` + TV shape); без historical backfill |
-| TMDB-1.8 | conditional | TV `episode_run_time` только при системной потере nonempty |
+| TMDB-1.7 | closed | onboarding Details field parity (runtime / rating / keywords / TV shape / adult) |
+| TMDB-1.8 | conditional | TV `episode_run_time` only if nonempty values are systematically lost |
 
 ## Runners и тесты
 

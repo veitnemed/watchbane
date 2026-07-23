@@ -1956,12 +1956,19 @@ def _merge_details_into_discover_result(
         episode_runtime = details.get("episode_run_time")
         if episode_runtime not in (None, "", []):
             updated["episode_run_time"] = list(episode_runtime) if isinstance(episode_runtime, (list, tuple)) else episode_runtime
+        for field_name in ("number_of_seasons", "number_of_episodes"):
+            value = details.get(field_name)
+            if value not in (None, ""):
+                updated[field_name] = value
         content_rating = tmdb_api.get_content_rating(details)
     if content_rating not in (None, ""):
         updated["content_rating"] = content_rating
     keywords = tmdb_api.extract_keywords(details)
     if keywords:
         updated["keywords"] = keywords
+    # adult is tri-state TMDb safety data: explicit null must survive filtering.
+    if "adult" in details:
+        updated["adult"] = details.get("adult")
     updated["_details_enriched"] = True
     return updated
 
@@ -2223,10 +2230,20 @@ def build_candidate_record_from_result(
         },
         "signals": ["onboarding_autofill"],
     }
-    for field_name in ("runtime", "runtime_minutes", "episode_run_time", "content_rating", "keywords"):
+    for field_name in (
+        "runtime",
+        "runtime_minutes",
+        "episode_run_time",
+        "number_of_seasons",
+        "number_of_episodes",
+        "content_rating",
+        "keywords",
+    ):
         value = result.get(field_name)
         if value not in (None, "", []):
             candidate[field_name] = list(value) if field_name == "episode_run_time" and isinstance(value, tuple) else value
+    if "adult" in result:
+        candidate["adult"] = result.get("adult")
     candidate["quality_score"] = compute_tmdb_quality_score(candidate)
     candidate["hidden_gem_score"] = compute_tmdb_hidden_gem_score(candidate)
     candidate["final_score"] = compute_tmdb_final_score(candidate)

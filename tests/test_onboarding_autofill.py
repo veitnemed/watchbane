@@ -2086,8 +2086,35 @@ def test_details_enrichment_dedupes_before_details_requests(tmp_path, monkeypatc
 @pytest.mark.parametrize(
     ("media_type", "details", "expected"),
     [
-        (MEDIA_MOVIE, {"runtime": 120, "release_dates": {"results": [{"iso_3166_1": "RU", "release_dates": [{"certification": "16+"}]}]}, "keywords": {"keywords": [{"name": "noir"}]}}, {"runtime": 120, "runtime_minutes": 120, "content_rating": "16+", "keywords": ["noir"]}),
-        (MEDIA_TV, {"episode_run_time": [45], "content_ratings": {"results": [{"iso_3166_1": "RU", "rating": "16"}]}, "keywords": {"results": [{"name": "mystery"}]}}, {"episode_run_time": [45], "content_rating": "16", "keywords": ["mystery"]}),
+        (
+            MEDIA_MOVIE,
+            {
+                "adult": False,
+                "runtime": 120,
+                "release_dates": {"results": [{"iso_3166_1": "RU", "release_dates": [{"certification": "16+"}]}]},
+                "keywords": {"keywords": [{"name": "noir"}]},
+            },
+            {"adult": False, "runtime": 120, "runtime_minutes": 120, "content_rating": "16+", "keywords": ["noir"]},
+        ),
+        (
+            MEDIA_TV,
+            {
+                "adult": None,
+                "episode_run_time": [45],
+                "number_of_seasons": 2,
+                "number_of_episodes": 20,
+                "content_ratings": {"results": [{"iso_3166_1": "RU", "rating": "16"}]},
+                "keywords": {"results": [{"name": "mystery"}]},
+            },
+            {
+                "adult": None,
+                "episode_run_time": [45],
+                "number_of_seasons": 2,
+                "number_of_episodes": 20,
+                "content_rating": "16",
+                "keywords": ["mystery"],
+            },
+        ),
     ],
 )
 def test_details_merge_persists_enrichment_contract_fields(media_type, details, expected) -> None:
@@ -2100,6 +2127,49 @@ def test_details_merge_persists_enrichment_contract_fields(media_type, details, 
     appends = autofill._details_append_to_response(autofill.DetailsEnrichmentConfig(), media_type=media_type)
     assert "keywords" in appends
     assert ("release_dates" if media_type == MEDIA_MOVIE else "content_ratings") in appends
+
+
+@pytest.mark.parametrize("adult", [True, False, None])
+def test_onboarding_candidate_record_keeps_adult_and_tv_shape(adult) -> None:
+    bucket = build_fetch_buckets(_profile(media_preference="tv"))[0]
+    result = {
+        "id": 77,
+        "name": "Series",
+        "original_name": "Series",
+        "first_air_date": "2020-01-01",
+        "overview": "Overview",
+        "poster_path": "/p.jpg",
+        "vote_average": 8.0,
+        "vote_count": 100,
+        "popularity": 20.0,
+        "origin_country": [bucket.target_country or "US"],
+        "genre_ids": [18],
+        "adult": adult,
+        "episode_run_time": [48],
+        "number_of_seasons": 3,
+        "number_of_episodes": 30,
+        "content_rating": "16",
+        "keywords": ["crime"],
+        "_details_enriched": True,
+    }
+    score_debug = autofill.compute_candidate_score_debug(result, bucket, page=1, index_on_page=0)
+    candidate = autofill.build_candidate_record_from_result(
+        result,
+        bucket,
+        genre_lookup={MEDIA_MOVIE: {}, MEDIA_TV: {18: "Drama"}},
+        profile_id=1,
+        candidate_score=float(score_debug["final_score"]),
+        score_debug=score_debug,
+        fetch_rank=1,
+    )
+    assert "adult" in candidate
+    assert candidate["adult"] is adult
+    assert candidate["episode_run_time"] == [48]
+    assert candidate["number_of_seasons"] == 3
+    assert candidate["number_of_episodes"] == 30
+    assert candidate["content_rating"] == "16"
+    assert candidate["keywords"] == ["crime"]
+    assert candidate["details_enriched"] is True
 
 
 def test_details_enrichment_dedupes_raw_tmdb_id_across_pages_before_details(tmp_path, monkeypatch) -> None:
