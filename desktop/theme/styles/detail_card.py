@@ -88,6 +88,9 @@ QLabel#detailTitle {{
     font-weight: 600;
     padding: 0;
 }}
+QLabel#detailTitle[compactTitle="true"] {{
+    font-size: {font_px(28)}px;
+}}
 QLabel#detailTitleMeta {{
     background: transparent;
     color: {COLOR_TEXT_SECONDARY};

@@ -433,6 +433,7 @@ def build_detail_card_layout(owner: Any, parent, profile: DetailCardLayoutProfil
         maximum_lines=profile.detail_title_max_lines,
     )
     owner._title_label.setObjectName("detailTitle")
+    owner._title_label.setProperty("compactTitle", profile.compact_detail_title)
     owner._title_label.setWordWrap(True)
     owner._title_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
     owner._title_label.setMinimumHeight(profile.detail_title_min_height)

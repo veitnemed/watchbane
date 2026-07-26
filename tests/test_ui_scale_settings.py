@@ -973,8 +973,9 @@ def test_scale_anchor_layout_constants_use_scaled_tokens(monkeypatch, ui_scale) 
             + watched_profile.detail_title_min_height
         )
         assert first_fold_height < 520
-    assert candidate_profile.detail_poster_width == watched_profile.detail_poster_width
-    assert candidate_profile.detail_poster_height == watched_profile.detail_poster_height
+    assert candidate_profile.detail_poster_width < watched_profile.detail_poster_width
+    assert candidate_profile.detail_poster_height < watched_profile.detail_poster_height
+    assert candidate_profile.compact_detail_title is True
     assert candidate_profile.detail_content_max_width == watched_profile.detail_content_max_width
     assert candidate_profile.detail_info_min_width == watched_profile.detail_info_min_width
     assert candidate_profile.detail_section_max_width == watched_profile.detail_section_max_width
