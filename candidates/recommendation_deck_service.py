@@ -66,6 +66,34 @@ DECK_STATE_SCHEMA_VERSION = 2
 
 
 @dataclass(frozen=True)
+class ProductionEligibilityContext:
+    """Read-only context used by deck eligibility and QA audits."""
+
+    preferences: dict
+    now: datetime
+    watched: set[tuple[str, str]]
+    watched_tmdb: set[tuple[str, int]]
+    excluded_actions: set[str]
+    excluded_action_tmdb: set[tuple[str, int]]
+    recently_seen: set[tuple[str, str]]
+    seen: set[tuple[str, str, str]]
+    seen_aliases: set[tuple[str, str, str]]
+
+
+@dataclass(frozen=True)
+class ProductionEligibilityDecision:
+    """One production eligibility decision without ranking or storage writes."""
+
+    eligible: bool
+    reason_code: str | None
+    candidate: dict | None = None
+    identity: tuple[str, str] | None = None
+    stable_identity: tuple[str, str, str] | None = None
+    aliases: frozenset[tuple[str, str, str]] = frozenset()
+    track_identity: bool = False
+
+
+@dataclass(frozen=True)
 class DeckReserveSnapshot:
     remaining: int
     fresh_eligible: int
@@ -462,6 +490,76 @@ def _candidate_release_date(candidate: dict) -> date | None:
         except ValueError:
             continue
     return None
+
+
+def evaluate_production_eligibility(
+    raw_candidate: object,
+    context: ProductionEligibilityContext,
+) -> ProductionEligibilityDecision:
+    """Apply the existing deck eligibility rules to one candidate.
+
+    The function does not mutate the supplied context. A caller that receives a
+    decision with ``track_identity`` must add its identity aliases before
+    evaluating the next pool entry, including the ``recently_seen`` fallback.
+    """
+    if isinstance(raw_candidate, dict) is False:
+        return ProductionEligibilityDecision(False, "invalid_record")
+
+    candidate = normalize_candidate_record(raw_candidate)
+    identity = _identity(candidate)
+    stable_identity = _stable_identity(candidate)
+    tmdb_identity = candidate_tmdb_identity(candidate)
+    aliases = frozenset(_alias_identities(candidate))
+
+    if identity in context.watched or tmdb_identity in context.watched_tmdb:
+        return ProductionEligibilityDecision(False, "watched", candidate, identity, stable_identity, aliases)
+    if (
+        any(key in context.excluded_actions for key in candidate_state_identity_keys(candidate))
+        or tmdb_identity in context.excluded_action_tmdb
+    ):
+        return ProductionEligibilityDecision(False, "actioned", candidate, identity, stable_identity, aliases)
+
+    release_date = _candidate_release_date(candidate)
+    year = resolve_canonical_year(candidate)
+    if (
+        release_date is not None and release_date > context.now.date()
+    ) or (
+        release_date is None and year is not None and int(year) > context.now.year
+    ):
+        return ProductionEligibilityDecision(False, "future_release", candidate, identity, stable_identity, aliases)
+
+    genre_keys = set(
+        genre_schema.normalize_genre_filter_list(candidate.get("genre_keys") or [])
+    )
+    if genre_keys & _ALWAYS_IRRELEVANT_GENRES:
+        return ProductionEligibilityDecision(False, "junk_genre", candidate, identity, stable_identity, aliases)
+    if is_blocked_explicit_sexual_content(candidate):
+        return ProductionEligibilityDecision(False, "explicit_content", candidate, identity, stable_identity, aliases)
+    if not is_viable_unrated_candidate(candidate, current_year=context.now.year):
+        return ProductionEligibilityDecision(False, "quality_gate", candidate, identity, stable_identity, aliases)
+    if candidate_matches(candidate, context.preferences) is False:
+        return ProductionEligibilityDecision(False, "preferences", candidate, identity, stable_identity, aliases)
+    if stable_identity in context.seen or aliases.intersection(context.seen_aliases):
+        return ProductionEligibilityDecision(False, "duplicate", candidate, identity, stable_identity, aliases)
+    if identity in context.recently_seen:
+        return ProductionEligibilityDecision(
+            False,
+            "recently_seen",
+            candidate,
+            identity,
+            stable_identity,
+            aliases,
+            track_identity=True,
+        )
+    return ProductionEligibilityDecision(
+        True,
+        None,
+        candidate,
+        identity,
+        stable_identity,
+        aliases,
+        track_identity=True,
+    )
 
 
 def _diversify_quality_group(
@@ -911,60 +1009,34 @@ class RecommendationDeckService:
             "explicit_content": 0,
         }
         for raw_candidate in source:
-            if not isinstance(raw_candidate, dict):
-                continue
-            candidate = normalize_candidate_record(raw_candidate)
-            identity = _identity(candidate)
-            stable_identity = _stable_identity(candidate)
-            tmdb_identity = candidate_tmdb_identity(candidate)
-            if identity in watched or tmdb_identity in watched_tmdb:
-                counters["watched"] += 1
-                continue
-            if (
-                any(key in excluded_actions for key in candidate_state_identity_keys(candidate))
-                or tmdb_identity in excluded_action_tmdb
-            ):
-                counters["actioned"] += 1
-                continue
-            release_date = _candidate_release_date(candidate)
-            year = resolve_canonical_year(candidate)
-            if (
-                release_date is not None and release_date > now.date()
-            ) or (
-                release_date is None and year is not None and int(year) > now.year
-            ):
-                counters["future_release"] += 1
-                continue
-            genre_keys = set(
-                genre_schema.normalize_genre_filter_list(candidate.get("genre_keys") or [])
+            decision = evaluate_production_eligibility(
+                raw_candidate,
+                ProductionEligibilityContext(
+                    preferences=criteria,
+                    now=now,
+                    watched=watched,
+                    watched_tmdb=watched_tmdb,
+                    excluded_actions=excluded_actions,
+                    excluded_action_tmdb=excluded_action_tmdb,
+                    recently_seen=recently_seen,
+                    seen=seen,
+                    seen_aliases=seen_aliases,
+                ),
             )
-            if genre_keys & _ALWAYS_IRRELEVANT_GENRES:
-                counters["junk_genre"] += 1
+            if decision.reason_code is not None:
+                if decision.reason_code in counters:
+                    counters[decision.reason_code] += 1
+                if decision.track_identity:
+                    seen.add(decision.stable_identity)
+                    seen_aliases.update(decision.aliases)
+                if decision.reason_code == "recently_seen" and decision.candidate is not None:
+                    recent_fallback.append(decision.candidate)
                 continue
-            # C3-07 / QA-DEFECT-01: hard-drop explicit sexual content from inbox eligibility.
-            if is_blocked_explicit_sexual_content(candidate):
-                counters["explicit_content"] += 1
+            if decision.candidate is None or decision.stable_identity is None:
                 continue
-            if not is_viable_unrated_candidate(candidate, current_year=now.year):
-                counters["quality_gate"] += 1
-                continue
-            if candidate_matches(candidate, criteria) is False:
-                counters["preferences"] += 1
-                continue
-            if stable_identity in seen:
-                counters["duplicate"] += 1
-                continue
-            aliases = _alias_identities(candidate)
-            if aliases.intersection(seen_aliases):
-                counters["duplicate"] += 1
-                continue
-            seen.add(stable_identity)
-            seen_aliases.update(aliases)
-            if identity in recently_seen:
-                counters["recently_seen"] += 1
-                recent_fallback.append(candidate)
-                continue
-            eligible.append(candidate)
+            seen.add(decision.stable_identity)
+            seen_aliases.update(decision.aliases)
+            eligible.append(decision.candidate)
         return eligible, recent_fallback, counters
 
     def build_deck(

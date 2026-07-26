@@ -30,18 +30,32 @@
 | --- | --- |
 | Продуктовый контур | **X — inbox-колода** (смотрел / сохранить / скрыть) |
 | Не делаем | V0 «Сегодня», A/B (parking), web, LLM |
-| Активный фокус | `C3-04` [!] закрыта без acceptance; C4 [x]; весь блок C ещё не закрыт |
+| Активный фокус | `C3-13` [~] — baseline есть, отдельный fix `explicit_content` в pool pending; `C3-04` [!] исторически закрыта без acceptance; C4 [x] |
 | TMDb | **1.5–1.7 closed**; канон [`docs/research/tmdb_data_contract.md`](docs/research/tmdb_data_contract.md); next **TMDB-1.8** (условный) |
 | UI QA scales | `1.0` и `1.25` |
 | Последний docs commit | `89d0e6a` (C3-07/C3-08) |
 
 **Цель простыми словами:** разобрать порцию рекомендаций в списки, а не «выбрать кино на вечер».
 
-**Дальше по плану:** TMDB-1.8 только если `episode_run_time` системно теряется; иначе C3 acceptance.
+**Дальше по плану:** C3-13 baseline чистоты pool; TMDB-1.8 только если `episode_run_time` системно теряется. Ни один из шагов не заменяет отдельное решение об acceptance C3.
 
 ---
 
 ## Журнал
+
+### 2026-07-26 — C3-13 (read-only audit + baseline)
+- **Запрос:** реализовать audit чистоты candidate pool и кратко сообщить результат.
+- **Сделано:** common `evaluate_production_eligibility` теперь используют deck и audit; новый isolated child читает SQLite через `mode=ro`, пишет JSON без payload и не меняет runtime. Baseline с копии current runtime: pool 119; hard garbage 35 (29.4%), все `explicit_content`; eligible 42; hard-garbage leak 0; duplicate 0. State: hidden 19, saved 6, recently seen 59; metadata missing: keywords 103, runtime 91, content rating 43.
+- **Файлы / commit:** `candidates/recommendation_deck_service.py`, `tools/qa/candidate_pool_cleanliness_{audit,child}.py`, tests, PRODUCT/research/cursor-work; commit не создан.
+- **Проверка:** compileall; C3-13 + recommendation deck + isolation pytest — 50 passed. Existing isolated launcher passed; source and isolated copied SQLite имеют одинаковый SHA-256.
+- **Не сделано / next:** pool не очищался, ranking/personalization/UI/TMDb не менялись. Следующий один шаг — отдельный fix только для persisted `explicit_content` (35), без historical auto-cleanup без решения.
+
+### 2026-07-26 — C3-13 (контракт измерения, baseline pending)
+- **Запрос:** восстановить историю качества выдачи и зафиксировать отдельную read-only задачу измерения чистоты сохранённого candidate pool.
+- **Сделано:** добавлен контракт `docs/research/c3_13_pool_cleanliness_contract.md`: границы объективного мусора, state conflicts и metadata incompleteness; перечень будущих метрик, текущая data chain и правило «сначала baseline, затем один подтверждённый фикс». `C3-04` не переоткрывалась и остаётся `[!]`.
+- **Файлы / commit:** PRODUCT, `cursor-work.md`, новый research contract; commit не создан.
+- **Проверка:** docs-only: изучены C3-01…C3-12, TMDB-1.5…1.7 и текущие production paths; Python/UI/ranking/filtering/test fixtures не менялись.
+- **Не сделано / next:** не реализован auditor, не получен baseline и не выбран defect для исправления. Следующий один шаг — C3-13 read-only audit на изолированном runtime.
 
 ### 2026-07-23 — TMDB-1.7 (Onboarding Details field parity)
 - **Запрос:** onboarding Details merge на уровне deck/watched: runtime/rating/keywords + TV shape + adult.
