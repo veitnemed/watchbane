@@ -687,7 +687,9 @@ def test_candidate_detail_card_profile_scales_with_ui_scale(qapp) -> None:
     width_75 = detail_profiles.CANDIDATE_DETAIL_CARD_PROFILE.detail_poster_width
 
     assert width_75 < width_100
-    assert width_75 == scaling.poster_px(layout.DETAIL_POSTER_WIDTH)
+    assert width_75 == detail_profiles.detail_poster_px(
+        layout.DETAIL_POSTER_WIDTH * detail_profiles.CANDIDATE_DETAIL_POSTER_SCALE
+    )
 
 
 def test_settings_dialog_displays_current_scale(monkeypatch, tmp_path, qapp) -> None:

@@ -172,6 +172,7 @@ DETAIL_STACKED_UI_SCALE = 1.50
 DETAIL_STACKED_INFO_UI_SCALE = 1.00
 DETAIL_COMPACT_POSTER_WIDTH = 260
 DETAIL_STACKED_POSTER_WIDTH = 245
+CANDIDATE_DETAIL_POSTER_SCALE = 0.69
 
 
 def use_compact_detail_content() -> bool:
@@ -377,6 +378,11 @@ CANDIDATE_DETAIL_CARD_PROFILE = replace(
     show_mark_watched_button=False,
     show_hide_candidate_button=False,
     overview_in_poster_column=True,
+    # Recommendations keep a two-column card at the 1.25 anchor. A smaller
+    # candidate poster reserves a readable lane for the title and metadata in
+    # the narrow detail pane instead of creating horizontal overflow.
+    detail_poster_width=detail_poster_px(DETAIL_POSTER_WIDTH * CANDIDATE_DETAIL_POSTER_SCALE),
+    detail_poster_height=detail_poster_px(DETAIL_POSTER_HEIGHT * CANDIDATE_DETAIL_POSTER_SCALE),
     detail_overview_top_gap=0,
     detail_overview_left_inset=0,
 )
