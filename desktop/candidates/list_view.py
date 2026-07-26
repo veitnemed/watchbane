@@ -447,7 +447,7 @@ class CandidateListView(CandidateListActionsMixin):
         self._watchlist_action_button.setObjectName("recommendationWatchlistButton")
         self._hidden_action_button = QPushButton(tr("recommendations.action.hidden"))
         self._hidden_action_button.setObjectName("recommendationHiddenButton")
-        self._rating_back_button = QPushButton("←")
+        self._rating_back_button = QPushButton(f"← {tr('recommendations.action.back')}")
         self._rating_back_button.setObjectName("recommendationRatingBackButton")
         self._rating_back_button.setAccessibleName(tr("recommendations.action.back"))
         self._candidate_rating_selector = UserRatingSelector()
@@ -741,7 +741,7 @@ class CandidateListView(CandidateListActionsMixin):
             self._reason_label.clear()
 
     def _set_rating_mode(self, enabled: bool) -> None:
-        self._action_title.setVisible(not enabled)
+        self._action_title.setVisible(True)
         self._watched_action_button.setVisible(not enabled)
         self._watchlist_action_button.setVisible(not enabled)
         self._hidden_action_button.setVisible(not enabled)

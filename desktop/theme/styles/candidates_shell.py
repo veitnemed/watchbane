@@ -356,6 +356,12 @@ QLabel#recommendationUserRatingPrompt {{
     font-size: {font_px(FONT_SECTION + 1)}px;
     font-weight: 700;
 }}
+QLabel#recommendationActionTitle {{
+    background: transparent;
+    color: {FILM_TEXT};
+    font-size: {font_px(FONT_SECTION + 1)}px;
+    font-weight: 700;
+}}
 QPushButton#recommendationWatchedButton,
 QPushButton#recommendationWatchlistButton,
 QPushButton#recommendationHiddenButton {{
@@ -379,6 +385,21 @@ QPushButton#recommendationHiddenButton {{
     background-color: transparent;
     border: 1px solid {COLOR_BORDER};
     color: {COLOR_TEXT_SECONDARY};
+}}
+QPushButton#recommendationRatingBackButton {{
+    background-color: transparent;
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {px(RADIUS_BUTTON_SMALL)}px;
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: {font_px(FONT_SMALL)}px;
+    font-weight: 600;
+    margin-right: {list_px(10)}px;
+    min-height: {list_px(40)}px;
+    padding: {list_px(5)}px {list_px(10)}px;
+}}
+QPushButton#recommendationRatingBackButton:hover {{
+    border-color: {COLOR_FOCUS_BORDER};
+    color: {COLOR_TEXT};
 }}
 QPushButton#recommendationWatchedButton:hover,
 QPushButton#recommendationWatchlistButton:hover,

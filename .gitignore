@@ -55,6 +55,7 @@ _safety_audit/
 
 # Local UI screenshot smoke outputs
 /tmp/ui/
+/artifacts/ui-polish/
 
 /tmdb_net
 
