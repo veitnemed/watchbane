@@ -329,7 +329,7 @@ QFrame#recommendationActionPanel {{
     background-color: {FILM_SURFACE_1};
     border: 1px solid {FILM_BORDER_WEAK};
     border-radius: {detail_px(RADIUS_CARD)}px;
-    min-height: {list_px(126)}px;
+    min-height: {list_px(112)}px;
 }}
 QLabel#recommendationReasonsIcon {{
     background: transparent;
