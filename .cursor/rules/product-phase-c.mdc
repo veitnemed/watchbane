@@ -8,12 +8,12 @@ alwaysApply: true
 Перед задачей читай `docs/contracts/PRODUCT_ROADMAP_CONTRACT.md` и корневой `AGENTS.md`.
 
 - Продукт (**вариант X**): inbox-колода до 10; действия смотрел / сохранить / скрыть. Не «выбор на вечер» (V0 parking).
-- Одна задача = один roadmap ID; после работы отметь прогресс в PRODUCT_ROADMAP и допиши `cursor-work.md`.
+- Roadmap ID — необязательная метка: используй существующий, если он назван или явно подходит; не создавай, не назначай и не ищи новый ID ради выполнения работы. Обновляй PRODUCT_ROADMAP только при изменении отслеживаемой roadmap-задачи; `cursor-work.md` веди по осмысленным сессиям.
 - Не брать direction из `internal/archive/docs/plans/DESKTOP_GUI_ROADMAP.md` (SUPERSEDED).
-- UI DoD: **сначала** `tools/screenshots/capture_*.py`, скрины в `screens/tmp_ui/<task_id>/`, **Read каждый PNG**; scales только **1.0 и 1.25**.
+- UI DoD: **сначала** `tools/screenshots/capture_*.py`, скрины в `screens/tmp_ui/<task-label>/`, **Read каждый PNG**; scales только **1.0 и 1.25**.
 - Нельзя закрывать UI только по pytest. Нельзя писать «UI ок» без скринов + Read.
 - Клики: capture/QTest; computer use — только если доступен; без live-кликов не врать.
 - Happy path Recommendations: вкладка → колода или «готовим» → 3 действия разбора → без техтекста у табов.
 - TMDb с локальным токеном ок; токен не печатать. Sandbox отказ → permissions → повторить.
 - Запреты C: web, LLM/NL, filter algebra, like/dislike, V0 «Сегодня», commit без просьбы.
-- **Scope Gate:** без roadmap ID + явного «ок» — не писать код; отклонять A/B/V0/web с рисками размытия.
+- **Scope Gate:** при ясном пользовательском запросе работать напрямую в его границах; существующий roadmap ID можно указать как контекст. Отклонять A/B/V0/web только из-за продуктового scope, а не из-за отсутствия ID.
