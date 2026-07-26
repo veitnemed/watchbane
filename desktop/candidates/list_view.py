@@ -433,21 +433,23 @@ class CandidateListView(CandidateListActionsMixin):
         )
         action_layout.setSpacing(list_px(12))
 
+        self._action_title = QLabel(tr("recommendations.action.title"))
+        self._action_title.setObjectName("recommendationActionTitle")
+        action_layout.addWidget(self._action_title)
+
         action_buttons_layout = QGridLayout()
         action_buttons_layout.setContentsMargins(0, 0, 0, 0)
         action_buttons_layout.setHorizontalSpacing(list_px(12))
         action_buttons_layout.setVerticalSpacing(list_px(10))
         self._watched_action_button = QPushButton(tr("recommendations.action.watched"))
         self._watched_action_button.setObjectName("recommendationWatchedButton")
-        self._watched_action_button.hide()
         self._watchlist_action_button = QPushButton(tr("recommendations.action.watchlist"))
         self._watchlist_action_button.setObjectName("recommendationWatchlistButton")
         self._hidden_action_button = QPushButton(tr("recommendations.action.hidden"))
         self._hidden_action_button.setObjectName("recommendationHiddenButton")
-        rating_prompt = QLabel(tr("user_rating.candidate_prompt"))
-        rating_prompt.setObjectName("recommendationUserRatingPrompt")
-        rating_prompt.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        action_layout.addWidget(rating_prompt)
+        self._rating_back_button = QPushButton("←")
+        self._rating_back_button.setObjectName("recommendationRatingBackButton")
+        self._rating_back_button.setAccessibleName(tr("recommendations.action.back"))
         self._candidate_rating_selector = UserRatingSelector()
         self._candidate_rating_selector.setObjectName("recommendationUserRatingSelector")
         self._candidate_rating_selector.setProperty("candidatePanel", True)
@@ -469,14 +471,17 @@ class CandidateListView(CandidateListActionsMixin):
         rating_row.setContentsMargins(0, 0, 0, 0)
         rating_row.setSpacing(0)
         rating_row.addWidget(self._candidate_rating_selector, stretch=1)
+        rating_row.insertWidget(0, self._rating_back_button)
         action_layout.addLayout(rating_row)
+        self._rating_back_button.clicked.connect(lambda: self._set_rating_mode(False))
+        self._watched_action_button.clicked.connect(lambda: self._set_rating_mode(True))
         self._watchlist_action_button.clicked.connect(
             lambda: self._apply_recommendation_action("watchlist")
         )
         self._hidden_action_button.clicked.connect(
             lambda: self._apply_recommendation_action("hidden")
         )
-        action_buttons = (self._watchlist_action_button, self._hidden_action_button)
+        action_buttons = (self._watched_action_button, self._watchlist_action_button, self._hidden_action_button)
         for button in action_buttons:
             button.setMinimumHeight(list_px(38))
             button.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
@@ -491,7 +496,8 @@ class CandidateListView(CandidateListActionsMixin):
         action_layout.addLayout(action_buttons_layout)
         decision_layout.addWidget(self._action_panel)
         self._detail_card.add_overview_footer(self._reason_panel)
-        self._detail_card.add_main_info_footer(self._decision_cluster)
+        detail_layout.insertWidget(1, self._decision_cluster)
+        self._set_rating_mode(False)
         self._set_action_panel_enabled(False)
 
         splitter.addWidget(detail_panel)
@@ -730,8 +736,19 @@ class CandidateListView(CandidateListActionsMixin):
         ):
             button.setEnabled(enabled)
         self._candidate_rating_selector.setEnabled(enabled)
+        self._rating_back_button.setEnabled(enabled)
         if not enabled:
             self._reason_label.clear()
+
+    def _set_rating_mode(self, enabled: bool) -> None:
+        self._action_title.setVisible(not enabled)
+        self._watched_action_button.setVisible(not enabled)
+        self._watchlist_action_button.setVisible(not enabled)
+        self._hidden_action_button.setVisible(not enabled)
+        self._rating_back_button.setVisible(enabled)
+        self._candidate_rating_selector.setVisible(enabled)
+        if not enabled:
+            self._candidate_rating_selector.clear()
 
     def _recommendation_reasons(self, candidate: dict) -> list[str]:
         from desktop.candidates.presenters import build_recommendation_reasons
@@ -1434,6 +1451,7 @@ class CandidateListView(CandidateListActionsMixin):
             return
 
         candidate = self._candidates[row]
+        self._set_rating_mode(False)
         self._selected_candidate = candidate
         self._selected_identity = candidate_detail_identity(candidate)
         self._log_search_action("open", candidate, rank=row + 1)

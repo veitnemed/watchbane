@@ -174,16 +174,16 @@ def test_primary_navigation_and_recommendation_terms_follow_glossary() -> None:
         "tabs.candidates": "Рекомендации",
         "tabs.filters": "Настройки поиска",
         "recommendations.deck_reserve.label": "Запас колоды",
-        "recommendations.action.watched": "✓ Смотрел",
-        "recommendations.action.watchlist": "+ Запомнить",
-        "recommendations.action.hidden": "× Не показывать",
+        "recommendations.action.watched": "Смотрел",
+        "recommendations.action.watchlist": "Отложить",
+        "recommendations.action.hidden": "Не моё",
         "recommendations.discovery.module": "ИСТОЧНИК",
         "recommendations.vector.module": "МИКС",
         "media_type.movie": "Фильм",
         "media_type.tv": "Сериал",
     }
     assert TRANSLATIONS["en"]["tabs.filters"] == "Search settings"
-    assert TRANSLATIONS["en"]["recommendations.action.hidden"] == "× Don't show"
+    assert TRANSLATIONS["en"]["recommendations.action.hidden"] == "Not for me"
     assert all("�" not in value for catalog in TRANSLATIONS.values() for value in catalog.values())
 
 
