@@ -23,7 +23,7 @@ from storage.sqlite import action_repository, impression_repository
 from storage.sqlite.connection import connect
 from storage.sqlite.json_codec import loads_json
 from storage.sqlite.migrations import apply_migrations
-from storage.sqlite.watched_mapper import extract_watched_record
+from storage.sqlite.watched_mapper import extract_watched_record, metadata_watched_identity
 from storage.sqlite.watched_write import delete_watched, update_watched_user_score, upsert_watched_row
 
 
@@ -239,16 +239,23 @@ def mark_watched(
             conn.execute("BEGIN IMMEDIATE")
             tmdb_id = _candidate_tmdb_id(normalized)
             existing = _find_watched_row(conn, normalized)
-            if existing is None and tmdb_id is not None:
-                # A previously removed title can still have metadata at its key.
-                existing = conn.execute(
+            if existing is None and tmdb_id is not None and tmdb_id > 0:
+                # Older tombstones can retain columns inherited from the
+                # deleted payload. Only matching indexed rows are inspected,
+                # and the still-present metadata must prove the identity.
+                identity = (normalize_media_type(normalized.get("media_type")), tmdb_id)
+                matches = conn.execute(
                     """
                     SELECT * FROM watched_records
                     WHERE media_type = ? AND tmdb_id = ? AND payload_json = '{}'
-                    ORDER BY dataset_key LIMIT 1
+                    ORDER BY dataset_key
                     """,
-                    (normalize_media_type(normalized.get("media_type")), tmdb_id),
-                ).fetchone()
+                    identity,
+                )
+                existing = next((row for row in matches
+                                 if metadata_watched_identity(loads_json(row["meta_json"], None)) == identity),
+                                None)
+                matches.close()
             if existing is not None:
                 dataset_key = str(existing["dataset_key"])
                 existing_payload = loads_json(existing["payload_json"], {})

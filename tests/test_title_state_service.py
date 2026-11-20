@@ -274,3 +274,40 @@ def test_repeated_rating_rolls_back_if_same_title_action_cleanup_fails(tmp_path,
 
     assert _watched_rows(db) == before
     assert _actions(candidate, db) == {ACTION_WATCHLIST}
+
+
+@pytest.mark.parametrize("meta", [
+    {"media_type": "tv", "tmdb_id": 202},  # different surviving ID
+    {"media_type": "movie", "tmdb_id": 101},  # different surviving type
+    {"tmdb_id": 101},  # legacy default 'tv' is not evidence
+    {"media_type": "unknown", "tmdb_id": 101},
+    {"media_type": "tv"},  # stale column is the only ID
+    {"media_type": "tv", "main_info": {"media_type": "movie"}, "tmdb_id": 101},
+    {"media_type": "tv", "tmdb_id": 101, "raw_scores": {"tmdb_id": 999}},
+])
+def test_stale_tombstone_does_not_reuse_deleted_identity(tmp_path, meta):
+    from storage.sqlite.session import utc_now
+    from storage.sqlite.watched_write import upsert_watched_row
+
+    db = tmp_path / "stale.sqlite3"
+    candidate = _candidate(media_type="tv", tmdb_id=101)
+    conn = connect(db)
+    try:
+        apply_migrations(conn)
+        with conn:
+            upsert_watched_row(conn, dataset_key="A retained metadata key", payload={}, meta=meta)
+            # Represent a pre-fix deletion: columns kept the old payload's ID.
+            conn.execute("UPDATE watched_records SET tmdb_id=101, media_type='tv', updated_at=?",
+                         (utc_now(),))
+            upsert_watched_row(conn, dataset_key="B correctly linked key", payload={},
+                               meta={"media_type": "series", "tmdb_id": 101})
+    finally:
+        conn.close()
+    stale_before = _watched_rows(db)[0]
+
+    result = states.mark_watched(candidate, path=db)
+
+    assert result["dataset_key"] == "B correctly linked key"
+    rows = _watched_rows(db)
+    assert rows[0] == stale_before
+    assert rows[1]["payload_json"] != "{}"

@@ -10,7 +10,7 @@ from typing import TypeVar
 from storage.normalize import normalize_movie_tags
 from storage.sqlite.json_codec import dumps_json, loads_json
 from storage.sqlite.session import connection, transaction, utc_now
-from storage.sqlite.watched_mapper import extract_watched_record
+from storage.sqlite.watched_mapper import extract_watched_record, metadata_watched_projection
 
 
 EMPTY_PAYLOAD_JSON = dumps_json({})
@@ -66,6 +66,23 @@ def upsert_watched_row(
     )
 
 
+def _clear_payload_keep_meta(conn: sqlite3.Connection, dataset_key: str, meta_json: str) -> None:
+    meta = loads_json(meta_json, None)
+    # The surviving metadata alone defines a metadata-only row's identity.
+    # Preserve its raw bytes and the original creation time.
+    row = extract_watched_record(dataset_key, {}, meta=metadata_watched_projection(meta))
+    conn.execute(
+        """
+        UPDATE watched_records
+        SET payload_json = ?, title = ?, title_normalized = ?, media_type = ?,
+            year = ?, user_score = ?, country = ?, tmdb_id = ?, imdb_id = ?, updated_at = ?
+        WHERE dataset_key = ?
+        """,
+        (EMPTY_PAYLOAD_JSON, row.title, row.title_normalized, row.media_type,
+         row.year, row.user_score, row.country, row.tmdb_id, row.imdb_id, utc_now(), dataset_key),
+    )
+
+
 def save_dataset_dict(
     data: dict,
     *,
@@ -108,14 +125,7 @@ def save_dataset_dict(
                         (row["dataset_key"],),
                     )
                 else:
-                    active.execute(
-                        """
-                        UPDATE watched_records
-                        SET payload_json = ?, updated_at = ?
-                        WHERE dataset_key = ?
-                        """,
-                        (EMPTY_PAYLOAD_JSON, utc_now(), row["dataset_key"]),
-                    )
+                    _clear_payload_keep_meta(active, row["dataset_key"], row["meta_json"])
     finally:
         if owned:
             active.close()
@@ -250,14 +260,7 @@ def delete_watched(
                     (dataset_key,),
                 )
             else:
-                active.execute(
-                    """
-                    UPDATE watched_records
-                    SET payload_json = ?, updated_at = ?
-                    WHERE dataset_key = ?
-                    """,
-                    (EMPTY_PAYLOAD_JSON, utc_now(), dataset_key),
-                )
+                _clear_payload_keep_meta(active, dataset_key, row["meta_json"])
     finally:
         if owned:
             active.close()

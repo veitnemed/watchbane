@@ -7,7 +7,7 @@ from typing import Any
 
 from candidates.models.schema import coerce_candidate_number
 from dataset.models.identity import normalize_title_key
-from dataset.models.media_type import normalize_media_type
+from dataset.models.media_type import MOVIE_MEDIA_TYPE_ALIASES, TV_MEDIA_TYPE_ALIASES, normalize_media_type
 from dataset.models.user_rating import normalize_user_rating
 from storage.sqlite.json_codec import dumps_json
 
@@ -87,6 +87,49 @@ class WatchedRecordRow:
     imdb_id: str | None
     payload_json: str
     meta_json: str | None
+
+
+def metadata_watched_projection(meta: Any) -> dict | None:
+    """Honor nested legacy and flat Story metadata without changing raw JSON."""
+    if not isinstance(meta, dict):
+        return None
+    main_info = dict(_as_dict(meta.get("main_info")))
+    if _clean_text(main_info.get("media_type")) is None and "media_type" in meta:
+        main_info["media_type"] = meta["media_type"]
+    return {**meta, "main_info": main_info}
+
+
+def metadata_watched_identity(meta: Any) -> tuple[str, int] | None:
+    """Recognize an explicit retained identity; never infer the default type."""
+    projected = metadata_watched_projection(meta)
+    if projected is None:
+        return None
+    raw_type = _clean_text(projected["main_info"].get("media_type"))
+    types = MOVIE_MEDIA_TYPE_ALIASES | TV_MEDIA_TYPE_ALIASES
+    if raw_type is None or raw_type.casefold() not in types:
+        return None
+    media = normalize_media_type(raw_type)
+    flat_type = _clean_text(projected.get("media_type"))
+    if flat_type and (flat_type.casefold() not in types or normalize_media_type(flat_type) != media):
+        return None
+    ids: set[int] = set()
+    for section in (_as_dict(projected.get("raw_scores")), projected):
+        values = [section.get("tmdb_id"), section.get("tmdbId")]
+        if section.get("source") == "tmdb":
+            values.append(section.get("id"))
+        for value in values:
+            if value is None or value == "":
+                continue
+            if type(value) is int:
+                identifier = value
+            elif isinstance(value, str) and (digits := value.strip()).isascii() and digits.isdecimal() and len(digits) <= 19:
+                identifier = int(digits)
+            else:
+                return None
+            if not 0 < identifier < 2**63:
+                return None
+            ids.add(identifier)
+    return (media, next(iter(ids))) if len(ids) == 1 else None
 
 
 def extract_watched_record(
