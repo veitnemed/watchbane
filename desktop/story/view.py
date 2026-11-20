@@ -172,6 +172,7 @@ class StorySearchView:
         self._seed_count = None
         self._snapshot_rows = None
         self._catalog_ready = False
+        self._catalog_read_failed = False
         self._records = {}
         self.on_library_changed = on_library_changed
         root = QVBoxLayout(self.widget)
@@ -264,6 +265,10 @@ class StorySearchView:
         self.cancel_catalog_button.clicked.connect(self._cancel_catalog)
         self.cancel_catalog_button.hide()
         import_row.addWidget(self.cancel_catalog_button)
+        self.retry_catalog_button = QPushButton("Повторить чтение")
+        self.retry_catalog_button.setObjectName("storyRetryCatalog")
+        self.retry_catalog_button.clicked.connect(self._retry_catalog_read)
+        import_row.addWidget(self.retry_catalog_button)
         self.catalog_status = QLabel("")
         self.catalog_status.setWordWrap(True)
         import_row.addWidget(self.catalog_status, 1)
@@ -292,7 +297,8 @@ class StorySearchView:
         QWidget.setTabOrder(self.query, self.search_button)
         QWidget.setTabOrder(self.search_button, self.catalog_button)
         QWidget.setTabOrder(self.catalog_button, self.snapshot_button)
-        QWidget.setTabOrder(self.snapshot_button, self.install_model_button)
+        QWidget.setTabOrder(self.snapshot_button, self.retry_catalog_button)
+        QWidget.setTabOrder(self.retry_catalog_button, self.install_model_button)
         QWidget.setTabOrder(self.install_model_button, self.text_search_button)
         self.query.setFocus()
 
@@ -318,12 +324,17 @@ class StorySearchView:
             self.search()
 
     def _show_idle(self):
+        if self._catalog_read_failed:
+            self.status.setText("Повторите чтение каталога профиля или откройте локальный файл. Запрос останется в поле.")
+            return
         self.status.setText(
             "Выберите пример запроса или опишите свой сюжет." if self._catalog_ready else
             "Загрузите описания из TMDb или откройте файл каталога. Можно набрать запрос заранее."
         )
 
     def _update_catalog_count(self, prefix=""):
+        was_unreadable = self._catalog_read_failed
+        self._catalog_read_failed = False
         try:
             if self.seed_path:
                 # Even if filters excluded every row last time, a replaced
@@ -345,12 +356,24 @@ class StorySearchView:
                 self.catalog_status.setText(prefix + label)
         except Exception:
             self._catalog_ready = False
-            self.catalog_status.setText(prefix + "Не удалось прочитать локальный каталог.")
+            self._catalog_read_failed = True
+            self.catalog_button.hide()
+            self.catalog_status.setText(prefix + "Не удалось прочитать каталог профиля.")
+            self._show_idle()
+        if was_unreadable and not self._catalog_read_failed:
+            self._show_idle()
+        self.retry_catalog_button.setVisible(self._catalog_read_failed)
         self.snapshot_button.setMenu(self.snapshot_menu if self.seed_path else None)
         self.examples.setEnabled(self._catalog_ready)
         self.search_button.setEnabled(self._catalog_ready and self._snapshot_worker is None)
         self.query.setPlaceholderText("Например: сериал про преступника" if self._catalog_ready else
+                                      "Каталог профиля недоступен" if self._catalog_read_failed else
                                       "Для поиска нужен каталог")
+
+    def _retry_catalog_read(self):
+        if self._catalog_read_failed and self._can_switch_source():
+            self._update_catalog_count()
+            self.query.setFocus()
 
     def _can_switch_source(self):
         return not (self._closing or self._worker or self._catalog_worker or self._snapshot_worker)
@@ -372,6 +395,7 @@ class StorySearchView:
         self._snapshot_cancelled = False
         self.snapshot_button.setEnabled(False)
         self.catalog_button.setEnabled(False)
+        self.retry_catalog_button.setEnabled(False)
         self.search_button.setEnabled(False)
         self.examples.setEnabled(False)
         self.cancel_catalog_button.setEnabled(True)
@@ -390,6 +414,7 @@ class StorySearchView:
             return
         self.snapshot_button.setEnabled(True)
         self.catalog_button.setEnabled(True)
+        self.retry_catalog_button.setEnabled(True)
         self.cancel_catalog_button.hide()
         self.cancel_catalog_button.setText("Отменить загрузку")
         if self._snapshot_cancelled:
@@ -420,7 +445,8 @@ class StorySearchView:
         self.query.setFocus()
 
     def _fill_catalog(self):
-        if self._closing or self.seed_path or self._snapshot_worker or self._catalog_worker is not None:
+        if (self._closing or self.seed_path or self._snapshot_worker or self._catalog_worker is not None
+                or self._catalog_read_failed):
             return
         from apis import tmdb_api
         if not tmdb_api.has_tmdb_credentials():

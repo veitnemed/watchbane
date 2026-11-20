@@ -66,3 +66,55 @@ def test_qt_cancel_and_error_keep_existing_catalog(qtbot,monkeypatch):
     assert 'не удалась' in view.catalog_status.text() and load_candidate_pool()==before
     assert view.catalog_button.isEnabled()
     view.prepare_for_shutdown()
+
+
+def test_unreadable_profile_catalog_offers_local_retry_not_empty_import(qtbot, monkeypatch):
+    from desktop.story import view as story_ui
+
+    reads = []
+
+    def snapshot():
+        reads.append(1)
+        if len(reads) == 1:
+            raise OSError("private profile path")
+        return [], {}
+
+    monkeypatch.setattr(story_ui.service, "story_catalog_snapshot", snapshot)
+    view = StorySearchView()
+    qtbot.addWidget(view.widget)
+    view.widget.resize(1180, 950)
+    view.widget.show()
+    assert "Не удалось прочитать каталог профиля" in view.catalog_status.text()
+    assert "private profile path" not in view.catalog_status.text()
+    assert view.retry_catalog_button.isVisible() and view.snapshot_button.isVisible()
+    assert not view.catalog_button.isVisible() and not view.search_button.isEnabled()
+    view.query.setText("врач")
+    view._fill_catalog()
+    assert view._auth_dialog is None and view._worker is None
+    qtbot.mouseClick(view.retry_catalog_button, Qt.MouseButton.LeftButton)
+    assert len(reads) == 2 and "Каталог пока пуст" in view.catalog_status.text()
+    assert not view.retry_catalog_button.isVisible() and view.catalog_button.isVisible()
+    assert view.query.text() == "врач" and not view.search_button.isEnabled()
+
+
+def test_regular_catalog_refresh_clears_transient_profile_error(qtbot, monkeypatch):
+    from desktop.story import view as story_ui
+
+    unavailable = True
+
+    def snapshot():
+        if unavailable:
+            raise OSError("temporary read failure")
+        return [], {}
+
+    monkeypatch.setattr(story_ui.service, "story_catalog_snapshot", snapshot)
+    view = StorySearchView()
+    qtbot.addWidget(view.widget)
+    view.query.setText("врач ищет пациента")
+    assert view._catalog_read_failed
+    unavailable = False
+    view._update_catalog_count()
+    assert not view._catalog_read_failed
+    assert "Каталог пока пуст" in view.catalog_status.text()
+    assert "Загрузите описания" in view.status.text()
+    assert view.query.text() == "врач ищет пациента"
