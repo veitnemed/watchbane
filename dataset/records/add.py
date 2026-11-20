@@ -72,6 +72,55 @@ def _build_meta_obj(main_info: dict, raw: dict, extra_meta: dict | None = None) 
     return meta_obj
 
 
+def _build_new_movie(record_payload, main_info, raw_scores):
+    main_info = normalize_main_info(main_info)
+    raw_scores = normalize_raw_scores(raw_scores)
+    movie = {
+        "main_info": main_info,
+        "raw_scores": raw_scores,
+        "computed_scores": build_computed_scores(raw_scores, main_info),
+    }
+    localized = record_payload.get("localized")
+    if isinstance(localized, dict):
+        movie["localized"] = deepcopy(localized)
+    genres_tmdb = record_payload.get("genres_tmdb")
+    if isinstance(genres_tmdb, list) and genres_tmdb:
+        movie["genres_tmdb"] = list(genres_tmdb)
+    return movie
+
+
+def _add_reviewed_candidate(record_payload, meta_payload, pool_candidate, poster_hints):
+    # Do not load a whole-library snapshot here. The single-row writer decides
+    # identity and allocates the final key against fresh state inside SQLite.
+    from candidates.title_state_service import ReviewedWatchedConflict, save_watched_dataset_transition
+
+    parsed = validate_add_record_payload(record_payload, data={})
+    if isinstance(parsed, AddRecordResult):
+        return parsed
+    raw = (meta_payload.get("raw_scores", meta_payload.get("raw", parsed.input_raw_scores))
+           if isinstance(meta_payload, dict) else parsed.input_raw_scores)
+    if not valid.is_valid_raw_meta(raw):
+        return AddRecordResult(False, parsed.title, "Ошибка добавления! Некорректные raw_scores", "invalid_payload")
+    meta = _build_meta_obj(parsed.main_info, raw, extra_meta=extract_extra_meta(meta_payload))
+    if meta is None:
+        return AddRecordResult(False, parsed.title, "Ошибка добавления! Некорректные meta-данные", "invalid_payload")
+    movie = _build_new_movie(record_payload, parsed.main_info, raw)
+    try:
+        dataset_key = save_watched_dataset_transition(
+            {parsed.title: movie}, {parsed.title: meta}, pool_candidate,
+        ) or parsed.title
+    except ReviewedWatchedConflict as error:
+        return AddRecordResult(False, error.dataset_key, str(error), error.reason)
+    except Exception as error:
+        return AddRecordResult(False, parsed.title, f"Ошибка добавления! Не удалось сохранить dataset: {error}", "save_error")
+
+    side_effects = run_after_add_side_effects(
+        title=parsed.title, year=parsed.year, movie=movie, meta_obj=meta,
+        pool_candidate=pool_candidate, poster_hints=poster_hints,
+    )
+    return AddRecordResult(True, dataset_key, "Новая запись добавлена!", "saved", side_effects)
+
+
 def add_dataset_record(
     record_payload: dict,
     meta_payload=None,
@@ -79,7 +128,11 @@ def add_dataset_record(
     pool_candidate=None,
     poster_hints=None,
 ) -> AddRecordResult:
-    """Adds a new record to dataset using the current add_movie behavior."""
+    """Add a watched record; reviewed candidates use a single-row transaction."""
+    if isinstance(pool_candidate, dict):
+        return _add_reviewed_candidate(record_payload, meta_payload, pool_candidate, poster_hints)
+
+    # Keep the separate compatibility path for manual/non-candidate adds.
     data = load_dataset()
     meta = load_meta()
     validated = validate_add_record_payload(record_payload, data=data)
@@ -159,30 +212,10 @@ def add_dataset_record(
                 merged_meta.update(extra_meta)
                 meta[target_meta_key] = merged_meta
 
-    raw_scores = normalize_raw_scores(raw_scores)
-    new_main_info = normalize_main_info(main_info)
-    computed_scores = build_computed_scores(raw_scores, new_main_info)
-
-    new_movie = {
-        "main_info": new_main_info,
-        "raw_scores": raw_scores,
-        "computed_scores": computed_scores,
-    }
-    localized = record_payload.get("localized")
-    if isinstance(localized, dict):
-        new_movie["localized"] = deepcopy(localized)
-    genres_tmdb = record_payload.get("genres_tmdb")
-    if isinstance(genres_tmdb, list) and genres_tmdb:
-        new_movie["genres_tmdb"] = list(genres_tmdb)
-
+    new_movie = _build_new_movie(record_payload, main_info, raw_scores)
     data[dataset_key] = new_movie
     try:
-        if isinstance(pool_candidate, dict):
-            from candidates.title_state_service import save_watched_dataset_transition
-
-            save_watched_dataset_transition(data, meta, pool_candidate)
-        else:
-            save_dataset_and_meta(data, meta)
+        save_dataset_and_meta(data, meta)
     except Exception as error:
         return AddRecordResult(
             ok=False,

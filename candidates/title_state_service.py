@@ -19,8 +19,8 @@ from storage.sqlite import action_repository, impression_repository
 from storage.sqlite.connection import connect
 from storage.sqlite.json_codec import loads_json
 from storage.sqlite.migrations import apply_migrations
-from storage.sqlite.watched_meta import save_meta_dict
-from storage.sqlite.watched_write import delete_watched, save_dataset_dict, upsert_watched_row
+from storage.sqlite.watched_mapper import extract_watched_record
+from storage.sqlite.watched_write import delete_watched, upsert_watched_row
 
 
 STATE_AVAILABLE = "available"
@@ -274,21 +274,82 @@ def mark_watched(
         conn.close()
 
 
+class ReviewedWatchedConflict(ValueError):
+    def __init__(self, dataset_key: str, reason: str, message: str):
+        super().__init__(message)
+        self.dataset_key = dataset_key
+        self.reason = reason
+
+
 def save_watched_dataset_transition(
     data: dict,
     meta: dict,
     candidate: dict,
     *,
     path: str | Path | None = None,
-) -> None:
-    """Persist the reviewed transfer payload and clear candidate actions atomically."""
+) -> str:
+    """Add one reviewed watched record, never reconcile a stale dataset snapshot."""
+    if len(data) != 1 or not set(meta).issubset(data):
+        raise ValueError("Reviewed transfer requires exactly one record and its own meta.")
+    proposed_key, payload = next(iter(data.items()))
+    meta_payload = dict(meta.get(proposed_key) or {})
     normalized = normalize_candidate_record(candidate)
+    incoming = extract_watched_record(proposed_key, payload, meta=meta_payload)
+    candidate_id = _candidate_tmdb_id(normalized)
+    if candidate_id is not None:
+        if (incoming.tmdb_id not in (None, candidate_id)
+            or normalize_media_type(normalized.get("media_type")) != incoming.media_type):
+            raise ReviewedWatchedConflict(
+                proposed_key, "invalid_payload", "Идентификатор записи не совпадает с выбранным кандидатом.",
+            )
+        meta_payload["tmdb_id"] = candidate_id
+    tmdb_id = candidate_id if candidate_id is not None else incoming.tmdb_id
+
     conn = connect(path)
     try:
         apply_migrations(conn)
         with conn:
-            save_dataset_dict(data, conn=conn)
-            save_meta_dict(meta, conn=conn)
+            conn.execute("BEGIN IMMEDIATE")
+            matching_id = conn.execute(
+                """
+                SELECT dataset_key, payload_json, meta_json FROM watched_records
+                WHERE media_type = ? AND tmdb_id = ?
+                ORDER BY (payload_json != '{}') DESC, dataset_key LIMIT 1
+                """,
+                (incoming.media_type, tmdb_id),
+            ).fetchone()
+            if matching_id and matching_id["payload_json"] != "{}":
+                raise ReviewedWatchedConflict(
+                    str(matching_id["dataset_key"]), "duplicate_tmdb_identity",
+                    "This TMDb title is already in the watched collection.",
+                )
+            unresolved = conn.execute(
+                """
+                SELECT dataset_key FROM watched_records
+                WHERE title_normalized = ? AND media_type = ? AND payload_json != '{}'
+                  AND (year IS ? OR year IS NULL OR ? IS NULL)
+                  AND (tmdb_id IS NULL OR ? IS NULL)
+                LIMIT 1
+                """,
+                (incoming.title_normalized, incoming.media_type, incoming.year, incoming.year, tmdb_id),
+            ).fetchone()
+            if unresolved:
+                raise ReviewedWatchedConflict(
+                    str(unresolved["dataset_key"]), "duplicate_title",
+                    "Ошибка добавления! Такой объект уже добавлен",
+                )
+            if matching_id:
+                dataset_key = str(matching_id["dataset_key"])
+                old_meta = loads_json(matching_id["meta_json"], {})
+                if isinstance(old_meta, dict):
+                    meta_payload = dict(old_meta, **meta_payload)
+            else:
+                occupied = {row["dataset_key"]: None for row in conn.execute("SELECT dataset_key FROM watched_records")}
+                dataset_key = build_dataset_record_key(
+                    occupied, incoming.title, year=incoming.year, media_type=incoming.media_type,
+                )
+            upsert_watched_row(conn, dataset_key=dataset_key, payload=payload, meta=meta_payload)
             _clear_candidate_actions(conn, normalized)
+        return dataset_key
     finally:
         conn.close()
