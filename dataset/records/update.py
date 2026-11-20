@@ -1,9 +1,12 @@
 """Update watched record use-case."""
 
+import sqlite3
+
 from config import constant
 from dataset.meta.sync import sync_raw_scores_to_meta
 from dataset.models.identity import find_dataset_title
 from dataset.models.results import UpdateRecordResult
+from dataset.models.user_rating import normalize_user_rating
 from dataset.records.features import build_computed_scores
 from dataset.records.validation import (
     normalize_update_sections,
@@ -15,8 +18,34 @@ from storage.data import load_dataset, save_dataset
 from storage.normalize import normalize_main_info, normalize_raw_scores
 
 
+def _update_desktop_score(dataset_key: str, value) -> UpdateRecordResult:
+    from storage.sqlite.watched_write import update_watched_user_score
+
+    score = normalize_user_rating(value)
+    if score is None:
+        return UpdateRecordResult(
+            False, dataset_key, "Оценка должна быть целым числом от 1 до 3.", "invalid_patch", []
+        )
+    try:
+        reason = update_watched_user_score(dataset_key, score)
+    except (OSError, sqlite3.Error):
+        return UpdateRecordResult(
+            False, dataset_key, "Не удалось сохранить оценку. Попробуйте ещё раз.", "save_error", []
+        )
+    if reason == "not_found":
+        return UpdateRecordResult(False, dataset_key, "Запись не найдена.", reason, [])
+    if reason == "nothing_changed":
+        return UpdateRecordResult(True, dataset_key, "Изменений нет.", reason, [])
+    return UpdateRecordResult(True, dataset_key, "Запись обновлена.", reason, ["main_info.user_score"])
+
+
 def update_dataset_record(title, patch_payload, source_name: str = "") -> UpdateRecordResult:
     """Updates safe fields of an existing dataset record without changing its key."""
+    if source_name == "desktop_gui" and isinstance(patch_payload, dict) and set(patch_payload) == {"main_info"}:
+        score_patch = patch_payload["main_info"]
+        if isinstance(score_patch, dict) and set(score_patch) == {"user_score"}:
+            return _update_desktop_score(title, score_patch["user_score"])
+
     data = load_dataset()
     dataset_title = find_dataset_title(data, title)
     if dataset_title is None:

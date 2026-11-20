@@ -118,6 +118,44 @@ def save_dataset_dict(
             active.close()
 
 
+def update_watched_user_score(dataset_key: str, score: int) -> str:
+    """Update the indexed rating and the same watched payload in one transaction."""
+    active, _owned = connection(None, None)
+    try:
+        with active:
+            active.execute("BEGIN IMMEDIATE")
+            row = active.execute(
+                "SELECT payload_json, user_score FROM watched_records WHERE dataset_key = ?",
+                (dataset_key,),
+            ).fetchone()
+            if row is None:
+                return "not_found"
+
+            payload = loads_json(row["payload_json"], None)
+            if not isinstance(payload, dict) or not payload:
+                # A metadata-only row is not a watched item.
+                return "not_found"
+            main_info = payload.get("main_info")
+            if not isinstance(main_info, dict):
+                main_info = {}
+            payload_score = main_info.get("user_score")
+            if row["user_score"] == score and type(payload_score) is int and payload_score == score:
+                return "nothing_changed"
+
+            payload["main_info"] = {**main_info, "user_score": score}
+            active.execute(
+                """
+                UPDATE watched_records
+                SET user_score = ?, payload_json = ?, updated_at = ?
+                WHERE dataset_key = ?
+                """,
+                (score, dumps_json(payload), utc_now(), dataset_key),
+            )
+            return "updated"
+    finally:
+        active.close()
+
+
 def delete_watched(
     dataset_key: str,
     *,

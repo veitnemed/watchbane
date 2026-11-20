@@ -143,7 +143,10 @@ class CollectionView:
                     if action=='score':
                         value,ok=QInputDialog.getItem(self.widget,'Ваша оценка','Как вам история?',['1','2','3'],editable=False)
                         if not ok:return
-                        update_user_score(entry[0],int(value))
+                        result = update_user_score(entry[0], int(value))
+                        if not result.ok:
+                            self.status.setText("Не удалось сохранить оценку. Попробуйте ещё раз.")
+                            return
                     elif QMessageBox.question(self.widget,'Удалить из просмотренного?',str(entry[2].get('title') or entry[0]))==QMessageBox.StandardButton.Yes:
                         result=delete_watched_title(entry[0])
                         if not result.get('ok'):

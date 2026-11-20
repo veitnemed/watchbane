@@ -68,3 +68,22 @@ def test_collection_routes_each_saved_homonym_to_its_persisted_tmdb_identity(qtb
     assert states.get_title_state(target) == states.STATE_AVAILABLE
     assert states.get_title_state(other) == states.STATE_WATCHLIST
     assert not cards(reopened)
+
+
+def test_score_write_failure_keeps_card_and_reports_error(qtbot, monkeypatch):
+    from PyQt6.QtWidgets import QInputDialog
+    from app.use_cases import watched_library
+    from dataset.models.results import UpdateRecordResult
+
+    title = make_candidate(12993, "чужая запись не меняется")
+    key = states.mark_watched(title, optional_user_score=3)["dataset_key"]
+    view = open_collection(qtbot)
+    click(qtbot, view.section_buttons["watched"])
+    card = cards(view)[0]
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *args, **kwargs: ("1", True))
+    monkeypatch.setattr(watched_library, "update_user_score",
+                        lambda *args: UpdateRecordResult(False, key, "error", "save_error", []))
+    click(qtbot, next(button for button in card.findChildren(QPushButton) if button.text() == "Оценка"))
+    assert "Не удалось сохранить оценку" in view.status.text()
+    assert cards(view)[0] is card
+    assert view._entries[0][1]["main_info"]["user_score"] == 3
