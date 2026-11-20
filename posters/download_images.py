@@ -57,7 +57,14 @@ def _safe_image_filename(identity: str) -> str:
 
 def poster_image_path_for_identity(identity: str) -> Path:
     """Return the default local image path for a poster-cache identity."""
-    return DEFAULT_POSTER_IMAGES_DIR / _safe_image_filename(identity)
+    filename = _safe_image_filename(identity)
+    if len(filename.encode("utf-8")) <= 255:
+        return DEFAULT_POSTER_IMAGES_DIR / filename
+
+    # Keep overlong identities out of the legacy filename namespace. Hash the
+    # original identity, not its sanitized form or a truncated title prefix.
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()
+    return DEFAULT_POSTER_IMAGES_DIR / "_long" / f"{digest}.jpg"
 
 
 def normalize_tmdb_poster_download_url(

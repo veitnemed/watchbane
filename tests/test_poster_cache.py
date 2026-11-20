@@ -242,3 +242,49 @@ def test_build_watched_movie_card_falls_back_to_default_local_image(monkeypatch)
         card = build_watched_movie_card(movie, poster_cache={})
 
         assert card["poster_src"] == str(image_path)
+
+
+def test_watched_poster_path_keeps_old_short_names_and_bounds_utf8_components(tmp_path, monkeypatch) -> None:
+    from posters.download_images import poster_image_path_for_identity
+
+    monkeypatch.setattr("posters.download_images.DEFAULT_POSTER_IMAGES_DIR", tmp_path)
+    assert poster_image_path_for_identity("old/a\\b|2021") == tmp_path / "old_a_b_2021.jpg"
+    assert poster_image_path_for_identity("a" * 251).name == "a" * 251 + ".jpg"
+
+    # Both have the same sanitized text and are short in code points, but too
+    # long in UTF-8 bytes to be legal filenames on common Unix filesystems.
+    prefix = "Ж" * 130
+    first = poster_image_path_for_identity(prefix + "/|2021")
+    second = poster_image_path_for_identity(prefix + "\\|2021")
+    assert first.parent == second.parent == tmp_path / "_long"
+    assert first == poster_image_path_for_identity(prefix + "/|2021")
+    assert first != second
+    assert len(first.name.encode("utf-8")) == 68
+
+
+def test_long_watched_poster_round_trips_through_write_lookup_and_remove(tmp_path, monkeypatch) -> None:
+    from posters.cache import default_local_poster_path, poster_identity_key
+    from posters.download_images import download_poster_for_title, remove_local_poster_file
+
+    monkeypatch.setattr("posters.download_images.DEFAULT_POSTER_IMAGES_DIR", tmp_path / "images")
+
+    def fail_download(*_args, **_kwargs):
+        raise AssertionError("Unexpected network download")
+
+    monkeypatch.setattr("posters.download_images._download_preview_poster", fail_download)
+    monkeypatch.setattr("posters.download_images.save_poster_cache", lambda _cache: None)
+    source = tmp_path / "poster.jpg"
+    source.write_bytes(b"local poster")
+    title, year = "Длинное название " * 30, 2026
+    identity = poster_identity_key(title, year)
+    entry = {"status": "found", "poster_path": str(source), "poster_url": "https://example.invalid/poster.jpg"}
+    assert default_local_poster_path(title, year) is None
+
+    result = download_poster_for_title(title, year, cache={identity: entry})
+    new_path = Path(result["local_path"])
+    assert new_path.parent == tmp_path / "images" / "_long"
+    assert new_path.read_bytes() == b"local poster"
+    assert default_local_poster_path(title, year) == str(new_path)
+    assert remove_local_poster_file(title, year)["paths"] == [str(new_path)]
+    assert default_local_poster_path(title, year) is None
+    assert source.is_file()
