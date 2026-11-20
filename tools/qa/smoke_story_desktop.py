@@ -110,14 +110,14 @@ def _child_run(phase, payload, *, timeout, platform, exe=None):
     return report
 
 
-def _isolated_install_destination(story, profile):
-    from candidates.story_model_install import profile_story_model_destination
+def _isolated_install_destination(story, profile, *, repair=False):
+    from candidates.story_model_install import profile_story_model_destination, profile_story_model_repair_destination
     from config import constant
 
     root = Path(story._model_install_profile).resolve()
     check(root == Path(constant.APP_DATA_DIR).resolve() and root.is_relative_to(profile),
           "Installer did not bind to the isolated active data profile.")
-    destination = profile_story_model_destination(root)
+    destination = (profile_story_model_repair_destination if repair else profile_story_model_destination)(root)
     check(destination.resolve().is_relative_to(profile), "Model cache is outside the isolated profile.")
     return destination
 
@@ -145,6 +145,7 @@ def _desktop_phase(phase, options):
     check((profile / PROFILE_MARKER).is_file(), "Profile is not reserved as a disposable smoke directory.")
     apply_isolated_data_dir(profile)
     verify_cached_install = options.get("verify_cached_install", False)
+    verify_cache_repair = options.get("verify_cache_repair", False)
     if not verify_cached_install:
         os.environ["WATCHBANE_STORY_MODEL_DIR"] = options["model_dir"]
     os.environ["WATCHBANE_INTERFACE_LANGUAGE"] = "ru"
@@ -223,7 +224,15 @@ def _desktop_phase(phase, options):
                 screenshot("empty")
                 if verify_cached_install:
                     destination = _isolated_install_destination(story, profile)
-                    _prepare_pinned_cache(destination, Path(options["model_dir"]))
+                    if verify_cache_repair:
+                        damaged = destination / "onnx" / "model.onnx"
+                        damage = b"deliberately incomplete disposable cache"
+                        damaged.parent.mkdir(parents=True)
+                        damaged.write_bytes(damage)
+                        repair_destination = _isolated_install_destination(story, profile, repair=True)
+                        _prepare_pinned_cache(repair_destination, Path(options["model_dir"]))
+                    else:
+                        _prepare_pinned_cache(destination, Path(options["model_dir"]))
                     check(story.model_dir is None and story.install_model_button.isVisible(),
                           "Expected the model to be unconfigured on fresh startup.")
                     QTest.mouseClick(story.install_model_button, Qt.MouseButton.LeftButton)
@@ -232,6 +241,14 @@ def _desktop_phase(phase, options):
                     began = monotonic()
                     QTest.mouseClick(story._install_confirm, Qt.MouseButton.LeftButton)
                     wait_until(lambda: story._model_install_worker is None, "Cached model verification timed out.")
+                    if verify_cache_repair:
+                        check(story.model_dir is None and story._install_repair.isVisible(),
+                              "Damaged cache did not offer explicit recovery without switching modes.")
+                        QTest.mouseClick(story._install_repair, Qt.MouseButton.LeftButton)
+                        wait_until(lambda: story._model_install_worker is None, "Cache repair timed out.")
+                        check(damaged.read_bytes() == damage and not damaged.with_name("tokenizer.json").exists(),
+                              "Cache repair changed the damaged original.")
+                        destination = repair_destination
                     check(story.model_dir == str(destination) and story._model_preference.read() == str(destination),
                           "Model verification or preference persistence failed.")
                     elapsed["install_cached_verification_ms"] = round((monotonic() - began) * 1000)
@@ -270,7 +287,7 @@ def _desktop_phase(phase, options):
                       "Save action did not confirm persistence.")
                 screenshot("result")
             if phase == "reopen" and verify_cached_install:
-                check(story.model_dir == str(_isolated_install_destination(story, profile)),
+                check(story.model_dir == str(_isolated_install_destination(story, profile, repair=verify_cache_repair)),
                       "Installed model did not remain configured after restart.")
             registry.focus("watched")
             app.processEvents()
@@ -324,6 +341,8 @@ def main(argv=None):
     parser.add_argument("--verify-cached-install", action="store_true",
                         help="Exercise the real in-app installer and preference using a prefilled disposable cache; "
                              "does not verify downloading")
+    parser.add_argument("--verify-cache-repair", action="store_true",
+                        help="With cached install verification, exercise recovery from a damaged managed cache")
     parser.add_argument("--query", required=True)
     parser.add_argument("--expected-title", required=True, help="Displayed title expected in first result")
     parser.add_argument("--profile", type=Path, help="New/empty disposable profile (temporary if omitted)")
@@ -333,6 +352,8 @@ def main(argv=None):
     parser.add_argument("--qt-platform", default="offscreen" if sys.platform.startswith("linux") else None)
     args = parser.parse_args(argv)
     try:
+        check(not args.verify_cache_repair or args.verify_cached_install,
+              "Cache repair requires cached model verification.")
         exe = args.qa_exe.expanduser().resolve() if args.qa_exe else None
         if exe is not None:
             check(exe.is_file(), "The frozen QA executable does not exist.")
@@ -364,8 +385,9 @@ def main(argv=None):
                        "query": args.query, "expected_title": args.expected_title,
                        "output_dir": str(output) if output is not None else None,
                        "step_timeout": args.step_timeout, "scale": args.scale,
-                       "verify_cached_install": args.verify_cached_install, "require_fp32": exe is not None}
-            first = _child_run("first", payload, timeout=args.step_timeout * (3 if args.verify_cached_install else 2) + 30, platform=args.qt_platform, **launcher)
+                       "verify_cached_install": args.verify_cached_install, "verify_cache_repair": args.verify_cache_repair,
+                       "require_fp32": exe is not None}
+            first = _child_run("first", payload, timeout=args.step_timeout * (4 if args.verify_cache_repair else 3 if args.verify_cached_install else 2) + 30, platform=args.qt_platform, **launcher)
             reopen = _child_run("reopen", payload, timeout=args.step_timeout + 30, platform=args.qt_platform, **launcher)
             check(first["pid"] != reopen["pid"], "Expected independent first and reopen Qt processes.")
     except (SmokeFailure, ValueError, OSError) as exc:
@@ -378,7 +400,8 @@ def main(argv=None):
     print(json.dumps({"ok": True, "isolated_processes": 2, "catalogue_chooser": True,
                       "e5_top_result_matches": True, "reopened_collection_matches": True,
                       "poster_network_disabled": True, "frozen_qa": exe is not None, "fp32_required": exe is not None,
-                      "cached_model_verified_in_ui": args.verify_cached_install, "first": first, "reopen": reopen}, indent=2))
+                      "cached_model_verified_in_ui": args.verify_cached_install, "managed_cache_repair_verified": args.verify_cache_repair,
+                      "first": first, "reopen": reopen}, indent=2))
     return 0
 
 

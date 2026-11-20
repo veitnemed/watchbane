@@ -163,3 +163,57 @@ def test_model_install_uses_only_safe_hints(qtbot, monkeypatch, code, visible):
     text = view._install_status.text()
     assert visible in text and "режим не изменился" in text
     assert "private" not in text and code not in text and view.model_dir is None
+
+
+def test_managed_model_recovery_requires_explicit_action_and_preserves_selection_on_cancel(
+        qtbot, monkeypatch, tmp_path):
+    managed_attempts, repair_attempts = [], []
+    started, release = Event(), Event()
+    old = tmp_path / "manual"
+    old.mkdir()
+    marker = old / "keep"
+    marker.write_text("untouched")
+    set_setting(story_ui._MODEL_SETTING, str(old))
+    repaired = tmp_path / "recovery"
+
+    def install(destination, **_kwargs):
+        managed_attempts.append(destination)
+        raise story_model_install.StoryModelInstallError("internal detail", "existing_invalid")
+
+    def repair(profile, *, on_progress, cancelled):
+        repair_attempts.append(profile)
+        if len(repair_attempts) == 1:
+            started.set()
+            assert release.wait(5)
+            assert cancelled()
+        return repaired
+
+    monkeypatch.setattr(story_model_install, "install_story_model", install)
+    monkeypatch.setattr(story_model_install, "repair_profile_story_model", repair, raising=False)
+    view = open_view(qtbot)
+    view._search_failed()  # A manual-folder failure alone does not offer managed repair.
+    click(qtbot, view.install_model_button)
+    assert not view._install_repair.isVisible() and not managed_attempts and not repair_attempts
+    click(qtbot, view._install_confirm)
+    qtbot.waitUntil(lambda: view._model_install_worker is None)
+    assert len(managed_attempts) == 1 and not repair_attempts
+    assert view._install_repair.isVisible() and not view._install_confirm.isVisible()
+    assert "в отдельную папку" in view._install_status.text()
+    assert get_setting(story_ui._MODEL_SETTING) == view.model_dir == str(old)
+
+    click(qtbot, view._install_repair)
+    try:
+        qtbot.waitUntil(started.is_set)
+        assert not view._install_manual.isEnabled() and not view._install_repair.isEnabled()
+        click(qtbot, view._install_cancel)
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: view._model_install_worker is None)
+    assert get_setting(story_ui._MODEL_SETTING) == view.model_dir == str(old)
+    assert view._install_repair.isEnabled() and marker.read_text() == "untouched"
+
+    click(qtbot, view._install_repair)
+    qtbot.waitUntil(lambda: view._model_install_worker is None)
+    assert repair_attempts == [view._model_install_profile] * 2
+    assert get_setting(story_ui._MODEL_SETTING) == view.model_dir == str(repaired)
+    assert not view._install_repair.isVisible() and marker.read_text() == "untouched"

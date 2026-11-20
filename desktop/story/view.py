@@ -105,16 +105,17 @@ _MODEL_INSTALL_HINTS = {
     "integrity": "Не совпала контрольная сумма. Файлы не подключены; попробуйте скачать ещё раз.",
     "tls": "Не удалось подтвердить защищённое соединение. Проверьте дату на компьютере и настройки сети.",
     "timeout": "Загрузка заняла слишком много времени. Попробуйте ещё раз при устойчивом соединении.",
-    "existing_invalid": "Файлы в кэше не прошли проверку. Они оставлены без изменений. Выберите готовую папку.",
+    "existing_invalid": "Файлы в кэше не прошли проверку. Они оставлены без изменений.",
 }
 
 
 class ModelInstallWorker(QThread):
     progress = pyqtSignal(int, int)
 
-    def __init__(self, profile_root, parent):
+    def __init__(self, profile_root, parent, *, repair=False):
         super().__init__(parent)
         self.profile_root = profile_root
+        self.repair = repair
         self.path = None
         self.failure = None
         self._cancelled = Event()
@@ -128,11 +129,12 @@ class ModelInstallWorker(QThread):
                 StoryModelInstallCancelled, StoryModelInstallError, install_story_model, profile_story_model_destination,
             )
             try:
-                self.path = install_story_model(
-                    profile_story_model_destination(self.profile_root),
-                    on_progress=self.progress.emit,
-                    cancelled=self._cancelled.is_set,
-                )
+                callbacks = dict(on_progress=self.progress.emit, cancelled=self._cancelled.is_set)
+                if self.repair:
+                    from candidates.story_model_install import repair_profile_story_model
+                    self.path = repair_profile_story_model(self.profile_root, **callbacks)
+                else:
+                    self.path = install_story_model(profile_story_model_destination(self.profile_root), **callbacks)
             except StoryModelInstallCancelled:
                 self.failure = "cancelled"
             except StoryModelInstallError as error:
@@ -157,6 +159,7 @@ class StorySearchView:
         self._model_install_worker = None
         self._model_install_cancelled = False
         self._model_install_success = False
+        self._model_repair_available = False
         self._pending_query = None
         self._closing = False
         self._active_query = ""
@@ -527,8 +530,11 @@ class StorySearchView:
         for button in (self.model_button, self.text_search_button, self.install_model_button):
             button.setEnabled(can_change)
         if self._model_install_dialog is not None:
-            self._install_confirm.setEnabled(can_change and self._install_runtime_available
-                                             and not self._model_install_success)
+            can_install = can_change and self._install_runtime_available and not self._model_install_success
+            self._install_confirm.setVisible(not self._model_repair_available)
+            self._install_confirm.setEnabled(can_install and not self._model_repair_available)
+            self._install_repair.setVisible(self._model_repair_available)
+            self._install_repair.setEnabled(can_install and self._model_repair_available)
             self._install_manual.setEnabled(can_change and self._install_runtime_available)
 
     def _open_model_install(self):
@@ -554,6 +560,9 @@ class StorySearchView:
             layout.addWidget(self._install_progress)
             self._install_confirm = QPushButton("Скачать и установить (~487 МБ)")
             self._install_confirm.clicked.connect(self._start_model_install)
+            self._install_repair = QPushButton("Восстановить модель… (~487 МБ)")
+            self._install_repair.setAccessibleDescription("Скачать проверенную копию в отдельную папку.")
+            self._install_repair.clicked.connect(self._start_model_repair)
             self._install_manual = QPushButton("Выбрать готовую папку…")
             self._install_manual.clicked.connect(self._choose_install_folder)
             self._install_cancel = QPushButton("Отменить загрузку")
@@ -561,7 +570,7 @@ class StorySearchView:
             self._install_cancel.hide()
             close = QPushButton("Закрыть")
             close.clicked.connect(dialog.reject)
-            for button in (self._install_confirm, self._install_cancel, self._install_manual, close):
+            for button in (self._install_confirm, self._install_repair, self._install_cancel, self._install_manual, close):
                 button.setAutoDefault(False)  # Opening the dialog is not download consent.
                 layout.addWidget(button)
             dialog.rejected.connect(self._cancel_model_install)
@@ -579,10 +588,17 @@ class StorySearchView:
             self._model_install_dialog.accept()
 
     def _start_model_install(self):
+        self._start_model_download(repair=False)
+
+    def _start_model_repair(self):
+        self._start_model_download(repair=True)
+
+    def _start_model_download(self, *, repair):
         if (self._closing or self._worker or self._model_install_worker or self._model_install_success
-                or self._model_install_dialog is None or not self._install_runtime_available):
+                or self._model_install_dialog is None or not self._install_runtime_available
+                or repair != self._model_repair_available):
             return
-        worker = self._model_install_worker = ModelInstallWorker(self._model_install_profile, self.widget)
+        worker = self._model_install_worker = ModelInstallWorker(self._model_install_profile, self.widget, repair=repair)
         self._model_install_cancelled = False
         self._install_progress.setRange(0, 0)
         self._install_progress.show()
@@ -623,12 +639,23 @@ class StorySearchView:
         if self._model_install_cancelled or worker.failure == "cancelled":
             self._install_status.setText("Установка отменена. Выбранный режим не изменился.")
         elif worker.failure or not worker.path:
+            if worker.failure == "existing_invalid" and not worker.repair:
+                self._model_repair_available = True
+                self._install_status.setText("Копия модели в профиле не прошла проверку. Файлы оставлены без изменений. Можно скачать "
+                                             "проверенную копию в отдельную папку или выбрать готовую. "
+                                             "Выбранный режим не изменился.")
+                self._sync_model_actions()
+                return
             hint = _MODEL_INSTALL_HINTS.get(worker.failure, "Проверьте интернет и место на диске "
                                              "или выберите готовую папку.")
+            if worker.repair and worker.failure == "existing_invalid":
+                hint = ("Не удалось найти свободное место в кэше профиля. "
+                        "Существующие папки оставлены без изменений. Можно выбрать готовую копию.")
             self._install_status.setText(f"Не удалось установить модель. {hint} Выбранный режим не изменился.")
         else:
             self.model_dir = str(worker.path)
             self._model_install_success = True
+            self._model_repair_available = False
             self._update_model_controls()
             self.backend_label.setText("Локальная E5 установлена. Она подключится при следующем поиске.")
             saved = self._remember_model_choice()

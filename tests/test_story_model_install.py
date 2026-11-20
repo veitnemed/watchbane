@@ -205,3 +205,98 @@ def test_model_reuses_concurrently_published_copy(tmp_path, fake_download):
     assert installer.install_story_model(destination, on_progress=publish_other_instance) == destination
     assert (destination / "other-instance").read_text() == "keep"
     assert set(tmp_path.iterdir()) == {destination}
+
+
+def test_explicit_repair_preserves_base_and_reuses_verified_alternate(tmp_path, fake_download):
+    base = installer.profile_story_model_destination(tmp_path)
+    base.mkdir(parents=True)
+    (base / "original.txt").write_bytes(b"keep")
+    alternate = installer.profile_story_model_repair_destination(tmp_path)
+    assert alternate.parent == base.parent and alternate != base
+    assert installer.repair_profile_story_model(tmp_path) == alternate
+    for name, data in _ARTIFACTS.items():
+        assert (alternate / name).read_bytes() == data
+    request_count = len(fake_download.requests)
+    assert installer.repair_profile_story_model(tmp_path) == alternate
+    assert len(fake_download.requests) == request_count
+    assert list(base.iterdir()) == [base / "original.txt"]
+    assert (base / "original.txt").read_bytes() == b"keep"
+
+
+@pytest.mark.parametrize("cancel_after_download", [False, True])
+def test_failed_repair_never_adopts_or_changes_original(tmp_path, fake_download, cancel_after_download):
+    base = installer.profile_story_model_destination(tmp_path)
+    base.mkdir(parents=True)
+    (base / "original.txt").write_text("keep")
+    alternate = installer.profile_story_model_repair_destination(tmp_path)
+    if cancel_after_download:
+        with pytest.raises(installer.StoryModelInstallCancelled):
+            installer.repair_profile_story_model(tmp_path, cancelled=lambda: alternate.exists())
+    else:
+        fake_download.responses[_PREFIX + "onnx/tokenizer.json"] = Response(b"tampered")
+        with pytest.raises(installer.StoryModelInstallError) as exc:
+            installer.repair_profile_story_model(tmp_path)
+        assert exc.value.code == "integrity"
+    assert (base / "original.txt").read_text() == "keep"
+    assert set(base.parent.iterdir()) == {base}
+
+
+def test_repair_does_not_replace_concurrently_created_empty_folder(tmp_path, fake_download):
+    alternate = installer.profile_story_model_repair_destination(tmp_path)
+
+    def create_other_slot(_done, _limit):
+        alternate.mkdir(exist_ok=True)
+
+    with pytest.raises(installer.StoryModelInstallError) as exc:
+        installer.repair_profile_story_model(tmp_path, on_progress=create_other_slot)
+    assert exc.value.code == "existing_invalid"
+    assert alternate.is_dir() and not list(alternate.iterdir())
+    assert len(fake_download.requests) == len(_ARTIFACTS)
+    fake_download.responses.update({_PREFIX + name: Response(data) for name, data in _ARTIFACTS.items()})
+    assert installer.repair_profile_story_model(tmp_path) == alternate.with_name(alternate.name + "-2")
+    assert alternate.is_dir() and not list(alternate.iterdir())
+
+
+def test_repair_reuses_verified_later_slot_and_stops_when_all_occupied(tmp_path, fake_download):
+    first = installer.profile_story_model_repair_destination(tmp_path)
+    second = first.with_name(first.name + "-2")
+    second.mkdir(parents=True)
+    (second / "untouched").write_text("keep")
+    third = first.with_name(first.name + "-3")
+    installer.install_story_model(third)
+    count = len(fake_download.requests)
+    assert installer.repair_profile_story_model(tmp_path) == third
+    assert not first.exists()
+    assert len(fake_download.requests) == count
+    (third / "onnx" / "tokenizer.json").unlink()
+    first.mkdir()
+    with pytest.raises(installer.StoryModelInstallError) as exc:
+        installer.repair_profile_story_model(tmp_path)
+    assert exc.value.code == "existing_invalid"
+    assert len(fake_download.requests) == count
+    assert (second / "untouched").read_text() == "keep"
+
+
+def test_repair_does_not_follow_redirected_managed_cache(tmp_path, fake_download):
+    custom = tmp_path / "custom"
+    custom.mkdir()
+    profile = tmp_path / "profile"
+    profile.mkdir()
+    try:
+        (profile / "cache").symlink_to(custom, target_is_directory=True)
+    except OSError:
+        pytest.skip("Symlink creation is unavailable")
+    with pytest.raises(installer.StoryModelInstallError) as exc:
+        installer.repair_profile_story_model(profile)
+    assert exc.value.code == "existing_invalid"
+    assert not list(custom.iterdir())
+    assert not fake_download.requests
+
+
+def test_repair_falls_back_to_exclusive_copy_if_hardlinks_unavailable(tmp_path, fake_download, monkeypatch):
+    def unsupported(*_args):
+        raise OSError("hardlinks unavailable")
+
+    monkeypatch.setattr(installer, "link", unsupported)
+    alternate = installer.repair_profile_story_model(tmp_path)
+    assert {name: (alternate / name).read_bytes() for name in _ARTIFACTS} == _ARTIFACTS

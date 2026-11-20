@@ -48,7 +48,7 @@ jobs:
         shell: pwsh
         continue-on-error: true # Keep ranking misses visible and independent of install acceptance.
         run: ./tools/smoke_windows_e5_install.ps1 -BundleDirectory dist/Watchbane -SearchOnly -ModelDirectory $env:WATCHBANE_QA_INSTALLED_E5
-      - name: Exercise actual Qt controls in a disposable frozen QA build
+      - name: Exercise explicit cache recovery and Qt search in a disposable frozen build
         shell: pwsh
         continue-on-error: true # Distinct QA overlay; never a publication or installer gate by itself.
         run: |
@@ -61,7 +61,7 @@ jobs:
             python -m tools.qa.build_frozen_story_desktop $output
             if ($LASTEXITCODE -ne 0) { throw "The private Qt QA overlay did not build." }
             $qaExe = Join-Path $output "WatchbaneStoryQA/WatchbaneStoryQA.exe"
-            python -m tools.qa.smoke_story_desktop --qa-exe $qaExe --verify-cached-install --model-dir $env:WATCHBANE_QA_INSTALLED_E5 --catalog $fixture --query "врач в больнице" --expected-title "Только тестовый заголовок" --qt-platform offscreen
+            python -m tools.qa.smoke_story_desktop --qa-exe $qaExe --verify-cached-install --verify-cache-repair --model-dir $env:WATCHBANE_QA_INSTALLED_E5 --catalog $fixture --query "врач в больнице" --expected-title "Только тестовый заголовок" --qt-platform offscreen
             if ($LASTEXITCODE -ne 0) { throw "The private Qt QA run did not pass." }
           } finally {
             Remove-Item -LiteralPath $qa -Recurse -Force
