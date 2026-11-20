@@ -32,8 +32,6 @@ jobs:
         run: python -m pip install -r requirements-preview.txt "PyInstaller>=6.13,<7"
       - name: Build disposable semantic executable
         run: ./tools/build_desktop.ps1
-      - name: Fetch and verify public FP32 E5 in the disposable runner
-        run: python -m tools.qa.download_story_model --destination "$env:RUNNER_TEMP/watchbane-e5" --variant fp32 --accept-download
-      - name: Verify actual E5 inference inside the frozen executable without Python on PATH
-        run: ./tools/smoke_windows_e5.ps1 -BundleDirectory dist/Watchbane -ModelDirectory "$env:RUNNER_TEMP/watchbane-e5"
+      - name: Install and run real E5 inside the frozen executable without Python on PATH
+        run: ./tools/smoke_windows_e5_install.ps1 -BundleDirectory dist/Watchbane
       # No artifact upload, no TMDb, no data pack, no model redistribution.
