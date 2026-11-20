@@ -95,3 +95,10 @@ The application remains local-first. Existing SQLite data, settings, candidate p
 - Deletion now verifies a recoverable backup and checks the exact selected row before removing it. Unrelated changes, shared posters and files outside the application cache are retained.
 - Windows CI now exercises separate lexical and semantic runtime builds; successful native-library checks do not verify distribution or inference of E5 weights. Source archive continues to omit the catalog, credentials and model.
 - An optional operator import plan spreads the first TMDb queries across decades; prior checkpoints still use their original plan. No live 5,000-title catalog is included or claimed.
+
+## Unreleased story-search source candidate
+
+- Different films sharing a display title and year keep separate collection entries where their source IDs differ. Clearing optional legacy metadata now also removes stale lookup IDs without erasing the watched record or its rating.
+- On the empty search screen, an example fills the input before a catalog is available. Opening a catalog keeps the typed query and makes the next step explicit without running it automatically.
+- A corrupt profile catalog has a retry path; an interrupted managed E5 cache can be repaired without overwriting the original or changing a manually selected model.
+- Source only; no ready-to-run Windows executable, weights, API credentials or starter catalog. Native compatibility and first-run acceptance require separate verification.

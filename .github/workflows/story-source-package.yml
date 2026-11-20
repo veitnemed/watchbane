@@ -7,6 +7,9 @@ on:
     paths:
       - ".github/workflows/story-source-package.yml"
       - "tools/qa/package_story_preview.py"
+      - "RELEASE_NOTES.md"
+      - "SOURCE_PREVIEW.md"
+      - "VERSION.md"
   workflow_dispatch:
 
 permissions:
