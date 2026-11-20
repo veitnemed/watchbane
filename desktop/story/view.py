@@ -13,8 +13,7 @@ from candidates.title_state_service import STATE_WATCHLIST, get_title_states
 from desktop.theme.scaling import layout_px
 from desktop.theme.layout import MAIN_TAB_PANE_TOP_LIFT
 from desktop.theme.styles.story import build_story_style
-from storage.sqlite.connection import get_db_path
-from storage.sqlite.settings_repository import get_setting, set_setting
+from config.app_settings_store import ProfileSetting
 
 
 _MODEL_SETTING = "story_search.model_dir"
@@ -94,7 +93,7 @@ class StorySearchView:
         self._active_query = ""
         # Bind writes to the profile which owns this particular window. Env/CLI
         # is a process override, not a request to change the saved profile.
-        self._model_settings_db = get_db_path()
+        self._model_preference = ProfileSetting(_MODEL_SETTING)
         self.model_dir = os.environ.get(_MODEL_ENV) or self._read_model_choice()
         self.seed_path = os.environ.get("WATCHBANE_STORY_SEED_CATALOG")
         self._seed_count = None
@@ -426,14 +425,14 @@ class StorySearchView:
 
     def _read_model_choice(self):
         try:
-            directory = get_setting(_MODEL_SETTING, path=self._model_settings_db)
+            directory = self._model_preference.read()
         except (OSError, sqlite3.Error):
             return None
         return directory if isinstance(directory, str) and directory.strip() else None
 
     def _remember_model_choice(self):
         try:
-            set_setting(_MODEL_SETTING, self.model_dir, path=self._model_settings_db)
+            self._model_preference.write(self.model_dir)
         except (OSError, sqlite3.Error):
             self.status.setText("Режим выбран на этот запуск. Не удалось сохранить настройку профиля.")
 

@@ -17,3 +17,23 @@ def save_sqlite_settings_dict(payload: dict) -> None:
     for key, value in payload.items():
         set_setting(str(key), value)
 
+
+
+class ProfileSetting:
+    """One setting bound to the profile which created its owner."""
+
+    def __init__(self, key: str):
+        from storage.sqlite.connection import get_db_path
+
+        self._key = key
+        self._path = get_db_path()
+
+    def read(self):
+        from storage.sqlite.settings_repository import get_setting
+
+        return get_setting(self._key, path=self._path)
+
+    def write(self, value) -> None:
+        from storage.sqlite.settings_repository import set_setting
+
+        set_setting(self._key, value, path=self._path)
