@@ -77,3 +77,89 @@ def test_environment_does_not_forward_existing_credentials_or_profile_settings(m
     assert "should-not-reach-child" not in isolated.values()
     assert isolated["QT_QPA_PLATFORM"] == "offscreen"
     assert smoke.match_title("  Белый\u00A0дом ", "БЕЛЫЙ дом")
+
+
+def test_frozen_child_file_ipc_keeps_private_inputs_out_of_args(tmp_path, monkeypatch):
+    from tools.qa import frozen_story_desktop as entry
+
+    exe = tmp_path / "WatchbaneStoryQA.exe"
+    payload = {"query": "частный запрос", "verify_cached_install": True}
+
+    def phase_run(phase, options):
+        assert phase == "first" and options["require_fp32"] is True
+        assert options["query"] == payload["query"]
+        return {"ok": True, "pid": 42}
+
+    def process_run(argv, **kwargs):
+        assert argv[0] == str(exe)
+        assert payload["query"] not in str(argv)
+        assert kwargs["stdin"] == smoke.subprocess.DEVNULL
+        status = entry.main(argv[1:])
+        return smoke.subprocess.CompletedProcess(argv, status)
+
+    monkeypatch.setattr(entry.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(entry, "_child_report", phase_run)
+    monkeypatch.setattr(smoke.subprocess, "run", process_run)
+    assert smoke._child_run("first", payload, timeout=5, platform=None, exe=exe) == {"ok": True, "pid": 42, "frozen": True}
+
+
+def test_frozen_entry_rejects_existing_report_and_non_cached_request(tmp_path, monkeypatch):
+    from tools.qa import frozen_story_desktop as entry
+
+    request = tmp_path / "request.json"
+    request.write_text("{}", encoding="ascii")
+    report = tmp_path / "report.json"
+    monkeypatch.setattr(entry, "_child_report", lambda *_: pytest.fail("Must not start Qt."))
+    assert entry.main(["first", str(request), str(report)]) == 1
+    assert json.loads(report.read_text()) == {"ok": False, "failure": "Cached model verification is required.", "frozen": False}
+    report.write_text("unchanged")
+    assert entry.main(["first", str(request), str(report)]) == 1
+    assert report.read_text() == "unchanged"
+
+
+@pytest.mark.skipif(not (os.environ.get("WATCHBANE_TEST_QA_EXE") and os.environ.get("WATCHBANE_TEST_MODEL_DIR")),
+                    reason="Requires private frozen QA executable and verified FP32 model")
+def test_frozen_bundle_can_run_actual_smoke(tmp_path, capsys):
+    args = arguments(tmp_path)
+    args[3] = os.environ["WATCHBANE_TEST_MODEL_DIR"]
+    assert smoke.main([*args, "--qa-exe", os.environ["WATCHBANE_TEST_QA_EXE"],
+                       "--verify-cached-install", "--step-timeout", "60"]) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["frozen_qa"] and output["fp32_required"]
+
+
+def test_private_overlay_uses_production_data_without_altering_public_spec(tmp_path, monkeypatch):
+    from tools.qa import build_frozen_story_desktop as build
+
+    root = Path(build.__file__).resolve().parents[2]
+    original = (root / "watchbane.spec").read_bytes()
+
+    def build_call(argv, **kwargs):
+        assert kwargs["cwd"] == root
+        assert kwargs["env"]["WATCHBANE_BUNDLE_PROFILE"] == "semantic"
+        assert Path(argv[-1]).parent != root
+        overlay = Path(argv[-1]).read_text(encoding="utf-8")
+        assert overlay.count('name="WatchbaneStoryQA"') == 2
+        assert "frozen_story_desktop.py" in overlay
+        assert "start_app.py" not in overlay
+        captured = {}
+        prefix = overlay.split("# -*- mode: python", 1)[0]
+        namespace = {"Analysis": lambda *_args, **kw: captured.update(kw)}
+        exec(compile(prefix, "fake-private.spec", "exec"), namespace)
+        namespace["_qa_analysis"](datas=[("desktop/images/logos", "desktop/images/logos")])
+        assert Path(captured["datas"][0][0]).is_dir()
+        assert captured["datas"][0][1] == "desktop/images/logos"
+        return 0
+
+    monkeypatch.setattr(build.subprocess, "call", build_call)
+    assert build.main([str(tmp_path / "private")]) == 0
+    assert (root / "watchbane.spec").read_bytes() == original
+
+
+
+def test_frozen_windows_child_leaves_python_off_path(monkeypatch):
+    monkeypatch.setattr(smoke.sys, "platform", "win32")
+    monkeypatch.setenv("SystemRoot", r"C:\Windows")
+    monkeypatch.setenv("Path", r"C:\InstalledPython")
+    with_frozen = smoke._clean_environment("offscreen", frozen=True)
+    assert {key: value for key, value in with_frozen.items() if key.upper() == "PATH"} == {"PATH": r"C:\Windows\System32"}

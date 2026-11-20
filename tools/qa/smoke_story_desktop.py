@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 from contextlib import ExitStack, redirect_stdout
 import json
+import ntpath
 import os
 from pathlib import Path
 from shutil import copyfile
@@ -43,10 +44,15 @@ def match_title(actual, expected):
     return normalized(actual) == normalized(expected)
 
 
-def _clean_environment(platform):
+def _clean_environment(platform, *, frozen=False):
     values = {name: value for name, value in os.environ.items()
               if not name.upper().startswith(PROFILE_KEYS)
               and name not in {"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP"}}
+    if frozen and sys.platform == "win32":
+        root = next((v for k, v in values.items() if k.upper() == "SYSTEMROOT"), None)
+        check(bool(root), "Frozen Windows QA requires SystemRoot.")
+        values = {name: value for name, value in values.items() if name.upper() != "PATH"}
+        values["PATH"] = ntpath.join(root, "System32")
     if platform:
         values["QT_QPA_PLATFORM"] = platform
     return values
@@ -58,7 +64,32 @@ def _fresh_directory(path, *, label):
     return path
 
 
-def _child_run(phase, payload, *, timeout, platform):
+def _child_run(phase, payload, *, timeout, platform, exe=None):
+    if exe is not None:
+        # GUI-subsystem Windows executables do not have usable stdio. Keep
+        # private inputs out of arguments and all results in disposable files.
+        with tempfile.TemporaryDirectory(prefix="watchbane-qt-ipc-") as ipc:
+            request = Path(ipc) / "request.json"
+            report = Path(ipc) / "report.json"
+            request.write_text(json.dumps(payload, ensure_ascii=True), encoding="ascii")
+            try:
+                result = subprocess.run(
+                    [str(exe), phase, str(request), str(report)], cwd=ipc,
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    env=_clean_environment(platform, frozen=True), timeout=timeout,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise SmokeFailure(f"{phase}: subprocess timed out.") from exc
+            try:
+                response = json.loads(report.read_text(encoding="ascii"))
+            except (OSError, UnicodeError, ValueError) as exc:
+                raise SmokeFailure(f"{phase}: frozen Qt subprocess did not return a report.") from exc
+            if not isinstance(response, dict) or result.returncode or not response.get("ok"):
+                reason = response.get("failure") if isinstance(response, dict) else None
+                raise SmokeFailure(f"{phase}: {reason or 'frozen Qt subprocess failed'}")
+            check(response.get("frozen") is True, f"{phase}: subprocess was not frozen.")
+            return response
+
     # Do not expose the query, title or operator file paths as child CLI flags.
     try:
         result = subprocess.run(
@@ -220,7 +251,9 @@ def _desktop_phase(phase, options):
                 QTest.keyClick(story.query, Qt.Key.Key_Return)
                 wait_until(lambda: story._worker is None, "E5 search timed out.")
                 elapsed["search_ms"] = round((monotonic() - began) * 1000)
-                check("E5" in story.backend_label.text(), "The search did not complete in E5 mode.")
+                check("E5" in story.backend_label.text() and
+                      (not options.get("require_fp32") or story.backend_label.text().endswith(" · fp32")),
+                      "The search did not complete in the required E5 mode.")
                 check(story.cards_layout.count() > 1, "Search returned no cards.")
                 top = story.cards_layout.itemAt(0).widget()
                 check(isinstance(top, QFrame), "Top render is not a story card.")
@@ -256,9 +289,8 @@ def _desktop_phase(phase, options):
                 "unexpected_network_calls": len(network_attempts), **elapsed}
 
 
-def _child(phase):
+def _child_report(phase, opts):
     try:
-        opts = json.load(sys.stdin)
         # Qt diagnostics and dependency output are not part of the
         # machine-readable report and may contain operator-private names.
         with redirect_stdout(sys.stderr):
@@ -267,6 +299,16 @@ def _child(phase):
         report = {"ok": False, "failure": str(exc)}
     except Exception as exc:
         report = {"ok": False, "failure": f"Unexpected {type(exc).__name__}."}
+    return report
+
+
+def _child(phase):
+    try:
+        options = json.load(sys.stdin)
+    except (ValueError, OSError):
+        report = {"ok": False, "failure": "Invalid child request."}
+    else:
+        report = _child_report(phase, options)
     print(json.dumps(report, ensure_ascii=True))
     return 0 if report["ok"] else 1
 
@@ -276,6 +318,7 @@ def main(argv=None):
     if argv in (["_child_first"], ["_child_reopen"]):
         return _child(argv[0].removeprefix("_child_"))
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--qa-exe", type=Path, help="Separate private frozen QA executable, never the public bundle")
     parser.add_argument("--catalog", type=Path, required=True, help="Existing local Watchbane JSONL snapshot")
     parser.add_argument("--model-dir", type=Path, required=True, help="Existing verified multilingual-e5-small directory")
     parser.add_argument("--verify-cached-install", action="store_true",
@@ -290,6 +333,11 @@ def main(argv=None):
     parser.add_argument("--qt-platform", default="offscreen" if sys.platform.startswith("linux") else None)
     args = parser.parse_args(argv)
     try:
+        exe = args.qa_exe.expanduser().resolve() if args.qa_exe else None
+        if exe is not None:
+            check(exe.is_file(), "The frozen QA executable does not exist.")
+            check(args.verify_cached_install, "Frozen QA requires cached model verification.")
+        launcher = {"exe": exe} if exe is not None else {}
         catalog = args.catalog.expanduser().resolve()
         directory = args.model_dir.expanduser().resolve()
         check(catalog.is_file() and catalog.suffix.casefold() == ".jsonl", "An existing JSONL catalogue is required.")
@@ -316,9 +364,9 @@ def main(argv=None):
                        "query": args.query, "expected_title": args.expected_title,
                        "output_dir": str(output) if output is not None else None,
                        "step_timeout": args.step_timeout, "scale": args.scale,
-                       "verify_cached_install": args.verify_cached_install}
-            first = _child_run("first", payload, timeout=args.step_timeout * 2 + 30, platform=args.qt_platform)
-            reopen = _child_run("reopen", payload, timeout=args.step_timeout + 30, platform=args.qt_platform)
+                       "verify_cached_install": args.verify_cached_install, "require_fp32": exe is not None}
+            first = _child_run("first", payload, timeout=args.step_timeout * (3 if args.verify_cached_install else 2) + 30, platform=args.qt_platform, **launcher)
+            reopen = _child_run("reopen", payload, timeout=args.step_timeout + 30, platform=args.qt_platform, **launcher)
             check(first["pid"] != reopen["pid"], "Expected independent first and reopen Qt processes.")
     except (SmokeFailure, ValueError, OSError) as exc:
         if isinstance(exc, IsolationError):
@@ -329,7 +377,7 @@ def main(argv=None):
         return 1
     print(json.dumps({"ok": True, "isolated_processes": 2, "catalogue_chooser": True,
                       "e5_top_result_matches": True, "reopened_collection_matches": True,
-                      "poster_network_disabled": True,
+                      "poster_network_disabled": True, "frozen_qa": exe is not None, "fp32_required": exe is not None,
                       "cached_model_verified_in_ui": args.verify_cached_install, "first": first, "reopen": reopen}, indent=2))
     return 0
 
