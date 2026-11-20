@@ -70,6 +70,24 @@ class LocalE5:
             return result
 
 
+_NAME_LIKE = re.compile(r"[А-ЯЁ][А-Яа-яЁё-]*[а-яё][А-Яа-яЁё-]*")
+_SENTENCE_END = re.compile(r"[.!?…\n]")
+
+
+def _query_words_with_protection(query):
+    """Keep case context without changing the existing search token format."""
+    previous_end = None
+    for match in re.finditer(r"[^\W_]+(?:-[^\W_]+)*", query):
+        name_like = (
+            previous_end is not None
+            and not _SENTENCE_END.search(query[previous_end:match.start()])
+            and _NAME_LIKE.fullmatch(match[0]) is not None
+        )
+        for word in tokens(match[0]):
+            yield word, name_like
+            previous_end = match.end()
+
+
 def normalized_query(query, vocabulary):
     """Use document vocabulary for conservative typo repair; preserve normal words.
 
@@ -79,10 +97,9 @@ def normalized_query(query, vocabulary):
     from difflib import SequenceMatcher
     vocabulary=set(vocabulary)|{w for forms in ROLE_WORDS.values() for w in forms}
     vocabulary|={"преступника","следователя","преступник"}
-    words=tokens(query)
     fixed=[]
-    for word in words:
-        if word in vocabulary or word in STOP or len(word)<7:
+    for word, protected in _query_words_with_protection(query):
+        if protected or word in vocabulary or word in STOP or len(word)<7:
             fixed.append(word);continue
         near=[v for v in vocabulary if abs(len(v)-len(word))<=2 and v[:2]==word[:2]]
         score,best=max(((SequenceMatcher(None,word,v).ratio(),v) for v in near),default=(0,word))
