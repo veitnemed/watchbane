@@ -10,7 +10,6 @@ from candidates.models.schema import coerce_candidate_number, normalize_candidat
 from dataset.add_flow.save import build_movie_record_from_defaults
 from dataset.models.identity import (
     build_dataset_record_key,
-    find_dataset_title,
     normalize_title_key,
 )
 from dataset.models.media_type import normalize_media_type
@@ -21,7 +20,6 @@ from storage.sqlite.connection import connect
 from storage.sqlite.json_codec import loads_json
 from storage.sqlite.migrations import apply_migrations
 from storage.sqlite.watched_meta import save_meta_dict
-from storage.sqlite.watched_read import load_dataset_dict
 from storage.sqlite.watched_write import delete_watched, save_dataset_dict, upsert_watched_row
 
 
@@ -59,7 +57,7 @@ def _candidate_tmdb_id(candidate: dict) -> int | None:
     return int(value)
 
 
-def _find_watched_row(conn: sqlite3.Connection, candidate: dict):
+def _find_watched_row(conn: sqlite3.Connection, candidate: dict, *, allow_legacy=True):
     media_type = normalize_media_type(candidate.get("media_type"))
     tmdb_id = _candidate_tmdb_id(candidate)
     if tmdb_id is not None:
@@ -67,28 +65,23 @@ def _find_watched_row(conn: sqlite3.Connection, candidate: dict):
             "SELECT * FROM watched_records WHERE media_type = ? AND tmdb_id = ? AND payload_json != '{}' LIMIT 1",
             (media_type, tmdb_id),
         ).fetchone()
-        if row is not None:
+        if row is not None or not allow_legacy:
             return row
 
     title = str(candidate.get("title") or candidate.get("name") or "").strip()
     year = _candidate_year(candidate)
-    if year is None:
-        return conn.execute(
-            """
-            SELECT * FROM watched_records
-            WHERE title_normalized = ? AND media_type = ? AND year IS NULL AND payload_json != '{}'
-            LIMIT 1
-            """,
-            (normalize_title_key(title), media_type),
-        ).fetchone()
-    return conn.execute(
+    # For a known TMDb identity, the title/year fallback may attach an
+    # unlinked legacy row, but a different known ID is a different work.
+    matches = conn.execute(
         """
         SELECT * FROM watched_records
-        WHERE title_normalized = ? AND media_type = ? AND year = ? AND payload_json != '{}'
-        LIMIT 1
+        WHERE title_normalized = ? AND media_type = ? AND year IS ?
+          AND payload_json != '{}' AND tmdb_id IS NULL
+        LIMIT 2
         """,
         (normalize_title_key(title), media_type, year),
-    ).fetchone()
+    ).fetchall()
+    return matches[0] if len(matches) == 1 else None
 
 
 def _state_in_connection(conn: sqlite3.Connection, candidate: dict) -> str:
@@ -204,7 +197,7 @@ def remove_from_watched(candidate: dict, *, path: str | Path | None = None) -> d
     try:
         apply_migrations(conn)
         with conn:
-            row = _find_watched_row(conn, normalized)
+            row = _find_watched_row(conn, normalized, allow_legacy=False)
             if row is not None:
                 delete_watched(str(row["dataset_key"]), conn=conn)
             _clear_candidate_actions(conn, normalized)
@@ -231,7 +224,21 @@ def mark_watched(
     try:
         apply_migrations(conn)
         with conn:
+            # Lock before reading/allocating dataset keys so a simultaneous mark
+            # cannot choose and then overwrite the same key.
+            conn.execute("BEGIN IMMEDIATE")
+            tmdb_id = _candidate_tmdb_id(normalized)
             existing = _find_watched_row(conn, normalized)
+            if existing is None and tmdb_id is not None:
+                # A previously removed title can still have metadata at its key.
+                existing = conn.execute(
+                    """
+                    SELECT * FROM watched_records
+                    WHERE media_type = ? AND tmdb_id = ? AND payload_json = '{}'
+                    ORDER BY dataset_key LIMIT 1
+                    """,
+                    (normalize_media_type(normalized.get("media_type")), tmdb_id),
+                ).fetchone()
             if existing is not None:
                 dataset_key = str(existing["dataset_key"])
                 existing_payload = loads_json(existing["payload_json"], {})
@@ -243,12 +250,15 @@ def mark_watched(
                 if not isinstance(meta_payload, dict) and isinstance(existing_meta, dict):
                     meta_payload = existing_meta
             else:
-                data = load_dataset_dict(conn=conn)
                 title = str(payload.get("main_info", {}).get("title") or normalized.get("title") or "")
                 year = payload.get("main_info", {}).get("year")
                 media_type = payload.get("main_info", {}).get("media_type")
-                dataset_key = find_dataset_title(data, title, year=year, media_type=media_type) or (
-                    build_dataset_record_key(data, title, year=year, media_type=media_type)
+                # A second title lookup would bypass the known-ID and
+                # ambiguity checks. Even metadata-only keys stay occupied.
+                occupied = {row["dataset_key"]: None for row in
+                            conn.execute("SELECT dataset_key FROM watched_records")}
+                dataset_key = build_dataset_record_key(
+                    occupied, title, year=year, media_type=media_type,
                 )
             upsert_watched_row(
                 conn,
