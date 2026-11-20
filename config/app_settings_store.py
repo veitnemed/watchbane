@@ -18,7 +18,6 @@ def save_sqlite_settings_dict(payload: dict) -> None:
         set_setting(str(key), value)
 
 
-
 class ProfileSetting:
     """One setting bound to the profile which created its owner."""
 
@@ -28,10 +27,10 @@ class ProfileSetting:
         self._key = key
         self._path = get_db_path()
 
-    def read(self):
+    def read(self, default=None):
         from storage.sqlite.settings_repository import get_setting
 
-        return get_setting(self._key, path=self._path)
+        return get_setting(self._key, default, path=self._path)
 
     def write(self, value) -> None:
         from storage.sqlite.settings_repository import set_setting

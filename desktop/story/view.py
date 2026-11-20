@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import sqlite3
+import sys
 from threading import Event
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
@@ -18,6 +19,18 @@ from config.app_settings_store import ProfileSetting
 
 _MODEL_SETTING = "story_search.model_dir"
 _MODEL_ENV = "WATCHBANE_STORY_MODEL_DIR"
+_MODEL_UNSET = object()
+
+
+def _publisher_model_dir():
+    """Find the optional external asset beside a frozen executable, not the source tree."""
+    if not getattr(sys, "frozen", False) or not sys.executable:
+        return None
+    directory = Path(sys.executable).parent / "assets" / "story-model"
+    try:
+        return str(directory) if directory.is_dir() else None
+    except OSError:
+        return None
 
 
 class StoryWorker(QThread):
@@ -425,9 +438,12 @@ class StorySearchView:
 
     def _read_model_choice(self):
         try:
-            directory = self._model_preference.read()
+            directory = self._model_preference.read(_MODEL_UNSET)
         except (OSError, sqlite3.Error):
             return None
+        if directory is _MODEL_UNSET:
+            return _publisher_model_dir()
+        # JSON null is an intentional choice, not an unset preference.
         return directory if isinstance(directory, str) and directory.strip() else None
 
     def _remember_model_choice(self):
