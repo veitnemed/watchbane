@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from copy import deepcopy
+from dataclasses import dataclass
+import sqlite3
 
 from candidates.models.keys import title_identity_key
 from common.cards import build_watched_movie_card
 from dataset.language import normalize_data_language, tmdb_locale_for_data_language
+from dataset.models.identity import get_record_main_info, normalize_title_key
+from dataset.models.media_type import MEDIA_TYPE_MOVIE, MOVIE_MEDIA_TYPE_ALIASES, TV_MEDIA_TYPE_ALIASES
 from storage import data as storage_data
+from storage.sqlite.connection import connect
+from storage.sqlite.json_codec import dumps_json, loads_json
+from storage.sqlite.migrations import apply_migrations
+from storage.sqlite.session import utc_now
+from storage.sqlite.watched_mapper import extract_watched_record
 
 WatchedEntry = tuple[str, dict, dict]
 
@@ -152,60 +162,114 @@ def _merge_localized_blocks(record: dict, blocks: dict) -> dict:
     return updated
 
 
-def _find_meta_key(meta: dict, title: str) -> str | None:
-    expected = str(title or "").strip().casefold()
-    for key in meta.keys():
-        if str(key).strip().casefold() == expected:
-            return key
-    return None
+@dataclass(frozen=True)
+class _PosterRefreshTarget:
+    dataset_key: str
+    media_type: str
+    tmdb_id: int | None
+    created_at: str
 
 
-def _ensure_tmdb_localized_poster_in_meta(
-    title: str,
-    meta_obj: dict | None,
-    data_language: str,
-) -> tuple[dict | None, bool]:
-    """Fetch and persist localized poster metadata for old records on demand."""
-    language = normalize_data_language(data_language)
-    if _localized_poster_available(meta_obj, language):
-        return meta_obj, False
+def _select_poster_refresh_target(conn, movie: dict) -> tuple[_PosterRefreshTarget, dict | None] | None:
+    title, _ = _movie_title_year(movie)
+    supplied = extract_watched_record(title, movie)
+    matches = []
+    for row in conn.execute(
+        """SELECT dataset_key, year, media_type, tmdb_id, created_at, payload_json, meta_json
+           FROM watched_records WHERE title_normalized = ?""",
+        (normalize_title_key(title),),
+    ):
+        if supplied.year is not None and row["year"] is not None and supplied.year != row["year"]:
+            continue
+        payload = loads_json(row["payload_json"], None)
+        if not isinstance(payload, dict) or not payload:
+            continue
+        # The poster cache is keyed by display title/year, not by trusted ID.
+        # Any sibling that can use that key makes a refresh unsafe.
+        matches.append(row)
+    if len(matches) != 1:
+        return None
+    row = matches[0]
+    if supplied.tmdb_id and supplied.tmdb_id != row["tmdb_id"]:
+        return None
+    raw_type = get_record_main_info(movie).get("media_type") or movie.get("media_type")
+    media_explicit = str(raw_type or "").strip().casefold() in MOVIE_MEDIA_TYPE_ALIASES | TV_MEDIA_TYPE_ALIASES
+    if media_explicit and supplied.media_type != row["media_type"]:
+        return None
+    meta = loads_json(row["meta_json"], None)
+    meta = meta if isinstance(meta, dict) else None
+    source_id = _tmdb_id_from_meta(meta)
+    try:
+        source_id = int(source_id) if source_id not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+    if row["tmdb_id"] and source_id and row["tmdb_id"] != source_id:
+        return None
+    return _PosterRefreshTarget(
+        row["dataset_key"], row["media_type"], source_id or row["tmdb_id"], row["created_at"]
+    ), meta
 
-    tmdb_id = _tmdb_id_from_meta(meta_obj)
-    if tmdb_id in (None, ""):
-        return meta_obj, False
 
+def _fetch_localized_poster(target: _PosterRefreshTarget, language: str) -> dict:
     from apis import tmdb_api
     from dataset.tmdb_localized import localized_blocks_from_tmdb_details
 
-    details = tmdb_api.get_tv_details(
-        int(tmdb_id),
-        language=tmdb_locale_for_data_language(language),
-        append_to_response=tmdb_api.DEFAULT_TV_DETAIL_APPENDS,
+    if target.media_type == MEDIA_TYPE_MOVIE:
+        get_details = tmdb_api.get_movie_details
+        append = tmdb_api.DEFAULT_MOVIE_DETAIL_APPENDS
+    else:
+        get_details = tmdb_api.get_tv_details
+        append = tmdb_api.DEFAULT_TV_DETAIL_APPENDS
+    details = get_details(
+        target.tmdb_id, language=tmdb_locale_for_data_language(language), append_to_response=append,
     )
-    blocks = localized_blocks_from_tmdb_details(details, current_language=language)
-    if _localized_poster_available({"localized": blocks}, language) is False:
-        return meta_obj, False
+    return localized_blocks_from_tmdb_details(details, current_language=language)
 
-    updated_meta_obj = _merge_localized_blocks(dict(meta_obj or {}), blocks)
+
+def _refresh_localized_poster(movie: dict, data_language: str) -> tuple[dict | None, bool] | None:
+    """Explicit refresh only. Recheck identity and merge just this row after I/O."""
+    language = normalize_data_language(data_language)
     try:
-        meta = storage_data.load_meta()
-        meta_key = _find_meta_key(meta, title)
-        if meta_key is not None:
-            meta[meta_key] = _merge_localized_blocks(
-                meta[meta_key] if isinstance(meta[meta_key], dict) else {},
-                blocks,
+        with closing(connect()) as conn:
+            apply_migrations(conn)
+            selected = _select_poster_refresh_target(conn, movie)
+    except (OSError, sqlite3.Error):
+        return None
+    if selected is None:
+        return None
+    target, meta = selected
+    if _localized_poster_available(meta, language) or not target.tmdb_id:
+        return meta, False
+
+    blocks = _fetch_localized_poster(target, language)
+    if not _localized_poster_available({"localized": blocks}, language):
+        return meta, False
+
+    try:
+        with closing(connect()) as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
+            current = _select_poster_refresh_target(conn, movie)
+            if current is None or current[0] != target:
+                return None
+            latest = current[1]
+            if meta is not None and latest is None:
+                return None
+            if _localized_poster_available(latest, language):
+                return latest, False
+            updated = _merge_localized_blocks(latest or {}, {language: blocks[language]})
+            conn.execute(
+                "UPDATE watched_records SET meta_json = ?, updated_at = ? WHERE dataset_key = ?",
+                (dumps_json(updated), utc_now(), target.dataset_key),
             )
-            storage_data.save_meta(meta)
-            global _lookup_cache
-            _lookup_cache = None
-            return meta[meta_key], True
-    except Exception:
-        return updated_meta_obj, True
-    return updated_meta_obj, True
+    except (OSError, sqlite3.Error):
+        return None
+    global _lookup_cache
+    _lookup_cache = None
+    return updated, True
 
 
 def sync_poster_for_display(movie: dict, data_language: str = "ru") -> dict:
-    """Best-effort lazy poster sync for the current data language."""
+    """Explicit poster refresh for one unambiguous watched title and language."""
     title, year = _movie_title_year(movie)
     if title == "":
         return {"updated": False, "reason": "missing_title"}
@@ -213,10 +277,12 @@ def sync_poster_for_display(movie: dict, data_language: str = "ru") -> dict:
     from posters.cache import lookup_poster_cache_entry, sync_poster_cache_from_meta_and_sources
     from posters.download_images import download_poster_for_title
 
+    refreshed = _refresh_localized_poster(movie, data_language)
+    if refreshed is None:
+        return {"updated": False, "reason": "watched_row_changed_or_ambiguous"}
+    meta_obj, meta_updated = refreshed
     cache_before = _get_poster_cache()
     before = lookup_poster_cache_entry(title, year, cache=cache_before) or {}
-    meta_obj = storage_data.get_meta_obj(title)
-    meta_obj, meta_updated = _ensure_tmdb_localized_poster_in_meta(title, meta_obj, data_language)
     entry = sync_poster_cache_from_meta_and_sources(
         title,
         year,

@@ -1377,9 +1377,8 @@ def test_sync_poster_for_display_fetches_missing_language_poster_from_tmdb(monke
     details_calls = []
     download_calls = []
 
-    monkeypatch.setattr(watched_read_model.storage_data, "get_meta_obj", lambda _title: meta_store["Naruto"])
-    monkeypatch.setattr(watched_read_model.storage_data, "load_meta", lambda: copy.deepcopy(meta_store))
-    monkeypatch.setattr(watched_read_model.storage_data, "save_meta", lambda meta: meta_store.update(meta))
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    watched_read_model.storage_data.save_dataset_and_meta({"Naruto": movie}, meta_store)
     monkeypatch.setattr(watched_read_model, "_get_poster_cache", lambda: poster_cache)
     monkeypatch.setattr(watched_read_model, "reload_poster_cache", lambda: poster_cache)
     monkeypatch.setattr(poster_cache_module, "load_poster_cache", lambda: poster_cache)
@@ -1414,7 +1413,7 @@ def test_sync_poster_for_display_fetches_missing_language_poster_from_tmdb(monke
 
     assert result["meta_updated"] is True
     assert details_calls[0][0:2] == (46260, "en-US")
-    assert meta_store["Naruto"]["localized"]["en"]["poster_path"] == "/naruto_en.jpg"
+    assert watched_read_model.storage_data.load_meta()["Naruto"]["localized"]["en"]["poster_path"] == "/naruto_en.jpg"
     assert result["entry"]["poster_url"] == "https://image.tmdb.org/t/p/original/naruto_en.jpg"
     assert download_calls == [("Naruto", 2002, {"force": True})]
 
