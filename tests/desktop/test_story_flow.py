@@ -157,3 +157,67 @@ def test_save_failure_leaves_result_and_retry_available(qtbot, monkeypatch):
     monkeypatch.setattr(service, "add_candidate_to_watchlist", real_save)
     qtbot.mouseClick(save, Qt.MouseButton.LeftButton)
     assert not save.isEnabled()
+
+
+def test_profile_story_search_and_save_keep_two_persisted_tmdb_homonyms(qtbot, monkeypatch):
+    from contextlib import closing
+    from candidates import service
+    from candidates.title_state_service import get_title_state, mark_watched
+    from storage.sqlite.candidate_pool_repository import load_candidate_pool_dict
+    from storage.sqlite.candidate_write import insert_candidate_record
+    from storage.sqlite.connection import connect
+    from storage.sqlite.migrations import apply_migrations
+    from storage.sqlite.session import utc_now
+
+    for name in ("WATCHBANE_STORY_SEED_CATALOG", "WATCHBANE_STORY_MODEL_DIR"):
+        monkeypatch.delenv(name, raising=False)
+    first = {"title": "Тёзки", "year": 2020, "media_type": "movie", "tmdb_id": 101,
+             "overview": "Преступник скрывается от полиции в горах."}
+    second = {**first, "tmdb_id": 202, "overview": "Преступник ограбил банк и бежал через лес."}
+    with closing(connect()) as conn:
+        apply_migrations(conn)
+        with conn:
+            insert_candidate_record(conn, pool_key="legacy:first", candidate=first, timestamp=utc_now())
+            insert_candidate_record(conn, pool_key="opaque:second", candidate=second, timestamp=utc_now())
+    before = load_candidate_pool_dict()
+
+    docs, records = service.story_catalog_snapshot()
+    assert {doc.key for doc in docs} == {"tmdb:movie:101", "tmdb:movie:202"}
+    assert {records[doc.key]["tmdb_id"] for doc in docs} == {101, 202}
+    assert load_candidate_pool_dict() == before
+
+    view = StorySearchView()
+    qtbot.addWidget(view.widget)
+    view.widget.resize(1100, 850)
+    view.widget.show()
+    run_search(qtbot, view, "преступник")
+    assert view.cards_layout.count() == 3
+    buttons = []
+    for i in range(2):
+        card = view.cards_layout.itemAt(i).widget()
+        buttons.append(card.findChild(QPushButton, "storySaveAction"))
+    assert all(b.isEnabled() for b in buttons)
+    qtbot.mouseClick(buttons[0], Qt.MouseButton.LeftButton)
+    assert {get_title_state(first), get_title_state(second)} == {"available", "watchlist"}
+    qtbot.mouseClick(buttons[1], Qt.MouseButton.LeftButton)
+    assert get_title_state(first) == get_title_state(second) == "watchlist"
+    assert load_candidate_pool_dict() == before
+
+    mark_watched(first)
+    _, remaining = service.story_catalog_snapshot()
+    assert set(remaining) == {"tmdb:movie:202"}
+    assert get_title_state(second) == "watchlist"
+
+
+
+def test_story_watched_legacy_without_id_does_not_hide_known_homonyms():
+    from candidates import service
+    from candidates.title_state_service import mark_watched
+
+    legacy = {"title": "Одно имя", "year": 2001, "media_type": "movie"}
+    first = {**legacy, "tmdb_id": 301, "overview": "Полицейский расследует кражу."}
+    second = {**legacy, "tmdb_id": 302, "overview": "Преступник скрывается от полиции."}
+    mark_watched(legacy)
+    assert not service.story_catalog_snapshot([first])[0]
+    docs, _ = service.story_catalog_snapshot([first, second])
+    assert {doc.key for doc in docs} == {"tmdb:movie:301", "tmdb:movie:302"}
