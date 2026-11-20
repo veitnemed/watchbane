@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from candidates import title_state_service
+from candidates.models.keys import candidate_action_identity_key
 from desktop.candidates.presenters import build_candidate_readonly_detail_entry
 from desktop.watched.model import WatchedEntry
 
@@ -25,7 +26,10 @@ def load_action_library_entries(
     entries: list[WatchedEntry] = []
     candidates_by_key: dict[str, dict] = {}
     for candidate in title_state_service.load_action_candidates(action, path=path):
-        entry = build_candidate_readonly_detail_entry(candidate, data_language=data_language)
-        entries.append(entry)
-        candidates_by_key[entry[0]] = candidate
+        _, movie, card = build_candidate_readonly_detail_entry(candidate, data_language=data_language)
+        # The Candidates presenter keys its own cache by pool/title, which is
+        # not unique for two persisted actions with different known TMDb IDs.
+        key = f"__candidate__{candidate_action_identity_key(candidate)}"
+        entries.append((key, movie, card))
+        candidates_by_key[key] = candidate
     return entries, candidates_by_key

@@ -1,4 +1,4 @@
-# Watchbane: поиск по сюжету, source preview 3
+# Watchbane: поиск по сюжету, source preview 4
 
 Это предварительная версия настольного Qt-приложения в виде исходников, не готовый Windows EXE. Она начинает работу с отдельным пустым профилем. В архиве нет готового кинокаталога, вымышленных карточек, выгрузок TMDb и постеров фильмов, ключей, личных профилей и весов модели. Пустой каталог не выдаёт результатов.
 
@@ -46,7 +46,7 @@ python -m tools.qa.download_story_model --destination ../watchbane-e5 --variant 
 `SOURCE_MANIFEST.json` содержит хеши файлов и идентификатор исходного Git-коммита; рядом с ZIP публикуется SHA-256 всего архива. Это контроль целостности, не цифровая подпись. На Windows:
 
 ```powershell
-Get-FileHash .\Watchbane-story-search-preview.3-source.zip -Algorithm SHA256
+Get-FileHash .\Watchbane-story-search-preview.4-source.zip -Algorithm SHA256
 ```
 
 Сравните результат с соседним файлом `.sha256`. Windows-команды подготовлены, но нативный Windows-запуск этой source-сборки не подтверждён.

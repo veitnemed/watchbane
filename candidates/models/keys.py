@@ -57,16 +57,39 @@ def title_identity_key(candidate: dict) -> str:
     return f"{title}|{year}"
 
 
+def candidate_typed_state_key(candidate: dict) -> str | None:
+    """Only a positive integral TMDb ID can act as a stable action identity."""
+    value = candidate.get("tmdb_id")
+    if type(value) is int:
+        tmdb_id = value
+    elif type(value) is str and (text := value.strip()).isascii() and text.isdecimal() and len(text) <= 20:
+        tmdb_id = int(text)
+    else:
+        return None
+    if tmdb_id <= 0:
+        return None
+    return f"tmdb:{normalize_media_type(candidate.get('media_type'))}:{tmdb_id}"
+
+
+def candidate_legacy_state_keys(candidate: dict) -> tuple[str, str]:
+    legacy = title_identity_key(candidate)
+    return f"{legacy}|{normalize_media_type(candidate.get('media_type'))}", legacy
+
+
 def candidate_state_identity_key(candidate: dict) -> str:
-    """Build a media-aware identity for user state transitions."""
-    return f"{title_identity_key(candidate)}|{normalize_media_type(candidate.get('media_type'))}"
+    """Return the legacy media-aware title key used by recommendation history."""
+    return candidate_legacy_state_keys(candidate)[0]
+
+
+def candidate_action_identity_key(candidate: dict) -> str:
+    """Return the stable typed action identity, or a scoped title key without an ID."""
+    return candidate_typed_state_key(candidate) or candidate_state_identity_key(candidate)
 
 
 def candidate_state_identity_keys(candidate: dict) -> tuple[str, ...]:
-    """Return current and legacy identities used by candidate actions."""
-    current = candidate_state_identity_key(candidate)
-    legacy = title_identity_key(candidate)
-    return (current,) if current == legacy else (current, legacy)
+    """A typed identity must never fall through to a conflicting title key."""
+    typed = candidate_typed_state_key(candidate)
+    return (typed,) if typed else candidate_legacy_state_keys(candidate)
 
 
 def pool_entry_key(candidate: dict) -> str:

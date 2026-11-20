@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sqlite3
 
-from candidates.models.keys import candidate_state_identity_key
+from candidates.models.keys import candidate_action_identity_key, candidate_state_identity_key
 from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
 from dataset.add_flow.save import build_movie_record_from_defaults
 from dataset.models.identity import (
@@ -35,7 +35,7 @@ def load_action_candidates(
     path: str | Path | None = None,
 ) -> list[dict]:
     """Load normalized candidate payloads currently assigned to one action state."""
-    stored = action_repository.load_candidate_actions_dict(action, path=path)
+    stored = action_repository.load_effective_candidate_actions_dict(action, path=path)
     return [
         entry["candidate"]
         for entry in stored.values()
@@ -134,19 +134,14 @@ def _set_action_state(candidate: dict, action: str, *, path: str | Path | None =
     try:
         apply_migrations(conn)
         with conn:
+            conn.execute("BEGIN IMMEDIATE")
             if _find_watched_row(conn, normalized) is not None:
                 _clear_candidate_actions(conn, normalized)
                 state = STATE_WATCHED
             else:
-                _clear_candidate_actions(conn, normalized)
-                result = action_repository.add_candidate_action(
-                    action,
-                    normalized,
-                    conn=conn,
-                    identity_key=candidate_state_identity_key(normalized),
-                )
+                action_repository.set_candidate_action(normalized, action, conn=conn)
                 state = action
-        return {"ok": True, "identity": candidate_state_identity_key(normalized), "state": state}
+        return {"ok": True, "identity": candidate_action_identity_key(normalized), "state": state}
     finally:
         conn.close()
 
@@ -165,10 +160,11 @@ def restore_candidate(candidate: dict, *, path: str | Path | None = None) -> dic
     try:
         apply_migrations(conn)
         with conn:
+            conn.execute("BEGIN IMMEDIATE")
             _clear_candidate_actions(conn, normalized)
             impression_repository.forget_impressions([normalized], conn=conn)
             state = _state_in_connection(conn, normalized)
-        return {"ok": True, "identity": candidate_state_identity_key(normalized), "state": state}
+        return {"ok": True, "identity": candidate_action_identity_key(normalized), "state": state}
     finally:
         conn.close()
 
@@ -179,13 +175,14 @@ def remove_from_watchlist(candidate: dict, *, path: str | Path | None = None) ->
     try:
         apply_migrations(conn)
         with conn:
+            conn.execute("BEGIN IMMEDIATE")
             action_repository.remove_candidate_actions(
                 normalized,
                 (action_repository.ACTION_WATCHLIST,),
                 conn=conn,
             )
             state = _state_in_connection(conn, normalized)
-        return {"ok": True, "identity": candidate_state_identity_key(normalized), "state": state}
+        return {"ok": True, "identity": candidate_action_identity_key(normalized), "state": state}
     finally:
         conn.close()
 

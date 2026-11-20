@@ -77,3 +77,10 @@ The application remains local-first. Existing SQLite data, settings, candidate p
 - The selected E5 folder is remembered in the profile. Explicitly switching to word search forgets the saved selection; startup overrides remain available.
 - Both search modes recognize a limited set of obvious non-film instructions. The semantic ranker can still return weak hits, especially on multiple plot constraints and cross-language synopses.
 - The attached archive contains source code only: no installer, model, live data, or keys. See `SOURCE_PREVIEW.md` to start.
+
+## Story Search Preview 4 (source pre-release)
+
+- Reviewed and saved titles now use stable IDs for action routing. Known different films with the same title and year do not share statuses or overwrite ratings; alternate names of the same known item do not duplicate saved or hidden entries.
+- Existing supported aliases are shown once without a bulk database rewrite. A failed state transition leaves the prior state intact. Records already overwritten on earlier versions are not automatically restored.
+- Added reproducible offline BM25 and character TF-IDF comparison tools for development. Product ranking is unchanged.
+- The pre-release is source only. No user profiles, catalogs, model weights, keys or Windows executable are included.
