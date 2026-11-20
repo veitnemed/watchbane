@@ -77,3 +77,32 @@ def test_added_title_opens_watched_and_returned_search_respects_hidden(qtbot,mon
     collection._add_title()
     assert collection.legacy._library_section=='watched' and len(collection._entries)==1
     window.shutdown_background_workers()
+
+
+def test_imported_saved_hidden_conflict_keeps_separate_media_and_restores(qtbot):
+    from desktop.shell.main_window import WatchedMoviesWindow
+    from storage.sqlite import action_repository as repo
+
+    movie = {"title": "Общее имя", "year": 2025, "media_type": "movie"}
+    series = dict(movie, media_type="tv")
+    key = "общее имя|2025"
+    repo.save_candidate_actions_dict(repo.ACTION_WATCHLIST, {
+        key: repo.build_action_entry(movie, repo.ACTION_WATCHLIST),
+        key + "|tv": repo.build_action_entry(series, repo.ACTION_WATCHLIST),
+    })
+    repo.save_candidate_actions_dict(repo.ACTION_HIDDEN, {
+        key + "|movie": repo.build_action_entry(movie, repo.ACTION_HIDDEN),
+    })
+    window = WatchedMoviesWindow(initial_size=(1280, 1000))
+    qtbot.addWidget(window)
+    window.show()
+    window._tab_registry.focus("watched")
+    collection = window._tab_registry._specs["watched"].view
+    assert [collection._action_candidates_by_key[entry[0]]["media_type"] for entry in collection._entries] == ["tv"]
+    collection._switch_section("hidden")
+    assert [collection._action_candidates_by_key[entry[0]]["media_type"] for entry in collection._entries] == ["movie"]
+    next(button for button in collection.cards.findChildren(QPushButton) if button.text() == "Вернуть").click()
+    assert not collection._entries
+    assert get_title_state(movie) == "available"
+    assert get_title_state(series) == "watchlist"
+    window.shutdown_background_workers()

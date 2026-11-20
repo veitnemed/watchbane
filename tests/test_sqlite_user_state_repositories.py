@@ -27,7 +27,8 @@ def test_hidden_and_watchlist_action_identities_roundtrip(tmp_path) -> None:
     assert hidden["identity"] == "метод|2015"
     assert watchlist["identity"] == "метод|2015"
     assert action_repository.load_action_identities(action_repository.ACTION_HIDDEN, path=db_path) == {"метод|2015"}
-    assert action_repository.load_action_identities(action_repository.ACTION_WATCHLIST, path=db_path) == {"метод|2015"}
+    assert action_repository.load_action_identities(action_repository.ACTION_WATCHLIST, path=db_path) == set()
+    assert set(action_repository.load_candidate_actions_dict(action_repository.ACTION_WATCHLIST, path=db_path)) == {"метод|2015"}
 
 
 def test_candidate_actions_mapping_roundtrip(tmp_path) -> None:

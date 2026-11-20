@@ -188,12 +188,13 @@ def load_effective_candidate_actions_dict(
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
 ) -> dict:
-    """Project known-ID duplicates as one current state without modifying imported rows."""
+    """Project current saved/hidden states without modifying imported rows."""
     active, owned = connection(conn, path)
     try:
         actions = (ACTION_WATCHLIST, ACTION_HIDDEN) if action in (ACTION_WATCHLIST, ACTION_HIDDEN) else (action,)
         result = {}
         typed = {}
+        legacy = {}
         for row in _action_rows(active, actions):
             entry, candidate = _row_value(row)
             if not isinstance(entry, dict):
@@ -201,8 +202,24 @@ def load_effective_candidate_actions_dict(
             key = candidate_typed_state_key(candidate)
             if key:
                 typed[key] = (row["action"], entry)
-            elif row["action"] == action:
-                result[row["identity_key"]] = entry
+            else:
+                scoped, bare = candidate_legacy_state_keys(candidate)
+                stored_key = row["identity_key"]
+                current = row["action"]
+                if current in (ACTION_WATCHLIST, ACTION_HIDDEN) and candidate and bare != "|" and stored_key in (scoped, bare):
+                    latest = legacy.setdefault(scoped, {})
+                    previous_key, _ = latest.get(current, (scoped, None))
+                    # Keep an actual historical bare exclusion; older filters
+                    # consume that key. Use the latest payload for the card.
+                    latest[current] = (bare if bare in (stored_key, previous_key) else scoped, entry)
+                elif current == action:
+                    result[stored_key] = entry
+        for latest in legacy.values():
+            # The per-card state has always preferred hidden for ID-less rows.
+            current = ACTION_HIDDEN if ACTION_HIDDEN in latest else next(iter(latest))
+            if current == action:
+                key, entry = latest[current]
+                result[key] = entry
         result.update({key: entry for key, (current, entry) in typed.items() if current == action})
         return result
     finally:

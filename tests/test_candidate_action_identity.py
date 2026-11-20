@@ -135,3 +135,47 @@ def test_legacy_filter_can_hide_bare_title_without_sharing_a_persisted_action(tm
     state.restore_candidate(homonym, path=path)
     state.restore_candidate(item(None), path=path)
     assert state.get_title_state(first, path=path) == state.STATE_HIDDEN
+
+
+def test_imported_unlinked_conflict_uses_same_state_in_cards_and_collection(tmp_path):
+    path = tmp_path / "watchbane.sqlite3"
+    old_movie, old_series = item(None), item(None, media="tv")
+    bare = "общее имя|2020"
+    scoped = bare + "|movie"
+    series_key = bare + "|tv"
+    saved = {
+        bare: {"candidate": old_movie, "added_at": "2026-01-02T00:00:00+00:00"},
+        scoped: {"candidate": old_movie, "added_at": "2026-01-03T00:00:00+00:00"},
+        series_key: {"candidate": old_series, "added_at": "2026-01-03T00:00:00+00:00"},
+    }
+    hidden = {scoped: {"candidate": old_movie, "hidden_at": "2026-01-01T00:00:00+00:00"}}
+    repo.save_candidate_actions_dict(repo.ACTION_WATCHLIST, saved, path=path)
+    repo.save_candidate_actions_dict(repo.ACTION_HIDDEN, hidden, path=path)
+
+    assert state.get_title_state(old_movie, path=path) == state.STATE_HIDDEN
+    assert state.get_title_state(old_series, path=path) == state.STATE_WATCHLIST
+    assert repo.load_action_identities(repo.ACTION_WATCHLIST, path=path) == {series_key}
+    assert repo.load_action_identities(repo.ACTION_HIDDEN, path=path) == {scoped}
+    assert repo.load_candidate_actions_dict(repo.ACTION_WATCHLIST, path=path) == saved
+    assert repo.load_candidate_actions_dict(repo.ACTION_HIDDEN, path=path) == hidden
+
+    state.add_to_watchlist(old_movie, path=path)
+    assert state.get_title_state(old_movie, path=path) == state.STATE_WATCHLIST
+    assert repo.load_action_identities(repo.ACTION_WATCHLIST, path=path) == {series_key, scoped}
+    assert repo.load_action_identities(repo.ACTION_HIDDEN, path=path) == set()
+
+
+def test_imported_unlinked_duplicate_collapses_without_losing_bare_filter(tmp_path):
+    path = tmp_path / "watchbane.sqlite3"
+    old_movie = item(None)
+    bare = "общее имя|2020"
+    scoped = bare + "|movie"
+    saved = {
+        bare: {"candidate": old_movie, "added_at": "2026-01-01T00:00:00+00:00"},
+        scoped: {"candidate": dict(old_movie, overview="Newest"), "added_at": "2026-01-02T00:00:00+00:00"},
+    }
+    repo.save_candidate_actions_dict(repo.ACTION_WATCHLIST, saved, path=path)
+
+    assert repo.load_action_identities(repo.ACTION_WATCHLIST, path=path) == {bare}
+    assert [row["overview"] for row in state.load_action_candidates(repo.ACTION_WATCHLIST, path=path)] == ["Newest"]
+    assert repo.load_candidate_actions_dict(repo.ACTION_WATCHLIST, path=path) == saved
