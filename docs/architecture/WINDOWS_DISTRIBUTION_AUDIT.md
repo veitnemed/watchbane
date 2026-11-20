@@ -54,3 +54,36 @@ The [matching upstream Apache 2.0 LICENSE](https://github.com/huggingface/tokeni
 establishes source provenance for review, not the complete notices of the
 compiled extension or permission for the whole archive. Inspect the exact
 wheel's contents separately.
+
+## Release acceptance on desktop Windows
+
+Use an already authorized clean Windows client. An enabled [Windows
+Sandbox](https://learn.microsoft.com/en-us/windows/security/threat-protection/windows-sandbox/windows-sandbox-overview)
+is suitable for a disposable first-launch check; use a clean VM snapshot for
+a specific desktop edition or for testing across a Windows reboot. An app
+restart in the same sandbox session tests profile persistence, not persistence
+after the sandbox is closed. Record the actual edition, build and architecture;
+a Windows 11 result is not evidence of Windows 10 support.
+
+1. Start with the exact candidate Windows archive from the intended delivery
+   channel. Verify and record its SHA-256 and build commit. Record the VC++ v14
+   registration before starting; don't uninstall system runtimes to simulate a
+   blank host. Use a fresh application profile without Python, seeded weights
+   or imported user data. If sharing files with a VM, expose only the needed
+   candidate and approved QA inputs, not a developer profile or credentials.
+2. Extract or install normally as a regular user and run the unmodified product
+   executable. Record any missing runtime, unexpected elevation or manual setup.
+   Hosted CI and private QA overlays are useful diagnostics, not substitutes.
+3. With internet enabled, use the visible **Подключить поиск по смыслу…**
+   control once and confirm the offered download. Check that E5 is shown as
+   active after verification. No manual model path, Python install or API key
+   should be required for the supported first-run flow.
+4. Use an approved real catalog through the same route available to the
+   recipient; don't silently preload a private QA dataset. Record its size,
+   provenance, expected film and actual rank for a fixed Russian plot query.
+   Save a result, close the app, start it again and verify that both E5 and the
+   saved result persist. Record separately whether the second search also works
+   offline. Capture the actual product UI and any failure steps.
+5. Mark only the tested OS and distribution route as verified. A successful
+   run doesn't authorize distribution: the exact downloadable archive and
+   catalog still need the separate source and notice review above.
