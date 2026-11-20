@@ -1,11 +1,12 @@
 from collections import Counter
 import json
+import sqlite3
 from urllib.error import HTTPError
 
 import pytest
 
 from tools.qa.build_story_starter_catalog import (
-    Acquisition, AcquisitionError, GENRES, Plan, build_catalog,
+    Acquisition, AcquisitionError, DEFAULT_ORDER, GENRES, INTERLEAVED_ORDER, Plan, buckets, build_catalog,
 )
 
 
@@ -165,3 +166,77 @@ def test_origin_is_independent_of_locale_and_counts_survive_resume(tmp_path):
     resumed = build_catalog(checkpoint, output, plan, get=get)
     assert resumed["api_requests_this_run"] == 0
     assert {key: resumed[key] for key in expected} == expected
+
+
+def test_interleaved_first_pass_spreads_decades_and_genres_without_changing_coverage():
+    legacy = list(buckets(Plan(through="2025-07-17")))
+    expected_years = list(range(1960, 2030, 10))
+    spread = list(buckets(Plan(through="2025-07-17", order=INTERLEAVED_ORDER)))
+    first_pass = spread[:2 * len(expected_years)]
+    assert [int(b.start[:4]) for b in first_pass[::2]] == expected_years
+    assert [int(b.start[:4]) for b in first_pass[1::2]] == expected_years
+    assert [b.media for b in first_pass] == ["movie", "tv"] * len(expected_years)
+    assert [b.genre for b in first_pass[::2]] == list(GENRES["movie"])
+    assert [b.genre for b in first_pass[1::2]] == list(GENRES["tv"])
+    assert {int(b.start[:4]) for b in legacy[:len(first_pass)]} == {1960}
+    assert len(spread) == len({b.key for b in spread}) == len(legacy) == 98
+    assert set(spread) == set(legacy)
+    assert {b.end for b in spread if b.start[:4] == "2020"} == {"2025-07-17"}
+    with pytest.raises(ValueError, match="Недопустимые"):
+        list(buckets(Plan(through="2025-07-17", order="unknown")))
+
+
+def test_new_interleaved_checkpoint_resumes_with_same_pages_and_bytes(tmp_path):
+    checkpoint, output = tmp_path / "interleaved.sqlite3", tmp_path / "interleaved.jsonl"
+    plan = Plan(420, "2025-12-31", order=INTERLEAVED_ORDER)
+    first = CatalogFixture()
+    first.interrupt_page = 6
+    with pytest.raises(KeyboardInterrupt):
+        build_catalog(checkpoint, output, plan, get=first)
+    # First five committed discover pages span three decades, and the sixth
+    # (first TV page of the third decade) was interrupted before commit.
+    assert [(media, decade) for media, decade, _, _ in first.discover] == [
+        ("movie", 1960), ("tv", 1960), ("movie", 1970), ("tv", 1970), ("movie", 1980), ("tv", 1980),
+    ]
+    assert not output.exists()
+    second = CatalogFixture()
+    assert build_catalog(checkpoint, output, plan, get=second)["count"] == 420
+    assert second.discover[0] == first.discover[-1]
+    assert not set(first.discover[:-1]) & set(second.discover)
+    reference = tmp_path / "reference.jsonl"
+    baseline = CatalogFixture()
+    build_catalog(tmp_path / "reference.sqlite3", reference, plan, get=baseline)
+    assert first.discover[:-1] + second.discover == baseline.discover
+    assert output.read_bytes() == reference.read_bytes()
+    with sqlite3.connect(checkpoint) as conn:
+        signature, = conn.execute("SELECT value FROM settings WHERE key='plan'").fetchone()
+    assert json.loads(signature)["plan"]["order"] == INTERLEAVED_ORDER
+    with pytest.raises(ValueError, match="другим планом"):
+        build_catalog(checkpoint, output, Plan(420, "2025-12-31"), get=CatalogFixture())
+
+
+def test_legacy_exact_checkpoint_signature_is_unchanged_and_cannot_switch_order(tmp_path):
+    checkpoint, output = tmp_path / "old.sqlite3", tmp_path / "old.jsonl"
+    legacy_signature = json.dumps({
+        "version": 1,
+        "plan": {"target": 40, "through": "2025-12-31", "max_pages": 12, "min_overview": 50, "min_votes": 10},
+        "genres": GENRES,
+    }, sort_keys=True)
+    with sqlite3.connect(checkpoint) as conn:
+        conn.execute("CREATE TABLE settings(key TEXT PRIMARY KEY,value TEXT NOT NULL)")
+        conn.execute("INSERT INTO settings VALUES ('plan',?)", (legacy_signature,))
+    before = checkpoint.read_bytes()
+    unexpected = CatalogFixture()
+    with pytest.raises(ValueError, match="другим планом"):
+        build_catalog(checkpoint, output, Plan(40, "2025-12-31", order=INTERLEAVED_ORDER), get=unexpected)
+    assert not unexpected.discover and not output.exists()
+    assert checkpoint.read_bytes() == before
+
+    previous = CatalogFixture()
+    assert build_catalog(checkpoint, output, Plan(40, "2025-12-31", order=DEFAULT_ORDER), get=previous)["complete"]
+    assert previous.discover[:2] == [("movie", 1960, 0, 1), ("tv", 1960, 0, 1)]
+    with sqlite3.connect(checkpoint) as conn:
+        after, = conn.execute("SELECT value FROM settings WHERE key='plan'").fetchone()
+    assert after == legacy_signature
+    assert build_catalog(checkpoint, output, Plan(40, "2025-12-31"), get=unexpected)["complete"]
+    assert not unexpected.discover

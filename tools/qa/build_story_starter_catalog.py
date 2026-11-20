@@ -25,6 +25,9 @@ GENRES = {
 }
 FIRST_DECADE = 1960
 VERSION = 1
+DEFAULT_ORDER = "decade-major"
+INTERLEAVED_ORDER = "decade-interleaved"
+ORDERS = (DEFAULT_ORDER, INTERLEAVED_ORDER)
 
 
 @dataclass(frozen=True)
@@ -34,12 +37,13 @@ class Plan:
     max_pages: int = 12
     min_overview: int = 50
     min_votes: int = 10
+    order: str = DEFAULT_ORDER
 
     def validate(self):
         end = date.fromisoformat(self.through)
         if not (1 <= self.target <= 5000 and 1 <= self.max_pages <= 100 and
                 1 <= self.min_overview <= 500 and 0 <= self.min_votes <= 100 and
-                FIRST_DECADE <= end.year and end <= date.today()):
+                FIRST_DECADE <= end.year and end <= date.today() and self.order in ORDERS):
             raise ValueError("Недопустимые параметры плана.")
         return end
 
@@ -66,12 +70,22 @@ class Bucket:
 
 def buckets(plan):
     end = plan.validate()
-    for decade in range(FIRST_DECADE, end.year + 1, 10):
+    decades = tuple(range(FIRST_DECADE, end.year + 1, 10))
+    genre_pairs = tuple(zip(GENRES["movie"], GENRES["tv"], strict=True))
+    if plan.order == INTERLEAVED_ORDER:
+        # Each pass visits every decade; rotate genre offsets so the first
+        # decades do not all request the same group. Every pair is still unique.
+        positions = ((decade, (round_index + offset) % len(genre_pairs))
+                     for round_index in range(len(genre_pairs))
+                     for offset, decade in enumerate(decades))
+    else:
+        positions = ((decade, group) for decade in decades for group in range(len(genre_pairs)))
+    for decade, group in positions:
         start = f"{decade}-01-01"
         stop = min(date(decade + 9, 12, 31), end).isoformat()
-        for m, t in zip(GENRES["movie"], GENRES["tv"], strict=True):
-            yield Bucket("movie", start, stop, m)
-            yield Bucket("tv", start, stop, t)
+        movie, tv = genre_pairs[group]
+        yield Bucket("movie", start, stop, movie)
+        yield Bucket("tv", start, stop, tv)
 
 
 class AcquisitionError(RuntimeError):
@@ -217,7 +231,20 @@ def _record(api, bucket, row, plan, rejected):
     return data
 
 
+def _plan_signature(plan):
+    parameters = asdict(plan)
+    if plan.order == DEFAULT_ORDER:
+        # Older checkpoints were written before the order field existed.
+        parameters.pop("order")
+    return json.dumps({"version": VERSION, "plan": parameters, "genres": GENRES}, sort_keys=True)
+
+
 def _setup(conn, plan):
+    expected = _plan_signature(plan)
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='settings'").fetchone():
+        old = conn.execute("SELECT value FROM settings WHERE key='plan'").fetchone()
+        if old and old[0] != expected:
+            raise ValueError("Контрольная точка создана с другим планом. Укажите прежние параметры или другой файл.")
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS overview_stats (
             bucket TEXT NOT NULL, page INTEGER NOT NULL, unusable INTEGER NOT NULL, PRIMARY KEY(bucket,page)
@@ -230,10 +257,6 @@ def _setup(conn, plan):
             UNIQUE(media,id)
         );
     """)
-    expected = json.dumps({"version": VERSION, "plan": asdict(plan), "genres": GENRES}, sort_keys=True)
-    old = conn.execute("SELECT value FROM settings WHERE key='plan'").fetchone()
-    if old and old[0] != expected:
-        raise ValueError("Контрольная точка создана с другим планом. Укажите прежние параметры или другой файл.")
     conn.execute("INSERT OR IGNORE INTO settings VALUES ('plan',?)", (expected,))
     conn.commit()
 
@@ -341,6 +364,9 @@ def main(argv=None):
     parser.add_argument("--through", required=True, help="Фиксированная дата YYYY-MM-DD; та же при возобновлении.")
     parser.add_argument("--target", type=int, default=5000)
     parser.add_argument("--max-pages", type=int, default=12)
+    parser.add_argument("--order", choices=ORDERS, default=DEFAULT_ORDER,
+                        help="Порядок обхода; decade-interleaved охватывает разные десятилетия раньше. "
+                             "Для смены порядка нужен новый checkpoint.")
     parser.add_argument("--ask-token", action="store_true", help="Ввести API Read Access Token в терминале без сохранения.")
     args = parser.parse_args(argv)
     get = None
@@ -355,7 +381,7 @@ def main(argv=None):
             if not token:
                 parser.error("Токен не введён.")
             get = partial(tmdb_get, token=token)
-        result = build_catalog(args.checkpoint, args.output, Plan(args.target, args.through, args.max_pages),
+        result = build_catalog(args.checkpoint, args.output, Plan(args.target, args.through, args.max_pages, order=args.order),
                                get=get,
                                progress=lambda state: print(json.dumps(state, ensure_ascii=False), file=sys.stderr, flush=True))
     except KeyboardInterrupt:
