@@ -17,6 +17,7 @@ from candidates.models.genre_schema import build_genre_keys
 from candidates.models.keys import (
     COMMON_POOL_CRITERIA_NAME,
     candidate_state_identity_keys,
+    candidate_typed_state_key,
     pool_entry_key,
     title_identity_key,
 )
@@ -2408,11 +2409,12 @@ def _save_pool_incremental(
     for candidate in candidates:
         key = pool_entry_key(candidate)
         if key != "|":
-            candidate["pool_entry_key"] = key
-            pool[key] = candidate
-            incoming[key] = candidate
+            incoming[candidate_typed_state_key(candidate) or key] = candidate
     if incoming:
         merge_candidate_pool_dict(incoming, path=path)
+        committed_pool = load_candidate_pool_dict(path=path)
+        pool.clear()
+        pool.update(committed_pool)
 
 
 def _run_onboarding_autofill_impl(

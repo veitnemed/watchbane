@@ -18,6 +18,7 @@ from candidates.models import genre_schema
 from candidates.models.keys import (
     candidate_state_identity_key,
     candidate_state_identity_keys,
+    candidate_typed_state_key,
     title_identity_key,
     pool_entry_key,
 )
@@ -788,7 +789,7 @@ class RecommendationDeckService:
         if request_cap < len(candidates):
             counters["request_cap_reached"] = 1
         successful = {
-            pool_entry_key(candidate): candidate
+            candidate_typed_state_key(candidate) or pool_entry_key(candidate): candidate
             for candidate in enriched
             if candidate.get("details_enrichment_contract_version") == 1
             and candidate.get("details_enrichment_status") == "success"
