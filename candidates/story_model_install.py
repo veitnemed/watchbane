@@ -5,9 +5,10 @@ from hashlib import sha256
 from http.client import HTTPException
 from os import fsync
 from pathlib import Path
+import ssl
 from tempfile import TemporaryDirectory
 from time import monotonic
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -27,6 +28,10 @@ _ALLOWED_HOSTS = frozenset({"huggingface.co", "cas-bridge.xethub.hf.co"})
 class StoryModelInstallError(RuntimeError):
     """The model was not installed; an existing destination was not changed."""
 
+    def __init__(self, message: str, code: str = "runtime_error"):
+        super().__init__(message)
+        self.code = code
+
 
 class StoryModelInstallCancelled(StoryModelInstallError):
     """The requested model installation was cancelled."""
@@ -45,13 +50,13 @@ def profile_story_model_destination(profile_root: Path | None = None) -> Path:
 
 def _check_cancel(cancelled: Callable[[], bool] | None) -> None:
     if cancelled is not None and cancelled():
-        raise StoryModelInstallCancelled("Model installation cancelled")
+        raise StoryModelInstallCancelled("Model installation cancelled", "cancelled")
 
 
 def _check_active(cancelled: Callable[[], bool] | None, deadline: float) -> None:
     _check_cancel(cancelled)
     if monotonic() >= deadline:
-        raise StoryModelInstallError("Model download timed out")
+        raise StoryModelInstallError("Model download timed out", "timeout")
 
 
 def _safe_url(url: str) -> bool:
@@ -74,24 +79,24 @@ def _open_artifact(opener, name: str, cancelled: Callable[[], bool] | None, dead
     for _ in range(_REDIRECT_LIMIT + 1):
         _check_active(cancelled, deadline)
         if not _safe_url(url):
-            raise StoryModelInstallError("Unapproved model download address")
+            raise StoryModelInstallError("Unapproved model download address", "redirect_host")
         request = Request(url, headers={"Accept-Encoding": "identity", "User-Agent": "Watchbane"}, method="GET")
         try:
             response = opener.open(request, timeout=min(SOCKET_TIMEOUT_SECONDS, max(0.001, deadline - monotonic())))
         except HTTPError as exc:
             with closing(exc):
                 if exc.code not in _REDIRECT_STATUSES:
-                    raise StoryModelInstallError(f"Model server returned HTTP {exc.code}") from None
+                    raise StoryModelInstallError(f"Model server returned HTTP {exc.code}", "http_status") from None
                 location = exc.headers.get("Location")
                 if not location:
-                    raise StoryModelInstallError("Model server returned an empty redirect") from None
+                    raise StoryModelInstallError("Model server returned an empty redirect", "invalid_response") from None
                 url = urljoin(url, location)
                 continue
         if response.status != 200:
             response.close()
-            raise StoryModelInstallError("Model server did not return a complete artifact")
+            raise StoryModelInstallError("Model server did not return a complete artifact", "invalid_response")
         return response
-    raise StoryModelInstallError("Too many model download redirects")
+    raise StoryModelInstallError("Too many model download redirects", "redirect_host")
 
 
 def _verified_existing(destination: Path, cancelled: Callable[[], bool] | None, deadline: float) -> int | None:
@@ -125,13 +130,13 @@ def _download_set(stage, cancelled, deadline, on_progress) -> int:
         digest = sha256()
         with closing(_open_artifact(opener, name, cancelled, deadline)) as response, path.open("xb") as output:
             if response.headers.get("Content-Encoding", "identity").strip().lower() != "identity":
-                raise StoryModelInstallError("Unexpected compression for the pinned artifact")
+                raise StoryModelInstallError("Unexpected compression for the pinned artifact", "invalid_response")
             size = response.headers.get("Content-Length")
             if size is not None and (not size.isascii() or not size.isdecimal() or len(size) > 12):
-                raise StoryModelInstallError("Invalid model artifact size header")
+                raise StoryModelInstallError("Invalid model artifact size header", "invalid_response")
             declared = int(size) if size is not None else None
             if declared is not None and not 0 < declared <= DOWNLOAD_BYTE_LIMIT - transferred:
-                raise StoryModelInstallError("Model exceeds the download size limit")
+                raise StoryModelInstallError("Model exceeds the download size limit", "invalid_response")
             written = 0
             while True:
                 _check_active(cancelled, deadline)
@@ -142,15 +147,15 @@ def _download_set(stage, cancelled, deadline, on_progress) -> int:
                 written += len(chunk)
                 transferred += len(chunk)
                 if transferred > DOWNLOAD_BYTE_LIMIT or (declared is not None and written > declared):
-                    raise StoryModelInstallError("Model exceeds the download size limit")
+                    raise StoryModelInstallError("Model exceeds the download size limit", "invalid_response")
                 digest.update(chunk)
                 output.write(chunk)
                 if on_progress is not None:
                     on_progress(transferred, DOWNLOAD_BYTE_LIMIT)
             if declared is not None and declared != written:
-                raise StoryModelInstallError("Model artifact download was incomplete")
+                raise StoryModelInstallError("Model artifact download was incomplete", "integrity")
             if not written or digest.hexdigest() != expected:
-                raise StoryModelInstallError(f"Checksum mismatch: {name}")
+                raise StoryModelInstallError(f"Checksum mismatch: {name}", "integrity")
             output.flush()
             fsync(output.fileno())
     return transferred
@@ -175,7 +180,7 @@ def install_story_model(
         if destination.exists() or destination.is_symlink():
             existing = _verified_existing(destination, cancelled, deadline)
             if existing is None:
-                raise StoryModelInstallError("Model destination exists but could not be verified; it was not changed")
+                raise StoryModelInstallError("Model destination exists but could not be verified; it was not changed", "existing_invalid")
             if on_progress is not None:
                 on_progress(existing, existing)
             return destination
@@ -197,6 +202,9 @@ def install_story_model(
         return destination
     except StoryModelInstallError:
         raise
+    except URLError as error:
+        reason = "tls" if isinstance(error.reason, ssl.SSLError) else "network_or_disk"
+        raise StoryModelInstallError("Could not reach the model server", reason) from None
     except (OSError, HTTPException, ValueError):
         # Do not include temporary signed CDN URLs, proxies or local user paths.
-        raise StoryModelInstallError("Could not download or save the verified model") from None
+        raise StoryModelInstallError("Could not download or save the verified model", "network_or_disk") from None
