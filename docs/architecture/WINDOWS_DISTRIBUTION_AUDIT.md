@@ -57,6 +57,8 @@ wheel's contents separately.
 
 ## Release acceptance on desktop Windows
 
+Отдельный [пилот первого самостоятельного запуска](../operations/STORY_FIRST_RUN_UX_ACCEPTANCE.md) проверяет понятность сценария для нового человека. Этот план не означает, что пилот уже пройден.
+
 Use an already authorized clean Windows client. An enabled [Windows
 Sandbox](https://learn.microsoft.com/en-us/windows/security/threat-protection/windows-sandbox/windows-sandbox-overview)
 is suitable for a disposable first-launch check; use a clean VM snapshot for
