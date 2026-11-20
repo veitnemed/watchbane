@@ -1,0 +1,48 @@
+name: Watchbane verified source package
+
+on:
+  push:
+    branches: ["feature/story-search"]
+    paths:
+      - ".github/workflows/story-source-package.yml"
+      - "tools/qa/package_story_preview.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watchbane-source-package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build twice and verify ZIP against the event commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse "${GITHUB_SHA}^{commit}")"
+          test "$(git rev-parse HEAD)" = "$sha"
+          name="Watchbane-${sha:0:12}-source.zip"
+          a="$RUNNER_TEMP/watchbane-source-output"
+          b="$(mktemp -d "$RUNNER_TEMP/watchbane-source-check.XXXXXX")"
+          mkdir "$a"
+          python3 -m tools.qa.package_story_preview build "$a/$name" --ref "$sha"
+          python3 -m tools.qa.package_story_preview build "$b/$name" --ref "$sha"
+          cmp "$a/$name" "$b/$name"
+          cmp "$a/$name.sha256" "$b/$name.sha256"
+          python3 -m tools.qa.package_story_preview verify "$a/$name" --ref "$sha"
+          (cd "$a"; sha256sum --check "$name.sha256")
+      - uses: actions/upload-artifact@v7
+        with:
+          name: watchbane-verified-source-${{ github.sha }}
+          path: ${{ runner.temp }}/watchbane-source-output/Watchbane-*-source.zip*
+          if-no-files-found: error
+          retention-days: 3
+      # A CI artifact is not a release; no model, catalogue or Windows executable.
