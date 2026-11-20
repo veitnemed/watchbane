@@ -98,6 +98,66 @@ def unsupported_negation(query: str) -> bool:
                for i, w in enumerate(words))
 
 
+OUT_OF_SCOPE_NOTICE = (
+    "Здесь можно искать фильмы и сериалы по сюжету. Опишите героя, событие или конфликт."
+)
+
+# Conservative two-signal heuristic, not a classifier. A technical or culinary
+# word by itself also belongs in ordinary movie plots.
+_TECH_ACTIONS = {
+    "настроить", "сконфигурировать", "установить", "переустановить",
+    "обновить", "подключить", "включить", "отключить", "скопировать",
+    "перенести", "посмотреть", "проверить", "изменить",
+}
+_TECH_ROOTS = (
+    "драйвер", "прошивк", "компьютер", "ноутбук", "клавиатур", "роутер",
+    "маршрутизатор", "терминал", "интерфейс", "сетев",
+)
+_TECH_WORDS = {"ip", "ipv4", "ipv6", "wifi", "dns", "пароль", "пароля", "буфер"}
+_COOK_ACTIONS = {"приготовить", "сварить", "поджарить", "пожарить", "запечь", "испечь"}
+_FOOD_ROOTS = (
+    "картош", "картоф", "гриб", "омар", "куриц", "гречк", "макарон", "блин",
+    "пирог", "бисквит", "торт", "суп", "салат", "овощ", "десерт", "кашу",
+)
+_SCOPE_PREFIX_FILLERS = {"мне", "можно", "лучше", "быстро", "правильно", "пожалуйста"}
+
+
+def instructional_non_plot(query: str, title_words: set[tuple[str, ...]]) -> bool:
+    words = tokens(query)
+    stripped = query.strip()
+    if tuple(words) in title_words or (
+        len(stripped) >= 2 and (stripped[0], stripped[-1]) in {('«', '»'), ('"', '"'), ('“', '”')}
+    ):
+        return False
+    if not words:
+        return False
+
+    def food(word):
+        return word.startswith(_FOOD_ROOTS)
+
+    if words[0] != "как":
+        # Search-style recipe fragments: require both an explicit recipe request
+        # and a food term, not merely a plot involving a cook or restaurant.
+        return ((words[0] in {"рецепт", "рецепты"} or food(words[0])
+                 or words[0] in {"жареная", "жареный", "домашний", "домашняя"})
+                and any(w in {"рецепт", "рецепты"} for w in words)
+                and any(food(w) for w in words))
+
+    start = 1
+    while start < len(words) and words[start] in _SCOPE_PREFIX_FILLERS:
+        start += 1
+    rest = words[start:]
+    if not rest or (len(rest) >= 2 and rest[0] == "в" and rest[1] in {"фильме", "сериале", "кино"}):
+        return False
+    if rest[0] in _COOK_ACTIONS and any(food(w) for w in rest[1:]):
+        return True
+    # Some instructions name the context before the action ("как в ...").
+    # Do not scan bodies beginning with a person or third-person verb.
+    return ((rest[0] in _TECH_ACTIONS or rest[0] in {"в", "на", "через"})
+            and any(w in _TECH_ACTIONS for w in rest)
+            and any(w in _TECH_WORDS or w.startswith(_TECH_ROOTS) for w in rest))
+
+
 def media_constraints(query: str):
     words = tokens(query)
     tv = any(w.startswith("сериал") for w in words)
@@ -153,6 +213,7 @@ def protagonist(text: str) -> str | None:
 class StorySearch:
     def __init__(self, documents: Sequence[StoryDocument], retriever: Retriever | None = None):
         self.documents = tuple(documents)
+        self.title_words = {tuple(tokens(d.title)) for d in self.documents}
         self.retriever = retriever or ConceptRetriever()
 
     def search(self, query: str, *, excluded: frozenset[str] = frozenset(), limit: int = 5) -> StoryResponse:
@@ -163,6 +224,8 @@ class StorySearch:
             return StoryResponse((), "Опишите героя или событие: например, побег из тюрьмы.")
         if unsupported_negation(query):
             return StoryResponse((), "Отрицания пока не поддерживаются. Опишите желаемую историю утвердительно.")
+        if instructional_non_plot(query, self.title_words):
+            return StoryResponse((), OUT_OF_SCOPE_NOTICE)
         kind, year = media_constraints(query)
         docs = [d for d in self.documents if d.key not in excluded and (kind is None or d.media_type == kind) and (year is None or d.year == year)]
         q = concepts(words, fuzzy=True)

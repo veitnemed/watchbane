@@ -1,10 +1,11 @@
 """Search-first Qt home; original library/title search remain separate tabs."""
 import os
+from pathlib import Path
+import sqlite3
 from threading import Event
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QShortcut, QKeySequence
-from pathlib import Path
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
                             QPushButton, QScrollArea, QFrame, QMessageBox, QFileDialog, QDialog)
 from candidates import service
@@ -12,6 +13,12 @@ from candidates.title_state_service import STATE_WATCHLIST, get_title_states
 from desktop.theme.scaling import layout_px
 from desktop.theme.layout import MAIN_TAB_PANE_TOP_LIFT
 from desktop.theme.styles.story import build_story_style
+from storage.sqlite.connection import get_db_path
+from storage.sqlite.settings_repository import get_setting, set_setting
+
+
+_MODEL_SETTING = "story_search.model_dir"
+_MODEL_ENV = "WATCHBANE_STORY_MODEL_DIR"
 
 
 class StoryWorker(QThread):
@@ -56,7 +63,10 @@ class StorySearchView:
         self._pending_query = None
         self._closing = False
         self._active_query = ""
-        self.model_dir = os.environ.get("WATCHBANE_STORY_MODEL_DIR")
+        # Bind writes to the profile which owns this particular window. Env/CLI
+        # is a process override, not a request to change the saved profile.
+        self._model_settings_db = get_db_path()
+        self.model_dir = os.environ.get(_MODEL_ENV) or self._read_model_choice()
         self.seed_path = os.environ.get("WATCHBANE_STORY_SEED_CATALOG")
         self._seed_count = None
         self._catalog_ready = False
@@ -90,9 +100,12 @@ class StorySearchView:
         self.options_button = QPushButton("Подключить поиск по смыслу…")
         self.options_button.setVisible(not bool(self.model_dir))
         self.options_button.setAccessibleName("Подключить локальную модель поиска")
-        self.text_search_button = QPushButton("Искать по словам")
+        self.text_search_button = QPushButton("Перейти на поиск по словам")
         self.text_search_button.clicked.connect(self._use_text_search)
-        self.text_search_button.hide()
+        self.text_search_button.setVisible(bool(self.model_dir))
+        text_mode_description = "Использовать поиск по словам и забыть папку модели в этом профиле."
+        self.text_search_button.setToolTip(text_mode_description)
+        self.text_search_button.setAccessibleDescription(text_mode_description)
 
         root.addLayout(row)
         self.examples = QWidget()
@@ -144,7 +157,7 @@ class StorySearchView:
         self.catalog_status.setWordWrap(True)
         import_row.addWidget(self.catalog_status, 1)
         root.addLayout(import_row)
-        self.scope = self._label(root, "Поиск по описаниям в вашем каталоге", "storyMuted")
+        self.scope = self._label(root, self._model_scope(), "storyMuted")
         self.status = self._label(root, "")
         self._update_catalog_count()
         self._show_idle()
@@ -288,19 +301,41 @@ class StorySearchView:
         self.catalog_button.setEnabled(True)
         self.cancel_catalog_button.hide()
 
+    def _read_model_choice(self):
+        try:
+            directory = get_setting(_MODEL_SETTING, path=self._model_settings_db)
+        except (OSError, sqlite3.Error):
+            return None
+        return directory if isinstance(directory, str) and directory.strip() else None
+
+    def _remember_model_choice(self):
+        try:
+            set_setting(_MODEL_SETTING, self.model_dir, path=self._model_settings_db)
+        except (OSError, sqlite3.Error):
+            self.status.setText("Режим выбран на этот запуск. Не удалось сохранить настройку профиля.")
+
+    def _model_scope(self):
+        return ("Поиск по смыслу · локальная E5 будет проверена при поиске" if self.model_dir else
+                "Поиск по описаниям в вашем каталоге")
+
+    def _update_model_controls(self, *, offer_replacement=False):
+        self.options_button.setVisible(not self.model_dir or offer_replacement)
+        self.text_search_button.setVisible(bool(self.model_dir))
+        self.scope.setText("Поиск по смыслу недоступен" if self.model_dir and offer_replacement else self._model_scope())
+
     def _choose_model(self):
         directory = QFileDialog.getExistingDirectory(self.widget, "Папка проверенной multilingual-e5-small (скачивание не выполняется)")
         if directory:
             self.model_dir = directory
-            self.options_button.hide()
-            self.text_search_button.hide()
+            self._update_model_controls()
             self.backend_label.setText("E5 выбрана. Файлы будут проверены при следующем поиске; ничего не скачивается.")
+            self._remember_model_choice()
 
     def _use_text_search(self):
         self.model_dir = None
-        self.text_search_button.hide()
-        self.options_button.show()
+        self._update_model_controls()
         self.search()
+        self._remember_model_choice()
 
     def _label(self, layout, text, name=""):
         label = QLabel(text)
@@ -348,7 +383,8 @@ class StorySearchView:
         self.status.setText("Ищем совпадения в описаниях…")
         self.search_button.setText("Следующий запрос")
         self.refresh_button.setEnabled(False)
-        self.model_button.setEnabled(False)
+        for button in (self.model_button, self.options_button, self.text_search_button):
+            button.setEnabled(False)
         self._worker = StoryWorker(self._active_query, self.widget, self.model_dir, self.seed_path)
         self._worker.completed.connect(self._show_results)
         self._worker.progress.connect(self.status.setText)
@@ -357,8 +393,7 @@ class StorySearchView:
         self._worker.start()
 
     def _search_failed(self):
-        self.options_button.show()
-        self.text_search_button.setVisible(bool(self.model_dir))
+        self._update_model_controls(offer_replacement=True)
         self.status.setText("Не удалось открыть описания или модель. Подключите локальную модель или повторите поиск; библиотека не изменена.")
 
     def _finished(self):
@@ -368,7 +403,8 @@ class StorySearchView:
         self.search_button.setText("Найти историю")
         self.search_button.setEnabled(True)
         self.refresh_button.setEnabled(True)
-        self.model_button.setEnabled(True)
+        for button in (self.model_button, self.options_button, self.text_search_button):
+            button.setEnabled(True)
         self.query.setEnabled(True)
         if not self._closing and self._pending_query is not None:
             pending, self._pending_query = self._pending_query, None

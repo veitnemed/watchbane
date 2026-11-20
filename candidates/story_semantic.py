@@ -10,7 +10,8 @@ from threading import RLock
 from candidates.story_model_manifest import FILES, PORTABLE_FILES, artifact_sha256
 import sys
 from candidates.story_search import (StoryHit, StoryResponse, tokens, STOP, ROLE_WORDS,
-                                     concepts, protagonist, lexical_score, unsupported_negation, media_constraints, requested_protagonist)
+                                     concepts, protagonist, lexical_score, unsupported_negation, media_constraints, requested_protagonist,
+                                     instructional_non_plot, OUT_OF_SCOPE_NOTICE)
 from candidates.story_lexical import LexicalIndex
 
 
@@ -92,6 +93,7 @@ def normalized_query(query, vocabulary):
 class SemanticStorySearch:
     def __init__(self,documents,encoder,*,cancelled=None):
         self.documents=tuple(documents)
+        self.title_words={tuple(tokens(d.title)) for d in self.documents}
         self.encoder=encoder
         self.vocabulary={w for d in documents for w in tokens(d.overview)}
         self.vectors=encoder.encode([d.overview for d in self.documents], **({"cancelled": cancelled} if cancelled else {}))
@@ -106,6 +108,8 @@ class SemanticStorySearch:
         if not(set(words)-STOP):return self._response((),"Опишите героя или событие.")
         if unsupported_negation(query):
             return self._response((),"Отрицания пока не поддерживаются. Опишите желаемую историю утвердительно.")
+        if domain_filters and instructional_non_plot(query, self.title_words):
+            return self._response((), OUT_OF_SCOPE_NOTICE)
         kind,year=media_constraints(query) if domain_filters else (None,None)
         indices=[i for i,d in enumerate(self.documents) if d.key not in excluded and (not kind or d.media_type==kind) and (year is None or d.year==year)]
         if not indices:return self._response((),"В этом локальном наборе пока нет подходящих описаний.")
