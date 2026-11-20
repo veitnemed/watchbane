@@ -3,6 +3,7 @@ name: Watchbane verified source package
 on:
   push:
     branches: ["feature/story-search"]
+    tags: ["story-search-preview.*"]
     paths:
       - ".github/workflows/story-source-package.yml"
       - "tools/qa/package_story_preview.py"
