@@ -88,3 +88,10 @@ The application remains local-first. Existing SQLite data, settings, candidate p
 - Added reproducible offline BM25 and character TF-IDF comparison tools for development. Product ranking is unchanged.
 - The pre-release is source only. No user profiles, catalogs, model weights, keys or Windows executable are included.
 - Use the separate preview profile. Concurrent rating edits/deletions can still update stale collection data; rating and deletion transactions are being repaired separately.
+
+## Story Search Preview 5 (source pre-release)
+
+- Editing a desktop rating changes one existing SQLite record, retaining its title, metadata, synopsis and other entries. A failed save is shown in Collection without reloading or pretending the rating persisted.
+- Deletion now verifies a recoverable backup and checks the exact selected row before removing it. Unrelated changes, shared posters and files outside the application cache are retained.
+- Windows CI now exercises separate lexical and semantic runtime builds; successful native-library checks do not verify distribution or inference of E5 weights. Source archive continues to omit the catalog, credentials and model.
+- An optional operator import plan spreads the first TMDb queries across decades; prior checkpoints still use their original plan. No live 5,000-title catalog is included or claimed.
