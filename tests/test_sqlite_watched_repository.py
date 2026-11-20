@@ -104,3 +104,34 @@ def test_delete_watched_preserves_meta(tmp_path) -> None:
 
     assert watched_repository.load_dataset_dict(path=db_path) == {}
     assert watched_repository.load_meta_dict(path=db_path) == {"Метод": {"raw_scores": {"tmdb_id": 693}}}
+
+
+def test_clear_legacy_meta_removes_indexed_identity_without_losing_watched_rating(tmp_path):
+    from contextlib import closing
+    from storage.sqlite.connection import connect
+
+    db = tmp_path / "watched.sqlite3"
+    dataset = {"Observed": _movie("Observed", media_type="movie"),
+               "Explicit": _movie("Explicit", media_type="movie")}
+    dataset["Explicit"]["raw_scores"].update(tmdb_id=200, imdb_id="tt1234500")
+    watched_repository.save_dataset_dict(dataset, path=db)
+    watched_repository.save_meta_dict({
+        "Observed": {"raw_scores": {"tmdb_id": 100, "imdb_id": "tt1234400"}},
+        "Explicit": {"raw_scores": {"tmdb_id": 200, "imdb_id": "tt1234500"}},
+        "Meta only": {"raw_scores": {"tmdb_id": 300}},
+    }, path=db)
+    assert watched_repository.find_watched_identity("Observed", tmdb_id=100, path=db) == "Observed"
+
+    with closing(connect(db)) as conn:
+        before = dict(conn.execute("SELECT * FROM watched_records WHERE dataset_key = 'Observed'").fetchone())
+    watched_repository.save_meta_dict({}, path=db)
+
+    assert watched_repository.find_watched_identity("Observed", tmdb_id=100, path=db) is None
+    assert watched_repository.find_watched_identity("Observed", media_type="movie", year=2015, path=db) == "Observed"
+    assert watched_repository.find_watched_identity("Explicit", tmdb_id=200, path=db) == "Explicit"
+    with closing(connect(db)) as conn:
+        after = dict(conn.execute("SELECT * FROM watched_records WHERE dataset_key = 'Observed'").fetchone())
+        assert after["tmdb_id"] is None and after["imdb_id"] is None
+        assert after["payload_json"] == before["payload_json"]
+        assert after["created_at"] == before["created_at"] and after["user_score"] == before["user_score"]
+        assert conn.execute("SELECT COUNT(*) FROM watched_records WHERE dataset_key = 'Meta only'").fetchone()[0] == 0

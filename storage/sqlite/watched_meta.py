@@ -8,6 +8,7 @@ import sqlite3
 from dataset.models.identity import find_case_insensitive_key
 from storage.sqlite.json_codec import loads_json
 from storage.sqlite.session import connection, transaction, utc_now
+from storage.sqlite.watched_mapper import extract_watched_record
 from storage.sqlite.watched_write import upsert_watched_row
 
 
@@ -73,19 +74,26 @@ def save_meta_dict(
 
             keep_keys = set(normalized)
             for row in active.execute(
-                "SELECT dataset_key, payload_json FROM watched_records"
+                "SELECT dataset_key, payload_json FROM watched_records WHERE meta_json IS NOT NULL"
             ).fetchall():
                 if row["dataset_key"] in keep_keys:
                     continue
                 payload = loads_json(row["payload_json"], {})
                 if isinstance(payload, dict) and payload:
+                    # Metadata can supply identity fields; removing it must
+                    # also remove stale lookup evidence, not the rated payload.
+                    identity = extract_watched_record(row["dataset_key"], payload)
                     active.execute(
                         """
                         UPDATE watched_records
-                        SET meta_json = NULL, updated_at = ?
+                        SET meta_json = NULL, title = ?, title_normalized = ?,
+                            media_type = ?, year = ?, tmdb_id = ?, imdb_id = ?,
+                            country = ?, user_score = ?, updated_at = ?
                         WHERE dataset_key = ?
                         """,
-                        (utc_now(), row["dataset_key"]),
+                        (identity.title, identity.title_normalized, identity.media_type,
+                         identity.year, identity.tmdb_id, identity.imdb_id, identity.country,
+                         identity.user_score, utc_now(), row["dataset_key"]),
                     )
                 else:
                     active.execute(
