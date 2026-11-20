@@ -1,0 +1,54 @@
+name: Watchbane Windows bundle smoke
+
+on:
+  push:
+    branches: ["feature/story-search"]
+    paths:
+      - ".github/workflows/windows-story-smoke.yml"
+      - "watchbane.spec"
+      - "start_app.py"
+      - "dataset/**"
+      - "diagnostics/**"
+      - "posters/**"
+      - "tools/build_desktop.ps1"
+      - "tools/smoke_windows_bundle.ps1"
+      - "requirements*.txt"
+      - "app/**"
+      - "apis/**"
+      - "candidates/**"
+      - "common/**"
+      - "config/**"
+      - "desktop/**"
+      - "storage/**"
+      - "tests/desktop/test_story*.py"
+      - "tests/test_packaging_contract.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watchbane-story-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install test and build dependencies
+        run: python -m pip install -r requirements.txt "pytest>=8,<9" "pytest-qt>=4.4,<5" "PyInstaller>=6.13,<7"
+      - name: Test packaging and search-first UI
+        run: python -m pytest -q tests/test_packaging_contract.py tests/desktop/test_story_flow.py tests/desktop/test_story_snapshot_picker.py tests/desktop/test_story_model_preference.py
+      - name: Build a disposable Windows bundle
+        run: ./tools/build_desktop.ps1
+      - name: Start the executable without Python on PATH
+        run: ./tools/smoke_windows_bundle.ps1 -BundleDirectory dist/Watchbane
+      # No upload: this is test infrastructure, not a release or catalog distribution.
