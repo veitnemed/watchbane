@@ -1,0 +1,203 @@
+from email.message import Message
+from hashlib import sha256
+from http.client import IncompleteRead
+from io import BytesIO
+from urllib.error import HTTPError
+
+import pytest
+
+from candidates import story_model_install as installer
+
+
+_MODEL = b"portable fixture"
+_TOKENIZER = b"tokenizer fixture"
+_ARTIFACTS = {"onnx/model.onnx": _MODEL, "onnx/tokenizer.json": _TOKENIZER}
+_PREFIX = f"https://huggingface.co/{installer.MODEL_ID}/resolve/{installer.REVISION}/"
+
+
+class Response(BytesIO):
+    status = 200
+
+    def __init__(self, body, headers=None):
+        super().__init__(body)
+        self.headers = headers or {}
+
+
+class FakeOpener:
+    def __init__(self, responses):
+        self.responses = responses
+        self.requests = []
+
+    def open(self, request, timeout):
+        self.requests.append(request)
+        assert 0 < timeout <= installer.SOCKET_TIMEOUT_SECONDS
+        reply = self.responses[request.full_url]
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+
+def _redirect(before, after):
+    headers = Message()
+    headers["Location"] = after
+    return HTTPError(before, 302, "Redirect", headers, BytesIO())
+
+
+@pytest.fixture
+def fake_download(monkeypatch):
+    monkeypatch.setattr(installer, "PORTABLE_FILES", {k: sha256(v).hexdigest() for k, v in _ARTIFACTS.items()})
+    opener = FakeOpener({_PREFIX + k: Response(v) for k, v in _ARTIFACTS.items()})
+    monkeypatch.setattr(installer, "build_opener", lambda _: opener)
+    return opener
+
+
+def test_install_publishes_complete_pinned_set_and_reuses_without_network(tmp_path, fake_download):
+    destination = installer.profile_story_model_destination(tmp_path)
+    calls = []
+
+    def progress(done, total):
+        calls.append((done, total))
+        if done != total:
+            assert not destination.exists()
+
+    assert not destination.parent.exists()
+    assert installer.install_story_model(destination, on_progress=progress) == destination
+    assert {p.relative_to(destination).as_posix() for p in destination.rglob("*") if p.is_file()} == set(_ARTIFACTS)
+    assert {k: (destination / k).read_bytes() for k in _ARTIFACTS} == _ARTIFACTS
+    assert calls[-1] == (len(_MODEL) + len(_TOKENIZER),) * 2
+    assert installer.install_story_model(destination) == destination
+    assert [r.full_url for r in fake_download.requests] == [_PREFIX + name for name in _ARTIFACTS]
+    assert all(r.get_header("Authorization") is None and r.get_header("Cookie") is None for r in fake_download.requests)
+    assert set(destination.parent.iterdir()) == {destination}
+
+
+def test_install_preserves_existing_invalid_directory_without_network(tmp_path, fake_download):
+    destination = tmp_path / "model"
+    destination.mkdir()
+    personal = destination / "personal.txt"
+    personal.write_bytes(b"do not move")
+    with pytest.raises(installer.StoryModelInstallError, match="not changed"):
+        installer.install_story_model(destination)
+    assert personal.read_bytes() == b"do not move"
+    assert not fake_download.requests
+
+
+@pytest.mark.parametrize("url", [
+    "http://huggingface.co/bad",
+    "https://huggingface.co.example.net/bad",
+    "https://user:password@cas-bridge.xethub.hf.co/bad",
+    "https://cas-bridge.xethub.hf.co:8443/bad",
+    "https://161.0.0.1/bad",
+])
+def test_model_rejects_unapproved_redirects(tmp_path, fake_download, url):
+    first = _PREFIX + "onnx/model.onnx"
+    fake_download.responses[first] = _redirect(first, url)
+    with pytest.raises(installer.StoryModelInstallError, match="Unapproved"):
+        installer.install_story_model(tmp_path / "model")
+    assert [r.full_url for r in fake_download.requests] == [first]
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_model_follows_approved_cdn_without_forwarding_sensitive_headers(tmp_path, fake_download):
+    first = _PREFIX + "onnx/model.onnx"
+    cdn = "https://cas-bridge.xethub.hf.co/xet-bridge/some-file?temporary-signature"
+    fake_download.responses[first] = _redirect(first, cdn)
+    fake_download.responses[cdn] = Response(_MODEL)
+    installer.install_story_model(tmp_path / "model")
+    assert [r.full_url for r in fake_download.requests] == [first, cdn, _PREFIX + "onnx/tokenizer.json"]
+    assert all(r.get_header("Authorization") is None and r.get_header("Cookie") is None
+               and r.get_header("Referer") is None for r in fake_download.requests)
+
+
+def test_model_checksum_failure_never_leaves_partial_install(tmp_path, fake_download):
+    fake_download.responses[_PREFIX + "onnx/tokenizer.json"] = Response(b"tampered")
+    with pytest.raises(installer.StoryModelInstallError, match="Checksum mismatch"):
+        installer.install_story_model(tmp_path / "model")
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("with_header", [False, True])
+def test_model_enforces_cumulative_limit_even_without_length(monkeypatch, tmp_path, fake_download, with_header):
+    monkeypatch.setattr(installer, "DOWNLOAD_BYTE_LIMIT", len(_MODEL) + len(_TOKENIZER) - 1)
+    if with_header:
+        fake_download.responses[_PREFIX + "onnx/tokenizer.json"] = Response(
+            _TOKENIZER, {"Content-Length": str(len(_TOKENIZER))}
+        )
+    with pytest.raises(installer.StoryModelInstallError, match="size limit"):
+        installer.install_story_model(tmp_path / "model")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_model_cancellation_cleans_staging_without_publishing(tmp_path, fake_download):
+    cancelled = False
+
+    def progress(_done, _total):
+        nonlocal cancelled
+        cancelled = True
+
+    with pytest.raises(installer.StoryModelInstallCancelled):
+        installer.install_story_model(tmp_path / "model", cancelled=lambda: cancelled, on_progress=progress)
+    assert len(fake_download.requests) == 1
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_model_network_error_hides_signed_urls_and_cleans_staging(tmp_path, fake_download):
+    first = _PREFIX + "onnx/model.onnx"
+    cdn = "https://cas-bridge.xethub.hf.co/xet-bridge/data?secret-signature"
+    fake_download.responses[first] = _redirect(first, cdn)
+    fake_download.responses[cdn] = HTTPError(cdn, 403, "Forbidden", Message(), BytesIO())
+    with pytest.raises(installer.StoryModelInstallError, match="HTTP 403") as error:
+        installer.install_story_model(tmp_path / "model")
+    assert "secret-signature" not in str(error.value)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_model_rejects_broken_transfer(tmp_path, fake_download):
+    class ShortResponse(Response):
+        def read1(self, _):
+            raise IncompleteRead(b"partial", 200)
+
+    fake_download.responses[_PREFIX + "onnx/model.onnx"] = ShortResponse(b"")
+    with pytest.raises(installer.StoryModelInstallError):
+        installer.install_story_model(tmp_path / "model")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_model_cancels_before_any_network_or_storage(tmp_path, fake_download):
+    destination = tmp_path / "not-created" / "model"
+    with pytest.raises(installer.StoryModelInstallCancelled):
+        installer.install_story_model(destination, cancelled=lambda: True)
+    assert not fake_download.requests and not destination.parent.exists()
+
+
+def test_model_stops_on_overall_deadline(tmp_path, fake_download, monkeypatch):
+    now = 0
+
+    def clock():
+        return now
+
+    def advance_clock(_done, _total):
+        nonlocal now
+        now = installer.TOTAL_TIMEOUT_SECONDS + 1
+
+    monkeypatch.setattr(installer, "monotonic", clock)
+    with pytest.raises(installer.StoryModelInstallError, match="timed out"):
+        installer.install_story_model(tmp_path / "model", on_progress=advance_clock)
+    assert len(fake_download.requests) == 1
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_model_reuses_concurrently_published_copy(tmp_path, fake_download):
+    destination = tmp_path / "model"
+
+    def publish_other_instance(done, total):
+        if done == total or destination.exists():
+            return
+        (destination / "onnx").mkdir(parents=True)
+        for key, value in _ARTIFACTS.items():
+            (destination / key).write_bytes(value)
+        (destination / "other-instance").write_text("keep")
+
+    assert installer.install_story_model(destination, on_progress=publish_other_instance) == destination
+    assert (destination / "other-instance").read_text() == "keep"
+    assert set(tmp_path.iterdir()) == {destination}

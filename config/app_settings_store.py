@@ -36,3 +36,10 @@ class ProfileSetting:
         from storage.sqlite.settings_repository import set_setting
 
         set_setting(self._key, value, path=self._path)
+
+
+def get_active_profile_root():
+    """Capture a window's current profile before a deferred install begins."""
+    from storage.profiles import get_active_data_dir
+
+    return get_active_data_dir()

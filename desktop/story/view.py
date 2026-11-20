@@ -1,4 +1,5 @@
 """Search-first Qt home; original library/title search remain separate tabs."""
+from importlib.util import find_spec
 import os
 from pathlib import Path
 import sqlite3
@@ -8,13 +9,13 @@ from threading import Event
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QShortcut, QKeySequence
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-                            QPushButton, QScrollArea, QFrame, QMessageBox, QFileDialog, QDialog, QMenu)
+                            QPushButton, QScrollArea, QFrame, QMessageBox, QFileDialog, QDialog, QMenu, QProgressBar)
 from candidates import service
 from candidates.title_state_service import STATE_WATCHLIST, get_title_states
 from desktop.theme.scaling import layout_px
 from desktop.theme.layout import MAIN_TAB_PANE_TOP_LIFT
 from desktop.theme.styles.story import build_story_style
-from config.app_settings_store import ProfileSetting
+from config.app_settings_store import ProfileSetting, get_active_profile_root
 
 
 _MODEL_SETTING = "story_search.model_dir"
@@ -89,6 +90,44 @@ class SnapshotCheckWorker(QThread):
             self.failure = "Не удалось проверить файл каталога."
 
 
+def _semantic_install_available():
+    # Discover packaging/dependency availability without importing ONNX or E5.
+    try:
+        return all(find_spec(name) is not None for name in ("numpy", "onnxruntime", "tokenizers"))
+    except (ImportError, ValueError):
+        return False
+
+
+class ModelInstallWorker(QThread):
+    progress = pyqtSignal(int, int)
+
+    def __init__(self, profile_root, parent):
+        super().__init__(parent)
+        self.profile_root = profile_root
+        self.path = None
+        self.failure = None
+        self._cancelled = Event()
+
+    def cancel(self):
+        self._cancelled.set()
+
+    def run(self):
+        try:
+            from candidates.story_model_install import (
+                StoryModelInstallCancelled, install_story_model, profile_story_model_destination,
+            )
+            try:
+                self.path = install_story_model(
+                    profile_story_model_destination(self.profile_root),
+                    on_progress=self.progress.emit,
+                    cancelled=self._cancelled.is_set,
+                )
+            except StoryModelInstallCancelled:
+                self.failure = "cancelled"
+        except Exception:
+            self.failure = "failed"
+
+
 class StorySearchView:
     def __init__(self, *, on_library_changed=lambda: None, on_open_settings=lambda: None, on_open_filters=lambda: None):
         self.widget = QWidget()
@@ -101,12 +140,17 @@ class StorySearchView:
         self._snapshot_worker = None
         self._snapshot_cancelled = False
         self._auth_dialog = None
+        self._model_install_dialog = None
+        self._model_install_worker = None
+        self._model_install_cancelled = False
+        self._model_install_success = False
         self._pending_query = None
         self._closing = False
         self._active_query = ""
         # Bind writes to the profile which owns this particular window. Env/CLI
         # is a process override, not a request to change the saved profile.
         self._model_preference = ProfileSetting(_MODEL_SETTING)
+        self._model_install_profile = get_active_profile_root()
         self.model_dir = os.environ.get(_MODEL_ENV) or self._read_model_choice()
         self.seed_path = os.environ.get("WATCHBANE_STORY_SEED_CATALOG")
         self._seed_count = None
@@ -139,7 +183,7 @@ class StorySearchView:
         self.search_button = QPushButton("Найти историю")
         self.search_button.setObjectName("storySearchButton")
         row.addWidget(self.search_button)
-        self.options_button = QPushButton("Подключить поиск по смыслу…")
+        self.options_button = QPushButton("Выбрать папку E5…")
         self.options_button.setVisible(not bool(self.model_dir))
         self.options_button.setAccessibleName("Подключить локальную модель поиска")
         self.text_search_button = QPushButton("Перейти на поиск по словам")
@@ -207,6 +251,15 @@ class StorySearchView:
         self.catalog_status.setWordWrap(True)
         import_row.addWidget(self.catalog_status, 1)
         root.addLayout(import_row)
+        install_row = QHBoxLayout()
+        self.install_model_button = QPushButton("Установить поиск по смыслу…")
+        self.install_model_button.setObjectName("storyInstallModelButton")
+        self.install_model_button.setAccessibleDescription("Скачивание около 487 МБ только после подтверждения.")
+        self.install_model_button.clicked.connect(self._open_model_install)
+        self.install_model_button.setVisible(not bool(self.model_dir))
+        install_row.addWidget(self.install_model_button)
+        install_row.addStretch()
+        root.addLayout(install_row)
         self.scope = self._label(root, self._model_scope(), "storyMuted")
         self.status = self._label(root, "")
         self._update_catalog_count()
@@ -233,6 +286,7 @@ class StorySearchView:
         QWidget.setTabOrder(self.catalog_button, self.options_button)
         QWidget.setTabOrder(self.options_button, self.text_search_button)
         QWidget.setTabOrder(self.text_search_button, self.snapshot_button)
+        QWidget.setTabOrder(self.snapshot_button, self.install_model_button)
         self.query.setFocus()
 
     def _focus_query(self):
@@ -451,6 +505,8 @@ class StorySearchView:
             self._model_preference.write(self.model_dir)
         except (OSError, sqlite3.Error):
             self.status.setText("Режим выбран на этот запуск. Не удалось сохранить настройку профиля.")
+            return False
+        return True
 
     def _model_scope(self):
         return ("Поиск по смыслу · локальная E5 будет проверена при поиске" if self.model_dir else
@@ -458,20 +514,140 @@ class StorySearchView:
 
     def _update_model_controls(self, *, offer_replacement=False):
         self.options_button.setVisible(not self.model_dir or offer_replacement)
+        self.install_model_button.setVisible(not self.model_dir or offer_replacement)
         self.text_search_button.setVisible(bool(self.model_dir))
         self.scope.setText("Поиск по смыслу недоступен" if self.model_dir and offer_replacement else self._model_scope())
 
+    def _sync_model_actions(self):
+        can_change = not (self._closing or self._worker or self._model_install_worker)
+        for button in (self.model_button, self.options_button, self.text_search_button, self.install_model_button):
+            button.setEnabled(can_change)
+        if self._model_install_dialog is not None:
+            self._install_confirm.setEnabled(can_change and self._install_runtime_available
+                                             and not self._model_install_success)
+            self._install_manual.setEnabled(can_change and self._install_runtime_available)
+
+    def _open_model_install(self):
+        if self._closing or self._worker:
+            return
+        if self._model_install_dialog is None:
+            dialog = self._model_install_dialog = QDialog(self.widget)
+            dialog.setWindowTitle("Модель поиска по смыслу")
+            dialog.setMinimumWidth(layout_px(460))
+            layout = QVBoxLayout(dialog)
+            self._label(layout, "Один раз скачайте локальную модель E5 (~487 МБ) с Hugging Face, "
+                                "из репозитория intfloat/multilingual-e5-small. После установки "
+                                "поиск по описаниям работает без интернета.")
+            self._label(layout, "Watchbane проверит файлы перед подключением. Ваши запросы и "
+                                "коллекция не отправляются при установке.")
+            self._install_status = self._label(layout, "")
+            self._install_status.setObjectName("storyModelInstallStatus")
+            self._install_progress = QProgressBar()
+            self._install_progress.setAccessibleName("Ход установки модели E5")
+            self._install_progress.hide()
+            layout.addWidget(self._install_progress)
+            self._install_confirm = QPushButton("Скачать и установить (~487 МБ)")
+            self._install_confirm.clicked.connect(self._start_model_install)
+            self._install_manual = QPushButton("Выбрать готовую папку…")
+            self._install_manual.clicked.connect(self._choose_install_folder)
+            self._install_cancel = QPushButton("Отменить загрузку")
+            self._install_cancel.clicked.connect(self._cancel_model_install)
+            self._install_cancel.hide()
+            close = QPushButton("Закрыть")
+            close.clicked.connect(dialog.reject)
+            for button in (self._install_confirm, self._install_cancel, self._install_manual, close):
+                button.setAutoDefault(False)  # Opening the dialog is not download consent.
+                layout.addWidget(button)
+            dialog.rejected.connect(self._cancel_model_install)
+            self._install_runtime_available = _semantic_install_available()
+            if not self._install_runtime_available:
+                self._install_status.setText("Эта сборка поддерживает только поиск по словам. "
+                                             "Для установки модели нужна сборка с поиском по смыслу.")
+            self._sync_model_actions()
+        self._model_install_dialog.show()
+        self._model_install_dialog.raise_()
+        self._install_manual.setFocus()
+
+    def _choose_install_folder(self):
+        if self._choose_model():
+            self._model_install_dialog.accept()
+
+    def _start_model_install(self):
+        if (self._closing or self._worker or self._model_install_worker or self._model_install_success
+                or self._model_install_dialog is None or not self._install_runtime_available):
+            return
+        worker = self._model_install_worker = ModelInstallWorker(self._model_install_profile, self.widget)
+        self._model_install_cancelled = False
+        self._install_progress.setRange(0, 0)
+        self._install_progress.show()
+        self._install_cancel.setEnabled(True)
+        self._install_cancel.show()
+        self._install_status.setText("Подготавливаем загрузку…")
+        self._sync_model_actions()
+        worker.progress.connect(self._update_install_progress, Qt.ConnectionType.QueuedConnection)
+        worker.finished.connect(self._model_install_finished, Qt.ConnectionType.QueuedConnection)
+        worker.start()
+
+    def _update_install_progress(self, downloaded, total):
+        if not self._model_install_worker or self._model_install_cancelled or self._closing or total <= 0:
+            return
+        self._install_progress.setRange(0, 100)
+        self._install_progress.setValue(max(0, min(100, downloaded * 100 // total)))
+        if downloaded >= total:
+            self._install_status.setText("Проверяем файлы модели…")
+        else:
+            self._install_status.setText(f"Загружено {downloaded / 1_000_000:.0f} МБ.")
+
+    def _cancel_model_install(self):
+        if self._model_install_worker:
+            self._model_install_cancelled = True
+            self._model_install_worker.cancel()
+            self._install_cancel.setEnabled(False)
+            self._install_status.setText("Отменяем загрузку… Выбранный режим не изменится.")
+
+    def _model_install_finished(self):
+        worker, self._model_install_worker = self._model_install_worker, None
+        if worker is None:
+            return
+        worker.deleteLater()
+        if self._closing:
+            return
+        self._install_progress.hide()
+        self._install_cancel.hide()
+        if self._model_install_cancelled or worker.failure == "cancelled":
+            self._install_status.setText("Установка отменена. Выбранный режим не изменился.")
+        elif worker.failure or not worker.path:
+            self._install_status.setText("Не удалось установить модель. Проверьте интернет и место на диске "
+                                         "или выберите готовую папку. Выбранный режим не изменился.")
+        else:
+            self.model_dir = str(worker.path)
+            self._model_install_success = True
+            self._update_model_controls()
+            self.backend_label.setText("Локальная E5 установлена. Она подключится при следующем поиске.")
+            saved = self._remember_model_choice()
+            self._install_status.setText("Модель проверена и подключится при следующем поиске." if saved else
+                                         "Модель проверена. Подключение сохранено только на этот запуск.")
+        self._sync_model_actions()
+
     def _choose_model(self):
+        if self._closing or self._worker or self._model_install_worker:
+            return False
         directory = QFileDialog.getExistingDirectory(self.widget, "Папка проверенной multilingual-e5-small (скачивание не выполняется)")
         if directory:
             self.model_dir = directory
             self._update_model_controls()
             self.backend_label.setText("E5 выбрана. Файлы будут проверены при следующем поиске; ничего не скачивается.")
             self._remember_model_choice()
+            return True
+        return False
 
     def _use_text_search(self):
+        if self._model_install_worker:
+            return
         self.model_dir = None
+        self._model_install_success = False
         self._update_model_controls()
+        self._sync_model_actions()
         self.search()
         self._remember_model_choice()
 
@@ -522,9 +698,8 @@ class StorySearchView:
         self.search_button.setText("Следующий запрос")
         self.refresh_button.setEnabled(False)
         self.snapshot_button.setEnabled(False)
-        for button in (self.model_button, self.options_button, self.text_search_button):
-            button.setEnabled(False)
         self._worker = StoryWorker(self._active_query, self.widget, self.model_dir, self.seed_path)
+        self._sync_model_actions()
         self._worker.completed.connect(self._show_results)
         self._worker.progress.connect(self.status.setText)
         self._worker.failed.connect(self._search_failed)
@@ -539,7 +714,8 @@ class StorySearchView:
                             "чтобы выбрать другой файл или вернуться к каталогу профиля.")
 
     def _search_failed(self):
-        self._update_model_controls(offer_replacement=True)
+        if self._worker is None or self._worker.model_dir == self.model_dir:
+            self._update_model_controls(offer_replacement=True)
         self.status.setText("Не удалось открыть описания или модель. Подключите локальную модель или повторите поиск; библиотека не изменена.")
 
     def _finished(self):
@@ -550,8 +726,7 @@ class StorySearchView:
         self.search_button.setEnabled(True)
         self.refresh_button.setEnabled(True)
         self.snapshot_button.setEnabled(self._catalog_worker is None)
-        for button in (self.model_button, self.options_button, self.text_search_button):
-            button.setEnabled(True)
+        self._sync_model_actions()
         self.query.setEnabled(True)
         if not self._closing and self._pending_query is not None:
             pending, self._pending_query = self._pending_query, None
@@ -708,6 +883,10 @@ class StorySearchView:
             self._snapshot_worker.requestInterruption()
         if self._auth_dialog:
             self._auth_dialog.hide()
+        if self._model_install_worker:
+            self._model_install_worker.cancel()
+        if self._model_install_dialog:
+            self._model_install_dialog.hide()
         if self._worker:
             self._worker.cancel()
             self._worker.requestInterruption()
