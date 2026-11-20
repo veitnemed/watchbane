@@ -48,6 +48,24 @@ jobs:
         shell: pwsh
         continue-on-error: true # Keep ranking misses visible and independent of install acceptance.
         run: ./tools/smoke_windows_e5_install.ps1 -BundleDirectory dist/Watchbane -SearchOnly -ModelDirectory $env:WATCHBANE_QA_INSTALLED_E5
+      - name: Exercise actual Qt controls in a disposable frozen QA build
+        shell: pwsh
+        continue-on-error: true # Distinct QA overlay; never a publication or installer gate by itself.
+        run: |
+          $qa = Join-Path $env:RUNNER_TEMP ("watchbane-qt-qa-" + [Guid]::NewGuid())
+          [void][System.IO.Directory]::CreateDirectory($qa)
+          try {
+            $fixture = Join-Path $qa "synthetic-qa.jsonl"
+            '{"tmdb_id":3477123,"media_type":"movie","title":"Только тестовый заголовок","overview":"Врач лечит пациентов в больнице и спасает ребёнка.","language":"ru-RU","year":2020}' | Set-Content -LiteralPath $fixture -Encoding utf8NoBOM
+            $output = Join-Path $qa "build"
+            python -m tools.qa.build_frozen_story_desktop $output
+            if ($LASTEXITCODE -ne 0) { throw "The private Qt QA overlay did not build." }
+            $qaExe = Join-Path $output "WatchbaneStoryQA/WatchbaneStoryQA.exe"
+            python -m tools.qa.smoke_story_desktop --qa-exe $qaExe --verify-cached-install --model-dir $env:WATCHBANE_QA_INSTALLED_E5 --catalog $fixture --query "врач в больнице" --expected-title "Только тестовый заголовок" --qt-platform offscreen
+            if ($LASTEXITCODE -ne 0) { throw "The private Qt QA run did not pass." }
+          } finally {
+            Remove-Item -LiteralPath $qa -Recurse -Force
+          }
       - name: Remove the temporary verified weight files
         if: always()
         shell: pwsh
