@@ -131,11 +131,11 @@ def merge_candidate_pool_dict(
     *,
     conn: sqlite3.Connection | None = None,
     path: str | Path | None = None,
-    max_records: int = 1000,
+    max_records: int | None = 1000,
 ) -> dict[str, int]:
-    """Atomically upsert an incremental refill and evict only unprotected low-value rows."""
+    """Atomically upsert a refill; None keeps all existing rows without eviction."""
     incoming = _incremental_candidates(data)
-    cap = max(1, int(max_records))
+    cap = None if max_records is None else max(1, int(max_records))
     active, owned = connection(conn, path)
     try:
         with transaction(active, owned):
@@ -204,7 +204,7 @@ def merge_candidate_pool_dict(
                          title_normalized ASC, pool_key ASC
                 """
             ).fetchall()
-            overflow = max(0, len(rows) - cap)
+            overflow = 0 if cap is None else max(0, len(rows) - cap)
             evicted_keys: list[str] = []
             if overflow:
                 for row in rows:

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
+from candidates.models.keys import COMMON_POOL_CRITERIA_NAME, candidate_typed_state_key
 from candidates.models.schema import EXTERNAL_RATING_FIELDS, normalize_candidate_for_storage, strip_external_rating_fields
 from candidates.pool.dataset_overlap import build_dataset_title_keys
 from candidates.pool.normalization import normalize_storage_pool
@@ -32,9 +33,11 @@ from storage.sqlite.candidate_criteria_repository import (
     load_candidate_criteria_dict,
     save_candidate_criteria_dict,
 )
-from storage.sqlite.candidate_pool_repository import save_candidate_pool_dict
+from storage.sqlite.candidate_pool_repository import merge_candidate_pool_dict, save_candidate_pool_dict
 from storage.sqlite.connection import connect
+from storage.sqlite.json_codec import dumps_json, loads_json
 from storage.sqlite.migrations import apply_migrations
+from storage.sqlite.session import utc_now
 
 
 def _count_external_rating_fields(candidate: dict[str, Any]) -> int:
@@ -302,6 +305,120 @@ def import_tmdb_candidates_to_common_pool(
     pool_size_after = len(load_candidate_pool())
     stats["pool_size_after"] = pool_size_after
     stats["pool_size"] = pool_size_after
+    return stats
+
+
+def _merge_story_provider_fields(existing: dict, incoming: dict) -> dict:
+    """Fill partial provider refreshes without dropping stored localized details."""
+    current = strip_external_rating_fields(existing)
+    updated = dict(current)
+    for key, value in incoming.items():
+        if key != "localized" and value not in (None, "", [], {}):
+            updated[key] = value
+    old_blocks = current.get("localized")
+    new_blocks = incoming.get("localized")
+    if isinstance(new_blocks, dict):
+        localized = dict(old_blocks) if isinstance(old_blocks, dict) else {}
+        for language, block in new_blocks.items():
+            if not isinstance(block, dict):
+                continue
+            old = localized.get(language)
+            localized[language] = {
+                **(old if isinstance(old, dict) else {}),
+                **{field: value for field, value in block.items() if value not in (None, "", [], {})},
+            }
+        updated["localized"] = localized
+    return normalize_candidate_for_storage(updated)
+
+
+def import_story_catalog_candidates(
+    candidates: list[dict[str, Any]], *, result_metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Add typed Story acquisitions atomically, without rewriting or evicting the pool."""
+    from candidates.title_state_service import _find_watched_row
+
+    criteria_name = COMMON_POOL_CRITERIA_NAME
+    with closing(connect()) as conn:
+        apply_migrations(conn)
+        with conn:
+            conn.execute("BEGIN IMMEDIATE")
+            count_before = conn.execute("SELECT COUNT(*) FROM candidate_records").fetchone()[0]
+            stats = _base_import_stats(len(candidates), criteria_name, count_before)
+            stats["retained_unverifiable_existing"] = 0
+            pending = {}
+
+            for raw_candidate in candidates:
+                if not isinstance(raw_candidate, dict):
+                    stats["errors"] += 1
+                    continue
+                stats["stripped_external_rating_fields"] += _count_external_rating_fields(raw_candidate)
+                candidate = normalize_tmdb_candidate_for_common_import(raw_candidate, criteria_name)
+                if not candidate.get("title") or not candidate.get("year") or not candidate_typed_state_key(candidate):
+                    stats["errors"] += 1
+                    continue
+                if candidate.get("is_complete") is not True:
+                    stats["incomplete"] += 1
+                # Same exact typed identity and unambiguous ID-less legacy match
+                # as the Collection; a different known homonym is not watched.
+                if _find_watched_row(conn, candidate) is not None:
+                    stats["watched_skipped"] += 1
+                    stats["skipped_watched"] += 1
+                    continue
+
+                identity = candidate_tmdb_identity(candidate)
+                prior = pending.get(identity)
+                if prior is None:
+                    row = conn.execute(
+                        "SELECT payload_json FROM candidate_records WHERE media_type = ? AND tmdb_id = ?",
+                        identity,
+                    ).fetchone()
+                    if row is not None:
+                        prior = loads_json(row["payload_json"], None)
+                        if not isinstance(prior, dict) or candidate_tmdb_identity(prior) != identity:
+                            stats["retained_unverifiable_existing"] += 1
+                            stats["skipped_existing"] += 1
+                            continue
+                if prior is None:
+                    pending[identity] = candidate
+                    stats["added"] += 1
+                elif candidate_sort_score(candidate) > candidate_sort_score(normalize_candidate_for_storage(prior)):
+                    stats["stripped_external_rating_fields"] += _count_external_rating_fields(prior)
+                    pending[identity] = _merge_story_provider_fields(prior, candidate)
+                    stats["updated"] += 1
+                else:
+                    stats["duplicates"] += 1
+                    stats["skipped_duplicates"] += 1
+                    stats["skipped_existing"] += 1
+
+            existing = conn.execute(
+                "SELECT criteria_json FROM candidate_criteria WHERE criteria_name = ?", (criteria_name,)
+            ).fetchone()
+            existing = loads_json(existing[0], {}) if existing is not None else {}
+            criteria_entry = build_tmdb_import_criteria_defaults(criteria_name)
+            if isinstance(existing, dict):
+                criteria_entry.update(existing)
+            if criteria_entry.get("count") in (None, 0, ""):
+                criteria_entry["count"] = len(candidates)
+            acquisition = build_tmdb_import_criteria_metadata(
+                criteria_name=criteria_name,
+                result_metadata=result_metadata or {},
+                result_path=None,
+                candidate_count=len(candidates),
+                imported_count=stats["added"] + stats["updated"],
+            )
+            timestamp = utc_now()
+            conn.execute(
+                """
+                INSERT INTO candidate_criteria(criteria_name, criteria_json, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(criteria_name) DO UPDATE SET
+                  criteria_json = excluded.criteria_json, updated_at = excluded.updated_at
+                """,
+                (criteria_name, dumps_json(merge_criteria_metadata(criteria_entry, acquisition)), timestamp, timestamp),
+            )
+            if pending:
+                merged = merge_candidate_pool_dict(pending, conn=conn, max_records=None)
+                stats["pool_size_after"] = stats["pool_size"] = merged["pool_size"]
     return stats
 
 

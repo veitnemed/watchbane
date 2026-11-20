@@ -1,9 +1,8 @@
 """Explicit bounded TMDb acquisition for story search; never receives a query."""
-from candidates.models.keys import COMMON_POOL_CRITERIA_NAME
 from candidates.repositories.pool_repository import load_candidate_pool
 from candidates.safety.explicit_content import is_blocked_explicit_sexual_content
 from candidates.sources.tmdb.normalizer import prepare_tmdb_candidate, prepare_tmdb_movie_candidate
-from candidates.sources.tmdb.importer import import_tmdb_candidates_to_common_pool
+from candidates.sources.tmdb.importer import import_story_catalog_candidates
 
 PER_MEDIA_LIMIT = 15
 MAX_DISCOVER_PAGES = 10
@@ -71,8 +70,8 @@ def fill_story_catalog(*, client=None, progress_callback=None, cancel_checker=No
     result={'ok':True,'cancelled':False,'created_count':len(selected),'saved_count':0,'api_requests':requests,
             'english_fallback_count':english,'existing_skipped':skipped}
     if selected and not dry_run:
-        # Established atomic importer: merges into the shared pool, preserves title states.
-        stats=import_tmdb_candidates_to_common_pool(selected,criteria_name=COMMON_POOL_CRITERIA_NAME,
+        # Explicit Story import only upserts exact typed identities into the existing pool.
+        stats=import_story_catalog_candidates(selected,
                  result_metadata={'source':'story_catalog','language':'ru-RU','english_fallback_count':english})
         result.update(saved_count=stats.get('added',0),save_stats=stats)
     return result
