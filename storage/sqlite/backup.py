@@ -10,6 +10,7 @@ import sqlite3
 
 from config import constant
 from storage.sqlite.connection import get_db_path
+from storage.sqlite.startup import inspect_sqlite_startup
 
 
 REQUIRED_BACKUP_TABLES = {
@@ -18,7 +19,6 @@ REQUIRED_BACKUP_TABLES = {
     "candidate_records",
     "candidate_criteria",
     "candidate_actions",
-    "candidate_impressions",
     "app_settings",
     "poster_cache_entries",
 }
@@ -102,6 +102,25 @@ def restore_sqlite_database(
     try:
         _validate_backup_source(source_conn, source)
 
+        temp_target.unlink(missing_ok=True)
+        target_conn = sqlite3.connect(temp_target)
+        try:
+            source_conn.backup(target_conn)
+            # SQLite backup can copy the source's WAL mode. Stage a single
+            # self-contained file for inspection and atomic replacement.
+            target_conn.execute("PRAGMA journal_mode=DELETE")
+            _validate_backup_source(target_conn, temp_target)
+            row = target_conn.execute("SELECT COUNT(*) FROM watched_records").fetchone()
+            restored_count = int(row[0])
+        finally:
+            target_conn.close()
+
+        # Check the staged snapshot that would actually replace the runtime,
+        # using the same compatibility rules as the next application startup.
+        inspection = inspect_sqlite_startup(temp_target)
+        if not inspection["ok"]:
+            raise ValueError(f"Cannot restore SQLite backup: {inspection['reason']}")
+
         # A valid restore is intentionally destructive. Preserve the current
         # runtime first so the user can recover even if the chosen backup is
         # valid but not the state they intended to restore.
@@ -118,15 +137,6 @@ def restore_sqlite_database(
                     if sidecar.is_file():
                         shutil.copy2(sidecar, preserved_dir / sidecar.name)
 
-        temp_target.unlink(missing_ok=True)
-        target_conn = sqlite3.connect(temp_target)
-        try:
-            source_conn.backup(target_conn)
-            _validate_backup_source(target_conn, temp_target)
-            row = target_conn.execute("SELECT COUNT(*) FROM watched_records").fetchone()
-            restored_count = int(row[0])
-        finally:
-            target_conn.close()
         os.replace(temp_target, target)
         for suffix in ("-wal", "-shm"):
             Path(str(target) + suffix).unlink(missing_ok=True)

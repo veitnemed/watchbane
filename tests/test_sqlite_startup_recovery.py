@@ -252,3 +252,79 @@ def test_corrupt_backup_is_rejected_before_target_is_touched(tmp_path) -> None:
 
     assert runtime_path.read_bytes() == before
     assert runtime_path.with_suffix(".sqlite3.restoring").exists() is False
+
+
+@pytest.mark.parametrize(
+    ("statement", "match"),
+    [
+        (
+            "INSERT INTO schema_migrations(version, name, applied_at) VALUES (999, 'future', 'now')",
+            "newer than supported",
+        ),
+        (
+            "UPDATE schema_migrations SET name='different_application' WHERE version=1",
+            "migration history is inconsistent",
+        ),
+        (
+            "DROP TABLE candidate_impressions",
+            "schema is incomplete",
+        ),
+    ],
+)
+def test_incompatible_restore_preserves_healthy_runtime(monkeypatch, tmp_path, statement, match) -> None:
+    backups = _patch_backup_dir(monkeypatch, tmp_path)
+    runtime_path = tmp_path / "watchbane.sqlite3"
+    backup_path = tmp_path / "incoming.sqlite3"
+    _create_schema(runtime_path)
+    _create_schema(backup_path)
+    conn = sqlite3.connect(backup_path)
+    try:
+        with conn:
+            conn.execute(statement)
+    finally:
+        conn.close()
+    before = runtime_path.read_bytes()
+    incoming_before = backup_path.read_bytes()
+
+    with pytest.raises(ValueError, match=match):
+        restore_sqlite_database(backup_path, db_path=runtime_path)
+
+    assert runtime_path.read_bytes() == before
+    assert backup_path.read_bytes() == incoming_before
+    assert not backups.exists()
+    assert not list(tmp_path.glob("*.restoring*"))
+    assert ensure_sqlite_startup_migration(db_path=runtime_path)["schema_version"] == len(MIGRATIONS)
+
+
+@pytest.mark.parametrize("version", [1, 4])
+def test_supported_old_backup_restores_and_migrates(monkeypatch, tmp_path, version) -> None:
+    backups = _patch_backup_dir(monkeypatch, tmp_path)
+    runtime_path = tmp_path / "watchbane.sqlite3"
+    backup_path = tmp_path / "incoming.sqlite3"
+    _create_schema(runtime_path)
+    _create_schema(backup_path, count=version)
+    conn = sqlite3.connect(backup_path)
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO watched_records(
+                    dataset_key, title, title_normalized, media_type, payload_json, created_at, updated_at
+                ) VALUES ('movie|1', 'From Back Up', 'from back up', 'movie', '{}', 'now', 'now')
+                """
+            )
+    finally:
+        conn.close()
+    incoming_before = backup_path.read_bytes()
+
+    assert restore_sqlite_database(backup_path, db_path=runtime_path) == 1
+    assert inspect_sqlite_startup(runtime_path)["schema_version"] == version
+    assert len(list(backups.glob("*.sqlite3"))) == 1
+    assert ensure_sqlite_startup_migration(db_path=runtime_path)["schema_version"] == len(MIGRATIONS)
+    conn = sqlite3.connect(runtime_path)
+    try:
+        assert conn.execute("SELECT title FROM watched_records").fetchone()[0] == "From Back Up"
+    finally:
+        conn.close()
+    assert backup_path.read_bytes() == incoming_before
+    assert not list(tmp_path.glob("*.restoring*"))
