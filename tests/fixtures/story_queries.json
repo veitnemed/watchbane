@@ -1,0 +1,290 @@
+[
+  {
+    "group": "short",
+    "query": "космос",
+    "relevant": [
+      "demo:05",
+      "demo:14",
+      "demo:26"
+    ]
+  },
+  {
+    "group": "short",
+    "query": "тюрьма",
+    "relevant": [
+      "demo:04",
+      "demo:15",
+      "demo:27"
+    ]
+  },
+  {
+    "group": "short",
+    "query": "врач",
+    "relevant": [
+      "demo:07",
+      "demo:29"
+    ]
+  },
+  {
+    "group": "short",
+    "query": "месть",
+    "relevant": [
+      "demo:13"
+    ]
+  },
+  {
+    "group": "short",
+    "query": "музыка",
+    "relevant": [
+      "demo:11",
+      "demo:22"
+    ]
+  },
+  {
+    "group": "typo",
+    "query": "пристурник",
+    "relevant": [
+      "demo:01",
+      "demo:03",
+      "demo:13",
+      "demo:15",
+      "demo:18",
+      "demo:25"
+    ]
+  },
+  {
+    "group": "typo",
+    "query": "сериал про пристурника",
+    "relevant": [
+      "demo:01",
+      "demo:03",
+      "demo:15",
+      "demo:18",
+      "demo:25"
+    ]
+  },
+  {
+    "group": "typo",
+    "query": "космонавтт",
+    "relevant": [
+      "demo:05",
+      "demo:14",
+      "demo:26"
+    ]
+  },
+  {
+    "group": "typo",
+    "query": "расследоване",
+    "relevant": [
+      "demo:02",
+      "demo:14",
+      "demo:17",
+      "demo:21",
+      "demo:28"
+    ]
+  },
+  {
+    "group": "typo",
+    "query": "побег из тюрмы",
+    "relevant": [
+      "demo:04",
+      "demo:15"
+    ]
+  },
+  {
+    "group": "paraphrase",
+    "query": "сериал о мошеннике под чужим именем",
+    "relevant": [
+      "demo:03",
+      "demo:18"
+    ]
+  },
+  {
+    "group": "paraphrase",
+    "query": "человек пытается выжить на далекой планете",
+    "relevant": [
+      "demo:05"
+    ]
+  },
+  {
+    "group": "paraphrase",
+    "query": "герой снова переживает один и тот же день",
+    "relevant": [
+      "demo:06",
+      "demo:29"
+    ]
+  },
+  {
+    "group": "paraphrase",
+    "query": "история о потере памяти",
+    "relevant": [
+      "demo:08",
+      "demo:22"
+    ]
+  },
+  {
+    "group": "paraphrase",
+    "query": "семья ищет безопасное место во время войны",
+    "relevant": [
+      "demo:30"
+    ]
+  },
+  {
+    "group": "roles",
+    "query": "сериал про преступника",
+    "relevant": [
+      "demo:01",
+      "demo:03",
+      "demo:15",
+      "demo:18",
+      "demo:25"
+    ]
+  },
+  {
+    "group": "roles",
+    "query": "сериал про следователя",
+    "relevant": [
+      "demo:02",
+      "demo:14",
+      "demo:17",
+      "demo:21",
+      "demo:28"
+    ]
+  },
+  {
+    "group": "roles",
+    "query": "следователь ловит преступника",
+    "relevant": [
+      "demo:02",
+      "demo:14",
+      "demo:17",
+      "demo:21",
+      "demo:28"
+    ]
+  },
+  {
+    "group": "roles",
+    "query": "преступник скрывается от следователя",
+    "relevant": [
+      "demo:01",
+      "demo:03",
+      "demo:15",
+      "demo:18",
+      "demo:25",
+      "demo:13"
+    ]
+  },
+  {
+    "group": "roles",
+    "query": "врач спасает пациентов",
+    "relevant": [
+      "demo:07",
+      "demo:29"
+    ]
+  },
+  {
+    "group": "compositional",
+    "query": "побег из тюрьмы",
+    "relevant": [
+      "demo:04",
+      "demo:15"
+    ]
+  },
+  {
+    "group": "compositional",
+    "query": "расследование в космосе",
+    "relevant": [
+      "demo:14"
+    ]
+  },
+  {
+    "group": "compositional",
+    "query": "музыкант потерял память",
+    "relevant": [
+      "demo:22"
+    ]
+  },
+  {
+    "group": "compositional",
+    "query": "любовь и отношения соседей",
+    "relevant": [
+      "demo:16"
+    ]
+  },
+  {
+    "group": "compositional",
+    "query": "спорт и подростки",
+    "relevant": [
+      "demo:24"
+    ]
+  },
+  {
+    "group": "unsupported",
+    "query": "история о дипломатическом кризисе",
+    "relevant": []
+  },
+  {
+    "group": "unsupported",
+    "query": "ботаник ищет редкую орхидею",
+    "relevant": []
+  },
+  {
+    "group": "unsupported",
+    "query": "без преступников",
+    "relevant": []
+  },
+  {
+    "group": "unsupported",
+    "query": "не про войну",
+    "relevant": []
+  },
+  {
+    "group": "unsupported",
+    "query": "",
+    "relevant": []
+  },
+  {
+    "group": "challenge_unmodelled",
+    "query": "герой зарабатывает обманом",
+    "relevant": [
+      "demo:03",
+      "demo:18"
+    ]
+  },
+  {
+    "group": "challenge_unmodelled",
+    "query": "человек живет за счет краж",
+    "relevant": [
+      "demo:01",
+      "demo:15",
+      "demo:25"
+    ]
+  },
+  {
+    "group": "challenge_unmodelled",
+    "query": "день никак не заканчивается",
+    "relevant": [
+      "demo:06",
+      "demo:29"
+    ]
+  },
+  {
+    "group": "challenge_unmodelled",
+    "query": "люди разыскивают родственника",
+    "relevant": [
+      "demo:09",
+      "demo:20"
+    ]
+  },
+  {
+    "group": "challenge_unmodelled",
+    "query": "сериал о человеке по другую сторону закона",
+    "relevant": [
+      "demo:01",
+      "demo:03",
+      "demo:15",
+      "demo:18",
+      "demo:25"
+    ]
+  }
+]

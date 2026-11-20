@@ -6,8 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QHBoxLayout, QTabWidget, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QTabWidget, QWidget, QLabel
 
+from desktop.story.view import StorySearchView
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.list_view import CandidateListView
 from desktop.candidates.session import CandidateSearchSession
@@ -53,13 +54,19 @@ class MainTabRegistry:
         self._widget_to_id: dict[QWidget, str] = {}
         self._tabs.currentChanged.connect(self.on_current_changed)
 
-    def register(self, spec: ShellTabSpec) -> None:
-        self._tabs.addTab(spec.view.widget, spec.label)
+    def register(self, spec: ShellTabSpec, *, visible=True) -> None:
+        if visible:
+            self._tabs.addTab(spec.view.widget, spec.label)
+        else:
+            spec.view.widget.setParent(self._tabs)
+            spec.view.widget.hide()
         self._specs[spec.tab_id] = spec
         self._widget_to_id[spec.view.widget] = spec.tab_id
 
     def focus(self, tab_id: str) -> None:
         spec = self._specs[tab_id]
+        if self._tabs.indexOf(spec.view.widget) < 0:
+            return
         if self._tabs.currentWidget() is spec.view.widget:
             activate_tab_view(spec.view)
             return
@@ -103,7 +110,9 @@ def build_main_tabs(
         layout_px(SPACING_SMALL),
     )
     brand_layout.setSpacing(0)
-    symbol = watchbane_symbol_label(control_px(27))
+    symbol = QLabel("WATCHBANE")
+    symbol.setObjectName("watchbaneShellSymbol")
+    symbol.setStyleSheet("font-weight: 800; padding: 12px; background: transparent;")
     symbol.setToolTip("Watchbane")
     brand_layout.addWidget(symbol, alignment=Qt.AlignmentFlag.AlignVCenter)
     tabs.setCornerWidget(brand, Qt.Corner.TopLeftCorner)
@@ -147,12 +156,19 @@ def build_main_tabs(
     )
     if callable(set_replenish_state_listener):
         set_replenish_state_listener(candidate_list_view.on_replenish_state_changed)
-    # Register Recommendations first so QTabWidget index 0 is the daily-path start.
+    # Owner-approved story-search home; existing tabs and callbacks stay intact.
+    from desktop.collection.view import CollectionView
+    legacy_watched = watched_tab_view
+    legacy_watched.widget.setParent(tabs)
+    legacy_watched.widget.hide()
+    watched_tab_view = CollectionView(legacy_watched)
+    story_view = StorySearchView(on_library_changed=lambda: watched_tab_view.reload_entries())
+    registry.register(ShellTabSpec("story", "Поиск" if languages.interface_language == "ru" else "Search", story_view))
     registry.register(
-        ShellTabSpec(DEFAULT_SHELL_TAB_ID, languages.tr("tabs.candidates"), candidate_list_view)
+        ShellTabSpec(DEFAULT_SHELL_TAB_ID, languages.tr("tabs.candidates"), candidate_list_view), visible=False
     )
-    registry.register(ShellTabSpec("watched", languages.tr("tabs.watched"), watched_tab_view))
-    registry.register(ShellTabSpec("filters", languages.tr("tabs.filters"), candidate_filters_view))
+    registry.register(ShellTabSpec("watched", "Коллекция" if languages.interface_language == "ru" else "Collection", watched_tab_view))
+    registry.register(ShellTabSpec("filters", languages.tr("tabs.filters"), candidate_filters_view), visible=False)
 
     refresh_candidate_filters = getattr(candidate_filters_view, "reload_filter_options", lambda: None)
 
@@ -165,8 +181,9 @@ def build_main_tabs(
         on_status_message=on_status_message,
         on_pool_changed=on_pool_changed,
     )
-    registry.register(ShellTabSpec("settings", languages.tr("tabs.settings"), settings_tab_view))
-    registry.focus(DEFAULT_SHELL_TAB_ID)
+    registry.register(ShellTabSpec("settings", languages.tr("tabs.settings"), settings_tab_view), visible=False)
+    registry.focus("story")
+    on_status_message("", 0)
 
     context = AppTabsContext(
         watched_tab_view=watched_tab_view,

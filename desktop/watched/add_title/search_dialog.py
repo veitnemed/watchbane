@@ -67,7 +67,8 @@ class AddTitleSearchDialog(QDialog):
         self.setWindowTitle(tr("add_title.window.search"))
         self.setModal(True)
         self.setFixedSize(SEARCH_DIALOG_WIDTH, SEARCH_DIALOG_HEIGHT)
-        self.setStyleSheet(ADD_TITLE_DIALOG_STYLE)
+        from desktop.theme.styles.cartoon import build_cartoon_style
+        self.setStyleSheet(build_cartoon_style())
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(

@@ -1,0 +1,3 @@
+# Source preview runtime only. No model weights are downloaded by pip or the app.
+-r requirements.txt
+-r requirements-story.txt

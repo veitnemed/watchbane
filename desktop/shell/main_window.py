@@ -17,6 +17,7 @@ from desktop.onboarding import OnboardingAutofillDialog
 from desktop.settings.app_settings import get_persisted_interface_language
 from desktop.shell.app_icon import build_app_icon
 from desktop.shell.tabs import build_main_tabs
+from desktop.theme.styles.cartoon import build_cartoon_style
 from desktop.startup import TmdbStartupGateView
 from desktop.theme import FONT_APP, FONT_FAMILY, build_app_style
 from desktop.theme.scaling import font_px, get_ui_scale, scale_px
@@ -54,7 +55,7 @@ class WatchedMoviesWindow(QMainWindow):
         self.setWindowIcon(build_app_icon())
         self._persist_window_geometry = initial_size is None
         self.resize(*(initial_size or scaled_main_window_size()))
-        self.setStyleSheet(build_app_style())
+        self.setStyleSheet(build_cartoon_style())
         self.statusBar().showMessage("")
 
         root_stack = QStackedWidget()
@@ -287,8 +288,13 @@ class WatchedMoviesWindow(QMainWindow):
         )
 
     def schedule_tmdb_startup_gate(self, delay_ms: int = 250) -> None:
-        """Schedule the startup probe on a window-owned timer that shutdown can cancel."""
-        self._tmdb_gate_timer.start(max(0, int(delay_ms)))
+        """Story home is offline-first; credentials are requested by online flows.
+
+        Keep the explicit gate method for existing acquisition/settings callers.
+        Do not write onboarding completion or alter a persisted token here.
+        """
+        self._tmdb_local_mode = True
+        self._tmdb_gate_passed = True
 
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt override
         super().resizeEvent(event)
@@ -319,7 +325,7 @@ class WatchedMoviesWindow(QMainWindow):
             app = QApplication.instance()
             if app is not None:
                 app.setFont(QFont(FONT_FAMILY, font_px(FONT_APP)))
-            self.setStyleSheet(build_app_style())
+            self.setStyleSheet(build_cartoon_style())
 
         tabs = QTabWidget()
         tabs.setObjectName("mainTabs")

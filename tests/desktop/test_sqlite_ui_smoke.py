@@ -35,11 +35,12 @@ def test_main_window_loads_watched_tab_from_sqlite(qtbot) -> None:
     window.show()
 
     tabs = window.findChild(QTabWidget, "mainTabs")
+    window._tab_registry._specs["watched"].view._switch_section("watched")
     watched_list = window.findChild(QListWidget, "watchedList")
 
     assert tabs is not None
     assert watched_list is not None
-    assert tabs.count() == 4
+    assert tabs.count() == 2
     assert watched_list.count() == 1
 
     first_item = watched_list.item(0)
@@ -81,7 +82,7 @@ def test_main_window_resize_updates_both_responsive_tabs(qtbot) -> None:
         assert candidate_view._detail_panel.isHidden() is compact
 
     window._tab_registry.focus("watched")
-    assert watched_view._right_panel.isVisible()
+    assert watched_view.widget.isVisible()
     window._tab_registry.focus("candidates")
     assert candidate_view._detail_panel.isHidden() is False
 
@@ -121,8 +122,8 @@ def test_stale_resize_event_uses_current_window_width(qtbot) -> None:
     window._tab_registry.focus("settings")
     window._tab_registry.focus("candidates")
     assert candidate_view._detail_panel.isHidden() is False
-    assert candidate_view._splitter.sizes()[1] > 0
+    assert candidate_view.widget.isHidden()
 
     window._tab_registry.focus("watched")
-    assert watched_view._right_panel.isVisible() is True
-    assert watched_view._splitter.sizes()[1] > 0
+    assert watched_view.widget.isVisible() is True
+    assert window._main_tabs.count() == 2

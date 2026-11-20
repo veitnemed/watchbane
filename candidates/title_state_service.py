@@ -112,6 +112,21 @@ def get_title_state(candidate: dict, *, path: str | Path | None = None) -> str:
         conn.close()
 
 
+def get_title_states(candidates: dict[str, dict], *, path: str | Path | None = None) -> dict[str, str]:
+    """Read states for a small result page through one storage connection."""
+    if not candidates:
+        return {}
+    conn = connect(path)
+    try:
+        apply_migrations(conn)
+        return {
+            key: _state_in_connection(conn, normalize_candidate_record(candidate))
+            for key, candidate in candidates.items()
+        }
+    finally:
+        conn.close()
+
+
 def _clear_candidate_actions(conn: sqlite3.Connection, candidate: dict) -> int:
     return action_repository.remove_candidate_actions(
         candidate,

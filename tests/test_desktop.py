@@ -6585,12 +6585,12 @@ def test_watched_window_includes_candidate_tabs() -> None:
     assert "load_desktop_language_context" in factory_source
     assert 'languages.tr("tabs.filters")' in factory_source
     assert 'languages.tr("tabs.candidates")' in factory_source
-    assert 'languages.tr("tabs.watched")' in factory_source
+    assert "CollectionView" in factory_source
     assert 'languages.tr("tabs.settings")' in factory_source
     assert '"Информация"' not in factory_source
     assert '"Watched"' not in factory_source
     assert '"Analytics"' not in factory_source
-    assert '"Search"' not in factory_source
+    assert '"Search"' in factory_source
     assert "MainTabRegistry" in factory_source
     assert "ShellTabSpec" in factory_source
     assert "_tab_registry.register" not in init_source
@@ -6617,6 +6617,12 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
             self.widget = QWidget(parent)
             self.entries = [("Alpha", {"main_info": {"title": "Alpha"}}, {"title": "Alpha"})]
             self._on_entries_changed = on_entries_changed
+            self._entries = self.entries
+            self._library_section = "watchlist"
+            self._action_candidates_by_key = {}
+
+        def _switch_section(self, section, **kwargs):
+            self._library_section = section
 
         def reload_entries(self, added_key: str | None = None) -> None:
             return None
@@ -6680,24 +6686,20 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     )
     qapp.processEvents()
 
-    assert tabs.count() == 4
-    assert [tabs.tabText(index) for index in range(tabs.count())] == [
-        "Рекомендации",
-        "Коллекция",
-        "Настройки поиска",
-        "Настройки",
-    ]
+    assert tabs.count() == 2
+    assert [tabs.tabText(i) for i in range(tabs.count())] == ["Поиск", "Коллекция"]
     assert hasattr(context, "analytics_tab_view") is False
-    assert len(registry._specs) == 4
+    assert len(registry._specs) == 5
     assert len(registry._specs) == len(set(registry._specs))
-    assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
+    assert set(registry._specs) == {"story", "watched", "filters", "candidates", "settings"}
     assert all(hasattr(spec.view, "widget") for spec in registry._specs.values())
-    # C1-01: Recommendations is first and focused by default after build.
+    # Owner-approved search-first scope supersedes the old startup choice.
     assert tabs.currentIndex() == 0
-    assert tabs.currentWidget() is registry._specs["candidates"].view.widget
-    assert registry._specs["candidates"].view.activation_count == 1
+    assert tabs.currentWidget() is registry._specs["story"].view.widget
+    registry.focus("candidates")
+    assert registry._specs["candidates"].view.activation_count == 0
     registry.activate_current()
-    assert registry._specs["candidates"].view.activation_count == 2
+    assert registry._specs["candidates"].view.activation_count == 0
     assert (
         registry._specs["filters"].view.replenish_state_listener.__self__
         is registry._specs["candidates"].view
@@ -6714,7 +6716,7 @@ def test_build_main_tabs_registers_active_shell_tabs(monkeypatch, qapp) -> None:
     for index in range(tabs.count()):
         registry.on_current_changed(index)
 
-    assert registry._specs["candidates"].view.activation_count == 3
+    assert registry._specs["candidates"].view.activation_count == 0
 
 
 def test_main_tab_registry_focus_activates_current_view(qapp) -> None:
@@ -6789,8 +6791,8 @@ def test_add_title_duplicate_message_uses_interface_language(qapp, monkeypatch) 
     dialog.close()
 
 
-def test_main_window_starts_on_recommendations_tab(qapp) -> None:
-    """C1-01: after shell build, Recommendations is the selected tab."""
+def test_main_window_starts_on_story_tab(qapp) -> None:
+    """Story search is selected; legacy recommendations keep their tab ID."""
     from desktop.shell.main_window import WatchedMoviesWindow
     from desktop.shell.tabs import DEFAULT_SHELL_TAB_ID
 
@@ -6799,8 +6801,8 @@ def test_main_window_starts_on_recommendations_tab(qapp) -> None:
         tabs = window._main_tabs
         assert DEFAULT_SHELL_TAB_ID == "candidates"
         assert tabs.currentIndex() == 0
-        assert tabs.tabText(0) in {"Recommendations", "Рекомендации"}
-        assert tabs.currentWidget() is window._tabs_context.candidate_list_view.widget
+        assert tabs.tabText(0) in {"Search", "Поиск"}
+        assert tabs.currentWidget() is window._tab_registry._specs["story"].view.widget
     finally:
         window.close()
 
@@ -7034,7 +7036,7 @@ def test_onboarding_scale_change_rebuilds_main_tabs_same_process(monkeypatch, qa
     monkeypatch.setattr(main_window_module, "get_ui_scale", lambda: scale["value"])
     monkeypatch.setattr(main_window_module, "get_persisted_interface_language", lambda: "ru")
     monkeypatch.setattr(main_window_module, "font_px", lambda _value: 19)
-    monkeypatch.setattr(main_window_module, "build_app_style", fake_build_app_style)
+    monkeypatch.setattr(main_window_module, "build_cartoon_style", fake_build_app_style)
     monkeypatch.setattr(
         main_window_module,
         "ensure_scaled_main_tab_modules",
@@ -7085,6 +7087,11 @@ def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> N
         def __init__(self, *args, **kwargs) -> None:
             self.widget = QWidget()
             self.entries = []
+            self._entries = []
+            self._library_section = "watchlist"
+
+        def _switch_section(self, section, **kwargs):
+            self._library_section = section
 
         def reload_entries(self, added_key: str | None = None) -> None:
             return None
@@ -7113,13 +7120,8 @@ def test_build_main_tabs_uses_english_interface_language(monkeypatch, qapp) -> N
         ),
     )
 
-    assert [tabs.tabText(index) for index in range(tabs.count())] == [
-        "Recommendations",
-        "Collection",
-        "Search settings",
-        "Settings",
-    ]
-    assert set(registry._specs) == {"watched", "filters", "candidates", "settings"}
+    assert [tabs.tabText(index) for index in range(tabs.count())] == ["Search", "Collection"]
+    assert set(registry._specs) == {"story", "watched", "filters", "candidates", "settings"}
 
 
 def test_cross_tab_wiring_stays_in_shell_tabs() -> None:

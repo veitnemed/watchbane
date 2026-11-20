@@ -55,7 +55,7 @@ def test_release_identity_is_visible_on_startup_and_settings(qapp) -> None:
     assert settings_label.text() == release_signature()
 
 
-def test_main_window_close_cancels_delayed_startup_gate(qapp) -> None:
+def test_main_window_offline_startup_does_not_schedule_gate(qapp) -> None:
     import desktop.settings.app_settings  # noqa: F401
 
     from desktop.shell.main_window import WatchedMoviesWindow
@@ -63,7 +63,8 @@ def test_main_window_close_cancels_delayed_startup_gate(qapp) -> None:
     window = WatchedMoviesWindow(initial_size=(900, 700))
     window.schedule_tmdb_startup_gate(10_000)
 
-    assert window._tmdb_gate_timer.isActive() is True
+    assert window._tmdb_gate_timer.isActive() is False
+    assert window._tmdb_local_mode is True
     window.close()
     qapp.processEvents()
     assert window._tmdb_gate_timer.isActive() is False

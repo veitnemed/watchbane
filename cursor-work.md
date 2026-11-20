@@ -402,3 +402,39 @@
 ---
 
 Текущий рабочий ID и порядок задач берутся только из PRODUCT §7 и §10; этот файл — журнал, не второй roadmap.
+
+
+## 2026-11-19 — сюжетный поиск, отдельная локальная ветка
+
+Владелец явно сменил цель с inbox Phase C на сюжетный поиск. Добавлены Qt home, сохранённые
+legacy tabs/actions, локальный E5 ONNX backend и явный fallback; models/data не публикуются.
+Независимая проверка отклонила dictionary как основной метод и показала регрессию sentence
+rerank: provisional default — hybrid, эксперимент выключен. Архитектура и reproduce:
+`docs/architecture/STORY_SEARCH_V1.md`. Коммит не создавался. Next: интеграционный обзор
+руководителя, расширенный independent acceptance, Windows packaging/CPU validation.
+
+### 2026-11-19 — source preview сюжетного поиска
+
+По дополнительному решению владельца: чистый hybrid default для широких запросов; фрагменты только финальных карточек. Сессионное переиспользование индекса, автоматический существующий каталог, очередь нового запроса и отмена между пакетами. Исправлено отсоединение старых Qt карточек перед deleteLater (повторный поиск/клик сохранения). Добавлены изолированный launcher, отдельные requirements и инструкция source preview. V1-патч сохранён неизменно вне checkout; ни commit, ни push, ни публикации. Windows/EXE не проверены; холодная память/пауза Qt и качество событий остаются измеримым долгом.
+
+### 2026-11-19 — profile-local vector cache increment
+
+Owner authorized a narrow restart-performance increment. Added fixed-size checked binary vectors under active profile, model/tokenizer/runtime/preprocessing/text identity, atomic tempfile replacement, corruption/read-only fallback and no query persistence. Ranking untouched. Four fresh-process Linux FP32 probes (120 texts): index 13.127 s without cache →87 ms restart; 120 hits/0 misses, changed text 119/1. Same vectors/top-5/evidence hashes. Tests and Windows manual plan in STORY_VECTOR_CACHE.md. Prior delivered ZIP and patches kept unchanged; no commit/push/publication.
+
+### 2026-11-19 — bounded TMDb catalog from story home
+
+Added explicit fill-catalog button/count without startup onboarding. Reused existing credentials panel/validation worker, cancelable FilterReplenishWorker, discover/details adapter, normalizers and transactional common-pool importer. Fixed movie/TV sample, Russian first, labelled English fallback; no plot-query transmission. Success refreshes current search without restart. Synthetic mock tests cover auth→import→results, offline demo, cancellation/error, repeated import/status preservation. Three real Qt/E5 fictional-demo captures at 1/1.25; no live API claim. New source artifact separately; no commit/push/publication.
+
+### 2026-11-19 — owner replaces dark polish with cartoon two-section shell
+
+New visible shell only Search/Collection, cream/ink/orange palette, original ticket SVG. Removed visible technical controls/legacy tabs without deleting implementations. Compact plot cards with bounded local-only poster decode; simple collection reuses existing reads/state/score/delete services and title-add flow. Temporary synthetic data only; real Qt/E5 save→collection→reopen tested at 1/1.25. Updated intentional shell contract tests; no search/ranking/storage schema changes. Prior artifacts immutable, no commit/push/publication. Windows and large real libraries unverified.
+
+## 2026-11-19 — постеры двухраздельной оболочки
+Разрешённый scope: async direct TMDb CDN, lazy visible cards, bounded queue/body/raster, existing preview cache, snapshot metadata сохранены. Старый proxy путь не используется новой оболочкой. Mock boundaries + Linux real CDN/Qt smoke, отдельный source ZIP; без commit/push. Windows не проверен. Детали: docs/architecture/STORY_POSTERS.md.
+
+- 2026-11-19, поиск по сюжету (локальный preview, без коммита): сохранение не
+  убирает результат и не сворачивает сюжет; «В коллекции» отражает состояние
+  при следующем запросе. Для статусов карточек используется одно соединение
+  SQLite; ранжирование и правила отсева не менялись.
+  Коллекция отображает 24 карточки на страницу и раскрывает длинные описания
+  по кнопке; фильтр ищет во всём разделе, а не лишь на видимой странице.

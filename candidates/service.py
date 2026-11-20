@@ -67,4 +67,9 @@ from candidates.tmdb_acquisition_service import (
 )
 
 
+from candidates.story_service import local_story_catalog, create_story_search, clear_story_search_cache, story_catalog_snapshot
+from candidates.story_catalog import StoryCatalogImportService
+from candidates.title_state_service import mark_watched as mark_story_watched
+
+
 __all__ = [name for name in globals() if not name.startswith("_")]

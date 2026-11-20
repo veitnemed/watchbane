@@ -74,7 +74,8 @@ class AddTitlePreviewDialog(QDialog):
         )
         self.setMaximumHeight(dialog_height)
         self.resize(PREVIEW_DIALOG_WIDTH, dialog_height)
-        self.setStyleSheet(ADD_TITLE_DIALOG_STYLE)
+        from desktop.theme.styles.cartoon import build_cartoon_style
+        self.setStyleSheet(build_cartoon_style())
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(
