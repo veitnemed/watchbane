@@ -111,3 +111,31 @@ def test_real_fp32_probe_via_source_cli(tmp_path):
     assert result["status"] == "ok" and result["model_tested"] and not result["search_tested"]
     assert result["variant"] == "fp32" and result["embedding_size"] == 384
     assert result["shape_ok"] and result["finite"] and result["unit_norm"] and result["differentiated"]
+
+
+def test_windows_msvc_groups_paths_without_leaking_path_names():
+    from candidates.story_windows_runtime import _origin
+
+    bundle = r"C:\Users\QA\Watchbane\_internal"
+    windows = r"C:\Windows"
+    assert _origin(r"\\?\C:\USERS\QA\watchbane\_internal\vcruntime140.dll", bundle, windows) == "bundle"
+    assert _origin(r"C:\WINDOWS\System32\msvcp140.dll", bundle, windows) == "windows"
+    assert _origin(r"C:\Users\QA\Watchbane\_internal_other\msvcp140.dll", bundle, windows) == "other"
+    assert _origin(r"D:\Windows\System32\msvcp140.dll", bundle, windows) == "other"
+    assert _origin(r"subfolder\msvcp140.dll", bundle, windows) == "unresolved"
+
+
+def test_windows_msvc_probe_is_frozen_only_and_never_reports_exceptions(monkeypatch):
+    from candidates import story_windows_runtime as observation
+
+    monkeypatch.setattr(observation.sys, "platform", "win32")
+    monkeypatch.setattr(observation.sys, "frozen", False, raising=False)
+
+    def unavailable():
+        raise OSError("private path")
+
+    monkeypatch.setattr(observation, "_observe", unavailable)
+    assert observation.frozen_windows_msvc_observation() is None
+
+    monkeypatch.setattr(observation.sys, "frozen", True, raising=False)
+    assert observation.frozen_windows_msvc_observation() == dict.fromkeys(observation._DLL_NAMES, "unresolved")

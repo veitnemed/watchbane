@@ -87,3 +87,13 @@ a Windows 11 result is not evidence of Windows 10 support.
 5. Mark only the tested OS and distribution route as verified. A successful
    run doesn't authorize distribution: the exact downloadable archive and
    catalog still need the separate source and notice review above.
+
+The explicit frozen E5 inference smoke reports, after inference, whether
+selected v14 modules already visible in that process map to the PyInstaller
+bundle's internal directory, the Windows directory, or another location.
+The report contains only fixed DLL basenames and categories; it never loads a
+candidate DLL for diagnosis or prints local paths. These are
+[loaded-module observations](https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-getmodulehandlew),
+not a dependency trace: only one handle is observed per basename, and the
+observation does not establish which caller loaded it, which redistributable
+is needed on a clean host, or permission to copy it.

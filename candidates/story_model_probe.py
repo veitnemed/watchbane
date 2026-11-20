@@ -42,6 +42,12 @@ def write_model_check(model_dir: str | Path, output_path: str | Path) -> int:
     # An existing report cannot be replaced, even by a successful check.
     with Path(output_path).open("x", encoding="utf-8") as file:
         result = check_model(model_dir)
+        if result["status"] == "ok":
+            from candidates.story_windows_runtime import frozen_windows_msvc_observation
+
+            origins = frozen_windows_msvc_observation()
+            if origins is not None:
+                result["windows_msvc_module_origins_observed"] = origins
         json.dump(result, file)
         file.write("\n")
     return 0 if result["status"] == "ok" else 1

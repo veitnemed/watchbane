@@ -41,6 +41,17 @@ try {
         $result.embedding_size -ne 384 -or !$result.finite -or !$result.unit_norm -or !$result.differentiated) {
         throw "Frozen FP32 E5 check failed (status $($result.status), error $($result.error_type))."
     }
+    $origins = $result.windows_msvc_module_origins_observed
+    $expectedDlls = @('vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll', 'msvcp140_1.dll', 'msvcp140_2.dll')
+    $categories = @('bundle', 'windows', 'other', 'not_observed', 'unresolved')
+    if ($null -ne $origins) {
+        foreach ($dll in $expectedDlls) {
+            $property = $origins.PSObject.Properties[$dll]
+            if ($null -ne $property -and $property.Value -is [string] -and $property.Value -cin $categories) {
+                Write-Output ("Observed loaded Windows QA module: {0}={1}" -f $dll, $property.Value)
+            }
+        }
+    }
     Write-Output 'Verified the pinned FP32 E5 model produced distinct finite 384-dimensional embeddings inside Watchbane.exe, without Python on PATH. Search and installation were not checked by this probe.'
 }
 finally {
