@@ -157,8 +157,8 @@ def test_sqlite_runtime_add_update_delete_watched_record(tmp_path, monkeypatch) 
     from dataset.records.update import update_dataset_record
 
     monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
-    monkeypatch.setattr(delete_module, "backup_before_watched_delete", lambda timestamp=None: [])
-    monkeypatch.setattr(delete_module, "load_poster_cache", lambda: {})
+    monkeypatch.setattr("config.constant.BACKUP_DIR", str(tmp_path / "backups"))
+    monkeypatch.setattr(delete_module, "DEFAULT_POSTER_CACHE_JSON", tmp_path / "legacy-posters.json")
 
     add_result = add_dataset_record(_movie("Alpha"))
     assert add_result.ok is True

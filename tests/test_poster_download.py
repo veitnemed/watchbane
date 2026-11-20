@@ -329,43 +329,40 @@ def test_add_dataset_record_downloads_poster_from_hints_when_cache_missing(monke
     assert upsert_calls == [("Hint Show", 2022, poster_hints)]
 
 
-def test_delete_watched_record_removes_local_poster_file(monkeypatch) -> None:
-    import tempfile
-
+def test_delete_watched_record_removes_local_poster_file(monkeypatch, tmp_path) -> None:
     from dataset import delete_record as module
     from dataset.records import delete as records_delete
     from posters.cache import poster_identity_key
 
-    with tempfile.TemporaryDirectory() as temp_root:
-        poster_path = Path(temp_root) / "alpha.jpg"
-        poster_path.write_bytes(b"x")
-        identity = poster_identity_key("Alpha", 2020)
-        poster_cache = {
-            identity: {
-                "title": "Alpha",
-                "year": 2020,
-                "status": "found",
-                "poster_url": "https://example.com/a.jpg",
-                "local_path": str(poster_path),
-            }
+    image_root = tmp_path / "images"
+    image_root.mkdir()
+    poster_path = image_root / "alpha.jpg"
+    poster_path.write_bytes(b"x")
+    identity = poster_identity_key("Alpha", 2020)
+    poster_cache = {
+        identity: {
+            "title": "Alpha",
+            "year": 2020,
+            "status": "found",
+            "poster_url": "https://example.com/a.jpg",
+            "local_path": str(poster_path),
         }
+    }
 
-        dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
-        saved_cache: dict = {}
+    dataset = {"Alpha": _make_movie("Alpha", 8.0, 2020)}
+    from storage import data as storage_data
+    from storage.sqlite.poster_repository import load_poster_cache_dict, save_poster_cache_dict
 
-        monkeypatch.setattr(records_delete.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
-        monkeypatch.setattr(records_delete.storage_data, "load_meta", lambda: {})
-        monkeypatch.setattr(
-            records_delete.storage_data,
-            "save_dataset_meta_and_poster_cache",
-            lambda _dataset, _meta, cache: saved_cache.update(cache),
-        )
-        monkeypatch.setattr(records_delete, "load_poster_cache", lambda: copy.deepcopy(poster_cache))
-        monkeypatch.setattr(records_delete, "backup_before_watched_delete", lambda timestamp=None: [])
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr("config.constant.BACKUP_DIR", str(tmp_path / "backups"))
+    monkeypatch.setattr(records_delete, "DEFAULT_POSTER_CACHE_JSON", tmp_path / "legacy-posters.json")
+    monkeypatch.setattr("posters.download_images.DEFAULT_POSTER_IMAGES_DIR", tmp_path / "images")
+    storage_data.save_dataset(dataset)
+    save_poster_cache_dict(poster_cache)
 
-        result = module.delete_watched_record("Alpha", timestamp="test")
+    result = module.delete_watched_record("Alpha", timestamp="test")
 
     assert result["ok"] is True
     assert result["deleted_poster_file"] == 1
     assert poster_path.is_file() is False
-    assert identity not in saved_cache
+    assert identity not in load_poster_cache_dict()

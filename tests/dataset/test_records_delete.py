@@ -1,7 +1,3 @@
-import copy
-
-from config import constant
-from config import scheme
 from common import format_score
 
 
@@ -19,7 +15,7 @@ def _make_movie(title: str, user_score: float, year: int) -> dict:
     }
 
 
-def test_delete_watched_record_returns_delete_record_result(monkeypatch) -> None:
+def test_delete_watched_record_returns_delete_record_result(monkeypatch, tmp_path) -> None:
     from dataset.records import delete as delete_module
     from dataset.records.delete import delete_watched_record
     from posters.cache import poster_identity_key
@@ -29,20 +25,15 @@ def test_delete_watched_record_returns_delete_record_result(monkeypatch) -> None
     identity = poster_identity_key("Alpha", 2020)
     poster_cache = {identity: {"title": "Alpha", "year": 2020, "status": "found"}}
 
-    saved_dataset = {}
-    saved_meta = {}
-    saved_cache = {}
+    from storage import data as storage_data
+    from storage.sqlite.poster_repository import save_poster_cache_dict
 
-    monkeypatch.setattr(delete_module.storage_data, "load_dataset", lambda: copy.deepcopy(dataset))
-    monkeypatch.setattr(delete_module.storage_data, "load_meta", lambda: copy.deepcopy(meta))
-    monkeypatch.setattr(delete_module, "load_poster_cache", lambda: copy.deepcopy(poster_cache))
-    def save_state(dataset_payload, meta_payload, cache_payload):
-        saved_dataset.update(dataset_payload)
-        saved_meta.update(meta_payload)
-        saved_cache.update(cache_payload)
-
-    monkeypatch.setattr(delete_module.storage_data, "save_dataset_meta_and_poster_cache", save_state)
-    monkeypatch.setattr(delete_module, "backup_before_watched_delete", lambda timestamp=None: ["backup-dataset"])
+    monkeypatch.setattr("config.constant.APP_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr("config.constant.BACKUP_DIR", str(tmp_path / "backups"))
+    monkeypatch.setattr(delete_module, "DEFAULT_POSTER_CACHE_JSON", tmp_path / "legacy-posters.json")
+    monkeypatch.setattr("posters.download_images.DEFAULT_POSTER_IMAGES_DIR", tmp_path / "images")
+    storage_data.save_dataset_and_meta(dataset, meta)
+    save_poster_cache_dict(poster_cache)
 
     result = delete_watched_record("Alpha", timestamp="test")
 
@@ -50,7 +41,7 @@ def test_delete_watched_record_returns_delete_record_result(monkeypatch) -> None
     assert result.deleted_dataset == 1
     assert result.deleted_meta == 1
     assert result.deleted_poster_cache == 1
-    assert "Alpha" not in saved_dataset
+    assert "Alpha" not in storage_data.load_dataset()
     assert result.to_dict()["ok"] is True
 
 

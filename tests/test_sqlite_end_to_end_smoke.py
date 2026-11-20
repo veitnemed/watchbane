@@ -98,7 +98,7 @@ def test_sqlite_end_to_end_runtime_smoke(tmp_path, monkeypatch) -> None:
 
     from dataset.records import delete as delete_module
 
-    monkeypatch.setattr(delete_module, "backup_before_watched_delete", lambda timestamp=None: [])
+    monkeypatch.setattr(delete_module, "DEFAULT_POSTER_CACHE_JSON", tmp_path / "legacy-posters.json")
     delete_result = delete_watched_record("Alpha", timestamp="sqlite-smoke")
     assert delete_result.ok is True
     assert "Alpha" not in storage_data.load_dataset()
