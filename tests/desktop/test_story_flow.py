@@ -27,7 +27,12 @@ def test_empty_catalog_does_not_run_demo_or_start_background_work(qtbot, monkeyp
     assert "Загрузите" in view.status.text()
     assert view.query.hasFocus() and view.query.text() == "сериал про пристурника"
     assert "TMDb" in view.status.text() and "файл каталога" in view.status.text()
-    assert view.heading.isVisible() and not view.examples.isEnabled()
+    assert view.heading.isVisible() and view.examples.isEnabled()
+    example = view.examples.findChildren(QPushButton)[0]
+    qtbot.mouseClick(example, Qt.MouseButton.LeftButton)
+    assert view.query.text() == example.text()
+    assert view._worker is None and not view.search_button.isEnabled()
+    assert view.cards_layout.count() == 1
 
 
 def test_local_actions_use_existing_storage(qtbot, monkeypatch):

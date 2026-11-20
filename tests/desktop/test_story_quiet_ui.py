@@ -98,3 +98,38 @@ def test_bad_model_can_retry_same_query_in_word_mode(qtbot, monkeypatch, tmp_pat
     qtbot.waitUntil(lambda: view._worker is None)
     assert view.query.text() == "врач" and view.cards_layout.count() == 2
     assert "Поиск по словам" in view.scope.text() and not view.text_search_button.isVisible()
+
+
+def test_first_run_example_prepares_query_before_catalog(qtbot, monkeypatch, tmp_path):
+    import json
+    from PyQt6.QtWidgets import QFileDialog, QPushButton
+    from desktop.story.view import StorySearchView
+
+    monkeypatch.delenv("WATCHBANE_STORY_MODEL_DIR", raising=False)
+    monkeypatch.delenv("WATCHBANE_STORY_SEED_CATALOG", raising=False)
+    monkeypatch.setattr("candidates.story_service.get_pool_view", lambda: [])
+    view = StorySearchView()
+    qtbot.addWidget(view.widget)
+    view.widget.show()
+
+    example = view.examples.findChildren(QPushButton)[1]
+    assert not view.search_button.isEnabled()
+    qtbot.keyClick(example, Qt.Key.Key_Space)
+    assert view.query.text() == "врач в больнице"
+    assert view._worker is None and not view.search_button.isEnabled()
+    assert "Запрос уже в поле" in view.status.text()
+
+    file = tmp_path / "catalog.jsonl"
+    file.write_text(json.dumps(dict(
+        media_type="movie", tmdb_id=314, title="Локальная карточка",
+        overview="Врач в больнице лечит пациентов.", language="ru-RU",
+    ), ensure_ascii=False) + "\n", encoding="utf-8")
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *args: (str(file), ""))
+    qtbot.mouseClick(view.snapshot_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: view.search_button.isEnabled())
+    assert view.query.text() == "врач в больнице"
+    assert view._worker is None
+    assert "Найти историю" in view.status.text()
+    qtbot.keyClick(view.query, Qt.Key.Key_Return)
+    qtbot.waitUntil(lambda: view.cards_layout.count() == 2 and view._worker is None)
+    assert set(view._records) == {"tmdb:movie:314"}

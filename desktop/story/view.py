@@ -312,7 +312,11 @@ class StorySearchView:
     def _example_callback(self, example):
         def clicked(_checked=False):
             self.query.setText(example)
-            self.search()
+            if self._catalog_ready:
+                self.search()
+            else:
+                self._show_idle()
+                self.query.setFocus()
         return clicked
 
     def on_tab_activated(self):
@@ -327,10 +331,14 @@ class StorySearchView:
         if self._catalog_read_failed:
             self.status.setText("Повторите чтение каталога профиля или откройте локальный файл. Запрос останется в поле.")
             return
-        self.status.setText(
-            "Выберите пример запроса или опишите свой сюжет." if self._catalog_ready else
-            "Загрузите описания из TMDb или откройте файл каталога. Можно набрать запрос заранее."
-        )
+        has_query = bool(self.query.text().strip())
+        if self._catalog_ready:
+            message = ("Каталог готов. Нажмите «Найти историю»." if has_query else
+                       "Выберите пример запроса или опишите свой сюжет.")
+        else:
+            message = "Загрузите описания из TMDb или откройте файл каталога."
+            message += (" Запрос уже в поле." if has_query else " Можно набрать запрос заранее.")
+        self.status.setText(message)
 
     def _update_catalog_count(self, prefix=""):
         was_unreadable = self._catalog_read_failed
@@ -364,7 +372,7 @@ class StorySearchView:
             self._show_idle()
         self.retry_catalog_button.setVisible(self._catalog_read_failed)
         self.snapshot_button.setMenu(self.snapshot_menu if self.seed_path else None)
-        self.examples.setEnabled(self._catalog_ready)
+        self.examples.setEnabled(self._snapshot_worker is None)
         self.search_button.setEnabled(self._catalog_ready and self._snapshot_worker is None)
         self.query.setPlaceholderText("Например: сериал про преступника" if self._catalog_ready else
                                       "Каталог профиля недоступен" if self._catalog_read_failed else
