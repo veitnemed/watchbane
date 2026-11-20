@@ -1,4 +1,4 @@
-"""Start Watchbane or explicitly check semantic runtime or local model inference."""
+"""Start Watchbane or run explicit semantic acceptance checks."""
 import os
 import sys
 
@@ -27,6 +27,16 @@ if __name__ == "__main__":
         try:
             result = write_model_check(sys.argv[2], sys.argv[3])
         except OSError:
+            raise SystemExit(1) from None
+        raise SystemExit(result)
+    if sys.argv[1:2] == ["--install-semantic-model"]:
+        if len(sys.argv) != 5 or sys.argv[4] != "--accept-download":
+            raise SystemExit(2)
+        from candidates.story_model_install_probe import write_model_install_check
+
+        try:
+            result = write_model_install_check(sys.argv[2], sys.argv[3])
+        except (OSError, ValueError):
             raise SystemExit(1) from None
         raise SystemExit(result)
     main()
