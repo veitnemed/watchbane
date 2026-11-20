@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string] $BundleDirectory
+    [string] $BundleDirectory,
+    [ValidateSet('lexical', 'semantic')]
+    [string] $BundleProfile = 'lexical'
 )
 
 $ErrorActionPreference = "Stop"
@@ -17,6 +19,10 @@ $settings = @{
     WATCHBANE_INTERFACE_LANGUAGE = 'ru'
     WATCHBANE_DATA_LANGUAGE = 'ru'
     QT_QPA_PLATFORM = 'offscreen'
+    QT_PLUGIN_PATH = $null
+    QT_QPA_PLATFORM_PLUGIN_PATH = $null
+    PYTHONHOME = $null
+    PYTHONPATH = $null
     WATCHBANE_STORY_SEED_CATALOG = $null
     WATCHBANE_STORY_MODEL_DIR = $null
     WATCHBANE_DEV_EMPTY_PROFILE = $null
@@ -36,6 +42,29 @@ try {
         [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process')
     }
     [void][System.IO.Directory]::CreateDirectory($profilePath)
+    $reportPath = Join-Path $profilePath 'semantic-runtime.json'
+    $probeArgs = @('--check-semantic-runtime', ('"{0}"' -f $reportPath))
+    $process = Start-Process -FilePath $exe -WorkingDirectory $profilePath -PassThru -ArgumentList $probeArgs
+    if (!$process.WaitForExit(60000)) { throw "Frozen runtime probe timed out." }
+    if (!(Test-Path -LiteralPath $reportPath -PathType Leaf)) {
+        throw "Frozen runtime probe did not write a report (code $($process.ExitCode))."
+    }
+    $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+    if ($report.model_tested -cne $false) { throw "The runtime probe must not use real model weights." }
+    if ($BundleProfile -eq 'semantic') {
+        if ($process.ExitCode -ne 0 -or $report.status -cne 'ok' -or $report.cpu_inference -cne $true -or
+            !$report.versions.numpy -or !$report.versions.onnxruntime -or !$report.versions.tokenizers) {
+            throw "Frozen semantic runtime probe failed (code $($process.ExitCode), status $($report.status), library $($report.library), error $($report.error_type))."
+        }
+        Write-Output 'Verified: bundled NumPy, tokenizer, and ONNX CPU inference work without Python on PATH (no E5 model).'
+    }
+    else {
+        if ($process.ExitCode -ne 1 -or $report.status -cne 'library_missing' -or $report.library -cne 'numpy') {
+            throw "Frozen lexical runtime did not report the expected missing NumPy (code $($process.ExitCode), status $($report.status))."
+        }
+        Write-Output 'Verified: lexical bundle skips the optional semantic runtime.'
+    }
+
     $process = Start-Process -FilePath $exe -WorkingDirectory $profilePath -PassThru
     $limit = (Get-Date).AddSeconds(60)
     $shown = $false
