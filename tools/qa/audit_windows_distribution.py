@@ -119,6 +119,40 @@ def missing_bundle_notices(files, names):
     return missing
 
 
+_VC_DLL = re.compile(r"(?:vcruntime140(?:_1|_threads)?|msvcp140(?:_[12]|_atomic_wait|_codecvt_ids)?|concrt140|vcomp140)\.dll")
+_VC_RUNTIME_KEY = r"SOFTWARE\Microsoft\VisualStudio\14.0\VC\Runtimes"
+
+
+def bundled_msvc_filenames(rows):
+    """File presence only; it says nothing about the native loader's choice."""
+    if rows is None:
+        return None
+    names = {Path(row["path"]).name.casefold() for row in rows}
+    return sorted(name for name in names if _VC_DLL.fullmatch(name))
+
+
+def host_msvc_registration():
+    """Read only the fixed v14 Redistributable registry keys on the audit host."""
+    if platform.system() != "Windows":
+        return None
+    import winreg
+
+    observed = {}
+    for arch, view in (("x64", winreg.KEY_WOW64_64KEY), ("x86", winreg.KEY_WOW64_32KEY),
+                       ("arm64", winreg.KEY_WOW64_64KEY)):
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, f"{_VC_RUNTIME_KEY}\\{arch}", 0,
+                                winreg.KEY_READ | view) as key:
+                installed = winreg.QueryValueEx(key, "Installed")[0]
+                version = winreg.QueryValueEx(key, "Version")[0]
+                # Never report arbitrary host registry strings.
+                if installed == 1 and isinstance(version, str) and re.fullmatch(r"[vV]?[0-9]{1,6}(?:\.[0-9]{1,6}){2,3}", version):
+                    observed[arch] = version.lower().removeprefix("v")
+        except OSError:
+            continue
+    return observed
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle", type=Path)
@@ -138,6 +172,8 @@ def main(argv=None):
     report = {
         "audit_host": {"system": platform.system(), "machine": platform.machine(), "python": platform.python_version()},
         "profile": args.profile, "package_review_flags": flags, "missing_bundle_notices": missing,
+        "msvc_bundle_filenames_observed": bundled_msvc_filenames(rows),
+        "msvc_audit_host_registration_observed": host_msvc_registration(),
         "scope": "Observed files only; not legal clearance or proof of target platform or source completeness."
     }
     if args.summary:

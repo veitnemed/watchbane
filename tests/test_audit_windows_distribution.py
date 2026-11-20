@@ -65,3 +65,34 @@ def test_summary_preserves_review_status_but_omits_filenames_and_hashes(tmp_path
     assert report["bundle_files_hashed"] == 1
     assert report["package_versions"]["pyqt6"] == "1.2"
     assert not {"installed_packages", "bundle", "bundle_excluded_entries"} & report.keys()
+
+
+def test_msvc_bundle_names_are_exact_and_do_not_imply_loaded():
+    rows = [{"path": p} for p in ("_internal/VCRUNTIME140_1.DLL", "_internal/msvcp140.dll",
+                                 "unrelated/msvcp140.dll.bak", "prefix-msvcp140.dll", "msvcrt.dll")]
+    assert audit.bundled_msvc_filenames(rows) == ["msvcp140.dll", "vcruntime140_1.dll"]
+    assert audit.bundled_msvc_filenames(None) is None
+
+
+def test_msvc_registration_reports_only_observed_version(monkeypatch):
+    import sys
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+
+    def open_key(root, path, _reserved, flags):
+        assert root == "HKLM" and flags & 1
+        if path.endswith("\\arm64"):
+            raise FileNotFoundError
+        return nullcontext(path.rsplit("\\", 1)[-1])
+
+    def query(key, name):
+        fields = {"x64": {"Installed": 1, "Version": "v14.51.36247.0"},
+                  "x86": {"Installed": 1, "Version": "must not log arbitrary registry text"}}
+        return fields[key][name], None
+
+    monkeypatch.setattr(audit.platform, "system", lambda: "Windows")
+    monkeypatch.setitem(sys.modules, "winreg", SimpleNamespace(HKEY_LOCAL_MACHINE="HKLM",
+                        KEY_READ=1, KEY_WOW64_64KEY=2, KEY_WOW64_32KEY=4, OpenKey=open_key, QueryValueEx=query))
+    assert audit.host_msvc_registration() == {"x64": "14.51.36247.0"}
+    monkeypatch.setattr(audit.platform, "system", lambda: "Linux")
+    assert audit.host_msvc_registration() is None

@@ -29,3 +29,28 @@ with the publication review. Audit the compiled libraries, assets, source
 availability, redistribution lane, and replacement/relink instructions
 separately. This tool is not an SBOM generator, does not verify source
 correspondence and must not be used to declare license compliance.
+
+## Clean Windows and Visual C++ v14
+
+The [observed Windows Server 2025 runner image](https://github.com/actions/runner-images/blob/win25-vs2026/20261103.298/images/windows/Windows2025-VS2026-Readme.md#installed-software)
+ships the Visual C++ 2022 x64 runtime 14.51.36247. [ONNX Runtime's Windows requirements](https://onnxruntime.ai/docs/install/#requirements)
+name Visual C++ 2019; see [Microsoft's supported v14 versions](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist).
+Removing Python from PATH does not remove that prerequisite from the runner.
+
+The audit reports fixed MSVC DLL *names found in the bundle* separately from
+v14 registrations *observed on the build host*. Neither list proves which DLL
+the app loads, clean-host independence, or redistribution rights. Before a
+consumer release, verify the exact archive SHA, test its normal install, model
+download and first real semantic search on a clean supported desktop Windows
+image, and record the runtime before launch. Verify app-local DLL use or the
+installer's supported prerequisite handling; do not remove runtime libraries
+from an existing machine to simulate this.
+
+For the audit row dated 20 November, the exact Windows wheel was
+`tokenizers-0.22.2-cp39-abi3-win_amd64.whl`,
+[PyPI SHA-256](https://pypi.org/project/tokenizers/0.22.2/#files)
+`c9ea31edff2968b44a88f97d784c2f16dc0729b8b143ed004699ebca91f05c48`.
+The [matching upstream Apache 2.0 LICENSE](https://github.com/huggingface/tokenizers/blob/v0.22.2/LICENSE)
+establishes source provenance for review, not the complete notices of the
+compiled extension or permission for the whole archive. Inspect the exact
+wheel's contents separately.
