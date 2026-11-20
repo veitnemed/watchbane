@@ -87,3 +87,4 @@ The application remains local-first. Existing SQLite data, settings, candidate p
 - Mentions of films and dates inside a plot no longer accidentally filter the result type or release year. Name-like Cyrillic words within queries are not silently corrected.
 - Added reproducible offline BM25 and character TF-IDF comparison tools for development. Product ranking is unchanged.
 - The pre-release is source only. No user profiles, catalogs, model weights, keys or Windows executable are included.
+- Use the separate preview profile. Concurrent rating edits/deletions can still update stale collection data; rating and deletion transactions are being repaired separately.
