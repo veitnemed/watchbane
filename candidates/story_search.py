@@ -158,13 +158,40 @@ def instructional_non_plot(query: str, title_words: set[tuple[str, ...]]) -> boo
             and any(w in _TECH_WORDS or w.startswith(_TECH_ROOTS) for w in rest))
 
 
+# Type is a result selector only in the request header, never a
+# substring of a word or a noun later inside the plot.
+_RESULT_HEADER = re.compile(
+    r"^\s*(?:(?:пожалуйста[,\s]+)?(?:найди|покажи|подбери|посоветуй|ищу|хочу\s+найти)"
+    r"\b[\s,:-]+(?:пожалуйста[,\s]+)?)?"
+    r"(?P<kind>фильм|сериал)\b(?:\s+(?:или|либо)\s+(?P<other>фильм|сериал)\b)?"
+)
+_EDITION_PREFIX = re.compile(
+    r"^\s*[,:(]?\s*(?:(?:вышел|выпущен(?:ный)?|вышедший)\s+в\s+)?"
+    r"((?:19|20)\d{2})(?![\d–-])\b"
+)
+_EDITION_LABEL = re.compile(
+    r"(?:^|[,;(])\s*год\s+выпуска\s*[:=]?\s*((?:19|20)\d{2})\b"
+    r"(?:\s+год[ау]?)?\s*[).!?]?\s*$"
+)
+_PLOT_HEADER_TAIL = re.compile(r"^\s*(?:$|[:;,]|(?:о|об|про|где|в\s+котором)\b)")
+
+
 def media_constraints(query: str):
-    words = tokens(query)
-    tv = any(w.startswith("сериал") for w in words)
-    movie = any(w.startswith("фильм") for w in words)
-    kind = "tv" if tv and not movie else "movie" if movie and not tv else None
-    match = re.search(r"(?:фильм|сериал)\s+((?:19|20)\d{2})\b|(?:год выпуска|вышел в|выпущен в)\s+((?:19|20)\d{2})\b", query.casefold())
-    year = int(next(g for g in match.groups() if g)) if match else None
+    q = query.casefold()
+    header = _RESULT_HEADER.match(q)
+    kind = None
+    labelled_year = _EDITION_LABEL.search(q)
+    year = int(labelled_year[1]) if labelled_year else None
+    if header:
+        tail = q[header.end():]
+        edition = _EDITION_PREFIX.match(tail)
+        if edition or _PLOT_HEADER_TAIL.match(tail):
+            if header["other"] in (None, header["kind"]):
+                kind = "tv" if header["kind"] == "сериал" else "movie"
+            if edition:
+                explicit = int(edition[1])
+                # Conflicting explicit years are not a reason to drop all titles.
+                year = explicit if year in (None, explicit) else None
     return kind, year
 
 
