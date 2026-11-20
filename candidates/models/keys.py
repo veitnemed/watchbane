@@ -87,9 +87,15 @@ def candidate_action_identity_key(candidate: dict) -> str:
 
 
 def candidate_state_identity_keys(candidate: dict) -> tuple[str, ...]:
-    """A typed identity must never fall through to a conflicting title key."""
+    """Keys for read-only filters, including explicit, untyped legacy exclusions.
+
+    The action repository projects old rows with a known ID to typed keys only.
+    An old bare title/year criterion genuinely has no ID, and keeps its historic
+    filtering behavior. Do not use these keys for action changes or deletion.
+    """
     typed = candidate_typed_state_key(candidate)
-    return (typed,) if typed else candidate_legacy_state_keys(candidate)
+    scoped, legacy = candidate_legacy_state_keys(candidate)
+    return (typed, legacy) if typed else (scoped, legacy)
 
 
 def pool_entry_key(candidate: dict) -> str:

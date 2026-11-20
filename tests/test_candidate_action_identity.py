@@ -114,3 +114,24 @@ def test_explicit_resave_combines_legacy_alias_metadata_and_keeps_earliest_date(
     assert entry["added_at"] == "2026-01-01T00:00:00+00:00"
     assert entry["candidate"]["overview"] == "First synopsis"
     assert entry["candidate"]["original_title"] == "Original release"
+
+
+def test_legacy_filter_can_hide_bare_title_without_sharing_a_persisted_action(tmp_path):
+    path = tmp_path / "watchbane.sqlite3"
+    first, homonym = item(1), item(2)
+    bare = "общее имя|2020"
+    criteria = {"hidden_identities": {bare}, "only_unwatched": False}
+    # Older callers supply a title/year exclusion without a resolved TMDb ID.
+    assert filter_candidates([first, homonym], criteria) == []
+
+    repo.save_candidate_actions_dict(
+        repo.ACTION_HIDDEN,
+        {bare: {"candidate": first, "hidden_at": "2026-01-01T00:00:00+00:00"}},
+        path=path,
+    )
+    criteria["hidden_identities"] = repo.load_action_identities(repo.ACTION_HIDDEN, path=path)
+    assert criteria["hidden_identities"] == {"tmdb:movie:1"}
+    assert [row["tmdb_id"] for row in filter_candidates([first, homonym], criteria)] == [2]
+    state.restore_candidate(homonym, path=path)
+    state.restore_candidate(item(None), path=path)
+    assert state.get_title_state(first, path=path) == state.STATE_HIDDEN
