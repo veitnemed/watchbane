@@ -12,6 +12,7 @@ from contextlib import ExitStack, redirect_stdout
 import json
 import os
 from pathlib import Path
+from shutil import copyfile
 import subprocess
 import sys
 import tempfile
@@ -78,13 +79,43 @@ def _child_run(phase, payload, *, timeout, platform):
     return report
 
 
+def _isolated_install_destination(story, profile):
+    from candidates.story_model_install import profile_story_model_destination
+    from config import constant
+
+    root = Path(story._model_install_profile).resolve()
+    check(root == Path(constant.APP_DATA_DIR).resolve() and root.is_relative_to(profile),
+          "Installer did not bind to the isolated active data profile.")
+    destination = profile_story_model_destination(root)
+    check(destination.resolve().is_relative_to(profile), "Model cache is outside the isolated profile.")
+    return destination
+
+
+def _prepare_pinned_cache(destination, source):
+    from candidates.story_model_manifest import PORTABLE_FILES
+
+    for name in PORTABLE_FILES:
+        target = destination / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        check(not target.exists() and not target.is_symlink(), "Model cache is not empty.")
+        try:
+            os.link(source / name, target)
+        except OSError:
+            try:
+                copyfile(source / name, target)
+            except OSError:
+                raise SmokeFailure("Could not populate the disposable model cache.") from None
+
+
 def _desktop_phase(phase, options):
     # Establish the profile before product modules resolve their paths.
     from tools.qa.isolation import apply_isolated_data_dir
     profile = assert_runtime_is_isolated(options["profile"])
     check((profile / PROFILE_MARKER).is_file(), "Profile is not reserved as a disposable smoke directory.")
     apply_isolated_data_dir(profile)
-    os.environ["WATCHBANE_STORY_MODEL_DIR"] = options["model_dir"]
+    verify_cached_install = options.get("verify_cached_install", False)
+    if not verify_cached_install:
+        os.environ["WATCHBANE_STORY_MODEL_DIR"] = options["model_dir"]
     os.environ["WATCHBANE_INTERFACE_LANGUAGE"] = "ru"
     os.environ["WATCHBANE_DATA_LANGUAGE"] = "ru"
 
@@ -159,6 +190,22 @@ def _desktop_phase(phase, options):
             if phase == "first":
                 check(not collection._entries, "Fresh profile already contains saved titles.")
                 screenshot("empty")
+                if verify_cached_install:
+                    destination = _isolated_install_destination(story, profile)
+                    _prepare_pinned_cache(destination, Path(options["model_dir"]))
+                    check(story.model_dir is None and story.install_model_button.isVisible(),
+                          "Expected the model to be unconfigured on fresh startup.")
+                    QTest.mouseClick(story.install_model_button, Qt.MouseButton.LeftButton)
+                    app.processEvents()
+                    check(story._install_confirm.isEnabled(), "Model install button was unavailable.")
+                    began = monotonic()
+                    QTest.mouseClick(story._install_confirm, Qt.MouseButton.LeftButton)
+                    wait_until(lambda: story._model_install_worker is None, "Cached model verification timed out.")
+                    check(story.model_dir == str(destination) and story._model_preference.read() == str(destination),
+                          "Model verification or preference persistence failed.")
+                    elapsed["install_cached_verification_ms"] = round((monotonic() - began) * 1000)
+                    screenshot("installed")
+                    story._model_install_dialog.accept()
                 with patch.object(QFileDialog, "getOpenFileName", return_value=(options["catalog"], "")):
                     began = monotonic()
                     QTest.mouseClick(story.snapshot_button, Qt.MouseButton.LeftButton)
@@ -189,6 +236,9 @@ def _desktop_phase(phase, options):
                 check(not save.isEnabled() and save.text() == "В коллекции",
                       "Save action did not confirm persistence.")
                 screenshot("result")
+            if phase == "reopen" and verify_cached_install:
+                check(story.model_dir == str(_isolated_install_destination(story, profile)),
+                      "Installed model did not remain configured after restart.")
             registry.focus("watched")
             app.processEvents()
             rows = collection.cards.findChildren(QLabel, "storyTitle")
@@ -228,6 +278,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--catalog", type=Path, required=True, help="Existing local Watchbane JSONL snapshot")
     parser.add_argument("--model-dir", type=Path, required=True, help="Existing verified multilingual-e5-small directory")
+    parser.add_argument("--verify-cached-install", action="store_true",
+                        help="Exercise the real in-app installer and preference using a prefilled disposable cache; "
+                             "does not verify downloading")
     parser.add_argument("--query", required=True)
     parser.add_argument("--expected-title", required=True, help="Displayed title expected in first result")
     parser.add_argument("--profile", type=Path, help="New/empty disposable profile (temporary if omitted)")
@@ -262,7 +315,8 @@ def main(argv=None):
             payload = {"catalog": str(catalog), "model_dir": str(directory), "profile": str(profile),
                        "query": args.query, "expected_title": args.expected_title,
                        "output_dir": str(output) if output is not None else None,
-                       "step_timeout": args.step_timeout, "scale": args.scale}
+                       "step_timeout": args.step_timeout, "scale": args.scale,
+                       "verify_cached_install": args.verify_cached_install}
             first = _child_run("first", payload, timeout=args.step_timeout * 2 + 30, platform=args.qt_platform)
             reopen = _child_run("reopen", payload, timeout=args.step_timeout + 30, platform=args.qt_platform)
             check(first["pid"] != reopen["pid"], "Expected independent first and reopen Qt processes.")
@@ -275,7 +329,8 @@ def main(argv=None):
         return 1
     print(json.dumps({"ok": True, "isolated_processes": 2, "catalogue_chooser": True,
                       "e5_top_result_matches": True, "reopened_collection_matches": True,
-                      "poster_network_disabled": True, "first": first, "reopen": reopen}, indent=2))
+                      "poster_network_disabled": True,
+                      "cached_model_verified_in_ui": args.verify_cached_install, "first": first, "reopen": reopen}, indent=2))
     return 0
 
 

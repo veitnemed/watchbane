@@ -54,14 +54,18 @@ def test_operator_report_uses_two_phases_without_catalogue_content(tmp_path, cap
     assert "Частный QA заголовок" not in output.out and "private-catalog" not in output.out
 
 
-def test_ci_can_run_actual_smoke_with_operator_supplied_model(tmp_path, capsys):
+@pytest.mark.parametrize("cached_install", [False, True])
+def test_ci_can_run_actual_smoke_with_operator_supplied_model(tmp_path, capsys, cached_install):
     model = os.environ.get("WATCHBANE_TEST_MODEL_DIR")
     if not model:
         pytest.skip("Set WATCHBANE_TEST_MODEL_DIR to verified local E5 artifacts")
     args = arguments(tmp_path)
     args[3] = model
-    assert smoke.main([*args, "--step-timeout", "20", "--qt-platform", "offscreen"]) == 0
+    if cached_install:
+        args.append("--verify-cached-install")
+    assert smoke.main([*args, "--step-timeout", "30", "--qt-platform", "offscreen"]) == 0
     output = json.loads(capsys.readouterr().out)
+    assert output["cached_model_verified_in_ui"] is cached_install
     assert output["first"]["pid"] != output["reopen"]["pid"]
     assert output["first"]["unexpected_network_calls"] == output["reopen"]["unexpected_network_calls"] == 0
 
