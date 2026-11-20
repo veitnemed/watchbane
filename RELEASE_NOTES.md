@@ -82,5 +82,7 @@ The application remains local-first. Existing SQLite data, settings, candidate p
 
 - Reviewed and saved titles now use stable IDs for action routing. Known different films with the same title and year do not share statuses or overwrite ratings; alternate names of the same known item do not duplicate saved or hidden entries.
 - Existing supported aliases are shown once without a bulk database rewrite. A failed state transition leaves the prior state intact. Records already overwritten on earlier versions are not automatically restored.
+- Incompatible backup schemas are rejected before the active database is replaced; supported older backups remain restorable.
+- Mentions of films and dates inside a plot no longer accidentally filter the result type or release year.
 - Added reproducible offline BM25 and character TF-IDF comparison tools for development. Product ranking is unchanged.
 - The pre-release is source only. No user profiles, catalogs, model weights, keys or Windows executable are included.
