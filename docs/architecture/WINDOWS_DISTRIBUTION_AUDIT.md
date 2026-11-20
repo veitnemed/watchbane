@@ -11,7 +11,8 @@ the current runtime packages even without a Windows build. The report identifies
 the **audit host**, not the target OS of an arbitrary directory. A Linux report
 cannot substitute for the exact Windows wheels and bundle.
 
-The audit prints JSON: package versions and installed license/notice file
+The audit prints JSON. Use `--summary` in CI to print versions, counts and
+review flags without individual paths or hashes. By default, the report includes package versions and installed license/notice file
 digests from distribution metadata, plus curated bundle file digests. It skips
 links/reparse points, known local data/profile folders and unrecognized
 extensions, imposes file/byte caps, and does not extract archives or inspect

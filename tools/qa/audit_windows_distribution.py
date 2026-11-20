@@ -122,6 +122,7 @@ def missing_bundle_notices(files, names):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle", type=Path)
+    parser.add_argument("--summary", action="store_true", help="Print review flags without the file inventory")
     parser.add_argument("--profile", choices=("lexical", "semantic"), default="semantic")
     args = parser.parse_args(argv)
     names = PACKAGES if args.profile == "semantic" else tuple(p for p in PACKAGES if p not in {"numpy", "onnxruntime", "tokenizers"})
@@ -134,12 +135,17 @@ def main(argv=None):
     required = ["python", *(p for p in names if p != "pyinstaller")]
     flags = [name for name, row in packages.items() if not row["installed"] or not row["notices"]]
     missing = missing_bundle_notices(rows, required) if rows is not None else None
-    print(json.dumps({
+    report = {
         "audit_host": {"system": platform.system(), "machine": platform.machine(), "python": platform.python_version()},
-        "profile": args.profile, "installed_packages": packages, "package_review_flags": flags,
-        "bundle": rows, "bundle_excluded_entries": excluded, "missing_bundle_notices": missing,
+        "profile": args.profile, "package_review_flags": flags, "missing_bundle_notices": missing,
         "scope": "Observed files only; not legal clearance or proof of target platform or source completeness."
-    }, indent=2))
+    }
+    if args.summary:
+        report["package_versions"] = {name: row.get("version") for name, row in packages.items()}
+        report["bundle_files_hashed"] = len(rows) if rows is not None else None
+    else:
+        report.update(installed_packages=packages, bundle=rows, bundle_excluded_entries=excluded)
+    print(json.dumps(report, indent=2))
     return int(bool(missing or flags))
 
 

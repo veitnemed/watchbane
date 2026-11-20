@@ -1,4 +1,5 @@
 from hashlib import sha256
+import json
 
 import pytest
 from tools.qa import audit_windows_distribution as audit
@@ -49,3 +50,18 @@ def test_dist_record_cannot_escape_metadata_root(tmp_path, monkeypatch):
     row = audit.package_inventory(["Test_Package"])["test-package"]
     assert row["version"] == "99.1"
     assert [n["path"] for n in row["notices"]] == ["LICENSE"]
+
+
+
+def test_summary_preserves_review_status_but_omits_filenames_and_hashes(tmp_path, monkeypatch, capsys):
+    (tmp_path / "Watchbane.exe").write_bytes(b"fake exec")
+    monkeypatch.setattr(audit, "package_inventory", lambda names: {
+        audit.canonical(name): {"installed": True, "version": "1.2", "notices": [{"path": "LICENSE"}]}
+        for name in names
+    })
+    assert audit.main(["--profile", "lexical", "--summary", "--bundle", str(tmp_path)]) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["missing_bundle_notices"] == ["python", "PyQt6", "PyQt6-Qt6", "PyQt6-sip"]
+    assert report["bundle_files_hashed"] == 1
+    assert report["package_versions"]["pyqt6"] == "1.2"
+    assert not {"installed_packages", "bundle", "bundle_excluded_entries"} & report.keys()
