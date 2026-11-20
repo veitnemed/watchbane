@@ -97,3 +97,55 @@ def test_preview_check_validates_environment_catalog_without_import(tmp_path, mo
     preview.main()
     assert "Validated catalogue: 1" in capsys.readouterr().out
     assert not profile.exists()
+
+
+def test_publisher_sidecar_resolution_priority_and_frozen_install(tmp_path, monkeypatch):
+    import sys
+    from candidates.story_seed_snapshot import PUBLISHER_CATALOG, resolve_catalog
+
+    source = tmp_path / "source"
+    source.mkdir()
+    launcher = source / "preview.py"
+    assert resolve_catalog(launcher) is None
+    assert resolve_catalog(launcher, environment_path="  ") is None
+    sidecar = source / PUBLISHER_CATALOG
+    sidecar.parent.mkdir()
+    snapshot(sidecar, [record()])
+    assert resolve_catalog(launcher) == sidecar
+    # An explicit but nonexistent override fails existing validation instead of
+    # hiding a user error by silently selecting the publisher's data.
+    override = tmp_path / "missing.jsonl"
+    assert resolve_catalog(launcher, environment_path=str(override)) == override
+    assert resolve_catalog(launcher, sidecar, str(override)) == sidecar
+
+    install = tmp_path / "Install"
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(install / "Watchbane.exe"))
+    assert resolve_catalog(launcher) is None
+    installed = install / PUBLISHER_CATALOG
+    installed.parent.mkdir(parents=True)
+    snapshot(installed, [record()])
+    assert resolve_catalog(launcher) == installed
+
+
+def test_preview_check_validates_installed_sidecar(tmp_path, monkeypatch, capsys):
+    import sys
+    import preview
+    from candidates.story_seed_snapshot import PUBLISHER_CATALOG
+
+    path = tmp_path / PUBLISHER_CATALOG
+    path.parent.mkdir()
+    snapshot(path, [record()])
+    monkeypatch.setattr(preview, "__file__", str(tmp_path / "preview.py"))
+    monkeypatch.delenv("WATCHBANE_STORY_SEED_CATALOG", raising=False)
+    monkeypatch.delenv("WATCHBANE_STORY_MODEL_DIR", raising=False)
+    monkeypatch.setattr(sys, "argv", ["preview.py", "--check"])
+    for name in ("WATCHBANE_DATA_DIR", "WATCHBANE_INTERFACE_LANGUAGE", "WATCHBANE_DATA_LANGUAGE"):
+        monkeypatch.setenv(name, "")
+    preview.main()
+    assert "Validated catalogue: 1" in capsys.readouterr().out
+    assert not (tmp_path / ".preview-profile").exists()
+    path.write_text("not JSON\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="2"):
+        preview.main()
+    assert "строка 1" in capsys.readouterr().err

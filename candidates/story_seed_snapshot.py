@@ -1,13 +1,40 @@
 """Read an operator-built TMDb snapshot without importing it into a user profile."""
 from functools import lru_cache
 import json
+import os
 from pathlib import Path
 import re
+import sys
 
 MAX_ROWS = 20_000
 MAX_LINE_BYTES = 32 * 1024
 MAX_FILE_BYTES = 64 * 1024 * 1024
 _POSTER = re.compile(r"/[A-Za-z0-9_-]+\.(?:jpg|jpeg|png|webp)", re.I)
+
+
+CATALOG_ENV = "WATCHBANE_STORY_SEED_CATALOG"
+PUBLISHER_CATALOG = Path("assets") / "story-catalog.jsonl"
+
+
+def resolve_catalog(launcher_file, explicit_path=None, environment_path=None):
+    """Select a local override or optional sidecar next to the actual launcher."""
+    if explicit_path is not None:
+        return Path(explicit_path).expanduser().resolve()
+    if environment_path and environment_path.strip():
+        return Path(environment_path).expanduser().resolve()
+    # Do not inspect PyInstaller's temporary unpack directory for a publisher
+    # asset installed alongside the executable.
+    executable = sys.executable if getattr(sys, "frozen", False) else launcher_file
+    sidecar = Path(executable).resolve().parent / PUBLISHER_CATALOG
+    return sidecar.resolve() if sidecar.exists() or sidecar.is_symlink() else None
+
+
+def configure_catalog(path):
+    """Make launch selection visible to the existing desktop view."""
+    if path is None:
+        os.environ.pop(CATALOG_ENV, None)
+    else:
+        os.environ[CATALOG_ENV] = str(path)
 
 
 class StorySeedSnapshotError(ValueError):

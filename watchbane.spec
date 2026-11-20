@@ -13,6 +13,8 @@ a = Analysis(
         ("desktop/images/user_rating_not_for_me.svg", "desktop/images"),
         ("desktop/images/user_rating_ok.svg", "desktop/images"),
         ("desktop/images/user_rating_top.svg", "desktop/images"),
+        ("desktop/images/story_ticket.svg", "desktop/images"),
+        ("candidates/search/title_aliases.json", "candidates/search"),
         ("scripts/tmdb-network-diagnose.ps1", "scripts"),
         ("scripts/tmdb-network-compare.ps1", "scripts"),
         ("scripts/tmdb-dns-recovery.ps1", "scripts"),
