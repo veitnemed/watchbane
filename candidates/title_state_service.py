@@ -292,6 +292,20 @@ class WatchedAddWriteResult:
     meta: dict
 
 
+def _remove_exact_watched_from_candidate_pool(conn: sqlite3.Connection, media_type: str, tmdb_id: int | None) -> None:
+    """Remove only an exact typed pool identity within the watched write transaction."""
+    if tmdb_id is None or tmdb_id <= 0:
+        return
+    identity = (media_type, tmdb_id)
+    pool_keys = conn.execute(
+        "SELECT pool_key FROM candidate_records WHERE media_type = ? AND tmdb_id = ?", identity
+    ).fetchall()
+    if not pool_keys:
+        return
+    conn.executemany("DELETE FROM candidate_fts WHERE pool_key = ?", pool_keys)
+    conn.execute("DELETE FROM candidate_records WHERE media_type = ? AND tmdb_id = ?", identity)
+
+
 def save_watched_dataset_transition(
     data: dict,
     meta: dict,
@@ -383,6 +397,7 @@ def save_watched_dataset_transition(
                     occupied, incoming.title, year=incoming.year, media_type=incoming.media_type,
                 )
             upsert_watched_row(conn, dataset_key=dataset_key, payload=payload, meta=meta_payload)
+            _remove_exact_watched_from_candidate_pool(conn, incoming.media_type, tmdb_id)
             if normalized is not None:
                 _clear_candidate_actions(conn, normalized)
         return WatchedAddWriteResult(dataset_key, payload, meta_payload)

@@ -66,17 +66,6 @@ def run_after_add_side_effects(
             }
         )
 
-    if isinstance(pool_candidate, dict):
-        events.append(
-            {
-                "type": "candidate_pool_cleanup",
-                "ok": True,
-                "candidate": dict(pool_candidate),
-            }
-        )
-    else:
-        events.append({"type": "candidate_pool_refresh", "ok": True})
-
     return events
 
 
@@ -85,23 +74,3 @@ def apply_add_record_side_effects(side_effects: list[dict] | None, *, print_warn
     for event in side_effects or []:
         if event.get("ok") is False and print_warnings and event.get("message"):
             print(f"Предупреждение: {event['message']}")
-
-        event_type = event.get("type")
-        if event_type == "candidate_pool_cleanup":
-            try:
-                from candidates import service as candidate_service
-
-                candidate = event.get("candidate")
-                if isinstance(candidate, dict):
-                    candidate_service.mark_candidate_watched_in_pool(candidate)
-            except Exception as error:
-                if print_warnings:
-                    print(f"Предупреждение: не удалось обновить candidate pool после добавления записи: {error}")
-        elif event_type == "candidate_pool_refresh":
-            try:
-                from candidates.repositories import pool_repository
-
-                pool_repository.save_candidate_pool(pool_repository.load_candidate_pool())
-            except Exception as error:
-                if print_warnings:
-                    print(f"Предупреждение: не удалось обновить candidate pool после добавления записи: {error}")
