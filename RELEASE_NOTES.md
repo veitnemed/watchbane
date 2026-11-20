@@ -69,3 +69,11 @@ The application remains local-first. Existing SQLite data, settings, candidate p
 - Можно подключить локальный снимок TMDb JSONL без автоматического добавления его в библиотеку и по желанию использовать внешнюю локальную модель E5. Без модели остаётся ограниченный текстовый поиск.
 - Архив формируется из закреплённого Git-коммита и поставляется с манифестом файлов и SHA-256. Ни снимок, ни личные данные, ни ключ, ни веса модели не распространяются вместе с исходниками.
 - Это экспериментальная версия. Гарантий полноты каталога и точности сопоставления каждого сюжетного условия нет.
+
+## Story Search Preview 3 (source pre-release)
+
+- `Файл каталога…` opens an existing Watchbane JSONL directly from the search window. The file is verified off the UI thread and does not import its rows into the collection or require TMDb credentials. The choice lasts until the app closes; the same menu returns to the profile catalog.
+- A failed or cancelled file choice leaves the old results in place. Replacing a file and searching again works even when all old entries were filtered out.
+- The selected E5 folder is remembered in the profile. Explicitly switching to word search forgets the saved selection; startup overrides remain available.
+- Both search modes recognize a limited set of obvious non-film instructions. The semantic ranker can still return weak hits, especially on multiple plot constraints and cross-language synopses.
+- The attached archive contains source code only: no installer, model, live data, or keys. See `SOURCE_PREVIEW.md` to start.

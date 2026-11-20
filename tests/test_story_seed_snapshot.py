@@ -69,11 +69,11 @@ def test_seed_preview_search_and_save_without_import(qtbot, tmp_path, monkeypatc
     view.widget.resize(1050, 800)
     view.widget.show()
     assert not view.catalog_button.isVisible()
-    assert view.catalog_status.text() == "Каталог из файла подключён"
+    assert view.catalog_status.text() == "Только каталог из файла"
     view.query.setText("врач")
     qtbot.keyClick(view.query, Qt.Key.Key_Return)
     qtbot.waitUntil(lambda: view._worker is None)
-    assert view.catalog_status.text() == "В каталоге: 1"
+    assert view.catalog_status.text() == "Только каталог из файла · доступно: 1"
     button = next(b for b in view.cards.findChildren(QPushButton) if b.text() == "Сохранить")
     qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
     assert button.text() == "В коллекции"

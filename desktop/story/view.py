@@ -7,7 +7,7 @@ from threading import Event
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QShortcut, QKeySequence
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-                            QPushButton, QScrollArea, QFrame, QMessageBox, QFileDialog, QDialog)
+                            QPushButton, QScrollArea, QFrame, QMessageBox, QFileDialog, QDialog, QMenu)
 from candidates import service
 from candidates.title_state_service import STATE_WATCHLIST, get_title_states
 from desktop.theme.scaling import layout_px
@@ -24,6 +24,7 @@ _MODEL_ENV = "WATCHBANE_STORY_MODEL_DIR"
 class StoryWorker(QThread):
     completed = pyqtSignal(object, object, int)
     failed = pyqtSignal()
+    snapshot_failed = pyqtSignal()
     progress = pyqtSignal(str)
 
     def __init__(self, query, parent, model_dir=None, seed_path=None):
@@ -37,6 +38,8 @@ class StoryWorker(QThread):
         self._cancelled.set()
 
     def run(self):
+        from candidates.story_seed_snapshot import StorySeedSnapshotError
+
         try:
             engine, records = service.local_story_catalog(
                 self.model_dir, on_progress=self.progress.emit,
@@ -46,8 +49,32 @@ class StoryWorker(QThread):
             self.progress.emit("Ищем совпадения в каталоге…")
             result = engine.search(self.query)
             self.completed.emit(result, records, len(engine.documents))
+        except StorySeedSnapshotError:
+            self.snapshot_failed.emit()
         except Exception:
             self.failed.emit()
+
+
+class SnapshotCheckWorker(QThread):
+    """Validate a local file without loading E5 or building a search index."""
+
+    def __init__(self, path, parent):
+        super().__init__(parent)
+        self.path = path
+        self.count = 0
+        self.failure = None
+
+    def run(self):
+        from candidates.story_seed_snapshot import StorySeedSnapshotError, load_seed_snapshot
+
+        if self.isInterruptionRequested():
+            return
+        try:
+            self.count = len(load_seed_snapshot(self.path))
+        except StorySeedSnapshotError as exc:
+            self.failure = str(exc)
+        except Exception:
+            self.failure = "Не удалось проверить файл каталога."
 
 
 class StorySearchView:
@@ -59,6 +86,8 @@ class StorySearchView:
         self.widget.setStyleSheet(build_story_style())
         self._worker = None
         self._catalog_worker = None
+        self._snapshot_worker = None
+        self._snapshot_cancelled = False
         self._auth_dialog = None
         self._pending_query = None
         self._closing = False
@@ -69,6 +98,7 @@ class StorySearchView:
         self.model_dir = os.environ.get(_MODEL_ENV) or self._read_model_choice()
         self.seed_path = os.environ.get("WATCHBANE_STORY_SEED_CATALOG")
         self._seed_count = None
+        self._snapshot_rows = None
         self._catalog_ready = False
         self._records = {}
         self.on_library_changed = on_library_changed
@@ -149,6 +179,14 @@ class StorySearchView:
         import_row.addWidget(self.catalog_button)
         import_row.addWidget(self.options_button)
         import_row.addWidget(self.text_search_button)
+        self.snapshot_button = QPushButton("Файл каталога…")
+        self.snapshot_button.setObjectName("storySnapshotButton")
+        self.snapshot_button.setAccessibleDescription("Использовать локальный JSONL только для поиска в этом сеансе.")
+        self.snapshot_button.clicked.connect(self._choose_snapshot)
+        self.snapshot_menu = QMenu(self.snapshot_button)
+        self.snapshot_menu.addAction("Выбрать другой файл…", self._choose_snapshot)
+        self.snapshot_menu.addAction("Вернуться к каталогу профиля", self._clear_snapshot)
+        import_row.addWidget(self.snapshot_button)
         self.cancel_catalog_button = QPushButton("Отменить загрузку")
         self.cancel_catalog_button.clicked.connect(self._cancel_catalog)
         self.cancel_catalog_button.hide()
@@ -181,6 +219,8 @@ class StorySearchView:
         QWidget.setTabOrder(self.query, self.search_button)
         QWidget.setTabOrder(self.search_button, self.catalog_button)
         QWidget.setTabOrder(self.catalog_button, self.options_button)
+        QWidget.setTabOrder(self.options_button, self.text_search_button)
+        QWidget.setTabOrder(self.text_search_button, self.snapshot_button)
         self.query.setFocus()
 
     def _focus_query(self):
@@ -198,6 +238,8 @@ class StorySearchView:
         return clicked
 
     def on_tab_activated(self):
+        if self._snapshot_worker:
+            return
         if self._catalog_worker is None:
             self._update_catalog_count()
         if self.query.text().strip() and self._worker is None and not self._closing:
@@ -206,16 +248,21 @@ class StorySearchView:
     def _show_idle(self):
         self.status.setText(
             "Выберите пример запроса или опишите свой сюжет." if self._catalog_ready else
-            "Загрузите первые фильмы и сериалы из TMDb, чтобы начать поиск."
+            "Загрузите описания из TMDb или откройте файл каталога, чтобы начать поиск."
         )
 
     def _update_catalog_count(self, prefix=""):
         try:
             if self.seed_path:
-                # Parsing thousands of rows stays in the search thread.
-                self._catalog_ready = self._seed_count is None or self._seed_count > 0
+                # Even if filters excluded every row last time, a replaced
+                # snapshot must be retryable. Parsing stays off the UI thread.
+                self._catalog_ready = True
                 self.catalog_button.hide()
-                label = "Каталог из файла подключён" if self._seed_count is None else f"В каталоге: {self._seed_count}"
+                label = "Только каталог из файла"
+                if self._seed_count is not None:
+                    label += f" · доступно: {self._seed_count}"
+                elif self._snapshot_rows is not None:
+                    label += f" · проверено записей: {self._snapshot_rows}"
                 self.catalog_status.setText(prefix + label)
             else:
                 documents, _ = service.story_catalog_snapshot()
@@ -227,10 +274,79 @@ class StorySearchView:
         except Exception:
             self._catalog_ready = False
             self.catalog_status.setText(prefix + "Не удалось прочитать локальный каталог.")
+        self.snapshot_button.setMenu(self.snapshot_menu if self.seed_path else None)
         self.examples.setEnabled(self._catalog_ready)
 
+    def _can_switch_source(self):
+        return not (self._closing or self._worker or self._catalog_worker or self._snapshot_worker)
+
+    def _choose_snapshot(self):
+        if not self._can_switch_source():
+            return
+        filename, _ = QFileDialog.getOpenFileName(
+            self.widget, "Открыть локальный каталог Watchbane", "",
+            "Каталог Watchbane JSONL (*.jsonl)",
+        )
+        if not filename:
+            return
+        if Path(filename).suffix.casefold() != ".jsonl":
+            self._update_catalog_count("Выберите файл Watchbane в формате JSONL. ")
+            return
+        worker = SnapshotCheckWorker(filename, self.widget)
+        self._snapshot_worker = worker
+        self._snapshot_cancelled = False
+        self.snapshot_button.setEnabled(False)
+        self.catalog_button.setEnabled(False)
+        self.search_button.setEnabled(False)
+        self.examples.setEnabled(False)
+        self.cancel_catalog_button.setEnabled(True)
+        self.cancel_catalog_button.setText("Отменить проверку")
+        self.cancel_catalog_button.show()
+        self.catalog_status.setText("Проверяем локальный файл…")
+        worker.finished.connect(self._snapshot_finished, Qt.ConnectionType.QueuedConnection)
+        worker.start()
+
+    def _snapshot_finished(self):
+        worker, self._snapshot_worker = self._snapshot_worker, None
+        if worker is None:
+            return
+        worker.deleteLater()
+        if self._closing:
+            return
+        self.snapshot_button.setEnabled(True)
+        self.catalog_button.setEnabled(True)
+        self.search_button.setEnabled(True)
+        self.cancel_catalog_button.hide()
+        self.cancel_catalog_button.setText("Отменить загрузку")
+        if self._snapshot_cancelled:
+            self._update_catalog_count("Проверка отменена. ")
+        elif worker.failure or not worker.count:
+            self._update_catalog_count((worker.failure or "Файл каталога пуст.") + " ")
+        else:
+            self._switch_source(worker.path, worker.count)
+
+    def _clear_snapshot(self):
+        if self.seed_path and self._can_switch_source():
+            self._switch_source(None, None)
+
+    def _switch_source(self, path, count):
+        self.seed_path, self._snapshot_rows = path, count
+        self._seed_count = None
+        if path and self._auth_dialog:
+            self._auth_dialog.hide()
+        self._active_query = ""
+        self._records = {}
+        self._clear()
+        for widget in (self.hero, self.heading, self.subtitle, self.examples):
+            widget.show()
+        self._update_catalog_count()
+        self.scope.setText(self._model_scope())
+        self.status.setToolTip("")
+        self._show_idle()
+        self.query.setFocus()
+
     def _fill_catalog(self):
-        if self._closing or self._catalog_worker is not None:
+        if self._closing or self.seed_path or self._snapshot_worker or self._catalog_worker is not None:
             return
         from apis import tmdb_api
         if not tmdb_api.has_tmdb_credentials():
@@ -252,6 +368,7 @@ class StorySearchView:
         from desktop.candidates.workers.filter_replenish_worker import FilterReplenishWorker
         worker = FilterReplenishWorker({}, service=service.StoryCatalogImportService, parent=self.widget)
         self._catalog_worker = worker
+        self.snapshot_button.setEnabled(False)
         self.catalog_button.setEnabled(False)
         self.cancel_catalog_button.setEnabled(True)
         self.cancel_catalog_button.show()
@@ -268,7 +385,12 @@ class StorySearchView:
             self._fill_catalog()
 
     def _cancel_catalog(self):
-        if self._catalog_worker:
+        if self._snapshot_worker:
+            self._snapshot_cancelled = True
+            self._snapshot_worker.requestInterruption()
+            self.cancel_catalog_button.setEnabled(False)
+            self.catalog_status.setText("Отменено. Завершаем чтение файла…")
+        elif self._catalog_worker:
             self._catalog_worker.cancel()
             self.cancel_catalog_button.setEnabled(False)
             self.catalog_status.setText("Отменяем после текущего запроса. Существующая библиотека сохранится.")
@@ -299,6 +421,7 @@ class StorySearchView:
         if worker:
             worker.deleteLater()
         self.catalog_button.setEnabled(True)
+        self.snapshot_button.setEnabled(self._worker is None)
         self.cancel_catalog_button.hide()
 
     def _read_model_choice(self):
@@ -361,7 +484,7 @@ class StorySearchView:
             self.status.setText("Описания будут обновлены при следующем поиске.")
 
     def search(self):
-        if self._closing:
+        if self._closing or self._snapshot_worker:
             return
         if self._worker is not None:
             self._pending_query = self.query.text()
@@ -383,14 +506,22 @@ class StorySearchView:
         self.status.setText("Ищем совпадения в описаниях…")
         self.search_button.setText("Следующий запрос")
         self.refresh_button.setEnabled(False)
+        self.snapshot_button.setEnabled(False)
         for button in (self.model_button, self.options_button, self.text_search_button):
             button.setEnabled(False)
         self._worker = StoryWorker(self._active_query, self.widget, self.model_dir, self.seed_path)
         self._worker.completed.connect(self._show_results)
         self._worker.progress.connect(self.status.setText)
         self._worker.failed.connect(self._search_failed)
+        self._worker.snapshot_failed.connect(self._snapshot_search_failed)
         self._worker.finished.connect(self._finished)
         self._worker.start()
+
+    def _snapshot_search_failed(self):
+        self._seed_count = self._snapshot_rows = None
+        self._update_catalog_count()
+        self.status.setText("Файл каталога недоступен или повреждён. Откройте меню «Файл каталога…», "
+                            "чтобы выбрать другой файл или вернуться к каталогу профиля.")
 
     def _search_failed(self):
         self._update_model_controls(offer_replacement=True)
@@ -403,6 +534,7 @@ class StorySearchView:
         self.search_button.setText("Найти историю")
         self.search_button.setEnabled(True)
         self.refresh_button.setEnabled(True)
+        self.snapshot_button.setEnabled(self._catalog_worker is None)
         for button in (self.model_button, self.options_button, self.text_search_button):
             button.setEnabled(True)
         self.query.setEnabled(True)
@@ -419,7 +551,11 @@ class StorySearchView:
             self._seed_count = count
             self._update_catalog_count()
         self.backend_label.setText(response.backend)
-        self.status.setText(f"{len(response.hits)} возможных совпадений · {count} описаний" if response.hits else (response.notice or "Совпадений нет. Попробуйте другой запрос."))
+        if self.seed_path and not count:
+            self.status.setText("В этом файле нет доступных описаний. Можно повторить поиск после обновления "
+                                "файла, выбрать другой или вернуться к каталогу профиля.")
+        else:
+            self.status.setText(f"{len(response.hits)} возможных совпадений · {count} описаний" if response.hits else (response.notice or "Совпадений нет. Попробуйте другой запрос."))
         self.status.setToolTip(response.notice or "Сходство по описанию не подтверждает каждое сюжетное условие.")
         self.scope.setText(
             "Поиск по смыслу · результаты могут совпадать только частично" if "E5" in response.backend else
@@ -553,6 +689,8 @@ class StorySearchView:
         self._pending_query = None
         if self._catalog_worker:
             self._catalog_worker.cancel()
+        if self._snapshot_worker:
+            self._snapshot_worker.requestInterruption()
         if self._auth_dialog:
             self._auth_dialog.hide()
         if self._worker:
