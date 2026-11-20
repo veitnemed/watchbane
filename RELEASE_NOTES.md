@@ -102,3 +102,4 @@ The application remains local-first. Existing SQLite data, settings, candidate p
 - On the empty search screen, an example fills the input before a catalog is available. Opening a catalog keeps the typed query and makes the next step explicit without running it automatically.
 - A corrupt profile catalog has a retry path; an interrupted managed E5 cache can be repaired without overwriting the original or changing a manually selected model.
 - Source only; no ready-to-run Windows executable, weights, API credentials or starter catalog. Native compatibility and first-run acceptance require separate verification.
+- Repeated Watched actions on an already stored exact title retain notes and edits; if the user supplies a new rating, only the rating changes. On collection read errors, results remain readable and collection actions are disabled until a successful retry.
