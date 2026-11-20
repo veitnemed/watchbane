@@ -34,6 +34,29 @@ jobs:
         run: ./tools/build_desktop.ps1
       - name: Check documented public CDN for pinned artifacts without following redirects
         run: python -m tools.qa.probe_story_download_route
+      - name: Inventory the exact native build (not a publication clearance)
+        shell: pwsh
+        run: |
+          python -c "import sys; from tools.qa.audit_windows_distribution import main; raise SystemExit(0 if main(sys.argv[1:]) in (0, 1) else 2)" --summary --profile semantic --bundle dist/Watchbane
       - name: Install and run real E5 inside the frozen executable without Python on PATH
-        run: ./tools/smoke_windows_e5_install.ps1 -BundleDirectory dist/Watchbane
+        shell: pwsh
+        run: |
+          $model = Join-Path $env:RUNNER_TEMP ("watchbane-e5-" + [Guid]::NewGuid())
+          "WATCHBANE_QA_INSTALLED_E5=$model" >> $env:GITHUB_ENV
+          ./tools/smoke_windows_e5_install.ps1 -BundleDirectory dist/Watchbane -ModelDirectory $model
+      - name: Check fixed story-search expectations on four real QA films
+        shell: pwsh
+        continue-on-error: true # Keep ranking misses visible and independent of install acceptance.
+        run: ./tools/smoke_windows_e5_install.ps1 -BundleDirectory dist/Watchbane -SearchOnly -ModelDirectory $env:WATCHBANE_QA_INSTALLED_E5
+      - name: Remove the temporary verified weight files
+        if: always()
+        shell: pwsh
+        run: |
+          $model = $env:WATCHBANE_QA_INSTALLED_E5
+          $root = [System.IO.Path]::GetFullPath($env:RUNNER_TEMP)
+          if ($model -and ([System.IO.Path]::GetDirectoryName($model) -eq $root) -and
+              ([System.IO.Path]::GetFileName($model) -match '^watchbane-e5-[a-f0-9-]{36}$') -and
+              (Test-Path -LiteralPath $model)) {
+            Remove-Item -LiteralPath $model -Recurse -Force
+          }
       # No artifact upload, no TMDb, no data pack, no model redistribution.

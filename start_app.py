@@ -39,4 +39,14 @@ if __name__ == "__main__":
         except (OSError, ValueError):
             raise SystemExit(1) from None
         raise SystemExit(result)
+    if sys.argv[1:2] == ["--check-story-search"]:
+        if len(sys.argv) != 5:
+            raise SystemExit(2)
+        from candidates.story_search_probe import write_story_search_check
+
+        try:
+            result = write_story_search_check(sys.argv[2], sys.argv[3], sys.argv[4])
+        except (OSError, ValueError):
+            raise SystemExit(1) from None
+        raise SystemExit(result)
     main()
