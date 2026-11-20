@@ -188,3 +188,89 @@ def test_remove_from_watched_returns_available(tmp_path) -> None:
     assert result["state"] == states.STATE_AVAILABLE
     assert states.get_title_state(candidate, path=db_path) == states.STATE_AVAILABLE
     assert _watched_rows(db_path)[0]["payload_json"] == "{}"
+
+
+def test_stale_repeated_unrated_mark_preserves_exact_watched_payload(tmp_path):
+    from storage.sqlite.watched_repository import save_dataset_dict, save_meta_dict
+
+    db = tmp_path / "state.sqlite3"
+    stale_card = _candidate(media_type="movie")
+    assert states.get_title_state(stale_card, path=db) == states.STATE_AVAILABLE
+    # Another caller finishes writing the film after search captured the card.
+    save_dataset_dict({"Original label": {
+        "main_info": {"title": "Edited title", "year": 2024, "media_type": "movie",
+                      "user_score": 3, "overview": "Rich description"},
+        "raw_scores": {"tmdb_id": 101},
+        "local_notes": "Retain my notes",
+    }}, path=db)
+    save_meta_dict({"Original label": {"private_tag": "retain metadata"}}, path=db)
+    add_candidate_action(ACTION_WATCHLIST, stale_card, path=db)
+    other = _candidate(media_type="tv")
+    states.hide_candidate(other, path=db)
+    before = _watched_rows(db)
+
+    result = states.mark_watched(stale_card, path=db)
+
+    assert result["state"] == states.STATE_WATCHED and result["dataset_key"] == "Original label"
+    assert _watched_rows(db) == before
+    assert _actions(stale_card, db) == set()
+    assert _actions(other, db) == {ACTION_HIDDEN}
+
+
+def test_first_unrated_mark_with_metadata_only_row_still_creates_watched_record(tmp_path):
+    from storage.sqlite.watched_repository import save_meta_dict
+
+    db = tmp_path / "state.sqlite3"
+    candidate = _candidate(media_type="movie")
+    save_meta_dict({"Old key": {"main_info": {"media_type": "movie"}, "raw_scores": {"tmdb_id": 101}}}, path=db)
+    assert states.get_title_state(candidate, path=db) == states.STATE_AVAILABLE
+    assert states.mark_watched(candidate, path=db)["dataset_key"] == "Old key"
+    assert states.get_title_state(candidate, path=db) == states.STATE_WATCHED
+    assert len(_watched_rows(db)) == 1
+
+
+def test_stale_explicit_rating_updates_only_the_score_of_existing_typed_record(tmp_path):
+    import json
+    from storage.sqlite.watched_repository import save_dataset_dict, save_meta_dict
+
+    db = tmp_path / "state.sqlite3"
+    candidate = _candidate(media_type="movie")
+    save_dataset_dict({"Original label": {
+        "main_info": {"title": "Edited title", "year": 2024, "media_type": "movie",
+                      "user_score": 3, "overview": "Rich description"},
+        "raw_scores": {"tmdb_id": 101},
+        "local_notes": "Retain my notes",
+    }}, path=db)
+    save_meta_dict({"Original label": {"private_tag": "retain metadata"}}, path=db)
+    before, = _watched_rows(db)
+    result = states.mark_watched(candidate, optional_user_score=1, path=db)
+    assert result["dataset_key"] == "Original label"
+    after, = _watched_rows(db)
+    assert after["user_score"] == 1
+    expected_payload = json.loads(before["payload_json"])
+    expected_payload["main_info"]["user_score"] = 1
+    assert json.loads(after["payload_json"]) == expected_payload
+    ignored = {"payload_json", "updated_at", "user_score"}
+    assert {k: v for k, v in after.items() if k not in ignored} == {
+        k: v for k, v in before.items() if k not in ignored
+    }
+
+
+def test_repeated_rating_rolls_back_if_same_title_action_cleanup_fails(tmp_path, monkeypatch):
+    db = tmp_path / "state.sqlite3"
+    candidate = _candidate(media_type="movie")
+    states.mark_watched(candidate, optional_user_score=3, path=db)
+    add_candidate_action(ACTION_WATCHLIST, candidate, path=db)
+    before = _watched_rows(db)
+    clear_actions = states._clear_candidate_actions
+
+    def fail_after_cleanup(conn, title):
+        clear_actions(conn, title)
+        raise RuntimeError("injected after cleanup")
+
+    monkeypatch.setattr(states, "_clear_candidate_actions", fail_after_cleanup)
+    with pytest.raises(RuntimeError, match="injected"):
+        states.mark_watched(candidate, optional_user_score=1, path=db)
+
+    assert _watched_rows(db) == before
+    assert _actions(candidate, db) == {ACTION_WATCHLIST}

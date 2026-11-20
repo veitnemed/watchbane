@@ -24,7 +24,7 @@ from storage.sqlite.connection import connect
 from storage.sqlite.json_codec import loads_json
 from storage.sqlite.migrations import apply_migrations
 from storage.sqlite.watched_mapper import extract_watched_record
-from storage.sqlite.watched_write import delete_watched, upsert_watched_row
+from storage.sqlite.watched_write import delete_watched, update_watched_user_score, upsert_watched_row
 
 
 STATE_AVAILABLE = "available"
@@ -252,6 +252,21 @@ def mark_watched(
             if existing is not None:
                 dataset_key = str(existing["dataset_key"])
                 existing_payload = loads_json(existing["payload_json"], {})
+                if (tmdb_id is not None and tmdb_id > 0
+                        and existing["tmdb_id"] == tmdb_id
+                        and isinstance(existing_payload, dict) and existing_payload):
+                    # A stale card may be submitted after another caller marked
+                    # the same title. Keep the durable record and its edits.
+                    # A deliberate score can change just that field.
+                    if normalized_score is not None:
+                        update_watched_user_score(dataset_key, normalized_score, conn=conn)
+                    _clear_candidate_actions(conn, normalized)
+                    return {
+                        "ok": True,
+                        "identity": candidate_state_identity_key(normalized),
+                        "dataset_key": dataset_key,
+                        "state": STATE_WATCHED,
+                    }
                 if optional_user_score is None and isinstance(existing_payload, dict):
                     existing_main_info = existing_payload.get("main_info")
                     if isinstance(existing_main_info, dict):
