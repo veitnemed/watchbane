@@ -58,3 +58,14 @@ SHA-256: `D891BB7E8D3B4B69FE3FFB1421D50F8CBA8DD7CC6A2DBBF9F81411F66F59E65E`.
 ## Upgrade and data safety
 
 The application remains local-first. Existing SQLite data, settings, candidate pools, recommendation deck and poster cache use the established runtime paths. The release has been tested against both clean and migrated profiles.
+
+---
+
+# Watchbane story-search-preview.2
+
+Это отдельный исходный pre-release поиска по сюжету, не обновление Windows EXE выше. Начните с [инструкции запуска](SOURCE_PREVIEW.md).
+
+- В поставке нет вымышленных или временных карточек. В чистом профиле приложение не изображает заполненный каталог: нужны реальные локальные описания или явный импорт TMDb.
+- Можно подключить локальный снимок TMDb JSONL без автоматического добавления его в библиотеку и по желанию использовать внешнюю локальную модель E5. Без модели остаётся ограниченный текстовый поиск.
+- Архив формируется из закреплённого Git-коммита и поставляется с манифестом файлов и SHA-256. Ни снимок, ни личные данные, ни ключ, ни веса модели не распространяются вместе с исходниками.
+- Это экспериментальная версия. Гарантий полноты каталога и точности сопоставления каждого сюжетного условия нет.

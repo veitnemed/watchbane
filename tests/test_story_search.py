@@ -1,7 +1,7 @@
 from dataclasses import replace
 import pytest
 from candidates.story_search import StorySearch, StoryDocument, concepts, tokens
-from candidates.story_demo import demo_documents
+from tests.fixtures.story_demo import demo_documents
 
 
 def test_typo_and_short_query():
@@ -84,10 +84,16 @@ def test_explicit_year_is_release_constraint_not_plot_year():
     assert media_constraints('сериал вышел в 2022') == ('tv',2022)
 
 
-def test_negative_plot_description_is_not_exclusion():
+@pytest.mark.parametrize('query', [
+    'герой не может вспомнить свое имя',
+    'семья приходит домой и её никто не узнаёт',
+    'сын прогуливает уроки и не возвращается домой',
+    'сын не вернулся домой',
+])
+def test_negative_plot_description_is_not_exclusion(query):
     from candidates.story_search import unsupported_negation
-    assert not unsupported_negation('герой не может вспомнить свое имя')
-    assert unsupported_negation('не про войну')
+    assert not unsupported_negation(query)
+    assert 'Отрицания' not in StorySearch(demo_documents()).search(query).notice
 
 
 def test_both_media_types_are_not_silently_narrowed():
@@ -96,7 +102,11 @@ def test_both_media_types_are_not_silently_narrowed():
     assert media_constraints('фильм или сериал') == (None,None)
 
 
-@pytest.mark.parametrize('query',['исключая войну','не детектив','только не ужасы','без убийств','никакой романтики'])
+@pytest.mark.parametrize('query', [
+    'исключая войну', 'не детектив', 'только не ужасы', 'без убийств',
+    'никакой романтики', 'не про войну', 'не хочу смотреть боевик',
+    'семья приходит домой и её никто не узнаёт, но без насилия',
+])
 def test_exclusions_are_explicitly_declined(query):
     response=StorySearch(demo_documents()).search(query)
     assert not response.hits and 'Отрицания' in response.notice
@@ -117,8 +127,26 @@ def test_session_index_reuse_change_and_explicit_refresh():
     service.clear_story_search_cache()
 
 
-def test_auto_source_does_not_replace_filtered_catalog_with_demo(monkeypatch):
+def test_empty_or_filtered_local_catalog_never_loads_demo_or_model(monkeypatch):
     from candidates import story_service as service
-    monkeypatch.setattr(service, 'get_pool_view', lambda: [{'title':'Missing description','media_type':'tv'}])
-    engine, records = service.local_story_catalog(auto_demo=True)
-    assert not engine.documents and not records
+
+    def unexpected_model(*args):
+        raise AssertionError("Do not load a model for an empty catalogue")
+
+    monkeypatch.setattr(service, '_local_encoder', unexpected_model)
+    for pool in ([], [{'title': 'Missing description', 'media_type': 'tv'}]):
+        monkeypatch.setattr(service, 'get_pool_view', lambda: pool)
+        engine, records = service.local_story_catalog(model_dir='unused-model')
+        assert not engine.documents and not records
+        assert not engine.search('космос').hits
+
+
+def test_developer_demo_index_cannot_supply_results_to_empty_local_catalog(monkeypatch):
+    from candidates import story_service as service
+
+    dev = service.create_story_search(demo_documents())
+    assert dev.search('космос').hits
+    monkeypatch.setattr(service, 'get_pool_view', lambda: [])
+    local, records = service.local_story_catalog()
+    assert local is not dev
+    assert not records and not local.search('космос').hits

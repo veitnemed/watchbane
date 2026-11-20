@@ -4,7 +4,7 @@ from desktop.story.view import StorySearchView
 from tests.test_story_catalog import FakeTMDb
 
 
-def test_clean_home_demo_offline_then_existing_auth_mock_import(qtbot,monkeypatch):
+def test_clean_home_real_only_then_existing_auth_mock_import(qtbot,monkeypatch):
     import requests
     from apis import tmdb_api
     from desktop.startup import worker as auth_worker
@@ -17,11 +17,11 @@ def test_clean_home_demo_offline_then_existing_auth_mock_import(qtbot,monkeypatc
     monkeypatch.setattr(tmdb_api,'get_movie_details',lambda identifier,language,**kw:fake.details('movie',identifier,language))
     monkeypatch.setattr(tmdb_api,'get_tv_details',lambda identifier,language,**kw:fake.details('tv',identifier,language))
     view=StorySearchView();qtbot.addWidget(view.widget);view.widget.resize(1180,950);view.widget.show()
-    assert view._auth_dialog is None and 'вымышленные' in view.catalog_status.text()
+    assert view._auth_dialog is None and 'Каталог пока пуст' in view.catalog_status.text()
     assert view.catalog_button.text()=='Заполнить каталог из TMDb'
     view.query.setText('врач');view.search()
     qtbot.waitUntil(lambda:view._worker is None)
-    assert view.cards_layout.count()>1 and not fake.calls
+    assert view.cards_layout.count()==1 and not fake.calls
     qtbot.mouseClick(view.catalog_button,Qt.MouseButton.LeftButton)
     assert view._auth_dialog.isVisible()
     from desktop.settings.tmdb_credentials_panel import TmdbCredentialsPanel
@@ -35,7 +35,7 @@ def test_clean_home_demo_offline_then_existing_auth_mock_import(qtbot,monkeypatc
     assert all('query' not in c[2] and 'врач' not in str(c[2]) for c in fake.calls if c[0]=='discover')
     view._fill_catalog();qtbot.waitUntil(lambda:view._catalog_worker is None)
     qtbot.waitUntil(lambda:view._worker is None)
-    assert 'Добавлено: 0' in view.catalog_status.text()
+    assert 'Новых описаний' in view.catalog_status.text()
     view.prepare_for_shutdown()
 
 

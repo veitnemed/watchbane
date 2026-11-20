@@ -3,7 +3,12 @@ from PyQt6.QtWidgets import QPushButton,QLabel
 from desktop.story.view import StorySearchView
 
 
-def test_keyboard_examples_compact_results_and_secondary_controls(qtbot):
+def test_keyboard_examples_compact_results_and_secondary_controls(qtbot, monkeypatch):
+    from candidates import story_service
+    monkeypatch.setattr(story_service, "get_pool_view", lambda: [{
+        "title": "Fixture", "tmdb_id": 155, "media_type": "movie",
+        "overview": "Узник планирует побег из тюрьмы и готовит подкоп.",
+    }])
     view=StorySearchView();qtbot.addWidget(view.widget);view.widget.resize(1280,1000);view.widget.show();view.widget.activateWindow()
     assert not view.options.isVisible() and view.examples.isVisible() and view.catalog_button.isVisible()
     qtbot.waitUntil(view.widget.isActiveWindow)
@@ -65,9 +70,31 @@ def test_poster_is_existing_local_image_or_network_free_placeholder(qtbot,tmp_pa
 
 
 def test_model_error_visible_and_controls_recover(qtbot,monkeypatch):
-    from candidates import service
-    monkeypatch.setattr(service,'create_story_search',lambda *a,**k: (_ for _ in ()).throw(ValueError('invalid model')))
-    view=StorySearchView();qtbot.addWidget(view.widget);view.widget.show();view.mode.setCurrentIndex(0)
+    from candidates import story_service
+    monkeypatch.setattr(story_service, "get_pool_view", lambda: [{
+        "title": "Fixture", "tmdb_id": 166, "media_type": "movie", "overview": "Врач лечит пациентов."
+    }])
+    monkeypatch.setattr(story_service,'create_story_search',lambda *a,**k: (_ for _ in ()).throw(ValueError('invalid model')))
+    view=StorySearchView();qtbot.addWidget(view.widget);view.widget.show()
     view.query.setText('врач');view.search();qtbot.waitUntil(lambda:view._worker is None)
     assert 'Не удалось' in view.status.text() and view.query.isEnabled()
     assert not view.options.isVisible() and view.model_button.isEnabled()
+
+
+def test_bad_model_can_retry_same_query_in_word_mode(qtbot, monkeypatch, tmp_path):
+    from candidates import story_service
+    monkeypatch.setenv("WATCHBANE_STORY_MODEL_DIR", str(tmp_path / "absent-model"))
+    monkeypatch.setattr(story_service, "get_pool_view", lambda: [{
+        "title": "Fixture", "tmdb_id": 177, "media_type": "movie", "overview": "Врач лечит пациентов."
+    }])
+    view = StorySearchView()
+    qtbot.addWidget(view.widget)
+    view.widget.show()
+    view.query.setText("врач")
+    view.search()
+    qtbot.waitUntil(lambda: view._worker is None)
+    assert view.text_search_button.isVisible() and view.cards_layout.count() == 1
+    qtbot.mouseClick(view.text_search_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: view._worker is None)
+    assert view.query.text() == "врач" and view.cards_layout.count() == 2
+    assert "Поиск по словам" in view.scope.text() and not view.text_search_button.isVisible()

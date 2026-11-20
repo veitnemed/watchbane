@@ -8,7 +8,7 @@ from pathlib import Path
 import platform
 from statistics import mean, median
 from time import perf_counter
-from candidates.story_demo import demo_documents
+from tests.fixtures.story_demo import demo_documents
 from candidates.story_search import StorySearch, ConceptRetriever, lexical_score, tokens
 
 

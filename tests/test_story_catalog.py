@@ -9,7 +9,7 @@ class FakeTMDb:
         self.calls=[];self.fail=fail;self.on_detail=on_detail
     def discover(self,media,params):
         self.calls.append(('discover',media,dict(params)))
-        return {'results':[{'id':101},{'id':102},{'id':103}], 'total_pages':500}
+        return {'results':[{'id':101},{'id':102},{'id':103}], 'total_pages':1}
     def details(self,media,identifier,language):
         self.calls.append(('details',media,identifier,language))
         if self.on_detail:self.on_detail()
@@ -85,3 +85,42 @@ def test_cancellation_immediately_before_import():
         if update.get('message','').startswith('Получено описаний: 6 '):stop[0]=True
     result=fill_story_catalog(client=fake,cancel_checker=lambda:stop[0],progress_callback=progress)
     assert result['cancelled'] and not load_candidate_pool()
+
+
+def test_replenish_scans_pages_and_skips_existing_typed_ids_without_details():
+    class PagedTMDb(FakeTMDb):
+        def discover(self, media, params):
+            self.calls.append(('discover', media, dict(params)))
+            page = params['page']
+            # One overlapping ID across successive pages, and identical IDs
+            # across movie/TV. Neither may create duplicate work within a kind.
+            start = 301 + 19 * (page - 1)
+            return {'results': [{'id': n} for n in range(start, start + 20)],
+                    'total_pages': 3}
+
+    first = PagedTMDb()
+    assert fill_story_catalog(client=first)['saved_count'] == 30
+    second = PagedTMDb()
+    assert fill_story_catalog(client=second)['saved_count'] == 30
+    rows = list(load_candidate_pool().values())
+    assert len(rows) == 60
+    for media in ('movie', 'tv'):
+        assert {r['tmdb_id'] for r in rows if r['media_type'] == media} == set(range(301, 331))
+        assert [c[2]['page'] for c in second.calls if c[:2] == ('discover', media)] == [1, 2]
+        assert [c[2] for c in second.calls if c[:2] == ('details', media)] == list(range(316, 331))
+
+
+def test_replenish_page_limit_on_duplicate_only_responses():
+    from candidates.story_catalog import MAX_DISCOVER_PAGES
+
+    class RepeatingTMDb(FakeTMDb):
+        def discover(self, media, params):
+            self.calls.append(('discover', media, dict(params)))
+            return {'results': [{'id': 101}] * 20, 'total_pages': 500}
+
+    fake = RepeatingTMDb()
+    assert fill_story_catalog(client=fake)['saved_count'] == 2
+    better = RepeatingTMDb()
+    assert fill_story_catalog(client=better)['saved_count'] == 0
+    assert len(better.calls) == 2 * MAX_DISCOVER_PAGES
+    assert all(c[0] == 'discover' for c in better.calls)

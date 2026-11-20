@@ -33,7 +33,7 @@ def main():
         print(json.dumps(report,indent=2));return
     start=perf_counter()
     from candidates.story_search import StoryDocument
-    from candidates.story_demo import demo_documents
+    from tests.fixtures.story_demo import demo_documents
     from candidates.story_semantic import LocalE5,SemanticStorySearch
     from candidates.story_vector_cache import CachedPassageEncoder
     if args.corpus:

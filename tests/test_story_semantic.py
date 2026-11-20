@@ -53,6 +53,10 @@ def test_e5_qt_flow_is_local(qtbot,encoder,monkeypatch):
     from desktop.story.view import StorySearchView
     from PyQt6.QtCore import Qt
     monkeypatch.setattr(story_service,'_local_encoder',lambda _:encoder)
+    monkeypatch.setattr(story_service, "get_pool_view", lambda: [{
+        "title": "Fixture", "tmdb_id": 167, "media_type": "tv",
+        "overview": "Преступник скрывается от полиции и планирует ограбление.",
+    }])
     view=StorySearchView();view.model_dir=os.environ['WATCHBANE_TEST_MODEL_DIR']
     qtbot.addWidget(view.widget);view.widget.show();view.query.setText('сериал про пристурника')
     qtbot.mouseClick(view.search_button,Qt.MouseButton.LeftButton)
@@ -75,7 +79,7 @@ def test_evidence_does_not_change_default_hybrid_order(encoder):
 
 def test_opt_in_explicit_criminal_role_does_not_promote_investigator(encoder):
     from candidates.story_semantic import SemanticStorySearch
-    from candidates.story_demo import demo_documents
+    from tests.fixtures.story_demo import demo_documents
     result=SemanticStorySearch(demo_documents(),encoder).search('сериал про пристурника',role_adjustment=True)
     assert result.hits[0].document.key in {'demo:01','demo:03','demo:15','demo:18','demo:25'}
 
@@ -100,7 +104,7 @@ def test_only_final_cards_get_sentence_extraction(encoder):
 def test_persistent_cache_preserves_real_vectors_ranks_and_evidence(encoder,tmp_path):
     from candidates.story_semantic import SemanticStorySearch
     from candidates.story_vector_cache import CachedPassageEncoder
-    from candidates.story_demo import demo_documents
+    from tests.fixtures.story_demo import demo_documents
     docs=demo_documents()[:8]
     baseline=SemanticStorySearch(docs,encoder)
     cached=SemanticStorySearch(docs,CachedPassageEncoder(encoder,tmp_path))

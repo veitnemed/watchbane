@@ -51,26 +51,30 @@ def _local_encoder(directory):
     return LocalE5(directory)
 
 
-def local_story_catalog(model_dir=None, *, auto_demo=False, on_progress=None, cancelled=None):
-    pool = get_pool_view()
-    if auto_demo and not pool:
-        from candidates.story_demo import demo_documents
-        return create_story_search(demo_documents(), model_dir, on_progress=on_progress, cancelled=cancelled), {}
-    documents, records = story_catalog_snapshot(pool)
-    return create_story_search(documents, model_dir, on_progress=on_progress, cancelled=cancelled), records
+def local_story_catalog(model_dir=None, *, on_progress=None, cancelled=None, seed_path=None):
+    """Index only the chosen real catalogue; an empty profile has no results."""
+    documents, records = story_catalog_snapshot(seed_path=seed_path)
+    return create_story_search(documents, model_dir if documents else None,
+                               on_progress=on_progress, cancelled=cancelled), records
 
 
-def story_catalog_snapshot(pool=None):
+def story_catalog_snapshot(pool=None, *, seed_path=None):
     """Read available descriptions without loading a model or writing an index."""
-    if pool is None:
-        pool = get_pool_view()
-    candidates = get_search_filter_view(pool, _prepare_text_search_criteria({}))["candidates"]
+    if seed_path is not None:
+        from candidates.search.filtering import filter_candidates
+        from candidates.story_seed_snapshot import load_seed_snapshot
+        candidates = filter_candidates(list(load_seed_snapshot(seed_path).values()), _prepare_text_search_criteria({}))
+    else:
+        if pool is None:
+            pool = get_pool_view()
+        candidates = get_search_filter_view(pool, _prepare_text_search_criteria({}))["candidates"]
     records, documents = {}, []
     for candidate in candidates:
         overview = choose_display_overview(candidate, "ru") or ""
         if not overview or is_blocked_explicit_sexual_content(candidate):
             continue
-        key = pool_entry_key(candidate)
+        key = (f"tmdb:{candidate['media_type']}:{candidate['tmdb_id']}"
+               if seed_path is not None else pool_entry_key(candidate))
         if key in records:
             continue
         records[key] = candidate

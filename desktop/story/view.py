@@ -6,9 +6,8 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QShortcut, QKeySequence
 from pathlib import Path
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-                            QPushButton, QScrollArea, QFrame, QComboBox, QMessageBox, QFileDialog, QDialog)
+                            QPushButton, QScrollArea, QFrame, QMessageBox, QFileDialog, QDialog)
 from candidates import service
-from candidates.story_demo import demo_documents
 from candidates.title_state_service import STATE_WATCHLIST, get_title_states
 from desktop.theme.scaling import layout_px
 from desktop.theme.layout import MAIN_TAB_PANE_TOP_LIFT
@@ -19,12 +18,12 @@ class StoryWorker(QThread):
     completed = pyqtSignal(object, object, int)
     failed = pyqtSignal()
     progress = pyqtSignal(str)
-    source_chosen = pyqtSignal(str)
 
-    def __init__(self, query, mode, excluded, parent, model_dir=None):
+    def __init__(self, query, parent, model_dir=None, seed_path=None):
         super().__init__(parent)
-        self.query, self.mode, self.excluded = query, mode, excluded
+        self.query = query
         self.model_dir = model_dir
+        self.seed_path = seed_path
         self._cancelled = Event()
 
     def cancel(self):
@@ -32,16 +31,13 @@ class StoryWorker(QThread):
 
     def run(self):
         try:
-            if self.mode == 0:
-                engine, records = service.create_story_search(demo_documents(), self.model_dir, on_progress=self.progress.emit, cancelled=self._cancelled.is_set), {}
-            else:
-                engine, records = service.local_story_catalog(self.model_dir, auto_demo=self.mode == 2, on_progress=self.progress.emit, cancelled=self._cancelled.is_set)
+            engine, records = service.local_story_catalog(
+                self.model_dir, on_progress=self.progress.emit,
+                cancelled=self._cancelled.is_set, seed_path=self.seed_path)
             if self._cancelled.is_set():
                 return
-            demo = bool(engine.documents and engine.documents[0].demo)
-            self.source_chosen.emit("demo" if demo else "local")
-            self.progress.emit("Ищем возможные совпадения…")
-            result = engine.search(self.query, excluded=frozenset(self.excluded))
+            self.progress.emit("Ищем совпадения в каталоге…")
+            result = engine.search(self.query)
             self.completed.emit(result, records, len(engine.documents))
         except Exception:
             self.failed.emit()
@@ -61,7 +57,9 @@ class StorySearchView:
         self._closing = False
         self._active_query = ""
         self.model_dir = os.environ.get("WATCHBANE_STORY_MODEL_DIR")
-        self._excluded_demo = set()
+        self.seed_path = os.environ.get("WATCHBANE_STORY_SEED_CATALOG")
+        self._seed_count = None
+        self._catalog_ready = False
         self._records = {}
         self.on_library_changed = on_library_changed
         root = QVBoxLayout(self.widget)
@@ -72,7 +70,7 @@ class StorySearchView:
         hero_layout.setContentsMargins(0, 0, 0, 0)
         hero_text = QVBoxLayout()
         self.heading = self._label(hero_text, "Какая история вам нужна?", "storyHeading")
-        self.subtitle = self._label(hero_text, "Пара слов о сюжете — и можно выбирать.")
+        self.subtitle = self._label(hero_text, "Опишите героя, ситуацию или событие.")
         hero_layout.addLayout(hero_text, 1)
         from PyQt6.QtSvgWidgets import QSvgWidget
         self.mascot = QSvgWidget(str(Path(__file__).resolve().parents[1] / "images" / "story_ticket.svg"))
@@ -92,6 +90,9 @@ class StorySearchView:
         self.options_button = QPushButton("Подключить поиск по смыслу…")
         self.options_button.setVisible(not bool(self.model_dir))
         self.options_button.setAccessibleName("Подключить локальную модель поиска")
+        self.text_search_button = QPushButton("Искать по словам")
+        self.text_search_button.clicked.connect(self._use_text_search)
+        self.text_search_button.hide()
 
         root.addLayout(row)
         self.examples = QWidget()
@@ -109,12 +110,7 @@ class StorySearchView:
         options_layout.setContentsMargins(0, 0, 0, 0)
         self.options.hide()
         self.options_button.clicked.connect(self._choose_model)
-        # Legacy controls remain internal; no technical settings form is shown.
-        self.mode = QComboBox()
-        self.mode.addItems(["Демо · 30 вымышленных историй", "Мои локальные описания", "Автоматически · мой каталог, иначе демо"])
-        self.mode.setCurrentIndex(2)
         source_row = QHBoxLayout()
-        source_row.addWidget(self.mode, 1)
         self.refresh_button = QPushButton("Обновить описания")
         self.refresh_button.clicked.connect(self._refresh_catalog)
         source_row.addWidget(self.refresh_button)
@@ -139,6 +135,7 @@ class StorySearchView:
         self.catalog_button.clicked.connect(self._fill_catalog)
         import_row.addWidget(self.catalog_button)
         import_row.addWidget(self.options_button)
+        import_row.addWidget(self.text_search_button)
         self.cancel_catalog_button = QPushButton("Отменить загрузку")
         self.cancel_catalog_button.clicked.connect(self._cancel_catalog)
         self.cancel_catalog_button.hide()
@@ -147,9 +144,10 @@ class StorySearchView:
         self.catalog_status.setWordWrap(True)
         import_row.addWidget(self.catalog_status, 1)
         root.addLayout(import_row)
+        self.scope = self._label(root, "Поиск по описаниям в вашем каталоге", "storyMuted")
+        self.status = self._label(root, "")
         self._update_catalog_count()
-        self.scope = self._label(root, "Демо без регистрации и ключей", "storyMuted")
-        self.status = self._label(root, "Выберите пример или напишите свой запрос.")
+        self._show_idle()
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
@@ -162,14 +160,14 @@ class StorySearchView:
         root.addWidget(scroll, 1)
         self.search_button.clicked.connect(self.search)
         self.query.returnPressed.connect(self.search)
-        self.mode.currentIndexChanged.connect(self._mode_changed)
         self.focus_shortcut = QShortcut(QKeySequence("Ctrl+L"), self.widget)
         self.focus_shortcut.activated.connect(self._focus_query)
         self.escape_shortcut = QShortcut(QKeySequence("Escape"), self.widget)
         self.escape_shortcut.activated.connect(self._close_options)
         self.query.setAccessibleName("Какую историю вы ищете")
         QWidget.setTabOrder(self.query, self.search_button)
-        QWidget.setTabOrder(self.search_button, self.options_button)
+        QWidget.setTabOrder(self.search_button, self.catalog_button)
+        QWidget.setTabOrder(self.catalog_button, self.options_button)
         self.query.setFocus()
 
     def _focus_query(self):
@@ -192,13 +190,31 @@ class StorySearchView:
         if self.query.text().strip() and self._worker is None and not self._closing:
             self.search()
 
+    def _show_idle(self):
+        self.status.setText(
+            "Выберите пример запроса или опишите свой сюжет." if self._catalog_ready else
+            "Загрузите первые фильмы и сериалы из TMDb, чтобы начать поиск."
+        )
+
     def _update_catalog_count(self, prefix=""):
         try:
-            documents, _ = service.story_catalog_snapshot()
-            self.catalog_button.setVisible(not documents or self._catalog_worker is not None)
-            self.catalog_status.setText(prefix + (f"В каталоге: {len(documents)}" if documents else "Пока можно попробовать вымышленные истории"))
+            if self.seed_path:
+                # Parsing thousands of rows stays in the search thread.
+                self._catalog_ready = self._seed_count is None or self._seed_count > 0
+                self.catalog_button.hide()
+                label = "Каталог из файла подключён" if self._seed_count is None else f"В каталоге: {self._seed_count}"
+                self.catalog_status.setText(prefix + label)
+            else:
+                documents, _ = service.story_catalog_snapshot()
+                self._catalog_ready = bool(documents)
+                self.catalog_button.setText("Пополнить из TMDb" if documents else "Заполнить каталог из TMDb")
+                self.catalog_button.show()
+                label = f"В каталоге: {len(documents)}" if documents else "Каталог пока пуст"
+                self.catalog_status.setText(prefix + label)
         except Exception:
-            self.catalog_status.setText("Не удалось прочитать локальный каталог.")
+            self._catalog_ready = False
+            self.catalog_status.setText(prefix + "Не удалось прочитать локальный каталог.")
+        self.examples.setEnabled(self._catalog_ready)
 
     def _fill_catalog(self):
         if self._closing or self._catalog_worker is not None:
@@ -210,7 +226,7 @@ class StorySearchView:
                 self._auth_dialog = QDialog(self.widget)
                 self._auth_dialog.setWindowTitle("TMDb · подключение каталога")
                 layout = QVBoxLayout(self._auth_dialog)
-                hint = QLabel("Токен нужен только для загрузки из TMDb. Демо и локальный поиск доступны без него.")
+                hint = QLabel("Ключ нужен только для загрузки фильмов и сериалов. После загрузки поиск по описаниям работает без интернета.")
                 hint.setWordWrap(True); layout.addWidget(hint)
                 panel = TmdbCredentialsPanel(self._auth_dialog)
                 panel.credentialsChanged.connect(self._catalog_credentials_ready)
@@ -257,8 +273,10 @@ class StorySearchView:
         if not result.get("ok"):
             self._catalog_failed("")
             return
-        self._update_catalog_count(f"Добавлено: {result.get('saved_count', 0)}. ")
-        self.mode.setCurrentIndex(2)
+        added = result.get("saved_count", 0)
+        prefix = f"Добавлено: {added}. " if added else "Новых описаний в этой подборке нет. "
+        self._update_catalog_count(prefix)
+        self._show_idle()
         self.on_library_changed()
         if self.query.text().strip():
             self.search()
@@ -275,7 +293,14 @@ class StorySearchView:
         if directory:
             self.model_dir = directory
             self.options_button.hide()
+            self.text_search_button.hide()
             self.backend_label.setText("E5 выбрана. Файлы будут проверены при следующем поиске; ничего не скачивается.")
+
+    def _use_text_search(self):
+        self.model_dir = None
+        self.text_search_button.hide()
+        self.options_button.show()
+        self.search()
 
     def _label(self, layout, text, name=""):
         label = QLabel(text)
@@ -300,19 +325,6 @@ class StorySearchView:
         else:
             self.status.setText("Описания будут обновлены при следующем поиске.")
 
-    def _source_chosen(self, source):
-        self.scope.setText("Демо · 30 вымышленных историй, не каталог фильмов."
-                           if source == "demo" else
-                           "Локальные описания · скрытое и просмотренное исключено.")
-
-    def _mode_changed(self):
-        self._clear()
-        if self.mode.currentIndex() == 2:
-            self.scope.setText("Локальный каталог · на пустом профиле — вымышленное демо.")
-        else:
-            self._source_chosen("demo" if self.mode.currentIndex() == 0 else "local")
-        self.status.setText("Введите сюжет и нажмите «Найти историю».")
-
     def search(self):
         if self._closing:
             return
@@ -321,29 +333,32 @@ class StorySearchView:
             self.status.setText("Текущий поиск ещё работает. Следующим выполним новый запрос.")
             return
         self._active_query = self.query.text()
-        compact = bool(self._active_query.strip())
+        compact = bool(self._active_query.strip()) and self._catalog_ready
         self.hero.setVisible(not compact)
         self.heading.setVisible(not compact)
         self.subtitle.setVisible(not compact)
         self.examples.setVisible(not compact)
         self.options_button.setChecked(False)
         self._clear()
+        if not compact:
+            self._show_idle()
+            if self._active_query.strip() and self.catalog_button.isVisible():
+                self.catalog_button.setFocus()
+            return
         self.status.setText("Ищем совпадения в описаниях…")
         self.search_button.setText("Следующий запрос")
         self.refresh_button.setEnabled(False)
         self.model_button.setEnabled(False)
-        self.mode.setEnabled(False)
-        self._worker = StoryWorker(self._active_query, self.mode.currentIndex(),
-                                   self._excluded_demo, self.widget, self.model_dir)
+        self._worker = StoryWorker(self._active_query, self.widget, self.model_dir, self.seed_path)
         self._worker.completed.connect(self._show_results)
         self._worker.progress.connect(self.status.setText)
-        self._worker.source_chosen.connect(self._source_chosen)
         self._worker.failed.connect(self._search_failed)
         self._worker.finished.connect(self._finished)
         self._worker.start()
 
     def _search_failed(self):
         self.options_button.show()
+        self.text_search_button.setVisible(bool(self.model_dir))
         self.status.setText("Не удалось открыть описания или модель. Подключите локальную модель или повторите поиск; библиотека не изменена.")
 
     def _finished(self):
@@ -354,7 +369,6 @@ class StorySearchView:
         self.search_button.setEnabled(True)
         self.refresh_button.setEnabled(True)
         self.model_button.setEnabled(True)
-        self.mode.setEnabled(True)
         self.query.setEnabled(True)
         if not self._closing and self._pending_query is not None:
             pending, self._pending_query = self._pending_query, None
@@ -365,11 +379,16 @@ class StorySearchView:
         if self._closing or self._pending_query is not None:
             return
         self._records = records
+        if self.seed_path:
+            self._seed_count = count
+            self._update_catalog_count()
         self.backend_label.setText(response.backend)
         self.status.setText(f"{len(response.hits)} возможных совпадений · {count} описаний" if response.hits else (response.notice or "Совпадений нет. Попробуйте другой запрос."))
         self.status.setToolTip(response.notice or "Сходство по описанию не подтверждает каждое сюжетное условие.")
-        if "E5" not in response.backend:
-            self.scope.setText(self.scope.text() + " · базовый поиск")
+        self.scope.setText(
+            "Поиск по смыслу · результаты могут совпадать только частично" if "E5" in response.backend else
+            "Поиск по словам · для поиска по смыслу подключите модель"
+        )
         try:
             states = get_title_states({
                 hit.document.key: records[hit.document.key]
@@ -396,7 +415,7 @@ class StorySearchView:
             self._label(layout, doc.title, "storyTitle")
             metadata = ["Сериал" if doc.media_type == "tv" else "Фильм"]
             if doc.year: metadata.append(str(doc.year))
-            metadata.append("Вымышленный пример" if doc.demo or "synthetic" in doc.source else "Локальный каталог")
+            metadata.append("Локальный каталог")
             if "английский fallback" in doc.source: metadata.append("Английский fallback")
             self._label(layout, " · ".join(metadata), "storyMuted")
             excerpt = self._label(layout, "Из описания: «" + hit.evidence + "»", "storyEvidence")
@@ -421,23 +440,20 @@ class StorySearchView:
 
             toggle_details(False)
             more.toggled.connect(toggle_details)
-            if not doc.demo:
-                save = QPushButton("Сохранить")
-                save.setObjectName("storySaveAction")
-                save.setAccessibleName("Сохранить: " + doc.title)
-                save.clicked.connect(self._action_callback(doc, card, "saved", save, more))
-                if states.get(doc.key) == STATE_WATCHLIST:
-                    self._mark_card_saved(save, doc.title)
-                actions.addWidget(save)
-                actions.addWidget(more)
-                watched = QPushButton("Смотрел")
-                watched.clicked.connect(self._action_callback(doc, card, "watched"))
-                actions.addWidget(watched)
-            hide = QPushButton("Скрыть пример" if doc.demo else "Скрыть")
+            save = QPushButton("Сохранить")
+            save.setObjectName("storySaveAction")
+            save.setAccessibleName("Сохранить: " + doc.title)
+            save.clicked.connect(self._action_callback(doc, card, "saved", save, more))
+            if states.get(doc.key) == STATE_WATCHLIST:
+                self._mark_card_saved(save, doc.title)
+            actions.addWidget(save)
+            actions.addWidget(more)
+            watched = QPushButton("Смотрел")
+            watched.clicked.connect(self._action_callback(doc, card, "watched"))
+            actions.addWidget(watched)
+            hide = QPushButton("Скрыть")
             hide.clicked.connect(self._action_callback(doc, card, "hidden"))
             actions.addWidget(hide)
-            if doc.demo:
-                actions.addWidget(more)
             actions.addStretch()
             layout.addLayout(actions)
             self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)
@@ -465,33 +481,30 @@ class StorySearchView:
         return clicked
 
     def _act(self, doc, card, action, save_button=None, details_button=None):
-        if doc.demo:
-            self._excluded_demo.add(doc.key)
-        else:
-            candidate = self._records[doc.key]
-            if action == "watched" and QMessageBox.question(self.widget, "Отметить просмотренным?", doc.title) != QMessageBox.StandardButton.Yes:
-                return
-            try:
-                if action == "watched":
-                    service.mark_story_watched(candidate)
-                elif action == "saved":
-                    result = service.add_candidate_to_watchlist(candidate)
-                    if not result.get("ok") or result.get("state") != STATE_WATCHLIST:
-                        self.status.setText("Не удалось добавить в сохранённое. Проверьте статус в коллекции.")
-                        return
-                else:
-                    service.hide_candidate(candidate)
-            except Exception:
-                self.status.setText("Не удалось сохранить действие. Карточка остаётся на месте.")
-                return
-            if action == "saved":
-                if save_button.hasFocus():
-                    details_button.setFocus(Qt.FocusReason.OtherFocusReason)
-                self._mark_card_saved(save_button, doc.title)
-                self.status.setText("Сохранено в коллекцию. Результаты поиска остались на месте.")
-                self.on_library_changed()
-                return
+        candidate = self._records[doc.key]
+        if action == "watched" and QMessageBox.question(self.widget, "Отметить просмотренным?", doc.title) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            if action == "watched":
+                service.mark_story_watched(candidate)
+            elif action == "saved":
+                result = service.add_candidate_to_watchlist(candidate)
+                if not result.get("ok") or result.get("state") != STATE_WATCHLIST:
+                    self.status.setText("Не удалось добавить в сохранённое. Проверьте статус в коллекции.")
+                    return
+            else:
+                service.hide_candidate(candidate)
+        except Exception:
+            self.status.setText("Не удалось сохранить действие. Карточка остаётся на месте.")
+            return
+        if action == "saved":
+            if save_button.hasFocus():
+                details_button.setFocus(Qt.FocusReason.OtherFocusReason)
+            self._mark_card_saved(save_button, doc.title)
+            self.status.setText("Сохранено в коллекцию. Результаты поиска остались на месте.")
             self.on_library_changed()
+            return
+        self.on_library_changed()
         self._update_catalog_count()
         self.cards_layout.removeWidget(card)
         card.setParent(None)

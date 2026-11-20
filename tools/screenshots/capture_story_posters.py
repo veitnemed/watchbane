@@ -40,7 +40,7 @@ def main():
         assert window.grab().save(str(a.output_dir/name))
     capture('01-home.png')
     # Original Watchbane fiction, persisted only in this disposable QA profile.
-    from candidates.story_demo import demo_documents
+    from tests.fixtures.story_demo import demo_documents
     from candidates.repositories.pool_repository import save_candidate_pool
     docs=demo_documents()
     selected=[d for d in docs if d.title in ('Обратная орбита','Точка пересадки','Дело на орбите')]

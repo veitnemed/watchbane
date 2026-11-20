@@ -85,8 +85,15 @@ def unsupported_negation(query: str) -> bool:
     words = tokens(query)
     if set(words) & {"без", "кроме", "никаких", "никакого", "никакой", "исключая", "исключить", "нет"}:
         return True
-    # These describe a protagonist's inability, not a request to exclude films.
-    plot_verbs = {"может", "мог", "могут", "помнит", "помнят", "знает", "знают", "умеет", "понимает", "получается", "заканчивается", "удается", "успевает"}
+    # Third-person narrative predicates describe what happens in a story.
+    # Keep the finite grammar conservative: an unfamiliar negation may still
+    # be an unsupported request to exclude films, themes, or genres.
+    plot_verbs = {
+        "может", "мог", "могут", "помнит", "помнят", "знает", "знают", "умеет",
+        "понимает", "получается", "заканчивается", "удается", "успевает",
+        "узнает", "узнают", "узнал", "узнала", "узнали",
+        "возвращается", "возвращаются", "вернулся", "вернулась", "вернулись",
+    }
     return any(w == "не" and (i+1 == len(words) or words[i+1] not in plot_verbs)
                for i, w in enumerate(words))
 
