@@ -1,11 +1,14 @@
 name: Watchbane Windows full E5 check
 
-# Intentionally not on ordinary source changes: this QA downloads ~487 MB once.
+# Only explicit QA-path changes: this job downloads ~487 MB per run.
 on:
   push:
     branches: ["feature/story-search"]
     paths:
       - ".github/workflows/windows-e5-acceptance.yml"
+      - "candidates/story_model_probe.py"
+      - "candidates/story_windows_runtime.py"
+      - "tools/smoke_windows_e5.ps1"
   workflow_dispatch:
 
 permissions:
