@@ -822,8 +822,9 @@ class StorySearchView:
                 for hit in response.hits if hit.document.key in records
             })
         except Exception:
-            states = {}
-            self.status.setText("Не удалось прочитать статусы коллекции.")
+            states = None
+            self.status.setText("Не удалось прочитать статусы коллекции. "
+                                "Действия с карточками недоступны. Повторите поиск.")
         for hit in response.hits:
             doc = hit.document
             card = QFrame()
@@ -868,19 +869,24 @@ class StorySearchView:
             toggle_details(False)
             more.toggled.connect(toggle_details)
             save = QPushButton("Сохранить")
-            save.setObjectName("storySaveAction")
+            # The disabled save style normally means “already saved”;
+            # a read error must not imply that state.
+            if states is not None:
+                save.setObjectName("storySaveAction")
             save.setAccessibleName("Сохранить: " + doc.title)
-            save.clicked.connect(self._action_callback(doc, card, "saved", save, more))
-            if states.get(doc.key) == STATE_WATCHLIST:
-                self._mark_card_saved(save, doc.title)
-            actions.addWidget(save)
-            actions.addWidget(more)
             watched = QPushButton("Смотрел")
-            watched.clicked.connect(self._action_callback(doc, card, "watched"))
-            actions.addWidget(watched)
             hide = QPushButton("Скрыть")
-            hide.clicked.connect(self._action_callback(doc, card, "hidden"))
-            actions.addWidget(hide)
+            if states is None:
+                for button in (save, watched, hide):
+                    button.setEnabled(False)
+            else:
+                save.clicked.connect(self._action_callback(doc, card, "saved", save, more))
+                watched.clicked.connect(self._action_callback(doc, card, "watched"))
+                hide.clicked.connect(self._action_callback(doc, card, "hidden"))
+                if states.get(doc.key) == STATE_WATCHLIST:
+                    self._mark_card_saved(save, doc.title)
+            for button in (save, more, watched, hide):
+                actions.addWidget(button)
             actions.addStretch()
             layout.addLayout(actions)
             self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)

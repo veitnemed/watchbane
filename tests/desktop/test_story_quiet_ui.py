@@ -133,3 +133,57 @@ def test_first_run_example_prepares_query_before_catalog(qtbot, monkeypatch, tmp
     qtbot.keyClick(view.query, Qt.Key.Key_Return)
     qtbot.waitUntil(lambda: view.cards_layout.count() == 2 and view._worker is None)
     assert set(view._records) == {"tmdb:movie:314"}
+
+
+def test_collection_state_read_failure_makes_search_cards_read_only_until_retry(qtbot, monkeypatch):
+    import sqlite3
+
+    from desktop.story import view as story_ui
+
+    monkeypatch.delenv("WATCHBANE_STORY_MODEL_DIR", raising=False)
+    monkeypatch.delenv("WATCHBANE_STORY_SEED_CATALOG", raising=False)
+    monkeypatch.setattr("candidates.story_service.get_pool_view", lambda: [{
+        "title": "Карточка", "tmdb_id": 314, "media_type": "movie",
+        "overview": "Врач лечит пациентов. Вечером он идёт домой.",
+    }])
+    unavailable = True
+
+    def read_states(records):
+        if unavailable:
+            raise sqlite3.OperationalError("unavailable")
+        return dict.fromkeys(records, story_ui.STATE_WATCHLIST)
+
+    calls = []
+    monkeypatch.setattr(story_ui, "get_title_states", read_states)
+    monkeypatch.setattr(StorySearchView, "_act", lambda *args: calls.append(args))
+    view = StorySearchView()
+    qtbot.addWidget(view.widget)
+    view.widget.resize(1280, 900)
+    view.widget.show()
+    view.query.setText("врач")
+
+    def submit():
+        qtbot.mouseClick(view.search_button, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(lambda: view._worker is None and view.cards_layout.count() == 2)
+        card = view.cards_layout.itemAt(0).widget()
+        return card, {b.text(): b for b in card.findChildren(QPushButton)}
+
+    card, buttons = submit()
+    assert "повторите поиск" in view.status.text().lower()
+    assert "Врач лечит пациентов" in card.findChild(QLabel, "storyEvidence").text()
+    for label in ("Сохранить", "Смотрел", "Скрыть"):
+        button = buttons[label]
+        assert not button.isEnabled()
+        qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+    assert not calls
+    qtbot.mouseClick(buttons["Полный сюжет"], Qt.MouseButton.LeftButton)
+    assert buttons["Полный сюжет"].isChecked()
+    assert any("Вечером" in label.text() and label.isVisible() for label in card.findChildren(QLabel))
+
+    unavailable = False
+    _, buttons = submit()
+    assert not buttons["В коллекции"].isEnabled()
+    assert buttons["Смотрел"].isEnabled() and buttons["Скрыть"].isEnabled()
+    qtbot.mouseClick(buttons["Смотрел"], Qt.MouseButton.LeftButton)
+    assert len(calls) == 1 and calls[0][3] == "watched"
+    assert "повторите поиск" not in view.status.text().lower()
