@@ -183,9 +183,6 @@ class StorySearchView:
         self.search_button = QPushButton("Найти историю")
         self.search_button.setObjectName("storySearchButton")
         row.addWidget(self.search_button)
-        self.options_button = QPushButton("Выбрать папку E5…")
-        self.options_button.setVisible(not bool(self.model_dir))
-        self.options_button.setAccessibleName("Подключить локальную модель поиска")
         self.text_search_button = QPushButton("Перейти на поиск по словам")
         self.text_search_button.clicked.connect(self._use_text_search)
         self.text_search_button.setVisible(bool(self.model_dir))
@@ -208,7 +205,6 @@ class StorySearchView:
         options_layout = QVBoxLayout(self.options)
         options_layout.setContentsMargins(0, 0, 0, 0)
         self.options.hide()
-        self.options_button.clicked.connect(self._choose_model)
         source_row = QHBoxLayout()
         self.refresh_button = QPushButton("Обновить описания")
         self.refresh_button.clicked.connect(self._refresh_catalog)
@@ -219,7 +215,7 @@ class StorySearchView:
         self.backend_label.setWordWrap(True)
         model_row.addWidget(self.backend_label, 1)
         self.model_button = QPushButton("Подключить локальную E5…")
-        self.model_button.clicked.connect(self._choose_model)
+        self.model_button.clicked.connect(self._open_model_install)
         model_row.addWidget(self.model_button)
         options_layout.addLayout(model_row)
         navigation = QHBoxLayout()
@@ -233,8 +229,6 @@ class StorySearchView:
         self.catalog_button.setObjectName("storyCatalogButton")
         self.catalog_button.clicked.connect(self._fill_catalog)
         import_row.addWidget(self.catalog_button)
-        import_row.addWidget(self.options_button)
-        import_row.addWidget(self.text_search_button)
         self.snapshot_button = QPushButton("Файл каталога…")
         self.snapshot_button.setObjectName("storySnapshotButton")
         self.snapshot_button.setAccessibleDescription("Использовать локальный JSONL только для поиска в этом сеансе.")
@@ -243,6 +237,13 @@ class StorySearchView:
         self.snapshot_menu.addAction("Выбрать другой файл…", self._choose_snapshot)
         self.snapshot_menu.addAction("Вернуться к каталогу профиля", self._clear_snapshot)
         import_row.addWidget(self.snapshot_button)
+        self.install_model_button = QPushButton("Подключить поиск по смыслу…")
+        self.install_model_button.setObjectName("storyInstallModelButton")
+        self.install_model_button.setAccessibleDescription("Скачайте модель или выберите готовую папку. Скачивание только после подтверждения.")
+        self.install_model_button.clicked.connect(self._open_model_install)
+        self.install_model_button.setVisible(not bool(self.model_dir))
+        import_row.addWidget(self.install_model_button)
+        import_row.addWidget(self.text_search_button)
         self.cancel_catalog_button = QPushButton("Отменить загрузку")
         self.cancel_catalog_button.clicked.connect(self._cancel_catalog)
         self.cancel_catalog_button.hide()
@@ -251,15 +252,6 @@ class StorySearchView:
         self.catalog_status.setWordWrap(True)
         import_row.addWidget(self.catalog_status, 1)
         root.addLayout(import_row)
-        install_row = QHBoxLayout()
-        self.install_model_button = QPushButton("Установить поиск по смыслу…")
-        self.install_model_button.setObjectName("storyInstallModelButton")
-        self.install_model_button.setAccessibleDescription("Скачивание около 487 МБ только после подтверждения.")
-        self.install_model_button.clicked.connect(self._open_model_install)
-        self.install_model_button.setVisible(not bool(self.model_dir))
-        install_row.addWidget(self.install_model_button)
-        install_row.addStretch()
-        root.addLayout(install_row)
         self.scope = self._label(root, self._model_scope(), "storyMuted")
         self.status = self._label(root, "")
         self._update_catalog_count()
@@ -283,10 +275,9 @@ class StorySearchView:
         self.query.setAccessibleName("Какую историю вы ищете")
         QWidget.setTabOrder(self.query, self.search_button)
         QWidget.setTabOrder(self.search_button, self.catalog_button)
-        QWidget.setTabOrder(self.catalog_button, self.options_button)
-        QWidget.setTabOrder(self.options_button, self.text_search_button)
-        QWidget.setTabOrder(self.text_search_button, self.snapshot_button)
+        QWidget.setTabOrder(self.catalog_button, self.snapshot_button)
         QWidget.setTabOrder(self.snapshot_button, self.install_model_button)
+        QWidget.setTabOrder(self.install_model_button, self.text_search_button)
         self.query.setFocus()
 
     def _focus_query(self):
@@ -294,7 +285,6 @@ class StorySearchView:
         self.query.selectAll()
 
     def _close_options(self):
-        self.options_button.setChecked(False)
         self.query.setFocus()
 
     def _example_callback(self, example):
@@ -515,14 +505,13 @@ class StorySearchView:
                 "Поиск по описаниям в вашем каталоге")
 
     def _update_model_controls(self, *, offer_replacement=False):
-        self.options_button.setVisible(not self.model_dir or offer_replacement)
         self.install_model_button.setVisible(not self.model_dir or offer_replacement)
         self.text_search_button.setVisible(bool(self.model_dir))
         self.scope.setText("Поиск по смыслу недоступен" if self.model_dir and offer_replacement else self._model_scope())
 
     def _sync_model_actions(self):
         can_change = not (self._closing or self._worker or self._model_install_worker)
-        for button in (self.model_button, self.options_button, self.text_search_button, self.install_model_button):
+        for button in (self.model_button, self.text_search_button, self.install_model_button):
             button.setEnabled(can_change)
         if self._model_install_dialog is not None:
             self._install_confirm.setEnabled(can_change and self._install_runtime_available
@@ -691,7 +680,6 @@ class StorySearchView:
         self.heading.setVisible(not compact)
         self.subtitle.setVisible(not compact)
         self.examples.setVisible(not compact)
-        self.options_button.setChecked(False)
         self._clear()
         if not compact:
             self._show_idle()

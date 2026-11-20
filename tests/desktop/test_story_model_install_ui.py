@@ -2,7 +2,7 @@ from threading import Event, get_ident
 
 import pytest
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel
+from PyQt6.QtWidgets import QLabel, QPushButton
 
 from candidates import story_model_install
 from desktop.story import view as story_ui
@@ -42,8 +42,13 @@ def test_no_download_before_confirmation_and_no_automatic_query_after_success(qt
     monkeypatch.setattr(story_model_install, "install_story_model", installer)
     view = open_view(qtbot)
     assert view._model_install_worker is None and not calls
-    click(qtbot, view.install_model_button)
+    visible_model_entries = [button for button in view.widget.findChildren(QPushButton)
+                             if button.isVisible() and ("по смыслу" in button.text() or "E5" in button.text())]
+    assert visible_model_entries == [view.install_model_button]
+    view.install_model_button.setFocus()
+    qtbot.keyClick(view.install_model_button, Qt.Key.Key_Space)
     assert view._model_install_dialog.isVisible() and not calls
+    assert view._install_manual.isEnabled()
     labels = [label.text() for label in view._model_install_dialog.findChildren(QLabel)]
     assert any("487 МБ" in label and "Hugging Face" in label for label in labels)
     assert any("не содержит описаний" in label and "TMDb" in label and "файл каталога" in label

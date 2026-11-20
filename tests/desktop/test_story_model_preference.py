@@ -9,6 +9,7 @@ from storage.sqlite.settings_repository import get_setting, set_setting
 
 @pytest.fixture(autouse=True)
 def isolated_environment(monkeypatch):
+    monkeypatch.setattr(story_ui, "_semantic_install_available", lambda: True)
     monkeypatch.delenv(story_ui._MODEL_ENV, raising=False)
     monkeypatch.delenv("WATCHBANE_STORY_SEED_CATALOG", raising=False)
 
@@ -48,7 +49,9 @@ def test_choose_reopens_lazily_and_isolated_to_the_current_profile(qtbot, monkey
     directory = tmp_path / "Модель E5"
     directory.mkdir()
     choose_folder(monkeypatch, directory)
-    mouse(qtbot, first.options_button)
+    mouse(qtbot, first.install_model_button)
+    assert first._model_install_dialog.isVisible()
+    mouse(qtbot, first._install_manual)
     assert get_setting(story_ui._MODEL_SETTING) == str(directory)
     assert first.text_search_button.isVisible()
     first.widget.close()
@@ -56,13 +59,13 @@ def test_choose_reopens_lazily_and_isolated_to_the_current_profile(qtbot, monkey
     reopened = open_view(qtbot)
     assert reopened.model_dir == str(directory)
     assert reopened.text_search_button.isVisible()
-    assert not reopened.options_button.isVisible()
+    assert not reopened.install_model_button.isVisible()
     assert reopened._worker is None
 
     profiles.set_active_profile(profile_b)
     different = open_view(qtbot)
     assert different.model_dir is None
-    assert different.options_button.isVisible()
+    assert different.install_model_button.isVisible()
     # Even a departing window cannot write a preference into the next profile.
     mouse(qtbot, reopened.text_search_button)
     assert get_setting(story_ui._MODEL_SETTING, "missing") == "missing"
@@ -82,14 +85,17 @@ def test_cli_override_is_session_only_until_explicit_selection_or_disable(qtbot,
     mouse(qtbot, view.text_search_button)
     assert view.model_dir is None
     assert get_setting(story_ui._MODEL_SETTING, "missing") is None
-    assert view.options_button.isVisible() and not view.text_search_button.isVisible()
+    assert view.install_model_button.isVisible() and not view.text_search_button.isVisible()
     choose_folder(monkeypatch, "")
-    mouse(qtbot, view.options_button)
+    mouse(qtbot, view.install_model_button)
+    assert view._model_install_dialog.isVisible()
+    mouse(qtbot, view._install_manual)
     assert view.model_dir is None
     assert get_setting(story_ui._MODEL_SETTING, "missing") is None
 
     choose_folder(monkeypatch, replacement)
-    mouse(qtbot, view.options_button)
+    assert view._model_install_dialog.isVisible()
+    mouse(qtbot, view._install_manual)
     assert view.model_dir == replacement
     assert get_setting(story_ui._MODEL_SETTING) == replacement
 
@@ -112,7 +118,7 @@ def test_missing_saved_folder_can_retry_same_query_and_reconnect(qtbot, monkeypa
     mouse(qtbot, view.search_button)
     qtbot.waitUntil(lambda: view._worker is None)
     assert "Не удалось" in view.status.text()
-    assert view.text_search_button.isVisible() and view.options_button.isVisible()
+    assert view.text_search_button.isVisible() and view.install_model_button.isVisible()
     assert get_setting(story_ui._MODEL_SETTING) == str(absent)
     mouse(qtbot, view.text_search_button)
     qtbot.waitUntil(lambda: view._worker is None)
@@ -122,7 +128,9 @@ def test_missing_saved_folder_can_retry_same_query_and_reconnect(qtbot, monkeypa
 
     replacement = tmp_path / "other"
     choose_folder(monkeypatch, replacement)
-    mouse(qtbot, view.options_button)
+    mouse(qtbot, view.install_model_button)
+    assert view._model_install_dialog.isVisible()
+    mouse(qtbot, view._install_manual)
     assert open_view(qtbot).model_dir == str(replacement)
 
 
@@ -130,7 +138,7 @@ def test_malformed_setting_does_not_block_startup(qtbot):
     set_setting(story_ui._MODEL_SETTING, {"path": "unexpected"})
     view = open_view(qtbot)
     assert view.model_dir is None
-    assert view.options_button.isVisible()
+    assert view.install_model_button.isVisible()
 
 
 def publisher_layout(monkeypatch, tmp_path, *, frozen=True):

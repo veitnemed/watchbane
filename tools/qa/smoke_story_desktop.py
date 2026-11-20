@@ -146,10 +146,10 @@ def _desktop_phase(phase, options):
             sleep(.01)
         app.processEvents()
 
-    def screenshot(name):
+    def screenshot(name, widget=None):
         if options["output_dir"]:
             file = Path(options["output_dir"]) / f"{phase}-{name}.png"
-            check(window.grab().save(str(file)), "Could not save requested screenshot.")
+            check((window if widget is None else widget).grab().save(str(file)), "Could not save requested screenshot.")
 
     with ExitStack() as guards:
         for owner, attribute in (
@@ -204,7 +204,7 @@ def _desktop_phase(phase, options):
                     check(story.model_dir == str(destination) and story._model_preference.read() == str(destination),
                           "Model verification or preference persistence failed.")
                     elapsed["install_cached_verification_ms"] = round((monotonic() - began) * 1000)
-                    screenshot("installed")
+                    screenshot("installed", story._model_install_dialog)
                     story._model_install_dialog.accept()
                 with patch.object(QFileDialog, "getOpenFileName", return_value=(options["catalog"], "")):
                     began = monotonic()
