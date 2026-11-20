@@ -314,7 +314,7 @@ class StorySearchView:
     def _show_idle(self):
         self.status.setText(
             "Выберите пример запроса или опишите свой сюжет." if self._catalog_ready else
-            "Загрузите описания из TMDb или откройте файл каталога, чтобы начать поиск."
+            "Загрузите описания из TMDb или откройте файл каталога. Можно набрать запрос заранее."
         )
 
     def _update_catalog_count(self, prefix=""):
@@ -342,6 +342,9 @@ class StorySearchView:
             self.catalog_status.setText(prefix + "Не удалось прочитать локальный каталог.")
         self.snapshot_button.setMenu(self.snapshot_menu if self.seed_path else None)
         self.examples.setEnabled(self._catalog_ready)
+        self.search_button.setEnabled(self._catalog_ready and self._snapshot_worker is None)
+        self.query.setPlaceholderText("Например: сериал про преступника" if self._catalog_ready else
+                                      "Для поиска нужен каталог")
 
     def _can_switch_source(self):
         return not (self._closing or self._worker or self._catalog_worker or self._snapshot_worker)
@@ -381,7 +384,6 @@ class StorySearchView:
             return
         self.snapshot_button.setEnabled(True)
         self.catalog_button.setEnabled(True)
-        self.search_button.setEnabled(True)
         self.cancel_catalog_button.hide()
         self.cancel_catalog_button.setText("Отменить загрузку")
         if self._snapshot_cancelled:
@@ -537,7 +539,9 @@ class StorySearchView:
             layout = QVBoxLayout(dialog)
             self._label(layout, "Один раз скачайте локальную модель E5 (~487 МБ) с Hugging Face, "
                                 "из репозитория intfloat/multilingual-e5-small. После установки "
-                                "поиск по описаниям работает без интернета.")
+                                "поиск по локальному каталогу работает без интернета.")
+            self._label(layout, "E5 ищет по смыслу, но не содержит описаний. Откройте файл каталога "
+                                "или загрузите описания из TMDb.")
             self._label(layout, "Watchbane проверит файлы перед подключением. Ваши запросы и "
                                 "коллекция не отправляются при установке.")
             self._install_status = self._label(layout, "")
@@ -691,8 +695,6 @@ class StorySearchView:
         self._clear()
         if not compact:
             self._show_idle()
-            if self._active_query.strip() and self.catalog_button.isVisible():
-                self.catalog_button.setFocus()
             return
         self.status.setText("Ищем совпадения в описаниях…")
         self.search_button.setText("Следующий запрос")
@@ -723,7 +725,7 @@ class StorySearchView:
         if worker:
             worker.deleteLater()
         self.search_button.setText("Найти историю")
-        self.search_button.setEnabled(True)
+        self.search_button.setEnabled(self._catalog_ready and self._snapshot_worker is None)
         self.refresh_button.setEnabled(True)
         self.snapshot_button.setEnabled(self._catalog_worker is None)
         self._sync_model_actions()

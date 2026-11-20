@@ -17,11 +17,16 @@ def test_empty_catalog_does_not_run_demo_or_start_background_work(qtbot, monkeyp
     view.widget.activateWindow()
     qtbot.waitUntil(view.widget.isActiveWindow)
     monkeypatch.setattr(service, "local_story_catalog", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no search")))
+    assert view.query.isEnabled() and not view.search_button.isEnabled()
+    assert view.query.placeholderText() == "Для поиска нужен каталог"
+    assert view.catalog_button.isVisible() and view.snapshot_button.isVisible()
+    view.query.setFocus()
     view.query.setText("сериал про пристурника")
     qtbot.keyClick(view.query, Qt.Key.Key_Return)
     assert view._worker is None and view.cards_layout.count() == 1
     assert "Загрузите" in view.status.text()
-    assert view.catalog_button.hasFocus()
+    assert view.query.hasFocus() and view.query.text() == "сериал про пристурника"
+    assert "TMDb" in view.status.text() and "файл каталога" in view.status.text()
     assert view.heading.isVisible() and not view.examples.isEnabled()
 
 

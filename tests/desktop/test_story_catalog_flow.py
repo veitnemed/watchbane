@@ -18,6 +18,7 @@ def test_clean_home_real_only_then_existing_auth_mock_import(qtbot,monkeypatch):
     monkeypatch.setattr(tmdb_api,'get_tv_details',lambda identifier,language,**kw:fake.details('tv',identifier,language))
     view=StorySearchView();qtbot.addWidget(view.widget);view.widget.resize(1180,950);view.widget.show()
     assert view._auth_dialog is None and 'Каталог пока пуст' in view.catalog_status.text()
+    assert not view.search_button.isEnabled()
     assert view.catalog_button.text()=='Заполнить каталог из TMDb'
     view.query.setText('врач');view.search()
     qtbot.waitUntil(lambda:view._worker is None)
@@ -30,6 +31,7 @@ def test_clean_home_real_only_then_existing_auth_mock_import(qtbot,monkeypatch):
     panel._token_input.setText('synthetic-test-token-not-a-secret');panel._save()
     qtbot.waitUntil(lambda:credentials[0] and view._catalog_worker is None and 'Добавлено: 6' in view.catalog_status.text(),timeout=10000)
     qtbot.waitUntil(lambda:view._worker is None,timeout=10000)
+    assert view.search_button.isEnabled() and view.query.text() == "врач"
     assert len(view._records)==6 and view.cards_layout.count()>1
     assert any('Вымышленный' in w.text() for w in view.cards.findChildren(QLabel,'storyTitle'))
     assert all('query' not in c[2] and 'врач' not in str(c[2]) for c in fake.calls if c[0]=='discover')

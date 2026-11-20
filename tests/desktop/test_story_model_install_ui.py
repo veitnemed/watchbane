@@ -46,6 +46,8 @@ def test_no_download_before_confirmation_and_no_automatic_query_after_success(qt
     assert view._model_install_dialog.isVisible() and not calls
     labels = [label.text() for label in view._model_install_dialog.findChildren(QLabel)]
     assert any("487 МБ" in label and "Hugging Face" in label for label in labels)
+    assert any("не содержит описаний" in label and "TMDb" in label and "файл каталога" in label
+               for label in labels)
     assert get_setting(story_ui._MODEL_SETTING, "absent") == "absent"
 
     search_calls = []
@@ -58,12 +60,17 @@ def test_no_download_before_confirmation_and_no_automatic_query_after_success(qt
     assert get_setting(story_ui._MODEL_SETTING) == view.model_dir
     assert "проверена" in view._install_status.text()
     assert view.query.text() == "врач" and not search_calls
+    assert not view.search_button.isEnabled()
     assert not view._install_confirm.isEnabled()
     view._model_install_dialog.accept()
     assert open_view(qtbot).model_dir == view.model_dir
 
 
 def test_cancel_does_not_adopt_a_late_verified_install(qtbot, monkeypatch, tmp_path):
+    from candidates.story_search import StoryDocument
+    monkeypatch.setattr(story_ui.service, "story_catalog_snapshot", lambda: ([
+        StoryDocument("existing", "Existing", "Врач лечит пациентов.", "tv", "fixture"),
+    ], {}))
     old_directory = str(tmp_path / "manual-model")
     set_setting(story_ui._MODEL_SETTING, old_directory)
     started, release = Event(), Event()
