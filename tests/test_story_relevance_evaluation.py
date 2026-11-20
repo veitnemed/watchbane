@@ -34,3 +34,32 @@ def test_score_rejects_duplicate_ids():
 def test_score_limit_one_counts_first_hit_once():
     actual = score([{"id": "a", "expect": "match", "full": ["a"]}], {"a": ["a"]}, {"a"}, limit=1)
     assert actual["counts"]["hit_1"] == 1
+
+
+def test_v1_validates_returned_ranking_beyond_visible_limit():
+    cases = [{"id": "a", "expect": "match", "full": ["present"]}]
+    for returned in (["present", "present"], ["present", "unknown"]):
+        with pytest.raises(ValueError, match="duplicate or unknown title"):
+            score(cases, {"a": returned}, {"present"}, limit=1)
+
+
+def test_strict_rank_case_ids_and_disjoint_positive_outcomes():
+    cases = [
+        {"id": "no_catalog", "expect": "match", "full": ["absent"]},
+        {"id": "covered_empty", "expect": "match", "full": ["present"]},
+        {"id": "covered_miss", "expect": "match", "full": ["present"]},
+        {"id": "covered_hit", "expect": "match", "full": ["present", "another_absent"]},
+    ]
+    ranked = {"no_catalog": ["other"], "covered_empty": [], "covered_miss": ["other"],
+              "covered_hit": ["present"]}
+    with pytest.raises(ValueError, match="exactly the sealed case IDs"):
+        score(cases, dict(ranked, extra=[]), {"present", "other"})
+    result = score(cases, ranked, {"present", "other"})
+    assert result["coverage"] == {
+        "positive_cases": 4, "covered_positive_cases": 3, "uncovered_positive_case_ids": ["no_catalog"],
+    }
+    counts = result["counts"]
+    assert counts["uncovered_positive_with_cards"] == 1
+    assert counts["covered_positive_misses_at_limit"] == 2
+    assert counts["covered_positive_without_cards"] == 1
+    assert counts["hit_5"] == 1
