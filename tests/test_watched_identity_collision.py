@@ -100,3 +100,31 @@ def test_concurrent_homonyms_allocate_unique_keys(tmp_path):
     keys = [one.result()["dataset_key"], two.result()["dataset_key"]]
     assert keys[0] != keys[1]
     assert _active(db) == {("movie", 101): (keys[0], 3), ("movie", 202): (keys[1], 1)}
+
+
+def test_legacy_watched_row_with_conflicting_imdb_id_must_not_be_adopted(tmp_path):
+    db = tmp_path / "watchbane.sqlite3"
+    legacy = dict(_item(None), imdb_id="tt1234567")
+    newer = dict(_item(101), imdb_id="tt7654321")
+    legacy_key = states.mark_watched(legacy, optional_user_score=3, path=db)["dataset_key"]
+    conn = connect(db)
+    try:
+        assert conn.execute("SELECT imdb_id FROM watched_records WHERE dataset_key = ?", (legacy_key,)).fetchone()["imdb_id"] == "tt1234567"
+    finally:
+        conn.close()
+
+    assert states.get_title_state(newer, path=db) == states.STATE_AVAILABLE
+    new_key = states.mark_watched(newer, optional_user_score=1, path=db)["dataset_key"]
+    assert new_key != legacy_key
+    assert _active(db) == {("movie", None): (legacy_key, 3), ("movie", 101): (new_key, 1)}
+
+
+def test_matching_legacy_imdb_id_can_keep_original_watched_row(tmp_path):
+    db = tmp_path / "watchbane.sqlite3"
+    legacy = dict(_item(None), imdb_id="tt1234567")
+    linked = dict(_item(101), imdb_id="TT1234567")
+    legacy_key = states.mark_watched(legacy, optional_user_score=3, path=db)["dataset_key"]
+
+    assert states.get_title_state(linked, path=db) == states.STATE_WATCHED
+    assert states.mark_watched(linked, path=db)["dataset_key"] == legacy_key
+    assert _active(db) == {("movie", 101): (legacy_key, 3)}

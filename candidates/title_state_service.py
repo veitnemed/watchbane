@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
 
-from candidates.models.keys import candidate_action_identity_key, candidate_state_identity_key
+from candidates.models.keys import candidate_action_identity_key, candidate_imdb_identity, candidate_state_identity_key
 from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
 from common import valid
 from dataset.add_flow.save import build_movie_record_from_defaults
@@ -85,7 +85,16 @@ def _find_watched_row(conn: sqlite3.Connection, candidate: dict, *, allow_legacy
         """,
         (normalize_title_key(title), media_type, year),
     ).fetchall()
-    return matches[0] if len(matches) == 1 else None
+    if len(matches) != 1:
+        return None
+    row = matches[0]
+    incoming_imdb = candidate_imdb_identity(candidate.get("imdb_id"))
+    stored_imdb = candidate_imdb_identity(row["imdb_id"])
+    # A legacy row can still carry a stable external identity even when no
+    # TMDb ID was stored. Its title/year must not override contradictory IDs.
+    if incoming_imdb and stored_imdb and incoming_imdb != stored_imdb:
+        return None
+    return row
 
 
 def _state_in_connection(conn: sqlite3.Connection, candidate: dict) -> str:

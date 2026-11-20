@@ -7,6 +7,7 @@ import sqlite3
 
 from candidates.models.keys import (
     candidate_action_identity_key,
+    candidate_imdb_identity,
     candidate_legacy_state_keys,
     candidate_typed_state_key,
     title_identity_key,
@@ -158,8 +159,8 @@ def _row_value(row):
 
 
 def _imdb_key(candidate):
-    value = str(candidate.get("imdb_id") or "").strip().casefold()
-    if value.startswith("tt") and value[2:].isascii() and value[2:].isdecimal():
+    value = candidate_imdb_identity(candidate.get("imdb_id"))
+    if value:
         return normalize_media_type(candidate.get("media_type")), value
     return None
 

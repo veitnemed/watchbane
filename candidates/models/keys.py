@@ -71,6 +71,14 @@ def candidate_typed_state_key(candidate: dict) -> str | None:
     return f"tmdb:{normalize_media_type(candidate.get('media_type'))}:{tmdb_id}"
 
 
+def candidate_imdb_identity(value: Any) -> str | None:
+    """Return only a syntactically valid external title ID."""
+    key = str(value or "").strip().casefold()
+    if key.startswith("tt") and key[2:].isascii() and key[2:].isdecimal():
+        return key
+    return None
+
+
 def candidate_legacy_state_keys(candidate: dict) -> tuple[str, str]:
     legacy = title_identity_key(candidate)
     return f"{legacy}|{normalize_media_type(candidate.get('media_type'))}", legacy
