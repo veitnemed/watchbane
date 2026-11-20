@@ -1,4 +1,4 @@
-from config import constant
+from storage import data as watched_storage
 
 
 def _valid_add_payload(title: str = "New Title") -> dict:
@@ -21,16 +21,6 @@ def test_add_dataset_record_returns_side_effects(monkeypatch) -> None:
     from dataset.records import add as add_module
     from dataset.records.add import add_dataset_record
 
-    saved = {}
-    saved_meta = {}
-
-    monkeypatch.setattr(add_module, "load_dataset", lambda: {})
-    monkeypatch.setattr(add_module, "load_meta", lambda: {})
-    monkeypatch.setattr(
-        add_module,
-        "save_dataset_and_meta",
-        lambda data, meta: saved.update(data) or saved_meta.update(meta),
-    )
     monkeypatch.setattr(
         add_module,
         "run_after_add_side_effects",
@@ -40,6 +30,7 @@ def test_add_dataset_record_returns_side_effects(monkeypatch) -> None:
     result = add_dataset_record(_valid_add_payload())
 
     assert result.ok is True
+    saved, saved_meta = watched_storage.load_dataset(), watched_storage.load_meta()
     assert result.side_effects == [{"type": "poster_cache_sync", "ok": True}]
     assert "New Title" in saved
     assert "New Title" in saved_meta
@@ -50,7 +41,7 @@ def test_add_dataset_record_rejects_duplicate(monkeypatch) -> None:
     from dataset.records import add as add_module
     from dataset.records.add import add_dataset_record
 
-    monkeypatch.setattr(add_module, "load_dataset", lambda: {"New Title": {}})
+    watched_storage.save_dataset_and_meta({"New Title": _valid_add_payload()}, {})
 
     result = add_dataset_record(_valid_add_payload())
 
@@ -62,8 +53,6 @@ def test_add_dataset_record_allows_same_title_with_different_media_type(monkeypa
     from dataset.records import add as add_module
     from dataset.records.add import add_dataset_record
 
-    saved = {}
-    saved_meta = {}
     existing = {
         "Watchmen": {
             "main_info": {
@@ -76,22 +65,12 @@ def test_add_dataset_record_allows_same_title_with_different_media_type(monkeypa
         }
     }
 
-    monkeypatch.setattr(add_module, "load_dataset", lambda: dict(existing))
-    monkeypatch.setattr(
-        add_module,
-        "load_meta",
-        lambda: {
-            "Watchmen": {
-                "main_info": existing["Watchmen"]["main_info"],
-                "raw_scores": {"tmdb_id": 100},
-            }
+    watched_storage.save_dataset_and_meta(existing, {
+        "Watchmen": {
+            "main_info": existing["Watchmen"]["main_info"],
+            "raw_scores": {"tmdb_id": 100},
         },
-    )
-    monkeypatch.setattr(
-        add_module,
-        "save_dataset_and_meta",
-        lambda data, meta: saved.update(data) or saved_meta.update(meta),
-    )
+    })
     monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
 
     payload = _valid_add_payload("Watchmen")
@@ -101,6 +80,7 @@ def test_add_dataset_record_allows_same_title_with_different_media_type(monkeypa
     result = add_dataset_record(payload)
 
     assert result.ok is True
+    saved, saved_meta = watched_storage.load_dataset(), watched_storage.load_meta()
     assert result.title == "Watchmen (2009, movie)"
     assert saved["Watchmen (2009, movie)"]["main_info"]["title"] == "Watchmen"
     assert saved["Watchmen (2009, movie)"]["main_info"]["media_type"] == "movie"
@@ -112,16 +92,6 @@ def test_add_dataset_record_accepts_tmdb_only_raw_scores(monkeypatch) -> None:
     from dataset.records import add as add_module
     from dataset.records.add import add_dataset_record
 
-    saved = {}
-    saved_meta = {}
-
-    monkeypatch.setattr(add_module, "load_dataset", lambda: {})
-    monkeypatch.setattr(add_module, "load_meta", lambda: {})
-    monkeypatch.setattr(
-        add_module,
-        "save_dataset_and_meta",
-        lambda data, meta: saved.update(data) or saved_meta.update(meta),
-    )
     monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
 
     payload = _valid_add_payload("TMDb Only")
@@ -134,6 +104,7 @@ def test_add_dataset_record_accepts_tmdb_only_raw_scores(monkeypatch) -> None:
     result = add_dataset_record(payload)
 
     assert result.ok is True
+    saved, saved_meta = watched_storage.load_dataset(), watched_storage.load_meta()
     movie = saved["TMDb Only"]
     assert movie["raw_scores"] == {
         "tmdb_score": 8.1,
@@ -150,16 +121,6 @@ def test_add_dataset_record_saves_new_meta_from_tmdb_meta_payload(monkeypatch) -
     from dataset.records import add as add_module
     from dataset.records.add import add_dataset_record
 
-    saved = {}
-    saved_meta = {}
-
-    monkeypatch.setattr(add_module, "load_dataset", lambda: {})
-    monkeypatch.setattr(add_module, "load_meta", lambda: {})
-    monkeypatch.setattr(
-        add_module,
-        "save_dataset_and_meta",
-        lambda data, meta: saved.update(data) or saved_meta.update(meta),
-    )
     monkeypatch.setattr(add_module, "run_after_add_side_effects", lambda **_kwargs: [])
 
     payload = _valid_add_payload("TMDb Meta")
@@ -178,6 +139,7 @@ def test_add_dataset_record_saves_new_meta_from_tmdb_meta_payload(monkeypatch) -
     result = add_dataset_record(payload, meta_payload=meta_payload)
 
     assert result.ok is True
+    saved, saved_meta = watched_storage.load_dataset(), watched_storage.load_meta()
     assert "TMDb Meta" in saved
     assert saved_meta["TMDb Meta"]["main_info"] == {
         **payload["main_info"],

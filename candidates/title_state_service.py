@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
 
 from candidates.models.keys import candidate_action_identity_key, candidate_state_identity_key
 from candidates.models.schema import coerce_candidate_number, normalize_candidate_record
+from common import valid
 from dataset.add_flow.save import build_movie_record_from_defaults
 from dataset.models.identity import (
     build_dataset_record_key,
@@ -14,7 +16,9 @@ from dataset.models.identity import (
 )
 from dataset.models.media_type import normalize_media_type
 from dataset.models.user_rating import normalize_user_rating
+from dataset.records.features import build_computed_scores
 from dataset.transfer.candidate import build_candidate_transfer_payload
+from storage.normalize import normalize_raw_scores
 from storage.sqlite import action_repository, impression_repository
 from storage.sqlite.connection import connect
 from storage.sqlite.json_codec import loads_json
@@ -281,21 +285,28 @@ class ReviewedWatchedConflict(ValueError):
         self.reason = reason
 
 
+@dataclass(frozen=True)
+class WatchedAddWriteResult:
+    dataset_key: str
+    payload: dict
+    meta: dict
+
+
 def save_watched_dataset_transition(
     data: dict,
     meta: dict,
-    candidate: dict,
+    candidate: dict | None,
     *,
     path: str | Path | None = None,
-) -> str:
-    """Add one reviewed watched record, never reconcile a stale dataset snapshot."""
+) -> WatchedAddWriteResult:
+    """Add one watched row; only an explicit candidate may transition actions."""
     if len(data) != 1 or not set(meta).issubset(data):
         raise ValueError("Reviewed transfer requires exactly one record and its own meta.")
     proposed_key, payload = next(iter(data.items()))
     meta_payload = dict(meta.get(proposed_key) or {})
-    normalized = normalize_candidate_record(candidate)
+    normalized = normalize_candidate_record(candidate) if candidate is not None else None
     incoming = extract_watched_record(proposed_key, payload, meta=meta_payload)
-    candidate_id = _candidate_tmdb_id(normalized)
+    candidate_id = _candidate_tmdb_id(normalized) if normalized is not None else None
     if candidate_id is not None:
         if (incoming.tmdb_id not in (None, candidate_id)
             or normalize_media_type(normalized.get("media_type")) != incoming.media_type):
@@ -338,10 +349,33 @@ def save_watched_dataset_transition(
                     str(unresolved["dataset_key"]), "duplicate_title",
                     "Ошибка добавления! Такой объект уже добавлен",
                 )
-            if matching_id:
-                dataset_key = str(matching_id["dataset_key"])
-                old_meta = loads_json(matching_id["meta_json"], {})
+            match = matching_id
+            if match is None and tmdb_id is None:
+                # An ID-less add may reuse only an unambiguous, equally ID-less
+                # metadata row. Never inherit a known homonym's metadata/ID.
+                rows = conn.execute(
+                    """
+                    SELECT dataset_key, meta_json FROM watched_records
+                    WHERE title_normalized = ? AND media_type = ? AND year IS ?
+                      AND tmdb_id IS NULL AND payload_json = '{}' AND meta_json IS NOT NULL
+                    LIMIT 2
+                    """,
+                    (incoming.title_normalized, incoming.media_type, incoming.year),
+                ).fetchall()
+                match = rows[0] if len(rows) == 1 else None
+            if match is not None:
+                dataset_key = str(match["dataset_key"])
+                old_meta = loads_json(match["meta_json"], {})
                 if isinstance(old_meta, dict):
+                    old_raw = old_meta.get("raw_scores", old_meta.get("raw"))
+                    fresh_raw = meta_payload.get("raw_scores")
+                    if isinstance(old_raw, dict) and isinstance(fresh_raw, dict):
+                        usable_old = {key: value for key, value in old_raw.items()
+                                      if valid.is_valid_raw_meta({key: value})}
+                        raw = normalize_raw_scores(dict(usable_old, **fresh_raw))
+                        meta_payload["raw_scores"] = raw
+                        payload = dict(payload, raw_scores=raw,
+                                       computed_scores=build_computed_scores(raw, payload["main_info"]))
                     meta_payload = dict(old_meta, **meta_payload)
             else:
                 occupied = {row["dataset_key"]: None for row in conn.execute("SELECT dataset_key FROM watched_records")}
@@ -349,7 +383,8 @@ def save_watched_dataset_transition(
                     occupied, incoming.title, year=incoming.year, media_type=incoming.media_type,
                 )
             upsert_watched_row(conn, dataset_key=dataset_key, payload=payload, meta=meta_payload)
-            _clear_candidate_actions(conn, normalized)
-        return dataset_key
+            if normalized is not None:
+                _clear_candidate_actions(conn, normalized)
+        return WatchedAddWriteResult(dataset_key, payload, meta_payload)
     finally:
         conn.close()

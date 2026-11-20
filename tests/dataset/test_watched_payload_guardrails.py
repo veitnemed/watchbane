@@ -10,13 +10,11 @@ FORBIDDEN_RAW_SCORE_KEYS = {"kp_score", "kp_votes", "imdb_score", "imdb_votes", 
 def test_add_dataset_record_does_not_persist_legacy_payload_fields(monkeypatch) -> None:
     saved: dict = {}
 
-    def fake_save_dataset_and_meta(data, meta):
+    def fake_persist(data, meta, _candidate):
         saved["data"] = data
         saved["meta"] = meta
 
-    monkeypatch.setattr("dataset.records.add.save_dataset_and_meta", fake_save_dataset_and_meta)
-    monkeypatch.setattr("dataset.records.add.load_dataset", lambda: {})
-    monkeypatch.setattr("dataset.records.add.load_meta", lambda: {})
+    monkeypatch.setattr("dataset.records.add._persist_one_watched", fake_persist)
     monkeypatch.setattr("dataset.records.add.run_after_add_side_effects", lambda **kwargs: {})
 
     result = add_dataset_record(

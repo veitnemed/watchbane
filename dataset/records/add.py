@@ -4,47 +4,24 @@ from copy import deepcopy
 
 from common import valid
 from dataset.meta.merge import extract_extra_meta
-from dataset.models.identity import build_dataset_record_key, find_case_insensitive_key
 from dataset.models.results import AddRecordResult
 from dataset.records.features import build_computed_scores
 from dataset.records.side_effects import run_after_add_side_effects
-from dataset.records.validation import ParsedAddPayload, validate_add_record_payload
-from storage.data import load_dataset, load_meta, save_dataset_and_meta
+from dataset.records.validation import validate_add_record_payload
 from storage.normalize import normalize_main_info, normalize_raw_scores
 
 
-def _tmdb_id_from_meta(meta_obj: dict | None) -> int | None:
-    if not isinstance(meta_obj, dict):
-        return None
-    raw_scores = meta_obj.get("raw_scores")
-    values = (
-        meta_obj.get("tmdb_id"),
-        raw_scores.get("tmdb_id") if isinstance(raw_scores, dict) else None,
-    )
-    for value in values:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            continue
-    return None
+_LEGACY_RAW_FIELDS = {
+    "kp_score", "kp_votes", "kp_popularity", "imdb_score", "imdb_votes", "imdb_popularity",
+}
 
 
-def _find_tmdb_duplicate(
-    data: dict,
-    meta: dict,
-    *,
-    tmdb_id: int | None,
-    media_type: str,
-) -> str | None:
-    if tmdb_id is None:
-        return None
-    for dataset_key, record in data.items():
-        main_info = record.get("main_info") if isinstance(record, dict) else None
-        existing_media_type = normalize_main_info(main_info or {}).get("media_type")
-        if existing_media_type != media_type:
-            continue
-        if _tmdb_id_from_meta(meta.get(dataset_key)) == tmdb_id:
-            return str(dataset_key)
+def _positive_tmdb_id(value):
+    if type(value) is int:
+        return value if value > 0 else None
+    if type(value) is str and (text := value.strip()).isascii() and text.isdecimal() and len(text) <= 20:
+        number = int(text)
+        return number if number > 0 else None
     return None
 
 
@@ -89,36 +66,9 @@ def _build_new_movie(record_payload, main_info, raw_scores):
     return movie
 
 
-def _add_reviewed_candidate(record_payload, meta_payload, pool_candidate, poster_hints):
-    # Do not load a whole-library snapshot here. The single-row writer decides
-    # identity and allocates the final key against fresh state inside SQLite.
-    from candidates.title_state_service import ReviewedWatchedConflict, save_watched_dataset_transition
-
-    parsed = validate_add_record_payload(record_payload, data={})
-    if isinstance(parsed, AddRecordResult):
-        return parsed
-    raw = (meta_payload.get("raw_scores", meta_payload.get("raw", parsed.input_raw_scores))
-           if isinstance(meta_payload, dict) else parsed.input_raw_scores)
-    if not valid.is_valid_raw_meta(raw):
-        return AddRecordResult(False, parsed.title, "Ошибка добавления! Некорректные raw_scores", "invalid_payload")
-    meta = _build_meta_obj(parsed.main_info, raw, extra_meta=extract_extra_meta(meta_payload))
-    if meta is None:
-        return AddRecordResult(False, parsed.title, "Ошибка добавления! Некорректные meta-данные", "invalid_payload")
-    movie = _build_new_movie(record_payload, parsed.main_info, raw)
-    try:
-        dataset_key = save_watched_dataset_transition(
-            {parsed.title: movie}, {parsed.title: meta}, pool_candidate,
-        ) or parsed.title
-    except ReviewedWatchedConflict as error:
-        return AddRecordResult(False, error.dataset_key, str(error), error.reason)
-    except Exception as error:
-        return AddRecordResult(False, parsed.title, f"Ошибка добавления! Не удалось сохранить dataset: {error}", "save_error")
-
-    side_effects = run_after_add_side_effects(
-        title=parsed.title, year=parsed.year, movie=movie, meta_obj=meta,
-        pool_candidate=pool_candidate, poster_hints=poster_hints,
-    )
-    return AddRecordResult(True, dataset_key, "Новая запись добавлена!", "saved", side_effects)
+def _persist_one_watched(data, meta, candidate):
+    from candidates.title_state_service import save_watched_dataset_transition
+    return save_watched_dataset_transition(data, meta, candidate)
 
 
 def add_dataset_record(
@@ -128,114 +78,46 @@ def add_dataset_record(
     pool_candidate=None,
     poster_hints=None,
 ) -> AddRecordResult:
-    """Add a watched record; reviewed candidates use a single-row transaction."""
-    if isinstance(pool_candidate, dict):
-        return _add_reviewed_candidate(record_payload, meta_payload, pool_candidate, poster_hints)
+    """Add one watched record without rewriting the rest of the collection."""
+    from candidates.title_state_service import ReviewedWatchedConflict
 
-    # Keep the separate compatibility path for manual/non-candidate adds.
-    data = load_dataset()
-    meta = load_meta()
-    validated = validate_add_record_payload(record_payload, data=data)
-    if isinstance(validated, AddRecordResult):
-        return validated
-
-    parsed: ParsedAddPayload = validated
-    title = parsed.title
-    main_info = parsed.main_info
-    input_raw_scores = parsed.input_raw_scores
-    year = parsed.year
-    media_type = parsed.media_type
-    duplicate_key = _find_tmdb_duplicate(
-        data,
-        meta,
-        tmdb_id=_tmdb_id_from_meta(meta_payload),
-        media_type=media_type,
-    )
-    if duplicate_key is not None:
-        return AddRecordResult(
-            ok=False,
-            title=duplicate_key,
-            message="This TMDb title is already in the watched collection.",
-            reason="duplicate_tmdb_identity",
-        )
-    dataset_key = build_dataset_record_key(data, title, year=year, media_type=media_type)
-
+    # Decide duplicates and allocate the key against fresh state inside SQLite,
+    # not against a whole-library snapshot read when the form was prepared.
+    parsed = validate_add_record_payload(record_payload, data={})
+    if isinstance(parsed, AddRecordResult):
+        return parsed
+    raw = (meta_payload.get("raw_scores", meta_payload.get("raw", parsed.input_raw_scores))
+           if isinstance(meta_payload, dict) else parsed.input_raw_scores)
+    if not isinstance(raw, dict):
+        return AddRecordResult(False, parsed.title, "Ошибка добавления! Некорректные raw_scores", "invalid_payload")
     extra_meta = extract_extra_meta(meta_payload)
-    existing_meta_key = find_case_insensitive_key(meta, dataset_key)
-    if existing_meta_key is None and dataset_key == title:
-        existing_meta_key = find_case_insensitive_key(meta, title)
-
-    existing_meta_obj = meta.get(existing_meta_key) if existing_meta_key is not None else None
-    if isinstance(meta_payload, dict) and (
-        "raw_scores" in meta_payload or "raw" in meta_payload
-    ):
-        candidate_meta_obj = meta_payload
-    else:
-        candidate_meta_obj = existing_meta_obj
-
-    if candidate_meta_obj is None:
-        if valid.is_valid_raw_meta(input_raw_scores) is False:
-            return AddRecordResult(
-                ok=False,
-                title=title,
-                message="Ошибка добавления! Некорректные raw_scores",
-                reason="invalid_payload",
-            )
-
-        raw_scores = normalize_raw_scores(input_raw_scores)
-        new_meta_obj = _build_meta_obj(main_info, raw_scores, extra_meta=extra_meta)
-        if new_meta_obj is None:
-            return AddRecordResult(
-                ok=False,
-                title=title,
-                message="Ошибка добавления! Некорректные meta-данные",
-                reason="invalid_payload",
-            )
-        meta[dataset_key] = new_meta_obj
-    else:
-        raw_scores = candidate_meta_obj.get("raw_scores", candidate_meta_obj.get("raw"))
-        target_meta_key = existing_meta_key or dataset_key
-        if existing_meta_key is None:
-            new_meta_obj = _build_meta_obj(main_info, normalize_raw_scores(raw_scores), extra_meta=extra_meta)
-            if new_meta_obj is None:
-                return AddRecordResult(
-                    ok=False,
-                    title=title,
-                    message="Ошибка добавления! Некорректные meta-данные",
-                    reason="invalid_payload",
-                )
-            meta[target_meta_key] = new_meta_obj
-        if extra_meta:
-            current_meta = meta.get(target_meta_key)
-            if isinstance(current_meta, dict):
-                merged_meta = dict(current_meta)
-                merged_meta.update(extra_meta)
-                meta[target_meta_key] = merged_meta
-
-    new_movie = _build_new_movie(record_payload, main_info, raw_scores)
-    data[dataset_key] = new_movie
+    values = (extra_meta.get("tmdb_id"), raw.get("tmdb_id"))
+    ids = {clean for value in values if (clean := _positive_tmdb_id(value)) is not None}
+    if len(ids) > 1:
+        return AddRecordResult(False, parsed.title, "В метаданных указаны разные TMDb ID.", "invalid_payload")
+    if ids:
+        extra_meta["tmdb_id"] = ids.pop()
+    # The old legacy-cache path accepted but did not persist external scores.
+    raw = {key: value for key, value in raw.items() if key not in _LEGACY_RAW_FIELDS and key != "tmdb_id"}
+    if not valid.is_valid_raw_meta(raw):
+        return AddRecordResult(False, parsed.title, "Ошибка добавления! Некорректные raw_scores", "invalid_payload")
+    meta = _build_meta_obj(parsed.main_info, raw, extra_meta=extra_meta)
+    if meta is None:
+        return AddRecordResult(False, parsed.title, "Ошибка добавления! Некорректные meta-данные", "invalid_payload")
+    movie = _build_new_movie(record_payload, parsed.main_info, raw)
     try:
-        save_dataset_and_meta(data, meta)
+        candidate = pool_candidate if isinstance(pool_candidate, dict) else None
+        persisted = _persist_one_watched({parsed.title: movie}, {parsed.title: meta}, candidate)
+    except ReviewedWatchedConflict as error:
+        return AddRecordResult(False, error.dataset_key, str(error), error.reason)
     except Exception as error:
-        return AddRecordResult(
-            ok=False,
-            title=title,
-            message=f"Ошибка добавления! Не удалось сохранить dataset: {error}",
-            reason="save_error",
-        )
+        return AddRecordResult(False, parsed.title, f"Ошибка добавления! Не удалось сохранить dataset: {error}", "save_error")
 
+    dataset_key = parsed.title
+    if persisted is not None:
+        dataset_key, movie, meta = persisted.dataset_key, persisted.payload, persisted.meta
     side_effects = run_after_add_side_effects(
-        title=title,
-        year=year,
-        movie=new_movie,
-        meta_obj=meta.get(dataset_key),
-        pool_candidate=pool_candidate,
-        poster_hints=poster_hints,
+        title=parsed.title, year=parsed.year, movie=movie, meta_obj=meta,
+        pool_candidate=pool_candidate, poster_hints=poster_hints,
     )
-    return AddRecordResult(
-        ok=True,
-        title=dataset_key,
-        message="Новая запись добавлена!",
-        reason="saved",
-        side_effects=side_effects,
-    )
+    return AddRecordResult(True, dataset_key, "Новая запись добавлена!", "saved", side_effects)

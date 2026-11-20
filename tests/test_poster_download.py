@@ -282,12 +282,9 @@ def test_add_dataset_record_downloads_poster_after_cache_sync(monkeypatch) -> No
         download_calls.append((title, year))
         return {"ok": True, "reason": "downloaded", "local_path": "C:/cache/new.jpg"}
 
-    with patch.object(add_module, "load_dataset", return_value={}):
-        with patch.object(add_module, "load_meta", return_value={}):
-            with patch.object(add_module, "save_dataset_and_meta"):
-                with patch("posters.cache.sync_poster_cache_from_meta_and_sources", side_effect=fake_sync):
-                    with patch("posters.download_images.download_poster_for_title", side_effect=fake_download):
-                        result = dataset_records.add_dataset_record(movie)
+    with patch("posters.cache.sync_poster_cache_from_meta_and_sources", side_effect=fake_sync):
+        with patch("posters.download_images.download_poster_for_title", side_effect=fake_download):
+            result = dataset_records.add_dataset_record(movie)
 
     assert result.ok is True
     assert download_calls == [("New Show", 2021)]
@@ -319,16 +316,13 @@ def test_add_dataset_record_downloads_poster_from_hints_when_cache_missing(monke
             return {"ok": False, "reason": "missing_cache", "local_path": None}
         return {"ok": True, "reason": "downloaded", "local_path": "C:/cache/hint.jpg"}
 
-    with patch.object(add_module, "load_dataset", return_value={}):
-        with patch.object(add_module, "load_meta", return_value={}):
-            with patch.object(add_module, "save_dataset_and_meta"):
-                with patch("posters.cache.sync_poster_cache_from_meta_and_sources", side_effect=fake_sync):
-                    with patch("posters.cache.upsert_poster_cache_entry", side_effect=fake_upsert):
-                        with patch("posters.download_images.download_poster_for_title", side_effect=fake_download):
-                            result = dataset_records.add_dataset_record(
-                                movie,
-                                poster_hints=poster_hints,
-                            )
+    with patch("posters.cache.sync_poster_cache_from_meta_and_sources", side_effect=fake_sync):
+        with patch("posters.cache.upsert_poster_cache_entry", side_effect=fake_upsert):
+            with patch("posters.download_images.download_poster_for_title", side_effect=fake_download):
+                result = dataset_records.add_dataset_record(
+                    movie,
+                    poster_hints=poster_hints,
+                )
 
     assert result.ok is True
     assert len(download_calls) == 2
