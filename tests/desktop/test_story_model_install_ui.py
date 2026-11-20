@@ -140,3 +140,26 @@ def test_lexical_runtime_does_not_offer_download(qtbot, monkeypatch):
     assert not view._install_confirm.isEnabled()
     view._start_model_install()  # guard even if called without the disabled widget.
     assert not calls and view._model_install_worker is None
+
+
+
+@pytest.mark.parametrize(("code", "visible"), [
+    ("integrity", "контрольная сумма"),
+    ("existing_invalid", "оставлены без изменений"),
+    ("tls", "защищённое соединение"),
+    ("unknown_private_code", "Проверьте интернет"),
+])
+def test_model_install_uses_only_safe_hints(qtbot, monkeypatch, code, visible):
+    set_setting(story_ui._MODEL_SETTING, None)
+
+    def fail(*_args, **_kwargs):
+        raise story_model_install.StoryModelInstallError("private signed URL and local file path", code)
+
+    monkeypatch.setattr(story_model_install, "install_story_model", fail)
+    view = open_view(qtbot)
+    click(qtbot, view.install_model_button)
+    click(qtbot, view._install_confirm)
+    qtbot.waitUntil(lambda: view._model_install_worker is None)
+    text = view._install_status.text()
+    assert visible in text and "режим не изменился" in text
+    assert "private" not in text and code not in text and view.model_dir is None

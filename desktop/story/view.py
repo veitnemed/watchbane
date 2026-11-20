@@ -98,6 +98,17 @@ def _semantic_install_available():
         return False
 
 
+_MODEL_INSTALL_HINTS = {
+    "redirect_host": "Адрес загрузки у поставщика изменился. Обновите Watchbane или выберите готовую папку.",
+    "http_status": "Сервер модели не отдал файлы. Повторите позже или выберите готовую папку.",
+    "invalid_response": "Сервер вернул неожиданный файл. Повторите позже или выберите готовую папку.",
+    "integrity": "Не совпала контрольная сумма. Файлы не подключены; попробуйте скачать ещё раз.",
+    "tls": "Не удалось подтвердить защищённое соединение. Проверьте дату на компьютере и настройки сети.",
+    "timeout": "Загрузка заняла слишком много времени. Попробуйте ещё раз при устойчивом соединении.",
+    "existing_invalid": "Файлы в кэше не прошли проверку. Они оставлены без изменений. Выберите готовую папку.",
+}
+
+
 class ModelInstallWorker(QThread):
     progress = pyqtSignal(int, int)
 
@@ -114,7 +125,7 @@ class ModelInstallWorker(QThread):
     def run(self):
         try:
             from candidates.story_model_install import (
-                StoryModelInstallCancelled, install_story_model, profile_story_model_destination,
+                StoryModelInstallCancelled, StoryModelInstallError, install_story_model, profile_story_model_destination,
             )
             try:
                 self.path = install_story_model(
@@ -124,6 +135,8 @@ class ModelInstallWorker(QThread):
                 )
             except StoryModelInstallCancelled:
                 self.failure = "cancelled"
+            except StoryModelInstallError as error:
+                self.failure = error.code if error.code in _MODEL_INSTALL_HINTS else "failed"
         except Exception:
             self.failure = "failed"
 
@@ -610,8 +623,9 @@ class StorySearchView:
         if self._model_install_cancelled or worker.failure == "cancelled":
             self._install_status.setText("Установка отменена. Выбранный режим не изменился.")
         elif worker.failure or not worker.path:
-            self._install_status.setText("Не удалось установить модель. Проверьте интернет и место на диске "
-                                         "или выберите готовую папку. Выбранный режим не изменился.")
+            hint = _MODEL_INSTALL_HINTS.get(worker.failure, "Проверьте интернет и место на диске "
+                                             "или выберите готовую папку.")
+            self._install_status.setText(f"Не удалось установить модель. {hint} Выбранный режим не изменился.")
         else:
             self.model_dir = str(worker.path)
             self._model_install_success = True
