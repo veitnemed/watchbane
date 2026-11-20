@@ -84,6 +84,9 @@ def test_install_preserves_existing_invalid_directory_without_network(tmp_path, 
 
 @pytest.mark.parametrize("url", [
     "http://huggingface.co/bad",
+    "http://us.aws.cdn.hf.co/bad",
+    "https://us.aws.cdn.hf.co.example.net/bad",
+    "https://unknown.cdn.hf.co/bad",
     "https://huggingface.co.example.net/bad",
     "https://user:password@cas-bridge.xethub.hf.co/bad",
     "https://cas-bridge.xethub.hf.co:8443/bad",
@@ -98,9 +101,10 @@ def test_model_rejects_unapproved_redirects(tmp_path, fake_download, url):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_model_follows_approved_cdn_without_forwarding_sensitive_headers(tmp_path, fake_download):
+@pytest.mark.parametrize("host", ["cas-bridge.xethub.hf.co", "us.aws.cdn.hf.co"])
+def test_model_follows_approved_cdn_without_forwarding_sensitive_headers(tmp_path, fake_download, host):
     first = _PREFIX + "onnx/model.onnx"
-    cdn = "https://cas-bridge.xethub.hf.co/xet-bridge/some-file?temporary-signature"
+    cdn = f"https://{host}/xet-bridge/some-file?temporary-signature"
     fake_download.responses[first] = _redirect(first, cdn)
     fake_download.responses[cdn] = Response(_MODEL)
     installer.install_story_model(tmp_path / "model")

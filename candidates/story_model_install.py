@@ -22,7 +22,9 @@ TOTAL_TIMEOUT_SECONDS = 30 * 60
 _CHUNK_SIZE = 1024 * 1024
 _REDIRECT_LIMIT = 4
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
-_ALLOWED_HOSTS = frozenset({"huggingface.co", "cas-bridge.xethub.hf.co"})
+# Exact hosts only. The CDN is declared in the Hugging Face download docs and
+# serves both pinned artifacts on the native acceptance runner.
+_ALLOWED_HOSTS = frozenset({"huggingface.co", "cas-bridge.xethub.hf.co", "us.aws.cdn.hf.co"})
 
 
 class StoryModelInstallError(RuntimeError):
