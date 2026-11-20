@@ -101,3 +101,45 @@ def test_score_returns_distinct_missing_invalid_unchanged_and_write_error_result
     result = update_user_score("Alpha", 2)
     assert not result.ok and result.reason == "save_error"
     assert _row("Alpha") == before
+
+
+def test_raw_score_patch_keeps_typed_payload_and_atomically_merges_meta(monkeypatch) -> None:
+    from storage.sqlite import watched_write
+
+    selected = "Common (2020, movie, 11)"
+    expected_payload = _seed(selected, "Common", 11)
+    _seed("Common", "Common", 12)
+    old_peer = _row("Common")
+    create_connection = watched_write.connection
+
+    def before_write(conn, path):
+        _seed("Concurrent", "Concurrent", 13)
+        return create_connection(conn, path)
+
+    monkeypatch.setattr(watched_write, "connection", before_write)
+    result = update_dataset_record(selected.lower(), {"raw_scores": {"tmdb_score": 8.1}})
+    assert result.ok and result.title == selected
+    assert result.changed_fields == ["raw_scores.tmdb_score"]
+    actual = _row(selected)
+    expected_payload["raw_scores"]["tmdb_score"] = 8.1
+    expected_payload["computed_scores"]["tmdb_score"] = 8.1
+    assert loads_json(actual["payload_json"]) == expected_payload
+    assert actual["title"] == "Common" and actual["tmdb_id"] == 11
+    assert _row("Common") == old_peer
+    assert _row("Concurrent")["tmdb_id"] == 13
+    meta = loads_json(actual["meta_json"])
+    assert meta["tmdb_id"] == 11 and meta["origin"] == "keep"
+    assert meta["main_info"]["title"] == "Common" and meta["raw_scores"]["tmdb_score"] == 8.1
+
+    monkeypatch.setattr(watched_write, "connection", create_connection)
+    conn = connect()
+    try:
+        with conn:
+            conn.execute(
+                "CREATE TRIGGER simulated_meta_error BEFORE UPDATE OF meta_json ON watched_records "
+                "BEGIN SELECT RAISE(ABORT, 'simulated meta error'); END"
+            )
+    finally:
+        conn.close()
+    assert update_dataset_record(selected, {"raw_scores": {"tmdb_score": 6.4}}).reason == "save_error"
+    assert _row(selected) == actual

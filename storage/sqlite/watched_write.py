@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 import sqlite3
+from typing import TypeVar
 
 from storage.normalize import normalize_movie_tags
 from storage.sqlite.json_codec import dumps_json, loads_json
@@ -12,6 +14,7 @@ from storage.sqlite.watched_mapper import extract_watched_record
 
 
 EMPTY_PAYLOAD_JSON = dumps_json({})
+_PatchResult = TypeVar("_PatchResult")
 
 
 def upsert_watched_row(
@@ -152,6 +155,62 @@ def update_watched_user_score(dataset_key: str, score: int) -> str:
                 (score, dumps_json(payload), utc_now(), dataset_key),
             )
             return "updated"
+    finally:
+        active.close()
+
+
+def patch_watched_record(
+    key: str,
+    prepare: Callable[[str, dict, dict], tuple[_PatchResult, dict | None, dict | None]],
+) -> _PatchResult | None:
+    """Read, validate and write one watched row under the same write transaction."""
+    active, _owned = connection(None, None)
+    try:
+        with active:
+            active.execute("BEGIN IMMEDIATE")
+            row = active.execute(
+                "SELECT dataset_key, payload_json, meta_json FROM watched_records WHERE dataset_key = ?",
+                (key,),
+            ).fetchone()
+            if row is None:
+                normalized = key.strip().lower()
+                row = next(
+                    (candidate for candidate in active.execute(
+                        "SELECT dataset_key, payload_json, meta_json FROM watched_records ORDER BY rowid"
+                    ) if candidate["dataset_key"].strip().lower() == normalized
+                     and candidate["payload_json"] != EMPTY_PAYLOAD_JSON),
+                    None,
+                )
+            if row is None:
+                return None
+            payload = loads_json(row["payload_json"], None)
+            if not isinstance(payload, dict) or not payload:
+                return None
+            old_meta = loads_json(row["meta_json"], None)
+            result, new_payload, new_meta = prepare(
+                row["dataset_key"], payload, old_meta if isinstance(old_meta, dict) else {}
+            )
+            if new_payload is not None:
+                main_info = new_payload["main_info"]
+                active.execute(
+                    """
+                    UPDATE watched_records
+                    SET year = ?, country = ?, user_score = ?, payload_json = ?,
+                        meta_json = ?, updated_at = ?
+                    WHERE dataset_key = ?
+                    """,
+                    (
+                        main_info["year"], main_info.get("country") or None, main_info.get("user_score"),
+                        dumps_json(new_payload), dumps_json(new_meta) if new_meta is not None else row["meta_json"],
+                        utc_now(), row["dataset_key"],
+                    ),
+                )
+            elif new_meta is not None and new_meta != old_meta:
+                active.execute(
+                    "UPDATE watched_records SET meta_json = ?, updated_at = ? WHERE dataset_key = ?",
+                    (dumps_json(new_meta), utc_now(), row["dataset_key"]),
+                )
+            return result
     finally:
         active.close()
 

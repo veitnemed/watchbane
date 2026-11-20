@@ -42,7 +42,9 @@ def test_add_dataset_record_does_not_persist_legacy_payload_fields(monkeypatch) 
     assert movie.get("genres_tmdb") == ["Drama"]
 
 
-def test_update_dataset_record_does_not_persist_legacy_payload_fields(monkeypatch) -> None:
+def test_update_dataset_record_does_not_persist_legacy_payload_fields() -> None:
+    from storage.data import load_dataset, save_dataset
+
     existing = {
         "Guardrail Show": {
             "main_info": {
@@ -60,13 +62,7 @@ def test_update_dataset_record_does_not_persist_legacy_payload_fields(monkeypatc
             "genres_tmdb": ["Drama"],
         }
     }
-    saved: dict = {}
-
-    def fake_save_dataset(data):
-        saved["data"] = data
-
-    monkeypatch.setattr("dataset.records.update.save_dataset", fake_save_dataset)
-    monkeypatch.setattr("dataset.records.update.load_dataset", lambda: existing)
+    save_dataset(existing)
 
     result = update_dataset_record(
         "Guardrail Show",
@@ -80,6 +76,6 @@ def test_update_dataset_record_does_not_persist_legacy_payload_fields(monkeypatc
     )
 
     assert result.ok is True
-    movie = saved["data"]["Guardrail Show"]
+    movie = load_dataset()["Guardrail Show"]
     assert FORBIDDEN_PAYLOAD_KEYS.isdisjoint(movie.keys())
     assert FORBIDDEN_RAW_SCORE_KEYS.isdisjoint(movie["raw_scores"].keys())

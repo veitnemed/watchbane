@@ -3,8 +3,6 @@
 import sqlite3
 
 from config import constant
-from dataset.meta.sync import sync_raw_scores_to_meta
-from dataset.models.identity import find_dataset_title
 from dataset.models.results import UpdateRecordResult
 from dataset.models.user_rating import normalize_user_rating
 from dataset.records.features import build_computed_scores
@@ -14,8 +12,6 @@ from dataset.records.validation import (
     validate_normalized_update_values,
     validate_update_patch_structure,
 )
-from storage.data import load_dataset, save_dataset
-from storage.normalize import normalize_main_info, normalize_raw_scores
 
 
 def _update_desktop_score(dataset_key: str, value) -> UpdateRecordResult:
@@ -46,34 +42,43 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
         if isinstance(score_patch, dict) and set(score_patch) == {"user_score"}:
             return _update_desktop_score(title, score_patch["user_score"])
 
-    data = load_dataset()
-    dataset_title = find_dataset_title(data, title)
-    if dataset_title is None:
-        return UpdateRecordResult(
-            ok=False,
-            title=str(title).strip() if title is not None else None,
-            message="Ошибка обновления! Запись не найдена",
-            reason="not_found",
-            changed_fields=[],
-        )
+    from storage.sqlite.watched_write import patch_watched_record
 
+    key = str(title).strip() if title is not None else ""
+    try:
+        result = patch_watched_record(
+            key, lambda dataset_key, movie, meta: _prepare_patch(dataset_key, movie, meta, patch_payload)
+        )
+    except (OSError, sqlite3.Error):
+        return UpdateRecordResult(
+            False, key or None, "Не удалось сохранить изменения. Попробуйте ещё раз.", "save_error", []
+        )
+    return result if result is not None else UpdateRecordResult(
+        False, key or None, "Ошибка обновления! Запись не найдена", "not_found", []
+    )
+
+
+_RAW_IDENTITY_FIELDS = {"tmdb_id", "tmdbId", "id", "source", "imdb_id"}
+
+
+def _with_preserved_raw_identity(previous: dict, normalized: dict) -> dict:
+    return {**{key: previous[key] for key in _RAW_IDENTITY_FIELDS if key in previous}, **normalized}
+
+
+def _prepare_patch(dataset_title, current_movie, meta, patch_payload):
+    """Return the result and only the new payload/meta values that should be written."""
     structure_error = validate_update_patch_structure(patch_payload, dataset_title=dataset_title)
     if structure_error is not None:
-        return structure_error
+        return structure_error, None, None
 
-    current_movie = data[dataset_title]
     main_info = dict(current_movie.get("main_info", {}))
     raw_scores = dict(current_movie.get("raw_scores", {}))
     changed_fields = []
 
     main_patch = patch_payload.get("main_info")
-    main_error = validate_main_info_patch(
-        main_patch,
-        dataset_title=dataset_title,
-        main_info=main_info,
-    )
+    main_error = validate_main_info_patch(main_patch, dataset_title=dataset_title, main_info=main_info)
     if main_error is not None:
-        return main_error
+        return main_error, None, None
 
     if isinstance(main_patch, dict):
         for field in ("user_score", "year", "country"):
@@ -83,90 +88,56 @@ def update_dataset_record(title, patch_payload, source_name: str = "") -> Update
 
     raw_patch = patch_payload.get("raw_scores")
     if raw_patch is not None:
-        if isinstance(raw_patch, dict) is False:
-            return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректные raw_scores", "invalid_patch", [])
+        if not isinstance(raw_patch, dict):
+            return UpdateRecordResult(False, dataset_title, "Ошибка обновления! Некорректные raw_scores", "invalid_patch", []), None, None
         for field, value in raw_patch.items():
             if field not in constant.RAW_SCORES:
                 return UpdateRecordResult(
-                    ok=False,
-                    title=dataset_title,
-                    message=f"Ошибка обновления! Неподдерживаемое поле raw_scores: {field}",
-                    reason="invalid_patch",
-                    changed_fields=[],
-                )
+                    False, dataset_title, f"Ошибка обновления! Неподдерживаемое поле raw_scores: {field}",
+                    "invalid_patch", [],
+                ), None, None
             if raw_scores.get(field) != value:
                 raw_scores[field] = value
                 changed_fields.append(f"raw_scores.{field}")
 
-    if len(changed_fields) == 0:
-        if raw_patch is not None:
-            try:
-                current_main_info = normalize_main_info({**main_info, "title": dataset_title})
-                current_raw_scores = normalize_raw_scores(raw_scores)
-                sync_raw_scores_to_meta(dataset_title, current_main_info, current_raw_scores)
-            except Exception as error:
-                return UpdateRecordResult(
-                    ok=False,
-                    title=dataset_title,
-                    message=f"Ошибка обновления! Не удалось синхронизировать meta: {error}",
-                    reason="save_error",
-                    changed_fields=[],
-                )
-        return UpdateRecordResult(
-            ok=True,
-            title=dataset_title,
-            message="Изменений нет.",
-            reason="nothing_changed",
-            changed_fields=[],
-        )
+    no_change = UpdateRecordResult(True, dataset_title, "Изменений нет.", "nothing_changed", [])
+    if not changed_fields and raw_patch is None:
+        return no_change, None, None
 
-    normalized = normalize_update_sections(
-        dataset_title=dataset_title,
-        main_info=main_info,
-        raw_scores=raw_scores,
-    )
+    normalized = normalize_update_sections(dataset_title=dataset_title, main_info=main_info, raw_scores=raw_scores)
     if isinstance(normalized, UpdateRecordResult):
-        return normalized
+        return normalized, None, None
 
-    new_main_info, new_raw_scores = normalized
-
+    new_main, new_raw = normalized
     values_error = validate_normalized_update_values(
         dataset_title=dataset_title,
-        new_main_info=new_main_info,
-        new_raw_scores=new_raw_scores,
+        new_main_info=new_main,
+        new_raw_scores=new_raw,
     )
     if values_error is not None:
-        return values_error
+        return values_error, None, None
 
-    computed_scores = build_computed_scores(new_raw_scores, new_main_info)
+    # The selected key may include a collision suffix or typed ID. It is not
+    # the displayed title, and unrelated payload/metadata fields are untouched.
+    display_title = main_info.get("title", current_movie.get("title", dataset_title))
+    new_main = {**main_info, **new_main, "title": display_title}
+    updated_meta = None
+    if raw_patch is not None:
+        meta_main = meta.get("main_info") or {}
+        meta_raw = meta.get("raw_scores") or {}
+        updated_meta = {
+            **meta,
+            "main_info": {**(meta_main if isinstance(meta_main, dict) else {}), **new_main},
+            "raw_scores": _with_preserved_raw_identity(meta_raw if isinstance(meta_raw, dict) else {}, new_raw),
+        }
+    if not changed_fields:
+        return no_change, None, updated_meta
 
     updated_movie = {
-        "main_info": new_main_info,
-        "raw_scores": new_raw_scores,
-        "computed_scores": computed_scores,
+        **current_movie,
+        "main_info": new_main,
+        "raw_scores": _with_preserved_raw_identity(raw_scores, new_raw) if raw_patch is not None else raw_scores,
+        "computed_scores": build_computed_scores(new_raw, new_main),
     }
-    for field_name in ("localized", "genres_tmdb"):
-        if field_name in current_movie:
-            updated_movie[field_name] = current_movie[field_name]
-    data[dataset_title] = updated_movie
-
-    try:
-        save_dataset(data)
-        if raw_patch is not None:
-            sync_raw_scores_to_meta(dataset_title, new_main_info, new_raw_scores)
-    except Exception as error:
-        return UpdateRecordResult(
-            ok=False,
-            title=dataset_title,
-            message=f"Ошибка обновления! Не удалось сохранить dataset: {error}",
-            reason="save_error",
-            changed_fields=[],
-        )
-
-    return UpdateRecordResult(
-        ok=True,
-        title=dataset_title,
-        message="Запись обновлена.",
-        reason="updated",
-        changed_fields=changed_fields,
-    )
+    result = UpdateRecordResult(True, dataset_title, "Запись обновлена.", "updated", changed_fields)
+    return result, updated_movie, updated_meta
