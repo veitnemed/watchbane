@@ -18,12 +18,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Export Watchbane SQLite data to legacy JSON files.")
     parser.add_argument("--output-dir", required=True, help="New or empty directory for legacy JSON files; existing exports are not overwritten.")
     parser.add_argument("--db-path", default=None, help="Source SQLite database path.")
+    parser.add_argument("--portable", action="store_true", help="Include only portable preferences; exclude the poster cache.")
     args = parser.parse_args()
 
     try:
         report = export_sqlite_to_legacy_json(
             output_dir=args.output_dir,
             db_path=args.db_path,
+            portable=args.portable,
         )
     except FileExistsError:
         parser.error("--output-dir already exists and is not empty; choose a new directory")

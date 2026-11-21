@@ -11,6 +11,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 from storage.sqlite import action_repository
 from storage.sqlite import candidate_repository
+from storage.legacy_json.portable import OMITTED_MEMBERS, portable_settings
 from storage.sqlite import poster_repository
 from storage.sqlite import settings_repository
 from storage.sqlite import watched_repository
@@ -19,6 +20,7 @@ from storage.sqlite.migrations import MIGRATIONS
 
 
 LEGACY_EXPORT_SCHEMA_VERSION = 3
+PORTABLE_EXPORT_SCHEMA_VERSION = 4
 CANONICAL_RATING_SCALE = "watchbane-reaction-1-to-3"
 LEGACY_EXPORT_MANIFEST = "_watchbane_export.json"
 LEGACY_EXPORT_V3_MARKER = "_watchbane_export_v3"
@@ -89,12 +91,18 @@ def export_sqlite_to_legacy_json(
     *,
     output_dir: str | Path,
     db_path: str | Path | None = None,
+    portable: bool = False,
 ) -> dict:
     """Publish a consistent export to a new or empty output directory."""
     target_dir = Path(output_dir).absolute()
     source_db = Path(db_path) if db_path is not None else get_db_path()
     _require_empty_destination(target_dir)
     payloads = _read_payloads(source_db)
+    version = PORTABLE_EXPORT_SCHEMA_VERSION if portable else LEGACY_EXPORT_SCHEMA_VERSION
+    if portable:
+        payloads["settings.json"] = portable_settings(payloads["settings.json"])
+        for member in OMITTED_MEMBERS:
+            payloads[member] = {}
 
     target_dir.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix=".watchbane-export-", dir=target_dir.parent) as staging:
@@ -108,7 +116,7 @@ def export_sqlite_to_legacy_json(
         (bundle / LEGACY_EXPORT_V3_MARKER).touch()
         _dump_mapping(bundle / LEGACY_EXPORT_MANIFEST, {
             "format": "watchbane-legacy-json",
-            "schema_version": LEGACY_EXPORT_SCHEMA_VERSION,
+            "schema_version": version,
             "watched_rating_scale": CANONICAL_RATING_SCALE,
             "files_sha256": checksums,
         })
@@ -127,5 +135,5 @@ def export_sqlite_to_legacy_json(
         "db_path": str(source_db),
         "output_dir": str(output_dir),
         "counts": {relative_path: len(payload) for relative_path, payload in payloads.items()},
-        "schema_version": LEGACY_EXPORT_SCHEMA_VERSION,
+        "schema_version": version,
     }

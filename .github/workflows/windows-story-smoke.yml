@@ -28,6 +28,7 @@ on:
       - "tests/test_sqlite_backup_restore.py"
       - "tests/test_sqlite_export_legacy.py"
       - "tests/test_sqlite_import_legacy.py"
+      - "tests/test_portable_collection_export.py"
       - "tests/test_sqlite_startup_recovery.py"
       - "tests/test_title_state_service.py"
       - "tests/test_stale_saved*.py"
@@ -74,6 +75,7 @@ jobs:
           tests/test_sqlite_backup_restore.py
           tests/test_sqlite_export_legacy.py
           tests/test_sqlite_import_legacy.py
+          tests/test_portable_collection_export.py
           tests/test_sqlite_startup_recovery.py
           tests/test_title_state_service.py
           tests/test_stale_saved_removal_identity.py

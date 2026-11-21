@@ -8,6 +8,8 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import sqlite3
+from contextlib import closing
 
 from dataset.models.user_rating import is_valid_user_rating, legacy_score_to_user_rating
 
@@ -20,10 +22,12 @@ from storage.sqlite.connection import get_db_path
 from storage.sqlite.backup import backup_sqlite_database
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
+from storage.legacy_json.portable import OMITTED_MEMBERS, portable_settings
 from storage.legacy_json.exporter import (
     CANONICAL_RATING_SCALE,
     LEGACY_EXPORT_MANIFEST,
     LEGACY_EXPORT_SCHEMA_VERSION,
+    PORTABLE_EXPORT_SCHEMA_VERSION,
     LEGACY_EXPORT_V3_MARKER,
 )
 
@@ -106,14 +110,15 @@ def _export_metadata(paths: LegacyJsonPaths) -> tuple[int | None, dict[str, str]
     version = manifest.get("schema_version")
     if manifest.get("format") != "watchbane-legacy-json" or type(version) is not int:
         raise ValueError(f"Unsupported Watchbane export schema version: {version!r}")
-    if marker and version != LEGACY_EXPORT_SCHEMA_VERSION:
+    checked_versions = (LEGACY_EXPORT_SCHEMA_VERSION, PORTABLE_EXPORT_SCHEMA_VERSION)
+    if marker and version not in checked_versions:
         raise ValueError("Watchbane v3 marker does not match manifest schema version")
-    if version == LEGACY_EXPORT_SCHEMA_VERSION and not marker:
+    if version in checked_versions and not marker:
         raise ValueError("Watchbane v3 export is missing its format marker")
     if version == 1 and set(manifest) == {"format", "schema_version"}:
         # Version 1 was introduced after the SQLite migration to reactions.
         return 1, {}
-    if version not in (2, LEGACY_EXPORT_SCHEMA_VERSION):
+    if version not in (2, *checked_versions):
         raise ValueError(f"Unsupported Watchbane export schema version: {version!r}")
     if manifest.get("watched_rating_scale") != CANONICAL_RATING_SCALE:
         raise ValueError("Invalid Watchbane export rating metadata")
@@ -184,6 +189,18 @@ def backup_legacy_json(paths: LegacyJsonPaths) -> Path:
     return backup_root
 
 
+def _require_empty_portable_collection(conn: sqlite3.Connection) -> None:
+    try:
+        occupied = conn.execute(
+            "SELECT EXISTS(SELECT 1 FROM watched_records) OR "
+            "EXISTS(SELECT 1 FROM candidate_actions WHERE action IN ('watchlist', 'hidden'))"
+        ).fetchone()[0]
+    except sqlite3.DatabaseError as exc:
+        raise ValueError("Open or repair the destination profile before portable import") from exc
+    if occupied:
+        raise ValueError("Portable import requires an empty destination collection")
+
+
 def import_legacy_json_to_sqlite(
     *,
     base_dir: str | Path = "data",
@@ -205,42 +222,70 @@ def import_legacy_json_to_sqlite(
         relative = path.relative_to(paths.base_dir).as_posix()
         payloads[role] = (
             _read_export_member(path, relative, checksums[relative])
-            if export_version == LEGACY_EXPORT_SCHEMA_VERSION else load_legacy_json_mapping(path)
+            if export_version in (LEGACY_EXPORT_SCHEMA_VERSION, PORTABLE_EXPORT_SCHEMA_VERSION)
+            else load_legacy_json_mapping(path)
         )
+    portable = export_version == PORTABLE_EXPORT_SCHEMA_VERSION
+    if portable:
+        has_local_members = any(
+            payloads[role] for role, field in _MEMBER_FIELDS.items()
+            if getattr(paths, field).relative_to(paths.base_dir).as_posix() in OMITTED_MEMBERS
+        )
+        if payloads["settings"] != portable_settings(payloads["settings"]) or has_local_members:
+            raise ValueError("Invalid machine-specific data in portable Watchbane export")
     report = {
         "ok": True,
         "dry_run": dry_run,
         "db_path": str(target_db),
         "backup_dir": None,
         "runtime_backup": None,
-        "schema_version": LEGACY_EXPORT_SCHEMA_VERSION,
+        "schema_version": PORTABLE_EXPORT_SCHEMA_VERSION if portable else LEGACY_EXPORT_SCHEMA_VERSION,
         "counts": {name: len(value) for name, value in payloads.items()},
     }
     if dry_run:
         return report
 
-    if create_backup:
+    runtime_backup_dir = paths.backup_dir
+    if portable:
+        # The transfer bundle stays unchanged, and the destination's private
+        # rollback DB belongs only to the destination profile.
+        bundle_root = paths.base_dir.resolve()
+        runtime_backup_dir = target_db.parent / "backups"
+        if (target_db.resolve().is_relative_to(bundle_root)
+                or runtime_backup_dir.resolve().is_relative_to(bundle_root)):
+            raise ValueError("Portable import requires a destination outside the export bundle")
+        if target_db.is_file():
+            uri = target_db.resolve().as_uri() + "?mode=ro"
+            with closing(sqlite3.connect(uri, uri=True)) as probe:
+                _require_empty_portable_collection(probe)
+    elif create_backup:
         report["backup_dir"] = str(backup_legacy_json(paths))
     if target_db.is_file():
         report["runtime_backup"] = str(
-            backup_sqlite_database(db_path=target_db, backup_dir=paths.backup_dir)
+            backup_sqlite_database(db_path=target_db, backup_dir=runtime_backup_dir)
         )
 
     active = connect(target_db)
     try:
         apply_migrations(active)
         with active:
+            if portable:
+                # Recheck after acquiring the write lock: a concurrent user
+                # write after preflight must still prevent replacement.
+                active.execute("BEGIN IMMEDIATE")
+                _require_empty_portable_collection(active)
             watched_repository.save_dataset_dict(payloads["watched"], conn=active)
             watched_repository.save_meta_dict(payloads["meta"], conn=active)
-            candidate_repository.save_candidate_pool_dict(
-                payloads["candidate_pool"],
-                conn=active,
-                purge_watched=False,
-            )
-            candidate_repository.save_candidate_criteria_dict(
-                payloads["candidate_criteria"],
-                conn=active,
-            )
+            if not portable:
+                candidate_repository.save_candidate_pool_dict(
+                    payloads["candidate_pool"],
+                    conn=active,
+                    purge_watched=False,
+                )
+                candidate_repository.save_candidate_criteria_dict(
+                    payloads["candidate_criteria"],
+                    conn=active,
+                )
             action_repository.save_candidate_actions_dict(
                 action_repository.ACTION_WATCHLIST,
                 payloads["watchlist"],
@@ -251,8 +296,12 @@ def import_legacy_json_to_sqlite(
                 payloads["hidden"],
                 conn=active,
             )
-            settings_repository.save_settings_dict(payloads["settings"], conn=active)
-            poster_repository.save_poster_cache_dict(payloads["poster_cache"], conn=active)
+            if portable:
+                for key, value in payloads["settings"].items():
+                    settings_repository.set_setting(key, value, conn=active)
+            else:
+                settings_repository.save_settings_dict(payloads["settings"], conn=active)
+                poster_repository.save_poster_cache_dict(payloads["poster_cache"], conn=active)
     finally:
         active.close()
     return report
