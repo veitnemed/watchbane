@@ -143,3 +143,36 @@ def test_console_backup_menu_hides_corruption_details_and_preserves_target(
     assert "Backup повреждён или несовместим. Данные не изменены." in output
     assert str(corrupt_backup) not in output
     assert list(storage_data.load_dataset()) == ["Alpha"]
+
+
+def test_failed_backup_is_never_listed_and_prior_backup_stays_restorable(tmp_path, monkeypatch):
+    import sqlite3
+    import pytest
+
+    from storage.files import get_latest_backups
+
+    _use_sqlite(tmp_path, monkeypatch)
+    storage_data.save_dataset({"Alpha": _movie("Alpha")})
+    prior = create_backup()
+    storage_data.save_dataset({"Beta": _movie("Beta")})
+    connect = sqlite3.connect
+    listed_during_copy = []
+
+    class InterruptedCopy(sqlite3.Connection):
+        def backup(self, target, *args, **kwargs):
+            listed_during_copy[:] = get_latest_backups()
+            raise sqlite3.OperationalError("simulated copy failure")
+
+    def fail_copy(database, *args, **kwargs):
+        return connect(database, *args, factory=InterruptedCopy, **kwargs)
+
+    with monkeypatch.context() as failed:
+        failed.setattr("storage.sqlite.backup.sqlite3.connect", fail_copy)
+        with pytest.raises(sqlite3.OperationalError, match="simulated copy failure"):
+            create_backup()
+    assert listed_during_copy == [prior]
+    assert get_latest_backups() == [prior]
+    assert set(prior.parent.iterdir()) == {prior}
+    assert list(storage_data.load_dataset()) == ["Beta"]
+    assert restore_backup(prior) == 1
+    assert list(storage_data.load_dataset()) == ["Alpha"]

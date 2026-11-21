@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import sqlite3
+from tempfile import TemporaryDirectory
 
 from config import constant
 from storage.sqlite.connection import get_db_path
@@ -51,16 +52,31 @@ def backup_sqlite_database(
     stamp = timestamp or datetime.now().strftime("%d-%m-%Y %H-%M-%S-%f")
     target = target_dir / f"{stamp}.sqlite3"
 
-    source_conn = sqlite3.connect(source)
-    try:
-        source_conn.execute("PRAGMA wal_checkpoint(FULL)")
-        target_conn = sqlite3.connect(target)
+    if target.exists() and source.samefile(target):
+        raise ValueError("SQLite backup destination must differ from its source")
+
+    # Only completed snapshots carry a backup suffix in the menu directory.
+    # Same-directory staging also keeps the final rename on one filesystem.
+    with TemporaryDirectory(prefix=".watchbane-backup-", dir=target_dir) as staging:
+        snapshot = Path(staging) / "snapshot.sqlite3"
+        source_conn = sqlite3.connect(source)
         try:
-            source_conn.backup(target_conn)
+            source_conn.execute("PRAGMA wal_checkpoint(FULL)")
+            target_conn = sqlite3.connect(snapshot)
+            try:
+                source_conn.backup(target_conn)
+                journal_mode = target_conn.execute("PRAGMA journal_mode=DELETE").fetchone()
+                if journal_mode != ("delete",):
+                    raise sqlite3.DatabaseError("Could not stage SQLite backup as a single file")
+                # Pre-migration snapshots may intentionally have an older
+                # schema. Check database integrity, not the current schema.
+                if target_conn.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+                    raise sqlite3.DatabaseError("SQLite backup failed quick_check")
+            finally:
+                target_conn.close()
         finally:
-            target_conn.close()
-    finally:
-        source_conn.close()
+            source_conn.close()
+        os.replace(snapshot, target)
     return target
 
 
