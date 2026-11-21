@@ -37,6 +37,7 @@ on:
       - "tests/test_story_model_install.py"
       - "tests/test_story_narrative_negation.py"
       - "tests/test_story_seed_snapshot.py"
+      - "tests/test_tmdb_detached_transport.py"
   workflow_dispatch:
 
 permissions:
@@ -87,6 +88,7 @@ jobs:
           tests/test_story_model_install.py
           tests/test_story_narrative_negation.py
           tests/test_story_seed_snapshot.py
+          tests/test_tmdb_detached_transport.py
           tests/desktop/test_story_flow.py
           tests/desktop/test_story_no_match.py
           tests/desktop/test_story_catalog_flow.py
