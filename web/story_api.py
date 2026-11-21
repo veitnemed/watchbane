@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from threading import Lock
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
@@ -93,6 +93,22 @@ async def _read_query(request: Request):
     return query.strip(), limit
 
 
+
+_OUTCOME_HEADER = "Watchbane-Search-Outcome"
+
+
+def _search_outcome(result):
+    if result.hits:
+        return {"state": "candidates", "reason": "possible_local_results"}
+    reason = getattr(result, "reason", None)
+    if reason == "explicit_non_film_request":
+        return {"state": "scope_refusal", "reason": reason}
+    if reason in ("no_filtered_descriptions", "no_eligible_catalog_entries"):
+        reason = "no_eligible_catalog_entries"
+    elif reason not in ("unsupported_exclusion", "need_plot_detail"):
+        reason = "no_candidates"
+    return {"state": "clarification", "reason": reason}
+
 def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, cache_dir: Path | None = None,
                prepared_index: bool = False):
     """One verified engine per worker; tests may inject a local engine factory."""
@@ -116,6 +132,7 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
         response = await call_next(request)
         if request.url.path == "/v1/search":
             response.headers["Cache-Control"] = "no-store"
+            response.headers.append("Vary", _OUTCOME_HEADER)
         return response
 
     @app.get("/healthz")
@@ -123,13 +140,18 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
         return {"ready": True}
 
     @app.post("/v1/search")
-    async def search(request: Request):
+    async def search(request: Request, response: Response):
+        versions = request.headers.getlist(_OUTCOME_HEADER)
+        if versions and versions != ["1"]:
+            raise HTTPException(400, "unsupported_search_outcome_version")
         query, limit = await _read_query(request)
         if not search_slot.acquire(blocking=False):
             raise HTTPException(503, "search_busy", headers={"Retry-After": "1"})
         try:
-            result = await run_in_threadpool(app.state.engine.search, query, limit=limit)
-            return {
+            engine = app.state.engine
+            search_query = getattr(engine, "search_with_outcome", engine.search) if versions else engine.search
+            result = await run_in_threadpool(search_query, query, limit=limit)
+            payload = {
                 "source": "tmdb",
                 "results": [{
                     "id": hit.document.key,
@@ -141,6 +163,10 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
                     "language": "ru-RU",
                 } for hit in result.hits],
             }
+            if versions:
+                payload["outcome"] = _search_outcome(result)
+                response.headers[_OUTCOME_HEADER] = "1"
+            return payload
         except Exception:
             # Do not put search text, provider data, or an exception containing
             # either into server logs or a response body.

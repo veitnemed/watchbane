@@ -105,6 +105,7 @@ jobs:
           tests/desktop/test_story_model_install_ui.py
           tests/test_story_online_client.py
           tests/desktop/test_story_online_mode.py
+          tests/desktop/test_story_online_outcome.py
       - name: Isolate failed pytest group (SQLite upgrades)
         if: ${{ failure() && steps.story_pytest.outcome == 'failure' }}
         run: python -m pytest -q tests/test_sqlite_upgrade_profiles.py

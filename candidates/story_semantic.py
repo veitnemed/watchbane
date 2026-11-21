@@ -120,21 +120,25 @@ class SemanticStorySearch:
     def _response(self, hits, notice, *, reason=None):
         return StoryResponse(hits, notice, "E5 small · локальный гибрид · " + self.encoder.variant, reason=reason)
 
-    def search(self,query,*,excluded=frozenset(),limit=5,rerank=False,hybrid=True,domain_filters=True,repair_typos=True,evidence=True,role_adjustment=False):
+    def search_with_outcome(self, query, *, limit):
+        return self.search(query, limit=limit, include_route_reason=True)
+
+    def search(self,query,*,excluded=frozenset(),limit=5,rerank=False,hybrid=True,domain_filters=True,repair_typos=True,evidence=True,role_adjustment=False,include_route_reason=False):
         words=tokens(query)
         if len(query)>600:return self._response((),"Сократите описание до 600 символов.")
-        if not(set(words)-STOP):return self._response((),"Опишите героя или событие.")
+        if not(set(words)-STOP):return self._response((),"Опишите героя или событие.", reason="need_plot_detail" if include_route_reason else None)
         if unsupported_negation(query):
-            return self._response((),"Отрицания пока не поддерживаются. Опишите желаемую историю утвердительно.")
+            return self._response((),"Отрицания пока не поддерживаются. Опишите желаемую историю утвердительно.",
+                                  reason="unsupported_exclusion" if include_route_reason else None)
         if domain_filters and instructional_non_plot(query, self.title_words):
-            return self._response((), OUT_OF_SCOPE_NOTICE)
+            return self._response((), OUT_OF_SCOPE_NOTICE, reason="explicit_non_film_request" if include_route_reason else None)
         kind,year=media_constraints(query) if domain_filters else (None,None)
         indices=[i for i,d in enumerate(self.documents) if d.key not in excluded and (not kind or d.media_type==kind) and (year is None or d.year==year)]
         if not indices:
             filtered_empty = self.documents and (kind is not None or year is not None) and not any(
                 (kind is None or d.media_type == kind) and (year is None or d.year == year) for d in self.documents
             )
-            reason = "no_filtered_descriptions" if filtered_empty else None
+            reason = "no_filtered_descriptions" if filtered_empty else ("no_eligible_catalog_entries" if include_route_reason else None)
             return self._response((), "В этом локальном наборе пока нет подходящих описаний.", reason=reason)
         corrected=normalized_query(query,self.vocabulary) if repair_typos else query
         q=self.encoder.encode([corrected],prefix="query: ")[0]

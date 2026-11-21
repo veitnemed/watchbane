@@ -11,6 +11,15 @@ _HOST = "127.0.0.1"
 _PATH = "/v1/search"
 _TIMEOUT = 8.0
 _MAX_BYTES = 512 * 1024
+_OUTCOME_HEADER = "Watchbane-Search-Outcome"
+_OUTCOME_V1 = frozenset({
+    ("candidates", "possible_local_results"),
+    ("scope_refusal", "explicit_non_film_request"),
+    ("clarification", "unsupported_exclusion"),
+    ("clarification", "need_plot_detail"),
+    ("clarification", "no_eligible_catalog_entries"),
+    ("clarification", "no_candidates"),
+})
 _RESULT_KEYS = {"id", "media_type", "title", "year", "overview", "evidence", "language"}
 _ID = re.compile(r"tmdb:(movie|tv):([1-9][0-9]{0,18})", re.ASCII)
 
@@ -29,11 +38,18 @@ class OnlineStoryResult:
     evidence: str
 
 
+@dataclass(frozen=True)
+class OnlineStoryOutcome:
+    results: tuple[OnlineStoryResult, ...]
+    state: str
+    reason: str
+
+
 def _invalid_response():
     return OnlineStoryError("Invalid response from the local story server.")
 
 
-def _parse(raw, limit):
+def _parse(raw, limit, *, with_outcome=False):
     def unique(pairs):
         result = dict(pairs)
         if len(result) != len(pairs):
@@ -42,7 +58,8 @@ def _parse(raw, limit):
 
     try:
         value = json.loads(raw.decode("utf-8"), object_pairs_hook=unique)
-        if (type(value) is not dict or set(value) != {"source", "results"} or value["source"] != "tmdb"
+        keys = {"source", "results", "outcome"} if with_outcome else {"source", "results"}
+        if (type(value) is not dict or set(value) != keys or value["source"] != "tmdb"
                 or type(value["results"]) is not list or len(value["results"]) > limit):
             raise ValueError
         results, seen = [], set()
@@ -65,6 +82,16 @@ def _parse(raw, limit):
             results.append(OnlineStoryResult(identifier, row["media_type"], row["title"],
                                              year, row["overview"], row["evidence"]))
             seen.add(identifier)
+        if with_outcome:
+            outcome = value["outcome"]
+            if type(outcome) is not dict or set(outcome) != {"state", "reason"}:
+                raise ValueError
+            state, reason = outcome["state"], outcome["reason"]
+            if type(state) is not str or type(reason) is not str or (state, reason) not in _OUTCOME_V1:
+                raise ValueError
+            if bool(results) != (state == "candidates"):
+                raise ValueError
+            return OnlineStoryOutcome(tuple(results), state, reason)
         return tuple(results)
     except (ValueError, RecursionError):
         raise _invalid_response() from None
@@ -77,17 +104,20 @@ def search_online(
     port: int = 8765,
     limit: int = 5,
     cancelled: Event | None = None,
-) -> tuple[OnlineStoryResult, ...]:
+    with_outcome: bool = False,
+) -> tuple[OnlineStoryResult, ...] | OnlineStoryOutcome:
     """Send only query/limit to IPv4 loopback; never discover a server or fall back.
 
     Call from a worker. The caller owns the explicit, per-request consent and may
     set the cancellation event. Cancellation stops local waiting, not a server
-    operation that already received the POST.
+    operation that already received the POST. The optional outcome protocol
+    requires the exact server echo and never retries with the legacy contract.
     """
     if consent is not True:
         raise OnlineStoryError("Local server search was not authorized.")
     if (type(port) is not int or not 1 <= port <= 65535 or type(limit) is not int or not 1 <= limit <= 10
-            or type(query) is not str or len(query) > 600 or not query.strip()):
+            or type(query) is not str or len(query) > 600 or not query.strip()
+            or type(with_outcome) is not bool):
         raise OnlineStoryError("Invalid local story search request.")
     try:
         body = json.dumps({"query": query.strip(), "limit": limit}, ensure_ascii=False).encode("utf-8")
@@ -125,15 +155,18 @@ def search_online(
         # and interrupts reads while they are blocked.
         watcher = Thread(target=interrupt, daemon=True)
         watcher.start()
-        connection.request("POST", _PATH, body, {
-            "Content-Type": "application/json", "Accept": "application/json",
-            "Accept-Encoding": "identity", "Cache-Control": "no-store",
-        })
+        headers = {"Content-Type": "application/json", "Accept": "application/json",
+                   "Accept-Encoding": "identity", "Cache-Control": "no-store"}
+        if with_outcome:
+            headers[_OUTCOME_HEADER] = "1"
+        connection.request("POST", _PATH, body, headers)
         check_active()
         with connection.getresponse() as response:
             check_active()
             if response.status != 200:
                 raise OnlineStoryError("Local story server is unavailable.")
+            if with_outcome and response.getheader(_OUTCOME_HEADER) != "1":
+                raise _invalid_response()
             content_type = response.getheader("Content-Type", "").split(";", 1)[0].strip().lower()
             encoding = response.getheader("Content-Encoding", "identity").strip().lower()
             size = response.getheader("Content-Length")
@@ -154,7 +187,7 @@ def search_online(
                     raise _invalid_response()
             if size is not None and len(raw) != int(size):
                 raise _invalid_response()
-        results = _parse(raw, limit)
+        results = _parse(raw, limit, with_outcome=True) if with_outcome else _parse(raw, limit)
         check_active()  # A superseded request cannot hand stale results back.
         return results
     except (OSError, HTTPException):
