@@ -13,7 +13,7 @@ from starlette.requests import ClientDisconnect
 
 from candidates.safety.explicit_content import is_blocked_explicit_sexual_content
 from candidates.story_search import StoryDocument
-from candidates.story_seed_snapshot import load_seed_snapshot_with_digest
+from candidates.story_seed_snapshot import StorySeedSnapshotError, load_seed_snapshot_with_digest
 from candidates.story_semantic import LocalE5, SemanticStorySearch
 
 _MAX_BODY = 8192
@@ -24,9 +24,10 @@ _MAX_RESULTS = 10
 class _StartupPassageEncoder:
     """The initial, exact document batch is the only persistable call."""
 
-    def __init__(self, encoder, cache, identity, documents):
+    def __init__(self, encoder, cache, identity, documents, previous_catalog=None):
         self.encoder, self.cache, self.identity = encoder, cache, identity
         self.expected = tuple(doc.overview for doc in documents)
+        self.documents, self.previous_catalog = documents, previous_catalog
         self.variant = encoder.variant
 
     def encode(self, texts, prefix="passage: ", **kwargs):
@@ -36,6 +37,23 @@ class _StartupPassageEncoder:
         matrix = self.cache.load(self.identity)
         if matrix is not None:
             return matrix
+        if self.previous_catalog is not None:
+            try:
+                previous, digest = _load_documents(self.previous_catalog)
+                if previous:
+                    from web.story_incremental_passages import reuse_verified_passages
+                    from web.story_vector_snapshot import SnapshotIdentity
+
+                    identity = SnapshotIdentity.from_documents(digest, self.encoder.cache_identity, previous)
+                    return reuse_verified_passages(
+                        self.cache, current_identity=self.identity, current_documents=self.documents,
+                        previous_identity=identity, previous_documents=previous,
+                        encode=lambda descriptions: self.encoder.encode(descriptions, prefix=prefix, **kwargs),
+                    ).matrix
+            except (StorySeedSnapshotError, OSError):
+                # A missing/invalid previous source or failed optional cache write
+                # must not prevent a full current-catalog rebuild.
+                pass
         matrix = self.encoder.encode(texts, prefix=prefix, **kwargs)
         try:
             self.cache.save(self.identity, matrix)
@@ -45,8 +63,7 @@ class _StartupPassageEncoder:
         return matrix
 
 
-def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = None, prepared_index: bool = False):
-    """Index the approved snapshot; persistence is an explicit operator option."""
+def _load_documents(catalog):
     snapshot, catalog_sha = load_seed_snapshot_with_digest(catalog)
     documents = []
     for key, row in snapshot.items():
@@ -55,6 +72,15 @@ def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = Non
             continue
         documents.append(StoryDocument(key, russian["title"], russian["overview"],
                                        row["media_type"], "TMDb", year=row["year"]))
+    return documents, catalog_sha
+
+
+def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = None, prepared_index: bool = False,
+                 previous_catalog: Path | None = None):
+    """Index the approved snapshot; persistence is an explicit operator option."""
+    if previous_catalog is not None and cache_dir is None:
+        raise ValueError("A previous catalog requires an explicit cache directory.")
+    documents, catalog_sha = _load_documents(catalog)
     if not documents:
         raise ValueError("The configured TMDb snapshot has no eligible Russian descriptions.")
     encoder = LocalE5(model_dir)  # Always verify model artifacts, even on a cache hit.
@@ -62,7 +88,8 @@ def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = Non
         from web.story_vector_snapshot import PassageVectorSnapshot, SnapshotIdentity
 
         identity = SnapshotIdentity.from_documents(catalog_sha, encoder.cache_identity, documents)
-        encoder = _StartupPassageEncoder(encoder, PassageVectorSnapshot(cache_dir), identity, documents)
+        encoder = _StartupPassageEncoder(encoder, PassageVectorSnapshot(cache_dir), identity, documents,
+                                         previous_catalog=previous_catalog)
     if prepared_index:
         from web.story_retrieval_index import PreparedRetrievalIndex
 
@@ -110,13 +137,17 @@ def _search_outcome(result):
     return {"state": "clarification", "reason": reason}
 
 def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, cache_dir: Path | None = None,
-               prepared_index: bool = False):
+               prepared_index: bool = False, previous_catalog: Path | None = None):
     """One verified engine per worker; tests may inject a local engine factory."""
+    if previous_catalog is not None and cache_dir is None:
+        raise ValueError("A previous catalog requires an explicit cache directory.")
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         options = {} if cache_dir is None else {"cache_dir": cache_dir}
         if prepared_index:
             options["prepared_index"] = True
+        if previous_catalog is not None:
+            options["previous_catalog"] = previous_catalog
         engine = await run_in_threadpool(engine_factory, catalog, model_dir, **options)
         app.state.engine = engine
         try:
@@ -186,9 +217,12 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--cache-dir", type=Path, help="Explicit detached server passage cache")
     parser.add_argument("--prepared-index", action="store_true", help="Opt in to exact prepared retrieval")
+    parser.add_argument("--previous-catalog", type=Path, help="Optional previous approved snapshot for passage reuse")
     args = parser.parse_args(argv)
+    if args.previous_catalog is not None and args.cache_dir is None:
+        parser.error("--previous-catalog requires --cache-dir")
     uvicorn.run(create_app(args.catalog, args.model_dir, cache_dir=args.cache_dir,
-                          prepared_index=args.prepared_index), host="127.0.0.1",
+                          prepared_index=args.prepared_index, previous_catalog=args.previous_catalog), host="127.0.0.1",
                 port=args.port, access_log=False, proxy_headers=False)
 
 
