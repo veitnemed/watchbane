@@ -22,7 +22,7 @@ from storage.sqlite.connection import get_db_path
 from storage.sqlite.backup import backup_sqlite_database
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
-from storage.legacy_json.portable import OMITTED_MEMBERS, portable_settings
+from storage.legacy_json.portable import OMITTED_MEMBERS, portable_settings, validate_portable_collection
 from storage.legacy_json.exporter import (
     CANONICAL_RATING_SCALE,
     LEGACY_EXPORT_MANIFEST,
@@ -233,6 +233,10 @@ def import_legacy_json_to_sqlite(
         )
         if payloads["settings"] != portable_settings(payloads["settings"]) or has_local_members:
             raise ValueError("Invalid machine-specific data in portable Watchbane export")
+        validate_portable_collection(
+            watched=payloads["watched"], meta=payloads["meta"],
+            watchlist=payloads["watchlist"], hidden=payloads["hidden"],
+        )
     report = {
         "ok": True,
         "dry_run": dry_run,

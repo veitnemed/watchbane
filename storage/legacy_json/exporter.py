@@ -11,7 +11,7 @@ from tempfile import NamedTemporaryFile, TemporaryDirectory
 
 from storage.sqlite import action_repository
 from storage.sqlite import candidate_repository
-from storage.legacy_json.portable import OMITTED_MEMBERS, portable_settings
+from storage.legacy_json.portable import OMITTED_MEMBERS, portable_settings, validate_portable_collection
 from storage.sqlite import poster_repository
 from storage.sqlite import settings_repository
 from storage.sqlite import watched_repository
@@ -100,6 +100,10 @@ def export_sqlite_to_legacy_json(
     payloads = _read_payloads(source_db)
     version = PORTABLE_EXPORT_SCHEMA_VERSION if portable else LEGACY_EXPORT_SCHEMA_VERSION
     if portable:
+        validate_portable_collection(
+            watched=payloads["watched/titles.json"], meta=payloads["watched/meta.json"],
+            watchlist=payloads["candidates/watchlist.json"], hidden=payloads["candidates/hidden.json"],
+        )
         payloads["settings.json"] = portable_settings(payloads["settings.json"])
         for member in OMITTED_MEMBERS:
             payloads[member] = {}

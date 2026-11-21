@@ -162,3 +162,72 @@ def test_portable_import_rechecks_concurrent_destination_write(tmp_path, monkeyp
     }
     assert settings_repository.load_settings_dict(path=dst) == {"ui_scale": 1.0}
     assert _snapshot(bundle) == before
+
+
+@pytest.mark.parametrize("case, error", [
+    ("saved_hidden", "Saved, Hidden"),
+    ("watched_saved", "Watched, Saved"),
+    ("duplicate_watched", "Watched, Watched"),
+    ("duplicate_saved", "Saved, Saved"),
+    ("different_action_id", "action key"),
+])
+def test_portable_conflict_rejected_before_export_or_import_writes(tmp_path, case, error):
+    from storage.legacy_json.exporter import export_sqlite_to_legacy_json
+    from storage.legacy_json.importer import import_legacy_json_to_sqlite
+
+    db, private, portable = tmp_path / "source.db", tmp_path / "private", tmp_path / "portable"
+    target = tmp_path / "destination" / "watchbane.db"
+    entry = {"candidate": {"title": "Film fixture", "tmdb_id": 700, "media_type": "movie"}}
+    record = {"main_info": {"title": "Film fixture", "user_score": 2}, "raw_scores": {"tmdb_id": 700}}
+    if case != "duplicate_watched":
+        mapping = {"tmdb:movie:701" if case == "different_action_id" else "tmdb:movie:700": entry}
+        if case == "duplicate_saved":
+            mapping["different title|2020|movie"] = entry
+        action_repository.save_candidate_actions_dict(action_repository.ACTION_WATCHLIST, mapping, path=db)
+    if case == "saved_hidden":
+        action_repository.save_candidate_actions_dict(
+            action_repository.ACTION_HIDDEN, {"tmdb:movie:700": entry}, path=db,
+        )
+    if case in {"watched_saved", "duplicate_watched"}:
+        keys = ["Film fixture"] if case == "watched_saved" else ["Film fixture", "Alternate title"]
+        watched_repository.save_dataset_dict({key: record for key in keys}, path=db)
+        watched_repository.save_meta_dict({key: {"media_type": "film"} for key in keys}, path=db)
+
+    # Exact v3 still supports diagnostics and recovery, including ambiguous states.
+    export_sqlite_to_legacy_json(db_path=db, output_dir=private)
+    assert import_legacy_json_to_sqlite(base_dir=private, db_path=tmp_path / "recovery.db")["ok"]
+    source_before = _snapshot(tmp_path)
+    with pytest.raises(ValueError, match=error):
+        export_sqlite_to_legacy_json(db_path=db, output_dir=portable, portable=True)
+    assert not portable.exists()
+    assert {k: v for k, v in _snapshot(tmp_path).items() if not k.endswith(("-shm", "-wal"))} == {
+        k: v for k, v in source_before.items() if not k.endswith(("-shm", "-wal"))
+    }
+
+    # A portable manifest from before preflight may contain that same collection.
+    manifest_path = private / "_watchbane_export.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest_path.write_text(json.dumps({**manifest, "schema_version": 4}))
+    target.parent.mkdir()
+    settings_repository.save_settings_dict({"ui_scale": 1.25}, path=target)
+    target_before = {k: v for k, v in _snapshot(target.parent).items() if not k.endswith(("-shm", "-wal"))}
+    bundle_before = _snapshot(private)
+    for dry_run in (True, False):
+        with pytest.raises(ValueError, match=error):
+            import_legacy_json_to_sqlite(base_dir=private, db_path=target, dry_run=dry_run)
+    assert _snapshot(private) == bundle_before
+    assert {k: v for k, v in _snapshot(target.parent).items() if not k.endswith(("-shm", "-wal"))} == target_before
+
+
+def test_portable_validator_does_not_infer_typed_identity_from_unknown_records():
+    from storage.legacy_json.portable import validate_portable_collection
+
+    validate_portable_collection(
+        watched={
+            "same|2020": {"main_info": {"title": "Same"}, "raw_scores": {"tmdb_id": 8}},
+            "another|2020": {"main_info": {"title": "Same", "media_type": "unknown"}, "raw_scores": {"tmdb_id": 8}},
+        },
+        meta={},
+        watchlist={"same|2020|tv": {"candidate": {"title": "Same", "tmdb_id": 8, "media_type": "tv"}}},
+        hidden={"same|2020|movie": {"candidate": {"title": "Same", "tmdb_id": 8, "media_type": "movie"}}},
+    )
