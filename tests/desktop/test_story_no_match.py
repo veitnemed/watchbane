@@ -1,9 +1,10 @@
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel
+from PyQt6.QtWidgets import QLabel, QPushButton
 import pytest
 
 from candidates import service, story_service
-from candidates.story_search import OUT_OF_SCOPE_NOTICE, StoryResponse
+from candidates.story_search import OUT_OF_SCOPE_NOTICE, StoryDocument, StoryHit, StoryResponse
+from desktop.story import view as story_view
 from desktop.story.view import StorySearchView
 
 
@@ -74,3 +75,53 @@ def test_no_result_profile_reread_error_preserves_recovery(plot_view, monkeypatc
     view._show_results(StoryResponse(()), {}, 0)
     assert view.retry_catalog_button.isVisible()
     assert "Повторите чтение каталога профиля" in view.status.text()
+
+
+@pytest.mark.parametrize("semantic", [True, False])
+def test_cards_frame_e5_as_options_and_preserve_card_order_and_actions(
+    qtbot, plot_view, monkeypatch, semantic
+):
+
+    view, _ = plot_view
+    monkeypatch.setattr(story_view, "get_title_states", lambda records: {})
+    documents = (
+        StoryDocument("movie:2", "Первый вариант", "Описание первого.", "movie", "synthetic"),
+        StoryDocument("tv:1", "Второй вариант", "Описание второго.", "tv", "synthetic"),
+    )
+    response = StoryResponse(tuple(StoryHit(doc, score, doc.overview)
+                                   for doc, score in zip(documents, (0.8, 0.7))))
+    if semantic:
+        from dataclasses import replace
+
+        response = replace(response, backend="Локальная E5")
+    view._show_results(response, {doc.key: {} for doc in documents}, 23)
+
+    if semantic:
+        assert view.status.text() == "Варианты из каталога: 2 · описаний: 23"
+        assert view.scope.isVisible()
+        assert view.scope.text() == "Поиск по смыслу · подходящего фильма или сериала среди вариантов может не быть"
+    else:
+        assert view.status.text() == "2 возможных совпадений · 23 описаний"
+        assert view.scope.text() == "Поиск по словам · для поиска по смыслу подключите модель"
+    assert view.backend_label.text() == response.backend
+    assert [card.text() for card in view.cards.findChildren(QLabel, "storyTitle")] == [
+        "Первый вариант", "Второй вариант",
+    ]
+    saves = view.cards.findChildren(QPushButton, "storySaveAction")
+    assert [button.accessibleName() for button in saves] == [
+        "Сохранить: Первый вариант", "Сохранить: Второй вариант",
+    ]
+    assert all(button.isEnabled() for button in saves)
+    details = next(button for button in view.cards.findChildren(QPushButton)
+                   if button.accessibleName() == "Полный сюжет: Первый вариант")
+    qtbot.mouseClick(details, Qt.MouseButton.LeftButton)
+    assert details.accessibleName() == "Свернуть сюжет: Первый вариант"
+
+
+def test_e5_without_cards_keeps_no_match_prompt(plot_view):
+    view, _ = plot_view
+    view._show_results(StoryResponse((), backend="Локальная E5", reason="no_match"), {}, 1)
+    assert view.status.text() == (
+        "В доступных описаниях совпадений не найдено. Какое необычное событие вы помните?"
+    )
+    assert view.scope.text() == "Поиск по смыслу · результаты могут совпадать только частично"

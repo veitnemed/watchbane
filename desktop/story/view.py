@@ -807,6 +807,8 @@ class StorySearchView:
             self._seed_count = count
             self._update_catalog_count()
         self.backend_label.setText(response.backend)
+        semantic = "E5" in response.backend
+        semantic_cards = bool(count and response.hits and semantic)
         if not count:
             if self.seed_path:
                 self.status.setText("В этом файле нет доступных описаний. Можно повторить поиск после обновления "
@@ -825,13 +827,16 @@ class StorySearchView:
         elif not response.hits and response.reason == "no_filtered_descriptions":
             self.status.setText("В доступном каталоге нет описаний с выбранными ограничениями. "
                                 "Попробуйте убрать год или тип.")
+        elif semantic_cards:
+            self.status.setText(f"Варианты из каталога: {len(response.hits)} · описаний: {count}")
         else:
             self.status.setText(f"{len(response.hits)} возможных совпадений · {count} описаний" if response.hits else (response.notice or "Совпадений нет. Попробуйте другой запрос."))
         self.status.setToolTip((response.notice or
                                "Сходство по описанию не подтверждает каждое сюжетное условие.")
                               if count and not response.reason else "")
         self.scope.setText(
-            "Поиск по смыслу · результаты могут совпадать только частично" if "E5" in response.backend else
+            "Поиск по смыслу · подходящего фильма или сериала среди вариантов может не быть" if semantic_cards else
+            "Поиск по смыслу · результаты могут совпадать только частично" if semantic else
             "Поиск по словам · для поиска по смыслу подключите модель"
         )
         try:
