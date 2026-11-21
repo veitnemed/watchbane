@@ -79,6 +79,7 @@ class StoryResponse:
     hits: tuple[StoryHit, ...]
     notice: str = ""
     backend: str = "Базовый поиск · словарный fallback"
+    reason: str | None = None
 
 
 def unsupported_negation(query: str) -> bool:
@@ -264,6 +265,11 @@ class StorySearch:
             return StoryResponse((), OUT_OF_SCOPE_NOTICE)
         kind, year = media_constraints(query)
         docs = [d for d in self.documents if d.key not in excluded and (kind is None or d.media_type == kind) and (year is None or d.year == year)]
+        if not docs and self.documents and (kind is not None or year is not None) and not any(
+            (kind is None or d.media_type == kind) and (year is None or d.year == year) for d in self.documents
+        ):
+            return StoryResponse((), "В доступных описаниях нет совпадений с выбранными ограничениями.",
+                                 reason="no_filtered_descriptions")
         q = concepts(words, fuzzy=True)
         # "следователь ловит преступника" selects the first role in the query.
         requested_role = next((next(iter(c & ROLE_WORDS.keys())) for w in words
@@ -285,4 +291,6 @@ class StorySearch:
             evidence = max(sentences, key=lambda s: len(q & concepts(tokens(s))), default=doc.overview)
             hits.append(StoryHit(doc, round(score, 6), evidence))
         hits.sort(key=lambda hit: (-hit.score, hit.document.key))
-        return StoryResponse(tuple(hits[:max(0, min(limit, 10))]), "" if hits else "Совпадений нет. Попробуйте другой сюжет или добавьте локальные описания.")
+        return StoryResponse(tuple(hits[:max(0, min(limit, 10))]),
+                             "" if hits else "Совпадений нет. Попробуйте другой сюжет или добавьте локальные описания.",
+                             reason="no_match" if not hits else None)

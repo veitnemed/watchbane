@@ -116,8 +116,8 @@ class SemanticStorySearch:
         self.vectors=encoder.encode([d.overview for d in self.documents], **({"cancelled": cancelled} if cancelled else {}))
         self.lexical=LexicalIndex(self.documents)
 
-    def _response(self, hits, notice):
-        return StoryResponse(hits, notice, "E5 small · локальный гибрид · " + self.encoder.variant)
+    def _response(self, hits, notice, *, reason=None):
+        return StoryResponse(hits, notice, "E5 small · локальный гибрид · " + self.encoder.variant, reason=reason)
 
     def search(self,query,*,excluded=frozenset(),limit=5,rerank=False,hybrid=True,domain_filters=True,repair_typos=True,evidence=True,role_adjustment=False):
         words=tokens(query)
@@ -129,7 +129,12 @@ class SemanticStorySearch:
             return self._response((), OUT_OF_SCOPE_NOTICE)
         kind,year=media_constraints(query) if domain_filters else (None,None)
         indices=[i for i,d in enumerate(self.documents) if d.key not in excluded and (not kind or d.media_type==kind) and (year is None or d.year==year)]
-        if not indices:return self._response((),"В этом локальном наборе пока нет подходящих описаний.")
+        if not indices:
+            filtered_empty = self.documents and (kind is not None or year is not None) and not any(
+                (kind is None or d.media_type == kind) and (year is None or d.year == year) for d in self.documents
+            )
+            reason = "no_filtered_descriptions" if filtered_empty else None
+            return self._response((), "В этом локальном наборе пока нет подходящих описаний.", reason=reason)
         corrected=normalized_query(query,self.vocabulary) if repair_typos else query
         q=self.encoder.encode([corrected],prefix="query: ")[0]
         dense={i:float(self.vectors[i]@q) for i in indices}

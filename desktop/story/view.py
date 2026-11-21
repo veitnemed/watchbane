@@ -807,12 +807,29 @@ class StorySearchView:
             self._seed_count = count
             self._update_catalog_count()
         self.backend_label.setText(response.backend)
-        if self.seed_path and not count:
-            self.status.setText("В этом файле нет доступных описаний. Можно повторить поиск после обновления "
-                                "файла, выбрать другой или вернуться к каталогу профиля.")
+        if not count:
+            if self.seed_path:
+                self.status.setText("В этом файле нет доступных описаний. Можно повторить поиск после обновления "
+                                    "файла, выбрать другой или вернуться к каталогу профиля.")
+            else:
+                self._update_catalog_count()
+                if self._catalog_read_failed:
+                    self._show_idle()
+                elif self._catalog_ready:
+                    self.status.setText("Доступные описания обновились. Повторите поиск.")
+                else:
+                    self.status.setText("Для поиска в профиле нет доступных описаний. Пополните каталог из TMDb "
+                                        "или выберите файл каталога.")
+        elif not response.hits and response.reason == "no_match":
+            self.status.setText("В доступных описаниях совпадений не найдено. Какое необычное событие вы помните?")
+        elif not response.hits and response.reason == "no_filtered_descriptions":
+            self.status.setText("В доступном каталоге нет описаний с выбранными ограничениями. "
+                                "Попробуйте убрать год или тип.")
         else:
             self.status.setText(f"{len(response.hits)} возможных совпадений · {count} описаний" if response.hits else (response.notice or "Совпадений нет. Попробуйте другой запрос."))
-        self.status.setToolTip(response.notice or "Сходство по описанию не подтверждает каждое сюжетное условие.")
+        self.status.setToolTip((response.notice or
+                               "Сходство по описанию не подтверждает каждое сюжетное условие.")
+                              if count and not response.reason else "")
         self.scope.setText(
             "Поиск по смыслу · результаты могут совпадать только частично" if "E5" in response.backend else
             "Поиск по словам · для поиска по смыслу подключите модель"
