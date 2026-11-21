@@ -19,6 +19,7 @@ class HydrationRun:
     hydrated: int
     ineligible: int
     missing_overview: int
+    unavailable: int = 0
 
 
 def _detail(transport, item, locale):
@@ -33,7 +34,14 @@ def _detail(transport, item, locale):
 
 def _fetch(transport, item):
     for locale in ("ru-RU", "en-US"):
-        row, title = _detail(transport, item, locale)
+        try:
+            row, title = _detail(transport, item, locale)
+        except DetachedTmdbError as error:
+            # EN follows a successful typed RU response; a later 404 is
+            # ambiguous/conflicting and must not persist resource absence.
+            if locale == "ru-RU" and error.code == "http" and error.status == 404 and error.resource_missing:
+                return "unavailable", None
+            raise
         if row.get("adult") is not False:
             return "ineligible", None
         overview = row.get("overview")
@@ -54,24 +62,39 @@ def _fetch(transport, item):
     return "missing_overview", None
 
 
+HYDRATION_STATES = ("hydrated", "ineligible", "missing_overview", "unavailable")
+_ITEMS_SQL = """CREATE TABLE hydration_items (
+    media TEXT NOT NULL CHECK(media IN ('movie', 'tv')),
+    tmdb_id INTEGER NOT NULL CHECK(tmdb_id > 0),
+    status TEXT NOT NULL CHECK(status IN ('hydrated', 'ineligible', 'missing_overview', 'unavailable')),
+    payload TEXT, PRIMARY KEY(media, tmdb_id),
+    CHECK ((status = 'hydrated') = (payload IS NOT NULL))
+)"""
+_LEGACY_ITEMS_SQL = _ITEMS_SQL.replace(", 'unavailable'", "")
+
+
 def _setup(conn, manifest):
     conn.execute("BEGIN IMMEDIATE")
     with conn:
         tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not tables:
             conn.execute("CREATE TABLE hydration_plan (singleton INTEGER PRIMARY KEY CHECK(singleton=1), manifest TEXT NOT NULL)")
-            conn.execute("""CREATE TABLE hydration_items (
-                media TEXT NOT NULL CHECK(media IN ('movie', 'tv')),
-                tmdb_id INTEGER NOT NULL CHECK(tmdb_id > 0),
-                status TEXT NOT NULL CHECK(status IN ('hydrated', 'ineligible', 'missing_overview')),
-                payload TEXT, PRIMARY KEY(media, tmdb_id),
-                CHECK ((status = 'hydrated') = (payload IS NOT NULL))
-            )""")
+            conn.execute(_ITEMS_SQL)
             conn.execute("INSERT INTO hydration_plan VALUES (1, ?)", (manifest,))
         elif tables != {"hydration_plan", "hydration_items"} or conn.execute(
             "SELECT manifest FROM hydration_plan WHERE singleton=1"
         ).fetchone() != (manifest,):
             raise ValueError("Hydration checkpoint differs from the ID plan; use a separate checkpoint")
+        else:
+            schema, = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='hydration_items'").fetchone()
+            normalized = " ".join(schema.split())
+            if normalized == " ".join(_LEGACY_ITEMS_SQL.split()):
+                conn.execute("ALTER TABLE hydration_items RENAME TO hydration_items_legacy")
+                conn.execute(_ITEMS_SQL)
+                conn.execute("INSERT INTO hydration_items SELECT media,tmdb_id,status,payload FROM hydration_items_legacy")
+                conn.execute("DROP TABLE hydration_items_legacy")
+            elif normalized != " ".join(_ITEMS_SQL.split()):
+                raise ValueError("Unrecognized hydration items schema; use a separate checkpoint")
 
 
 def hydrate_id_plan(
@@ -124,4 +147,4 @@ def hydrate_id_plan(
     completed = sum(statuses.values())
     return HydrationRun(completed == len(plan.queue), stop, transport.attempts - start,
                         completed, statuses.get("hydrated", 0), statuses.get("ineligible", 0),
-                        statuses.get("missing_overview", 0))
+                        statuses.get("missing_overview", 0), statuses.get("unavailable", 0))

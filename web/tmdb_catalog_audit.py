@@ -9,6 +9,7 @@ from pathlib import Path
 import sqlite3
 
 from web.tmdb_ids import IdPlan
+from web.tmdb_hydration import HYDRATION_STATES
 
 
 @dataclass(frozen=True)
@@ -40,7 +41,7 @@ def audit_hydration(
     for media in ("movie", "tv"):
         by_media[media] = {
             "planned": sum(kind == media for kind in planned.values()),
-            "pending": 0, "hydrated": 0, "ineligible": 0, "missing_overview": 0,
+            "pending": 0, **dict.fromkeys(HYDRATION_STATES, 0),
             "requested_locale": {"ru-RU": 0, "en-US": 0},
             "observed_language": {"ru": 0, "en": 0, "other": 0, "unverified": 0},
         }
@@ -54,7 +55,7 @@ def audit_hydration(
             "SELECT media, tmdb_id, status, payload FROM hydration_items"
         ):
             key = f"tmdb:{media}:{identifier}"
-            if key not in planned or key in seen or status not in ("hydrated", "ineligible", "missing_overview"):
+            if key not in planned or key in seen or status not in HYDRATION_STATES:
                 raise ValueError("Unexpected typed hydration state")
             seen.add(key)
             bucket = by_media[media]

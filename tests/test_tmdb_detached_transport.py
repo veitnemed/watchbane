@@ -147,3 +147,31 @@ def test_invalid_parameter_encoding_is_redacted_before_authentication():
         transport.get("/discover/movie", {"language": "\ud800"})
     assert caught.value.__cause__ is None and caught.value.__context__ is None
     assert transport.attempts == transport.budget_denials == 0
+
+
+@pytest.mark.parametrize(("path", "fault", "missing"), [
+    ("/movie/41", None, True), ("/discover/movie", None, False),
+    ("/movie/41", "read", False), ("/movie/41", "close", False),
+    ("/movie/41", "duplicate", False),
+])
+def test_missing_error_envelope_never_leaks_or_reclassifies_ambiguous_http(path, fault, missing):
+    class ErrorBody(BytesIO):
+        def read(self, size=-1):
+            if fault == "read":
+                raise OSError("private body read failure")
+            return super().read(size)
+        def close(self):
+            super().close()
+            if fault == "close":
+                raise OSError("private body close failure")
+    raw = b'{"success":false,"status_code":34}'
+    if fault == "duplicate":
+        raw = b'{"success":false,"status_code":6,"status_code":34}'
+    def opener(request, **_kwargs):
+        raise HTTPError(request.full_url, 404, "private remote message",
+                        {"Content-Type": "application/json"}, ErrorBody(raw))
+    transport = DetachedTmdbTransport(1, bearer=lambda: "fixture", opener=opener)
+    with pytest.raises(DetachedTmdbError, match="^http$") as error:
+        transport.get(path, {})
+    assert error.value.resource_missing is missing
+    assert error.value.status == 404 and error.value.__context__ is None and transport.attempts == 1

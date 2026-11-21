@@ -19,7 +19,7 @@ def test_only_review_bound_rows_export_and_seed_parser_agrees(checkpoint, tmp_pa
     }
     before = db.read_bytes()
     result = export_reviewed_seed(plan=plan, checkpoint=db, output=output, reviewed=evidence, use_cleared=True)
-    assert result == {"planned": 3, "completed": 3, "hydrated": 2, "missing_overview": 1, "ineligible": 0,
+    assert result == {"planned": 3, "completed": 3, "hydrated": 2, "missing_overview": 1, "ineligible": 0, "unavailable": 0,
                       "unreviewed_hydrated": 0, "exported": 2, "by_reviewed_language": {"ru": 1, "en": 1}}
     parsed = load_seed_snapshot(output)
     assert set(parsed) == set(evidence)

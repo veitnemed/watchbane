@@ -12,10 +12,10 @@ from tempfile import NamedTemporaryFile
 from candidates.story_seed_snapshot import MAX_FILE_BYTES, MAX_LINE_BYTES, MAX_ROWS
 from web.tmdb_catalog_audit import ReviewedLanguage
 from web.tmdb_ids import IdPlan
+from web.tmdb_hydration import HYDRATION_STATES
 
 
 _LANG = {"ru": "ru-RU", "en": "en-US"}
-_STATES = ("hydrated", "ineligible", "missing_overview")
 
 
 def _reviewed_payload(payload, media, identifier):
@@ -70,7 +70,7 @@ def export_reviewed_seed(
                     "SELECT media, tmdb_id, status, payload FROM hydration_items ORDER BY media, tmdb_id"
                 ):
                     key = f"tmdb:{media}:{identifier}"
-                    if key not in planned or key in found or status not in _STATES:
+                    if key not in planned or key in found or status not in HYDRATION_STATES:
                         raise ValueError("Unexpected typed hydration state")
                     found.add(key)
                     states[status] += 1
@@ -110,6 +110,6 @@ def export_reviewed_seed(
         if staged is not None:
             staged.unlink(missing_ok=True)
     return {"planned": len(planned), "completed": len(found),
-            **{status: states[status] for status in _STATES},
+            **{status: states[status] for status in HYDRATION_STATES},
             "unreviewed_hydrated": states["hydrated"] - len(emitted),
             "exported": len(emitted), "by_reviewed_language": {lang: languages[lang] for lang in _LANG}}

@@ -137,3 +137,70 @@ def test_cancellation_and_concurrent_sqlite_writer_do_not_dispatch(tmp_path):
         with pytest.raises(sqlite3.OperationalError, match="locked"):
             hydrate_id_plan(plan=plan, checkpoint=db, transport=_transport(20, transcript))
     assert not transcript
+
+
+def _missing_transport(transcript, *, phase="ru-RU", code=34, http=404,
+                       content_type="application/json; charset=utf-8", response_url=None):
+    healthy = _transport(20, [])
+    def opener(request, *, timeout):
+        target = urlsplit(request.full_url)
+        locale = parse_qs(target.query)["language"][0]
+        transcript.append((target.path, locale))
+        if target.path == "/3/tv/41" and locale == phase:
+            body = json.dumps({"success": False, "status_code": code, "status_message": "fixture"}).encode()
+            raise HTTPError(response_url or request.full_url, http, "fixture", {"Content-Type": content_type},
+                            io.BytesIO(body))
+        return healthy._open(request, timeout=timeout)
+    return DetachedTmdbTransport(20, bearer=lambda: "fictional-test-marker", opener=opener)
+
+
+def test_verified_missing_typed_item_migrates_restarts_and_has_separate_export_count(tmp_path):
+    from hashlib import sha256
+    from web.tmdb_catalog_audit import ReviewedLanguage, audit_hydration
+    from web.tmdb_seed_export import export_reviewed_seed
+
+    plan, checkpoint = _plan(tmp_path), tmp_path / "legacy.sqlite"
+    original_payload = json.dumps({"media_type": "movie", "tmdb_id": 41, "title": "Legacy title",
+                                   "overview": "Legacy fixture.", "year": 2020, "requested_locale": "en-US"})
+    with closing(sqlite3.connect(checkpoint)) as conn, conn:
+        conn.execute("CREATE TABLE hydration_plan (singleton INTEGER PRIMARY KEY CHECK(singleton=1), manifest TEXT NOT NULL)")
+        conn.execute("""CREATE TABLE hydration_items (
+            media TEXT NOT NULL CHECK(media IN ('movie', 'tv')),
+            tmdb_id INTEGER NOT NULL CHECK(tmdb_id > 0),
+            status TEXT NOT NULL CHECK(status IN ('hydrated', 'ineligible', 'missing_overview')),
+            payload TEXT, PRIMARY KEY(media, tmdb_id),
+            CHECK ((status = 'hydrated') = (payload IS NOT NULL))
+        )""")
+        conn.execute("INSERT INTO hydration_plan VALUES (1,?)",
+                     (json.dumps(plan.manifest(), sort_keys=True, separators=(",", ":")),))
+        conn.execute("INSERT INTO hydration_items VALUES ('movie',41,'hydrated',?)", (original_payload,))
+
+    calls = []
+    run = hydrate_id_plan(plan=plan, checkpoint=checkpoint, transport=_missing_transport(calls))
+    assert run.complete and run.unavailable == 1 and run.hydrated == 1
+    assert run.attempts_this_run == 1 and calls == [("/3/tv/41", "ru-RU")]
+    assert _rows(checkpoint) == [("movie", 41, "hydrated", original_payload), ("tv", 41, "unavailable", None)]
+    resumed, transcript = _run(plan, checkpoint, 0)
+    assert resumed.complete and resumed.unavailable == 1 and not transcript
+
+    report = audit_hydration(plan=plan, checkpoint=checkpoint)
+    assert report["by_media"]["tv"]["unavailable"] == 1 and report["by_media"]["tv"]["pending"] == 0
+    export = tmp_path / "seed.jsonl"
+    review = ReviewedLanguage(sha256(b"Legacy fixture.").hexdigest(), "en")
+    report = export_reviewed_seed(plan=plan, checkpoint=checkpoint, output=export,
+                                  reviewed={"tmdb:movie:41": review}, use_cleared=True)
+    assert report["unavailable"] == 1 and report["exported"] == 1
+    assert json.loads(export.read_text(encoding="utf-8"))["media_type"] == "movie"
+
+
+@pytest.mark.parametrize("options", [
+    {"phase": "en-US"}, {"code": 6}, {"code": 37}, {"code": "34"}, {"http": 401}, {"http": 429},
+    {"content_type": "text/html"}, {"response_url": "https://example.invalid/provider"},
+])
+def test_untrusted_or_conflicting_missing_response_leaves_item_pending(tmp_path, options):
+    plan, checkpoint = _plan(tmp_path), tmp_path / "detached.sqlite"
+    calls = []
+    run = hydrate_id_plan(plan=plan, checkpoint=checkpoint, transport=_missing_transport(calls, **options))
+    assert not run.complete and run.unavailable == 0 and run.completed == 1
+    assert run.stop_reason == ("throttled" if options.get("http") == 429 else "http")
+    assert _run(plan, checkpoint)[0].complete
