@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -44,7 +45,9 @@ def test_export_sqlite_to_legacy_json_preserves_file_names(tmp_path) -> None:
         assert (output_dir / relative_path).is_file()
     assert _read_json(output_dir / "_watchbane_export.json") == {
         "format": "watchbane-legacy-json",
-        "schema_version": 1,
+        "schema_version": 2,
+        "watched_rating_scale": "watchbane-reaction-1-to-3",
+        "watched_titles_sha256": hashlib.sha256((output_dir / "watched/titles.json").read_bytes()).hexdigest(),
     }
 
 
@@ -127,3 +130,85 @@ def test_export_modify_import_and_restore_round_trip(tmp_path) -> None:
 
     restore_sqlite_database(recovery_backup, db_path=db_path)
     assert list(watched_repository.load_dataset_dict(path=db_path)) == ["Beta"]
+
+
+def _rated(scores):
+    return {
+        str(index): {"main_info": {"title": f"Title {index}", "user_score": score}}
+        for index, score in enumerate(scores)
+    }
+
+
+def _stored_ratings(path):
+    from storage.sqlite import watched_repository
+
+    return [
+        item["main_info"].get("user_score")
+        for item in watched_repository.load_dataset_dict(path=path).values()
+    ]
+
+
+def test_manifested_ratings_survive_repeated_import_and_sqlite_restore(tmp_path):
+    from storage.sqlite import watched_repository
+    from storage.sqlite.backup import restore_sqlite_database
+
+    source, target = tmp_path / "source.sqlite3", tmp_path / "target.sqlite3"
+    output = tmp_path / "export"
+    ratings = [1, 2, 3, None]
+    watched_repository.save_dataset_dict(_rated(ratings), path=source)
+    watched_repository.save_dataset_dict(_rated([3, 2]), path=target)
+    export_sqlite_to_legacy_json(output_dir=output, db_path=source)
+    first = import_legacy_json_to_sqlite(base_dir=output, db_path=target, create_backup=False)
+    assert _stored_ratings(target) == ratings
+    import_legacy_json_to_sqlite(base_dir=output, db_path=target, create_backup=False)
+    assert _stored_ratings(target) == ratings
+    restore_sqlite_database(first["runtime_backup"], db_path=target)
+    assert _stored_ratings(target) == [3, 2]
+
+    # Historical manifest v1 was generated with the same canonical reaction
+    # contract, but did not carry a digest or explicit scale.
+    _write_json(output / "_watchbane_export.json", {"format": "watchbane-legacy-json", "schema_version": 1})
+    import_legacy_json_to_sqlite(base_dir=output, db_path=target, create_backup=False)
+    assert _stored_ratings(target) == ratings
+
+
+def test_unmanifested_legacy_rating_scale_is_still_converted(tmp_path):
+    source, target = tmp_path / "legacy", tmp_path / "target.sqlite3"
+    _write_json(source / "watched/titles.json", _rated([0, 2, 5, 8, 10, None]))
+    import_legacy_json_to_sqlite(base_dir=source, db_path=target, create_backup=False)
+    assert _stored_ratings(target) == [1, 1, 2, 3, 3, None]
+
+
+def test_mismatched_or_falsely_declared_ratings_are_rejected_before_mutation(tmp_path):
+    import pytest
+    from storage.sqlite import watched_repository
+
+    source, target = tmp_path / "source.sqlite3", tmp_path / "target.sqlite3"
+    output = tmp_path / "export"
+    watched_repository.save_dataset_dict(_rated([2, 3]), path=source)
+    watched_repository.save_dataset_dict(_rated([3]), path=target)
+    export_sqlite_to_legacy_json(output_dir=output, db_path=source)
+    manifest_path = output / "_watchbane_export.json"
+    manifest = _read_json(manifest_path)
+    titles_path = output / "watched/titles.json"
+
+    # Even a canonical-looking edit fails with a stale v2 manifest.
+    _write_json(titles_path, _rated([1, 2]))
+    with pytest.raises(ValueError, match="does not match"):
+        import_legacy_json_to_sqlite(base_dir=output, db_path=target, create_backup=False)
+
+    # Matching checksum cannot make out-of-scale values valid canonical data.
+    _write_json(titles_path, _rated([8]))
+    manifest["watched_titles_sha256"] = hashlib.sha256(titles_path.read_bytes()).hexdigest()
+    _write_json(manifest_path, manifest)
+    with pytest.raises(ValueError, match="Invalid canonical"):
+        import_legacy_json_to_sqlite(base_dir=output, db_path=target, create_backup=False)
+
+    _write_json(manifest_path, {"format": "watchbane-legacy-json", "schema_version": 1})
+    with pytest.raises(ValueError, match="Invalid canonical"):
+        import_legacy_json_to_sqlite(base_dir=output, db_path=target, create_backup=False)
+    _write_json(manifest_path, {"format": "watchbane-legacy-json", "schema_version": True})
+    with pytest.raises(ValueError, match="schema version"):
+        import_legacy_json_to_sqlite(base_dir=output, db_path=target, create_backup=False)
+    assert _stored_ratings(target) == [3]
+    assert not (output / "backups").exists()

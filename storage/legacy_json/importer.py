@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import shutil
-from copy import deepcopy
 
-from dataset.models.user_rating import legacy_score_to_user_rating
+from dataset.models.user_rating import is_valid_user_rating, legacy_score_to_user_rating
 
 from storage.sqlite import action_repository
 from storage.sqlite import candidate_repository
@@ -21,6 +21,7 @@ from storage.sqlite.backup import backup_sqlite_database
 from storage.sqlite.connection import connect
 from storage.sqlite.migrations import apply_migrations
 from storage.legacy_json.exporter import (
+    CANONICAL_RATING_SCALE,
     LEGACY_EXPORT_MANIFEST,
     LEGACY_EXPORT_SCHEMA_VERSION,
 )
@@ -80,15 +81,55 @@ def _json_sources(paths: LegacyJsonPaths) -> tuple[Path, ...]:
     )
 
 
-def _validate_export_manifest(paths: LegacyJsonPaths) -> None:
-    if paths.manifest.is_file() is False:
-        return
+def _export_rating_metadata(paths: LegacyJsonPaths) -> tuple[int | None, str | None]:
+    if not paths.manifest.is_file():
+        return None, None
     manifest = load_legacy_json_mapping(paths.manifest)
-    schema_version = manifest.get("schema_version")
-    if manifest.get("format") != "watchbane-legacy-json" or schema_version != LEGACY_EXPORT_SCHEMA_VERSION:
-        raise ValueError(
-            f"Unsupported Watchbane export schema version: {schema_version!r}"
-        )
+    version = manifest.get("schema_version")
+    if manifest.get("format") != "watchbane-legacy-json" or type(version) is not int:
+        raise ValueError(f"Unsupported Watchbane export schema version: {version!r}")
+    if version == 1 and set(manifest) == {"format", "schema_version"}:
+        # Version 1 was introduced after the SQLite migration to reactions.
+        return 1, None
+    if version != LEGACY_EXPORT_SCHEMA_VERSION:
+        raise ValueError(f"Unsupported Watchbane export schema version: {version!r}")
+    digest = manifest.get("watched_titles_sha256")
+    if (manifest.get("watched_rating_scale") != CANONICAL_RATING_SCALE
+            or not isinstance(digest, str) or len(digest) != 64
+            or any(char not in "0123456789abcdef" for char in digest)):
+        raise ValueError("Invalid Watchbane export rating metadata")
+    return version, digest
+
+
+def _load_watched_for_import(paths: LegacyJsonPaths, version: int | None, digest: str | None) -> dict:
+    if version is None:
+        watched = load_legacy_json_mapping(paths.titles)
+        for record in watched.values():
+            if not isinstance(record, dict):
+                continue
+            main_info = record.get("main_info")
+            if isinstance(main_info, dict):
+                main_info["user_score"] = legacy_score_to_user_rating(main_info.get("user_score"))
+        return watched
+
+    if not paths.titles.is_file():
+        raise ValueError("Export is missing watched/titles.json")
+    raw = paths.titles.read_bytes()
+    if digest is not None and hashlib.sha256(raw).hexdigest() != digest:
+        raise ValueError("Watched ratings file does not match Watchbane export metadata")
+    watched = json.loads(raw.decode("utf-8-sig"))
+    if not isinstance(watched, dict):
+        raise ValueError("Invalid Watchbane watched titles mapping")
+    for record in watched.values():
+        if not isinstance(record, dict):
+            raise ValueError("Invalid Watchbane watched title record")
+        main_info = record.get("main_info")
+        if main_info is not None and not isinstance(main_info, dict):
+            raise ValueError("Invalid Watchbane watched title metadata")
+        for value in (record.get("user_score"), (main_info or {}).get("user_score")):
+            if value is not None and not is_valid_user_rating(value):
+                raise ValueError("Invalid canonical Watchbane rating; expected 1, 2, 3 or null")
+    return watched
 
 
 def backup_legacy_json(paths: LegacyJsonPaths) -> Path:
@@ -116,10 +157,10 @@ def import_legacy_json_to_sqlite(
     """Import legacy JSON files into SQLite and return a count report."""
     paths = legacy_paths(base_dir)
     target_db = Path(db_path) if db_path is not None else get_db_path()
-    _validate_export_manifest(paths)
+    export_version, rating_digest = _export_rating_metadata(paths)
 
     payloads = {
-        "watched": load_legacy_json_mapping(paths.titles),
+        "watched": _load_watched_for_import(paths, export_version, rating_digest),
         "meta": load_legacy_json_mapping(paths.meta),
         "candidate_pool": load_legacy_json_mapping(paths.candidate_pool),
         "candidate_criteria": load_legacy_json_mapping(paths.candidate_criteria),
@@ -128,14 +169,6 @@ def import_legacy_json_to_sqlite(
         "settings": load_legacy_json_mapping(paths.settings),
         "poster_cache": load_legacy_json_mapping(paths.poster_cache),
     }
-    migrated_watched = deepcopy(payloads["watched"])
-    for record in migrated_watched.values():
-        if not isinstance(record, dict):
-            continue
-        main_info = record.get("main_info")
-        if isinstance(main_info, dict):
-            main_info["user_score"] = legacy_score_to_user_rating(main_info.get("user_score"))
-    payloads["watched"] = migrated_watched
     report = {
         "ok": True,
         "dry_run": dry_run,
