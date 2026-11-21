@@ -362,12 +362,18 @@ def test_recommendation_watched_action_uses_selected_reaction(qtbot) -> None:
     assert deck_service.action_calls[0][2] == 1
 
 
-def test_recommendation_action_keeps_the_user_deck_finite(qtbot) -> None:
-    service = FakeCandidateService(_candidate_set(31))
+@pytest.mark.parametrize("pool_size", [31, 10], ids=["reserve-promotes", "reserve-depleted"])
+def test_recommendation_action_keeps_the_user_deck_finite(qtbot, pool_size) -> None:
+    service = FakeCandidateService(_candidate_set(pool_size))
     deck_service = FakeRecommendationDeckService(service)
     _service, _session, _filters_view, list_view = _build_views(qtbot, service, deck_service)
     list_widget = _candidate_list(list_view)
-    initial_titles = set(_listed_titles(list_widget))
+    initial_titles = _listed_titles(list_widget)
+    assert len(initial_titles) == 10
+    reserve = deck_service._deck["reserve"]
+    promoted = reserve[0]["title"] if reserve else None
+    assert (promoted is not None) is (pool_size > 10)
+    removed = initial_titles[0]
     list_widget.setCurrentIndex(list_widget.model().index(0, 0))
     button = list_view.widget.findChild(QPushButton, "recommendationHiddenButton")
 
@@ -376,13 +382,17 @@ def test_recommendation_action_keeps_the_user_deck_finite(qtbot) -> None:
     detail_scroll = list_view.widget.findChild(QScrollArea, "candidateSearchDetailScroll")
     assert detail_scroll is not None
     detail_scroll.ensureWidgetVisible(button)
-    qtbot.wait(10)
     qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
 
-    updated_titles = set(_listed_titles(list_widget))
-    assert _listed_count(list_widget) == 9
-    assert updated_titles < initial_titles
+    expected = set(initial_titles) - {removed}
+    if promoted is not None:
+        expected.add(promoted)
+    qtbot.waitUntil(lambda: set(_listed_titles(list_widget)) == expected)
+    assert _listed_count(list_widget) == (10 if promoted is not None else 9)
+    assert len(deck_service.action_calls) == 1
+    assert deck_service.action_calls[0][0] == "hidden"
     current_row = list_widget.currentIndex().row()
+    assert current_row >= 0
     assert list_view._selected_candidate == list_view._candidates[current_row]
     assert list_view._selected_identity == candidate_detail_identity(
         list_view._candidates[current_row]
@@ -758,32 +768,48 @@ def test_recommendation_reason_remains_visible_without_overview(qtbot) -> None:
 
 
 def test_recommendation_reason_label_replaces_previous_intent(qtbot) -> None:
+    from desktop.i18n import tr
+
     candidates = _candidate_set(2)
     candidates[0].update({"year": 2010, "tmdb_popularity": 90, "tmdb_score": None})
     candidates[1].update({"year": 2011, "tmdb_popularity": 8, "tmdb_score": None})
     service = FakeCandidateService(candidates)
-    _service, session, _filters_view, list_view = _build_views(qtbot, service)
+    _service, session, filters_view, list_view = _build_views(qtbot, service)
     list_widget = _candidate_list(list_view)
+    apply_button = filters_view.widget.findChild(QPushButton, "candidateSearchApplyTopButton")
+    assert apply_button is not None
+    rarity = filters_view._form.vector_rarity_control
+    popular = tr("recommendations.reason.popular")
+    rare = tr("recommendations.reason.rare")
+    fallback = tr("recommendations.reason.local_fallback")
 
-    session.set_recommendation_vector(
-        {"mood": "any", "rarity_level": 0, "diversity_level": 2, "openness_level": 2}
-    )
-    list_widget.setCurrentIndex(list_widget.model().index(0, 0))
-    qtbot.wait(10)
-    first_text = list_view._reason_label.text()
+    def select(candidate):
+        row = _listed_titles(list_widget).index(candidate["title"])
+        list_widget.setCurrentIndex(list_widget.model().index(row, 0))
 
-    session.set_recommendation_vector(
-        {"mood": "any", "rarity_level": 4, "diversity_level": 2, "openness_level": 2}
-    )
-    list_widget.setCurrentIndex(list_widget.model().index(1, 0))
-    qtbot.wait(10)
-    second_text = list_view._reason_label.text()
+    def assert_reason(reason, *, absent):
+        qtbot.waitUntil(lambda: f"• {reason}" in list_view._reason_label.text().splitlines())
+        lines = list_view._reason_label.text().splitlines()
+        assert f"• {absent}" not in lines
+        assert all(line.strip("• ") for line in lines)
+        assert len(lines) == len(set(lines))
 
-    assert "Популярный выбор" in first_text
-    assert "Менее известный выбор" in second_text
-    assert "Популярный выбор" not in second_text
-    assert all(line.strip("• ") for line in second_text.splitlines())
-    assert len(second_text.splitlines()) == len(set(second_text.splitlines()))
+    select(candidates[0])
+    assert session.filters is None
+    rarity.setValue(0)
+    assert_reason(fallback, absent=popular)
+    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: session.filters is not None and session.recommendation_vector["rarity_level"] == 0)
+    select(candidates[0])
+    assert_reason(popular, absent=rare)
+
+    rarity.setValue(4)
+    select(candidates[1])
+    assert_reason(fallback, absent=rare)
+    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: session.recommendation_vector["rarity_level"] == 4)
+    select(candidates[1])
+    assert_reason(rare, absent=popular)
 
 
 def test_settings_tab_does_not_overlap_recommendation_poster(qtbot) -> None:

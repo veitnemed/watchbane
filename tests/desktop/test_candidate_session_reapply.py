@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QCheckBox, QLabel, QPushButton
 
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.session import CandidateSearchSession, DEFAULT_BROWSE_FILTERS
+from desktop.i18n import tr
 
 
 def _candidate(title: str, *, year: int = 2024, media_type: str = "movie") -> dict:
@@ -146,6 +147,6 @@ def test_replenish_gui_reloads_pool_and_reapplies_without_loop(qtbot) -> None:
 
     assert service.search_calls == 3
     assert session.filtered_count == 2
-    assert "До обновления: 1" in stats.text()
-    assert "Добавлено 1 из 30" in stats.text()
-    assert "Сейчас доступно: 2" in stats.text()
+    assert stats.text() == tr(
+        "recommendations.discovery.status.complete_partial", before=1, added=1, requested=30, visible=2
+    )
