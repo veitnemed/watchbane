@@ -1,0 +1,4 @@
+# Optional, separate loopback search server. No weights or catalog included.
+-r requirements-story.txt
+fastapi==0.141.1
+uvicorn==0.52.1
