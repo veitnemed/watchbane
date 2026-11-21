@@ -317,3 +317,34 @@ def test_detached_zero_budget_does_not_resolve_credentials_or_publish(tmp_path):
     assert result["stop_reason"] == "budget_exhausted"
     assert result["api_requests_this_run"] == 1 and result["transport_attempts_this_run"] == 0
     assert not output.exists()
+
+
+def test_detached_repeated_small_cap_never_advances_incomplete_page(tmp_path):
+    class TwoFallbacks(CatalogFixture):
+        def __call__(self, path, params, **kwargs):
+            response = super().__call__(path, params, **kwargs)
+            if path == "/discover/movie":
+                response["results"][1]["overview"] = ""
+            return response
+
+    plan = Plan(3, "2025-12-31")
+    checkpoint, output = tmp_path / "checkpoint.sqlite3", tmp_path / "catalog.jsonl"
+    output.write_bytes(b"existing catalog")
+    transcripts = []
+    for cap, expected_pages in ((2, 0), (2, 0), (3, 1)):
+        source, calls = TwoFallbacks(), []
+        result = build_catalog(checkpoint, output, plan,
+                               detached_transport=_detached_fixture(cap, source, calls))
+        assert result["stop_reason"] == "budget_exhausted"
+        assert result["completed_pages_this_run"] == expected_pages
+        assert result["transport_attempts_this_run"] == len(calls) == cap
+        assert result["api_requests_this_run"] == cap + 1
+        assert result["by_media"] == {"movie": expected_pages * 2, "tv": 0}
+        assert output.read_bytes() == b"existing catalog"
+        with sqlite3.connect(checkpoint) as conn:
+            assert conn.execute("SELECT count(*) FROM batches").fetchone()[0] == expected_pages
+            assert conn.execute("SELECT count(*) FROM seen").fetchone()[0] == expected_pages * 2
+        transcripts.append(calls)
+    assert transcripts[0] == transcripts[1] == transcripts[2][:2]
+    assert transcripts[2][0] == "/discover/movie"
+    assert len(set(transcripts[2][1:])) == 2

@@ -360,6 +360,7 @@ def build_catalog(checkpoint, output, plan, *, get=None, sleep=time.sleep, progr
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
     api = DetachedAcquisition(detached_transport) if detached_transport is not None else Acquisition(get, sleep=sleep)
     stop_reason = None
+    completed_pages = 0
     with closing(sqlite3.connect(checkpoint)) as conn:
         _setup(conn, plan)
         caps = {"movie": (plan.target + 1) // 2, "tv": plan.target // 2}
@@ -385,6 +386,7 @@ def build_catalog(checkpoint, output, plan, *, get=None, sleep=time.sleep, progr
                 # _page only publishes after all of its remote operations.
                 stop_reason = error.code
                 break
+            completed_pages += 1
             if progress:
                 update = {m: counts[m] for m in MEDIA} | {"bucket": bucket.key, "page": page, "api_requests": api.requests}
                 if detached_transport is not None:
@@ -396,7 +398,8 @@ def build_catalog(checkpoint, output, plan, *, get=None, sleep=time.sleep, progr
         result = {"complete": complete, "count": sum(counts.values()), "by_media": {m: counts[m] for m in MEDIA},
                   "api_requests_this_run": api.requests, "english_detail_requests_this_run": api.detail_requests} | _coverage(conn)
         if detached_transport is not None:
-            result.update(transport_attempts_this_run=api.attempts, stop_reason=stop_reason)
+            result.update(transport_attempts_this_run=api.attempts, stop_reason=stop_reason,
+                          completed_pages_this_run=completed_pages)
         return result
 
 
