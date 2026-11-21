@@ -40,10 +40,11 @@ class StoryWorker(QThread):
     snapshot_failed = pyqtSignal()
     progress = pyqtSignal(str)
 
-    def __init__(self, query, parent, model_dir=None, seed_path=None):
+    def __init__(self, query, parent, model_dir=None, seed_path=None, *, model_activation=None):
         super().__init__(parent)
         self.query = query
         self.model_dir = model_dir
+        self.model_activation = model_activation
         self.seed_path = seed_path
         self._cancelled = Event()
 
@@ -54,9 +55,10 @@ class StoryWorker(QThread):
         from candidates.story_seed_snapshot import StorySeedSnapshotError
 
         try:
+            activation = {} if self.model_activation is None else {"model_activation": self.model_activation}
             engine, records = service.local_story_catalog(
                 self.model_dir, on_progress=self.progress.emit,
-                cancelled=self._cancelled.is_set, seed_path=self.seed_path)
+                cancelled=self._cancelled.is_set, seed_path=self.seed_path, **activation)
             if self._cancelled.is_set():
                 return
             self.progress.emit("Ищем совпадения в каталоге…")
@@ -169,6 +171,7 @@ class StorySearchView:
         self._model_preference = ProfileSetting(_MODEL_SETTING)
         self._model_install_profile = get_active_profile_root()
         self.model_dir = os.environ.get(_MODEL_ENV) or self._read_model_choice()
+        self._model_activation = None
         self.seed_path = os.environ.get("WATCHBANE_STORY_SEED_CATALOG")
         self._seed_count = None
         self._snapshot_rows = None
@@ -688,7 +691,7 @@ class StorySearchView:
                         "Существующие папки оставлены без изменений. Можно выбрать готовую копию.")
             self._install_status.setText(f"Не удалось установить модель. {hint} Выбранный режим не изменился.")
         else:
-            self.model_dir = str(worker.path)
+            self._activate_model(str(worker.path))
             self._model_install_success = True
             self._model_repair_available = False
             self._update_model_controls()
@@ -703,17 +706,24 @@ class StorySearchView:
             return False
         directory = QFileDialog.getExistingDirectory(self.widget, "Папка проверенной multilingual-e5-small (скачивание не выполняется)")
         if directory:
-            self.model_dir = directory
+            self._activate_model(directory)
             self._update_model_controls()
             self.backend_label.setText("E5 выбрана. Файлы будут проверены при следующем поиске; ничего не скачивается.")
             self._remember_model_choice()
             return True
         return False
 
+    def _activate_model(self, directory):
+        self.model_dir = directory
+        # Even a same-path selection must revalidate on the next worker run.
+        # Do not acquire an index lock or read model artifacts in the GUI.
+        self._model_activation = object()
+
     def _use_text_search(self):
         if self._model_install_worker:
             return
         self.model_dir = None
+        self._model_activation = None
         self._model_install_success = False
         self._update_model_controls()
         self._sync_model_actions()
@@ -764,7 +774,8 @@ class StorySearchView:
         self.search_button.setText("Следующий запрос")
         self.refresh_button.setEnabled(False)
         self.snapshot_button.setEnabled(False)
-        self._worker = StoryWorker(self._active_query, self.widget, self.model_dir, self.seed_path)
+        self._worker = StoryWorker(self._active_query, self.widget, self.model_dir, self.seed_path,
+                                   model_activation=self._model_activation)
         self._sync_model_actions()
         self._worker.completed.connect(self._show_results)
         self._worker.progress.connect(self.status.setText)
@@ -780,7 +791,8 @@ class StorySearchView:
                             "чтобы выбрать другой файл или вернуться к каталогу профиля.")
 
     def _search_failed(self):
-        if self._worker is None or self._worker.model_dir == self.model_dir:
+        if self._worker is None or (self._worker.model_dir == self.model_dir
+                                    and self._worker.model_activation is self._model_activation):
             self._update_model_controls(offer_replacement=True)
         self.status.setText("Не удалось открыть описания или модель. Подключите локальную модель или повторите поиск; библиотека не изменена.")
 

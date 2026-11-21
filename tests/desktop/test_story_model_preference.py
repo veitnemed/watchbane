@@ -221,3 +221,49 @@ def test_publisher_model_uses_existing_validation_lazily_and_recovers(qtbot, mon
     qtbot.waitUntil(lambda: view._worker is None)
     assert view.query.text() == "врач" and view.cards_layout.count() == 2
     assert open_view(qtbot).model_dir is None
+
+
+def test_reselect_same_model_folder_revalidates_only_on_next_search(qtbot, monkeypatch, tmp_path):
+    from candidates import story_semantic, story_service, story_vector_cache
+    from candidates.story_search import StorySearch
+
+    directory = tmp_path / "custom-model"
+    directory.mkdir()
+    artifact = directory / "fixture-artifact"
+    artifact.write_text("verified", encoding="utf-8")
+    monkeypatch.setattr(story_service, "get_pool_view", lambda: [{
+        "title": "QA", "tmdb_id": 177, "media_type": "movie", "overview": "Врач лечит пациентов."
+    }])
+    loads = []
+
+    def local_encoder(path):
+        contents = artifact.read_text(encoding="utf-8")
+        loads.append((path, contents))
+        if contents != "verified":
+            raise ValueError("fixture model verification failed")
+        return object()
+
+    monkeypatch.setattr(story_semantic, "LocalE5", local_encoder)
+    monkeypatch.setattr(story_vector_cache, "CachedPassageEncoder", lambda encoder, _profile: encoder)
+    monkeypatch.setattr(story_semantic, "SemanticStorySearch",
+                        lambda docs, _encoder, **_kw: StorySearch(docs))
+    view = open_view(qtbot)
+    choose_folder(monkeypatch, directory)
+    assert view._choose_model() and not loads
+    view.query.setText("врач")
+
+    def search():
+        mouse(qtbot, view.search_button)
+        qtbot.waitUntil(lambda: view._worker is None)
+
+    search()
+    search()
+    assert loads == [(str(directory), "verified")]
+
+    artifact.write_text("changed", encoding="utf-8")
+    assert view._choose_model()
+    assert loads == [(str(directory), "verified")], "folder selection must stay lazy"
+    search()
+    assert loads == [(str(directory), "verified"), (str(directory), "changed")]
+    assert "Не удалось" in view.status.text()
+    assert view.query.text() == "врач" and view.text_search_button.isVisible()

@@ -25,11 +25,11 @@ def clear_story_search_cache():
         _INDEX_CACHE.clear()
 
 
-def create_story_search(documents, model_dir=None, *, on_progress=None, cancelled=None):
+def create_story_search(documents, model_dir=None, *, on_progress=None, cancelled=None, model_activation=None):
     documents = tuple(documents)
     from storage.profiles import get_active_data_dir
     profile_dir = get_active_data_dir().resolve()
-    key = (str(profile_dir), str(model_dir or ""), documents)
+    key = (str(profile_dir), str(model_dir or ""), documents, model_activation if model_dir else None)
     with _INDEX_LOCK:
         if key in _INDEX_CACHE:
             return _INDEX_CACHE[key]
@@ -40,7 +40,8 @@ def create_story_search(documents, model_dir=None, *, on_progress=None, cancelle
         else:
             from candidates.story_semantic import SemanticStorySearch
             from candidates.story_vector_cache import CachedPassageEncoder
-            encoder = CachedPassageEncoder(_local_encoder(str(model_dir)), profile_dir)
+            args = (str(model_dir),) if model_activation is None else (str(model_dir), model_activation)
+            encoder = CachedPassageEncoder(_local_encoder(*args), profile_dir)
             engine = SemanticStorySearch(documents, encoder, cancelled=cancelled)
         _INDEX_CACHE.clear()
         _INDEX_CACHE[key] = engine
@@ -51,16 +52,16 @@ from functools import lru_cache
 
 
 @lru_cache(maxsize=1)
-def _local_encoder(directory):
+def _local_encoder(directory, model_activation=None):
     from candidates.story_semantic import LocalE5
     return LocalE5(directory)
 
 
-def local_story_catalog(model_dir=None, *, on_progress=None, cancelled=None, seed_path=None):
+def local_story_catalog(model_dir=None, *, on_progress=None, cancelled=None, seed_path=None, model_activation=None):
     """Index only the chosen real catalogue; an empty profile has no results."""
     documents, records = story_catalog_snapshot(seed_path=seed_path)
     return create_story_search(documents, model_dir if documents else None,
-                               on_progress=on_progress, cancelled=cancelled), records
+                               on_progress=on_progress, cancelled=cancelled, model_activation=model_activation), records
 
 
 def get_pool_view() -> list[dict]:
