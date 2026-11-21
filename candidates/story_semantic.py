@@ -15,6 +15,15 @@ from candidates.story_search import (StoryHit, StoryResponse, tokens, STOP, ROLE
 from candidates.story_lexical import LexicalIndex
 
 
+DEFAULT_E5_BATCH_SIZE = 16
+
+
+def validate_e5_batch_size(value):
+    if type(value) is not int or not 1 <= value <= DEFAULT_E5_BATCH_SIZE:
+        raise ValueError(f"E5 batch size must be an integer from 1 to {DEFAULT_E5_BATCH_SIZE}")
+    return value
+
+
 class LocalE5:
     def __init__(self, directory: str | Path):
         import numpy as np
@@ -43,16 +52,17 @@ class LocalE5:
         self.cache=OrderedDict()
         self.lock=RLock()
 
-    def encode(self,texts,prefix="passage: ",cancelled=None):
+    def encode(self,texts,prefix="passage: ",cancelled=None,*,batch_size=DEFAULT_E5_BATCH_SIZE):
+        validate_e5_batch_size(batch_size)
         np=self.np
         keys=[prefix+t for t in texts]
         if not keys: return np.empty((0,384),dtype=np.float32)
         with self.lock:
             missing=list(dict.fromkeys(k for k in keys if k not in self.cache))
-            for offset in range(0,len(missing),16):
+            for offset in range(0,len(missing),batch_size):
                 if cancelled is not None and cancelled():
                     raise InterruptedError("Story indexing cancelled")
-                batch=missing[offset:offset+16]
+                batch=missing[offset:offset+batch_size]
                 enc=self.tokenizer.encode_batch(batch)
                 data={"input_ids":np.array([e.ids for e in enc],dtype=np.int64),
                       "attention_mask":np.array([e.attention_mask for e in enc],dtype=np.int64),

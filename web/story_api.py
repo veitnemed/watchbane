@@ -14,7 +14,8 @@ from starlette.requests import ClientDisconnect
 from candidates.safety.explicit_content import is_blocked_explicit_sexual_content
 from candidates.story_search import StoryDocument
 from candidates.story_seed_snapshot import StorySeedSnapshotError, load_seed_snapshot_with_digest
-from candidates.story_semantic import LocalE5, SemanticStorySearch
+from candidates.story_semantic import DEFAULT_E5_BATCH_SIZE, LocalE5, SemanticStorySearch, validate_e5_batch_size
+from candidates.story_vector_cache import PREPROCESS_VERSION
 
 _MAX_BODY = 8192
 _MAX_QUERY = 600
@@ -24,15 +25,21 @@ _MAX_RESULTS = 10
 class _StartupPassageEncoder:
     """The initial, exact document batch is the only persistable call."""
 
-    def __init__(self, encoder, cache, identity, documents, previous_catalog=None):
+    def __init__(self, encoder, cache, identity, documents, previous_catalog=None,
+                 startup_batch_size=DEFAULT_E5_BATCH_SIZE):
         self.encoder, self.cache, self.identity = encoder, cache, identity
         self.expected = tuple(doc.overview for doc in documents)
         self.documents, self.previous_catalog = documents, previous_catalog
         self.variant = encoder.variant
+        self.startup_batch_size = startup_batch_size
 
     def encode(self, texts, prefix="passage: ", **kwargs):
         expected, self.expected = self.expected, None
         if expected is None or prefix != "passage: " or tuple(texts) != expected:
+            return self.encoder.encode(texts, prefix=prefix, **kwargs)
+        if self.startup_batch_size != DEFAULT_E5_BATCH_SIZE:
+            kwargs["batch_size"] = self.startup_batch_size
+        if self.cache is None:
             return self.encoder.encode(texts, prefix=prefix, **kwargs)
         matrix = self.cache.load(self.identity)
         if matrix is not None:
@@ -44,7 +51,8 @@ class _StartupPassageEncoder:
                     from web.story_incremental_passages import reuse_verified_passages
                     from web.story_vector_snapshot import SnapshotIdentity
 
-                    identity = SnapshotIdentity.from_documents(digest, self.encoder.cache_identity, previous)
+                    identity = SnapshotIdentity.from_documents(digest, self.encoder.cache_identity, previous,
+                                                              preprocessing=self.identity.preprocessing)
                     return reuse_verified_passages(
                         self.cache, current_identity=self.identity, current_documents=self.documents,
                         previous_identity=identity, previous_documents=previous,
@@ -76,8 +84,9 @@ def _load_documents(catalog):
 
 
 def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = None, prepared_index: bool = False,
-                 previous_catalog: Path | None = None):
+                 previous_catalog: Path | None = None, startup_batch_size: int = DEFAULT_E5_BATCH_SIZE):
     """Index the approved snapshot; persistence is an explicit operator option."""
+    validate_e5_batch_size(startup_batch_size)
     if previous_catalog is not None and cache_dir is None:
         raise ValueError("A previous catalog requires an explicit cache directory.")
     documents, catalog_sha = _load_documents(catalog)
@@ -87,9 +96,15 @@ def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = Non
     if cache_dir is not None:
         from web.story_vector_snapshot import PassageVectorSnapshot, SnapshotIdentity
 
-        identity = SnapshotIdentity.from_documents(catalog_sha, encoder.cache_identity, documents)
+        preprocessing = PREPROCESS_VERSION
+        if startup_batch_size != DEFAULT_E5_BATCH_SIZE:
+            preprocessing += f":startup-batch={startup_batch_size}"
+        identity = SnapshotIdentity.from_documents(catalog_sha, encoder.cache_identity, documents,
+                                                   preprocessing=preprocessing)
         encoder = _StartupPassageEncoder(encoder, PassageVectorSnapshot(cache_dir), identity, documents,
-                                         previous_catalog=previous_catalog)
+                                         previous_catalog=previous_catalog, startup_batch_size=startup_batch_size)
+    elif startup_batch_size != DEFAULT_E5_BATCH_SIZE:
+        encoder = _StartupPassageEncoder(encoder, None, None, documents, startup_batch_size=startup_batch_size)
     if prepared_index:
         from web.story_retrieval_index import PreparedRetrievalIndex
 
@@ -137,8 +152,9 @@ def _search_outcome(result):
     return {"state": "clarification", "reason": reason}
 
 def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, cache_dir: Path | None = None,
-               prepared_index: bool = False, previous_catalog: Path | None = None):
+               prepared_index: bool = False, previous_catalog: Path | None = None, startup_batch_size: int = DEFAULT_E5_BATCH_SIZE):
     """One verified engine per worker; tests may inject a local engine factory."""
+    validate_e5_batch_size(startup_batch_size)
     if previous_catalog is not None and cache_dir is None:
         raise ValueError("A previous catalog requires an explicit cache directory.")
     @asynccontextmanager
@@ -148,6 +164,8 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
             options["prepared_index"] = True
         if previous_catalog is not None:
             options["previous_catalog"] = previous_catalog
+        if startup_batch_size != DEFAULT_E5_BATCH_SIZE:
+            options["startup_batch_size"] = startup_batch_size
         engine = await run_in_threadpool(engine_factory, catalog, model_dir, **options)
         app.state.engine = engine
         try:
@@ -218,11 +236,18 @@ def main(argv=None):
     parser.add_argument("--cache-dir", type=Path, help="Explicit detached server passage cache")
     parser.add_argument("--prepared-index", action="store_true", help="Opt in to exact prepared retrieval")
     parser.add_argument("--previous-catalog", type=Path, help="Optional previous approved snapshot for passage reuse")
+    parser.add_argument("--startup-passage-batch-size", type=int, default=DEFAULT_E5_BATCH_SIZE,
+                        help="Maximum E5 batch for initial passages only (1–16)")
     args = parser.parse_args(argv)
+    try:
+        validate_e5_batch_size(args.startup_passage_batch_size)
+    except ValueError as error:
+        parser.error(str(error))
     if args.previous_catalog is not None and args.cache_dir is None:
         parser.error("--previous-catalog requires --cache-dir")
     uvicorn.run(create_app(args.catalog, args.model_dir, cache_dir=args.cache_dir,
-                          prepared_index=args.prepared_index, previous_catalog=args.previous_catalog), host="127.0.0.1",
+                          prepared_index=args.prepared_index, previous_catalog=args.previous_catalog,
+                          startup_batch_size=args.startup_passage_batch_size), host="127.0.0.1",
                 port=args.port, access_log=False, proxy_headers=False)
 
 
