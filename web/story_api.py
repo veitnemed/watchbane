@@ -13,7 +13,7 @@ from starlette.requests import ClientDisconnect
 
 from candidates.safety.explicit_content import is_blocked_explicit_sexual_content
 from candidates.story_search import StoryDocument
-from candidates.story_seed_snapshot import load_seed_snapshot
+from candidates.story_seed_snapshot import load_seed_snapshot_with_digest
 from candidates.story_semantic import LocalE5, SemanticStorySearch
 
 _MAX_BODY = 8192
@@ -21,10 +21,35 @@ _MAX_QUERY = 600
 _MAX_RESULTS = 10
 
 
-def build_engine(catalog: Path, model_dir: Path):
-    """Verify and index the configured snapshot once; never write a profile/cache."""
+class _StartupPassageEncoder:
+    """The initial, exact document batch is the only persistable call."""
+
+    def __init__(self, encoder, cache, identity, documents):
+        self.encoder, self.cache, self.identity = encoder, cache, identity
+        self.expected = tuple(doc.overview for doc in documents)
+        self.variant = encoder.variant
+
+    def encode(self, texts, prefix="passage: ", **kwargs):
+        expected, self.expected = self.expected, None
+        if expected is None or prefix != "passage: " or tuple(texts) != expected:
+            return self.encoder.encode(texts, prefix=prefix, **kwargs)
+        matrix = self.cache.load(self.identity)
+        if matrix is not None:
+            return matrix
+        matrix = self.encoder.encode(texts, prefix=prefix, **kwargs)
+        try:
+            self.cache.save(self.identity, matrix)
+        except OSError:
+            # Cache is optional and never the source of truth.
+            pass
+        return matrix
+
+
+def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = None):
+    """Index the approved snapshot; persistence is an explicit operator option."""
+    snapshot, catalog_sha = load_seed_snapshot_with_digest(catalog)
     documents = []
-    for key, row in load_seed_snapshot(catalog).items():
+    for key, row in snapshot.items():
         russian = row["localized"].get("ru")
         if russian is None or is_blocked_explicit_sexual_content(row):
             continue
@@ -32,7 +57,13 @@ def build_engine(catalog: Path, model_dir: Path):
                                        row["media_type"], "TMDb", year=row["year"]))
     if not documents:
         raise ValueError("The configured TMDb snapshot has no eligible Russian descriptions.")
-    return SemanticStorySearch(documents, LocalE5(model_dir))
+    encoder = LocalE5(model_dir)  # Always verify model artifacts, even on a cache hit.
+    if cache_dir is not None:
+        from web.story_vector_snapshot import PassageVectorSnapshot, SnapshotIdentity
+
+        identity = SnapshotIdentity.from_documents(catalog_sha, encoder.cache_identity, documents)
+        encoder = _StartupPassageEncoder(encoder, PassageVectorSnapshot(cache_dir), identity, documents)
+    return SemanticStorySearch(documents, encoder)
 
 
 async def _read_query(request: Request):
@@ -58,11 +89,12 @@ async def _read_query(request: Request):
     return query.strip(), limit
 
 
-def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine):
+def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, cache_dir: Path | None = None):
     """One verified engine per worker; tests may inject a local engine factory."""
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        engine = await run_in_threadpool(engine_factory, catalog, model_dir)
+        options = {} if cache_dir is None else {"cache_dir": cache_dir}
+        engine = await run_in_threadpool(engine_factory, catalog, model_dir, **options)
         app.state.engine = engine
         try:
             yield
@@ -119,8 +151,9 @@ def main(argv=None):
     parser.add_argument("--catalog", type=Path, required=True)
     parser.add_argument("--model-dir", type=Path, required=True)
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument("--cache-dir", type=Path, help="Explicit detached server passage cache")
     args = parser.parse_args(argv)
-    uvicorn.run(create_app(args.catalog, args.model_dir), host="127.0.0.1",
+    uvicorn.run(create_app(args.catalog, args.model_dir, cache_dir=args.cache_dir), host="127.0.0.1",
                 port=args.port, access_log=False, proxy_headers=False)
 
 

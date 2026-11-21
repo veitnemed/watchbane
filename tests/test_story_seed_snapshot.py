@@ -186,3 +186,22 @@ def test_seed_accepts_stable_descriptor_metadata_that_differs_from_path_stat(tmp
     with monkeypatch.context() as patched:
         patched.setattr(seed.os, "fstat", windows_style_fstat)
         assert set(load_seed_snapshot(path)) == {"tmdb:movie:321"}
+
+
+def test_validated_snapshot_digest_matches_parsed_bytes_on_miss_and_hit(tmp_path):
+    import hashlib
+    import json
+
+    from candidates.story_seed_snapshot import load_seed_snapshot, load_seed_snapshot_with_digest
+
+    path = tmp_path / "snapshot.jsonl"
+    row = {"title": "Проверка", "overview": "Сюжет.", "media_type": "movie", "tmdb_id": 92,
+           "language": "ru-RU"}
+    raw = (json.dumps(row, ensure_ascii=False) + "\n").encode("utf-8")
+    path.write_bytes(raw)
+    first, digest = load_seed_snapshot_with_digest(path)
+    assert digest == hashlib.sha256(raw).hexdigest()
+    assert first["tmdb:movie:92"]["title"] == "Проверка"
+    assert load_seed_snapshot(path) is first
+    second, second_digest = load_seed_snapshot_with_digest(path)
+    assert second is first and second_digest == digest

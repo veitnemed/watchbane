@@ -107,3 +107,68 @@ def test_busy_and_engine_error_are_safe(tmp_path, caplog):
     assert responses[0].headers["cache-control"] == "no-store"
     assert responses[0].json() == {"detail": "search_unavailable"}
     assert "private-query" not in caplog.text
+
+
+def test_optional_passage_cache_restart_replacement_and_failed_write(tmp_path, monkeypatch):
+    import json
+    import os
+
+    np = pytest.importorskip("numpy")
+    import web.story_api as api
+
+    catalog, cache = tmp_path / "catalog.jsonl", tmp_path / "cache"
+    overview = "Альпинист возвращается домой и встречает проводника."
+    def write(title):
+        row = {"media_type": "movie", "title": title, "overview": overview,
+               "tmdb_id": 42, "language": "ru-RU", "year": 2024}
+        catalog.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    write("Один")
+
+    models = []
+    class DeterministicEncoder:
+        cache_identity, variant = "verified fixture model", "fixture"
+        def __init__(self, path):
+            self.calls = []
+            models.append(self)
+        def encode(self, texts, prefix="passage: ", **_kwargs):
+            self.calls.append((tuple(texts), prefix))
+            matrix = np.zeros((len(texts), 384), dtype=np.float32)
+            matrix[:, 0] = 1
+            return matrix
+
+    monkeypatch.setattr(api, "LocalE5", DeterministicEncoder)
+    def run(directory=None, title="Один"):
+        with TestClient(api.create_app(catalog, tmp_path, cache_dir=directory)) as client:
+            result = client.post("/v1/search", json={"query": "альпинист возвращается"}).json()
+            assert result["results"][0]["id"] == "tmdb:movie:42"
+            assert result["results"][0]["title"] == title
+        return models[-1].calls
+
+    calls = run()
+    assert calls[0] == ((overview,), "passage: ") and not cache.exists()
+    assert run(cache) == calls
+    generated = list(cache.rglob("*.wbsvec"))
+    assert len(generated) == 1
+    verified = generated[0].read_bytes()
+    assert run(cache) == calls[1:]  # New LocalE5, no initial passage re-encoding.
+    assert any(prefix == "query: " for _, prefix in calls[1:])
+    assert any(prefix == "passage: " for _, prefix in calls[1:])  # Evidence still delegates.
+    assert generated[0].read_bytes() == verified
+
+    generated[0].write_bytes(verified[:-1])
+    assert run(cache) == calls
+    assert generated[0].read_bytes() == verified
+
+    # Same passage and typed ID, same file size and mtime, but new catalog bytes.
+    original = catalog.stat()
+    write("Иной")
+    os.utime(catalog, ns=(original.st_atime_ns, original.st_mtime_ns))
+    assert catalog.stat().st_size == original.st_size
+    assert run(cache, "Иной") == calls
+    assert len(list(cache.rglob("*.wbsvec"))) == 2
+
+    unwritable = tmp_path / "not-a-directory"
+    unwritable.write_text("leave me alone", encoding="utf-8")
+    assert run(unwritable, "Иной") == calls
+    assert unwritable.read_text(encoding="utf-8") == "leave me alone"
+    assert len(models) == 6

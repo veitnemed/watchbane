@@ -124,6 +124,11 @@ def _snapshot_digest(stream, identity):
 
 def load_seed_snapshot(path):
     """Return an ID-keyed read-only snapshot; callers must not mutate its rows."""
+    return load_seed_snapshot_with_digest(path)[0]
+
+
+def load_seed_snapshot_with_digest(path):
+    """Return snapshot and SHA-256 hex digest of its validated descriptor bytes."""
     global _cached_snapshot
     path = Path(path).expanduser().resolve()
     try:
@@ -155,6 +160,6 @@ def load_seed_snapshot(path):
                 raise StorySeedSnapshotError("Каталог изменился во время чтения. Повторите поиск.")
         with _cache_lock:
             _cached_snapshot = (key, result)
-        return result
+        return result, digest.hex()
     except OSError as exc:
         raise StorySeedSnapshotError("Не удалось открыть файл каталога.") from exc
