@@ -168,3 +168,21 @@ def test_seed_observes_same_length_rewrite_even_when_mtime_is_preserved(tmp_path
         before.st_ino, before.st_size, before.st_mtime_ns,
     )
     assert set(load_seed_snapshot(path)) == {"tmdb:movie:678"}
+
+
+def test_seed_accepts_stable_descriptor_metadata_that_differs_from_path_stat(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from candidates import story_seed_snapshot as seed
+
+    path = snapshot(tmp_path / "seed.jsonl", [record()])
+    real_fstat = seed.os.fstat
+
+    def windows_style_fstat(fd):
+        info = real_fstat(fd)
+        return SimpleNamespace(st_dev=info.st_dev + 1, st_ino=info.st_ino + 1,
+                               st_size=info.st_size, st_mode=info.st_mode,
+                               st_mtime_ns=info.st_mtime_ns, st_ctime_ns=info.st_ctime_ns)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(seed.os, "fstat", windows_style_fstat)
+        assert set(load_seed_snapshot(path)) == {"tmdb:movie:321"}

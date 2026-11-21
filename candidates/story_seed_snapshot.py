@@ -130,10 +130,19 @@ def load_seed_snapshot(path):
         info = path.stat()
         if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
             raise StorySeedSnapshotError("Не удалось открыть файл каталога или он слишком большой.")
-        identity = _identity(info)
+        path_identity = _identity(info)
         with path.open("rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if not stat.S_ISREG(opened.st_mode) or opened.st_size > MAX_FILE_BYTES:
+                raise StorySeedSnapshotError("Не удалось открыть файл каталога или он слишком большой.")
+            # Windows path stat and descriptor fstat can represent the same
+            # file with different device/inode metadata. Keep each comparison
+            # in its own domain; only the original descriptor supplies bytes.
+            identity = _identity(opened)
+            if _identity(path.stat()) != path_identity:
+                raise StorySeedSnapshotError("Каталог изменился во время чтения. Повторите поиск.")
             digest = _snapshot_digest(stream, identity)
-            key = (path, identity, digest)
+            key = (path, path_identity, digest)
             with _cache_lock:
                 cached = _cached_snapshot
             if cached is not None and cached[0] == key:
@@ -142,7 +151,7 @@ def load_seed_snapshot(path):
                 # On miss, parse the same open descriptor, not a new file
                 # at this path. Validate bytes again without buffering 64 MiB.
                 result = _read(stream, identity, digest)
-            if _identity(path.stat()) != identity:
+            if _identity(path.stat()) != path_identity:
                 raise StorySeedSnapshotError("Каталог изменился во время чтения. Повторите поиск.")
         with _cache_lock:
             _cached_snapshot = (key, result)
