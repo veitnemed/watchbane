@@ -45,7 +45,7 @@ class _StartupPassageEncoder:
         return matrix
 
 
-def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = None):
+def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = None, prepared_index: bool = False):
     """Index the approved snapshot; persistence is an explicit operator option."""
     snapshot, catalog_sha = load_seed_snapshot_with_digest(catalog)
     documents = []
@@ -63,6 +63,10 @@ def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = Non
 
         identity = SnapshotIdentity.from_documents(catalog_sha, encoder.cache_identity, documents)
         encoder = _StartupPassageEncoder(encoder, PassageVectorSnapshot(cache_dir), identity, documents)
+    if prepared_index:
+        from web.story_retrieval_index import PreparedRetrievalIndex
+
+        return SemanticStorySearch(documents, encoder, retrieval_factory=PreparedRetrievalIndex)
     return SemanticStorySearch(documents, encoder)
 
 
@@ -89,11 +93,14 @@ async def _read_query(request: Request):
     return query.strip(), limit
 
 
-def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, cache_dir: Path | None = None):
+def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, cache_dir: Path | None = None,
+               prepared_index: bool = False):
     """One verified engine per worker; tests may inject a local engine factory."""
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         options = {} if cache_dir is None else {"cache_dir": cache_dir}
+        if prepared_index:
+            options["prepared_index"] = True
         engine = await run_in_threadpool(engine_factory, catalog, model_dir, **options)
         app.state.engine = engine
         try:
@@ -152,8 +159,10 @@ def main(argv=None):
     parser.add_argument("--model-dir", type=Path, required=True)
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--cache-dir", type=Path, help="Explicit detached server passage cache")
+    parser.add_argument("--prepared-index", action="store_true", help="Opt in to exact prepared retrieval")
     args = parser.parse_args(argv)
-    uvicorn.run(create_app(args.catalog, args.model_dir, cache_dir=args.cache_dir), host="127.0.0.1",
+    uvicorn.run(create_app(args.catalog, args.model_dir, cache_dir=args.cache_dir,
+                          prepared_index=args.prepared_index), host="127.0.0.1",
                 port=args.port, access_log=False, proxy_headers=False)
 
 

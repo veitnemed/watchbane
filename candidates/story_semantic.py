@@ -108,13 +108,14 @@ def normalized_query(query, vocabulary):
 
 
 class SemanticStorySearch:
-    def __init__(self,documents,encoder,*,cancelled=None):
+    def __init__(self,documents,encoder,*,cancelled=None,retrieval_factory=None):
         self.documents=tuple(documents)
         self.title_words={tuple(tokens(d.title)) for d in self.documents}
         self.encoder=encoder
         self.vocabulary={w for d in documents for w in tokens(d.overview)}
         self.vectors=encoder.encode([d.overview for d in self.documents], **({"cancelled": cancelled} if cancelled else {}))
-        self.lexical=LexicalIndex(self.documents)
+        self.retrieval = retrieval_factory(self.documents, self.vectors) if retrieval_factory is not None else None
+        self.lexical = LexicalIndex(self.documents) if self.retrieval is None else None
 
     def _response(self, hits, notice, *, reason=None):
         return StoryResponse(hits, notice, "E5 small · локальный гибрид · " + self.encoder.variant, reason=reason)
@@ -137,15 +138,27 @@ class SemanticStorySearch:
             return self._response((), "В этом локальном наборе пока нет подходящих описаний.", reason=reason)
         corrected=normalized_query(query,self.vocabulary) if repair_typos else query
         q=self.encoder.encode([corrected],prefix="query: ")[0]
-        dense={i:float(self.vectors[i]@q) for i in indices}
-        text_scores=self.lexical.scores(corrected)
-        lexical={i:text_scores[i] for i in indices}
-        dense_order=sorted(indices,key=lambda i:(-dense[i],self.documents[i].key))
-        lexical_order=sorted((i for i in indices if lexical[i]>0),key=lambda i:(-lexical[i],self.documents[i].key))
-        # Union recall: semantic candidates survive even with zero literal overlap.
-        candidates=set(dense_order[:40])|set(lexical_order[:40])
-        dense_rank={i:r for r,i in enumerate(dense_order)}
-        lexical_rank={i:r for r,i in enumerate(lexical_order)}
+        if self.retrieval is None:
+            dense={i:float(self.vectors[i]@q) for i in indices}
+            text_scores=self.lexical.scores(corrected)
+            lexical={i:text_scores[i] for i in indices}
+            dense_order=sorted(indices,key=lambda i:(-dense[i],self.documents[i].key))
+            lexical_order=sorted((i for i in indices if lexical[i]>0),key=lambda i:(-lexical[i],self.documents[i].key))
+            dense_rank={i:r for r,i in enumerate(dense_order)}
+            lexical_rank={i:r for r,i in enumerate(lexical_order)}
+            candidates=set(dense_order[:40])|set(lexical_order[:40])
+        else:
+            eligible = [False] * len(self.documents)
+            for index in indices:
+                eligible[index] = True
+            orders = self.retrieval.orders(corrected, q, eligible=eligible, top_k=40)
+            candidates = set(orders.dense_top) | set(orders.lexical_top)
+            dense_rank = {i: int(orders.dense_ranks[i]) for i in candidates}
+            lexical_rank = {i: int(orders.lexical_ranks[i]) for i in candidates if orders.lexical_ranks[i] >= 0}
+            # Dense-only and reranked response scores keep the original scalar
+            # dot product. Hybrid only needs orders and avoids redundant dots.
+            dense = {i: float(self.vectors[i] @ q) for i in candidates} if not hybrid or rerank else {}
+        # Union recall: semantic candidates survive with zero literal overlap.
         rrf={i:1/(60+dense_rank[i])+(0.35/(60+lexical_rank[i]) if i in lexical_rank else 0) for i in candidates}
         ordered=sorted(candidates,key=lambda i:(-rrf[i],self.documents[i].key))
         requested_role=requested_protagonist(corrected)
