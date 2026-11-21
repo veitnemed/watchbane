@@ -1,8 +1,8 @@
 from threading import Event, get_ident
 
 import pytest
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel, QMessageBox, QPushButton
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtWidgets import QApplication, QLabel, QMessageBox, QPushButton
 
 from candidates.title_state_service import STATE_WATCHLIST, get_title_state
 from desktop.story import online_client, view as story
@@ -31,6 +31,8 @@ def test_no_experimental_control_or_transport_by_default(qtbot, monkeypatch, con
     view.on_tab_activated()
     qtbot.keyClick(view.query, Qt.Key.Key_Return)
     assert view.online_button.isHidden() and view._online_worker is None
+    assert "Загрузите описания из TMDb или откройте файл каталога." in view.status.text()
+    assert "тестовом сервере" not in view.status.text()
 
 
 def test_explicit_cancel_default_and_requery_consent(qtbot, monkeypatch):
@@ -39,11 +41,11 @@ def test_explicit_cancel_default_and_requery_consent(qtbot, monkeypatch):
     monkeypatch.setattr(online_client, "search_online", lambda *args, **kwargs: calls.append((args, kwargs)) or ())
     prompts = []
 
-    def reject(*args):
-        prompts.append(args)
+    def reject(dialog):
+        prompts.append((dialog.text(), dialog.defaultButton().text()))
         return QMessageBox.StandardButton.No
 
-    monkeypatch.setattr(QMessageBox, "question", reject)
+    monkeypatch.setattr(QMessageBox, "exec", reject)
     view = make_view(qtbot)
     view.query.setText("не отправлять без действия")
     view.on_tab_activated()
@@ -51,20 +53,20 @@ def test_explicit_cancel_default_and_requery_consent(qtbot, monkeypatch):
     assert not calls and not prompts
     qtbot.mouseClick(view.online_button, LEFT)
     assert len(prompts) == 1 and not calls
-    assert "127.0.0.1:8765" in prompts[0][2] and prompts[0][-1] == QMessageBox.StandardButton.No
+    assert "127.0.0.1:8765" in prompts[0][0] and prompts[0][1] == "Не отправлять"
 
     def edit_during_modal(*args):
         view.query.setText("другой текст")
         return QMessageBox.StandardButton.Yes
 
-    monkeypatch.setattr(QMessageBox, "question", edit_during_modal)
+    monkeypatch.setattr(QMessageBox, "exec", edit_during_modal)
     qtbot.mouseClick(view.online_button, LEFT)
     assert not calls and view.query.text() == "другой текст"
 
 
 def test_accepted_result_runs_on_worker_and_saves_typed_movie_and_tv(qtbot, monkeypatch):
     monkeypatch.setenv(story._ONLINE_PORT_ENV, "32123")
-    monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
     main_thread, received = get_ident(), []
 
     def request(query, *, consent, port, cancelled):
@@ -95,7 +97,7 @@ def test_accepted_result_runs_on_worker_and_saves_typed_movie_and_tv(qtbot, monk
 @pytest.mark.parametrize("how", ["edit", "button", "shutdown"])
 def test_in_flight_cancel_suppresses_late_hits_without_second_send(qtbot, monkeypatch, how):
     monkeypatch.setenv(story._ONLINE_PORT_ENV, "8765")
-    monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
     entered = Event()
     calls = []
 
@@ -127,7 +129,7 @@ def test_in_flight_cancel_suppresses_late_hits_without_second_send(qtbot, monkey
 
 def test_failed_server_does_not_fall_back_on_tab_focus(qtbot, monkeypatch):
     monkeypatch.setenv(story._ONLINE_PORT_ENV, "8765")
-    monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
 
     def offline(*_args, **_kwargs):
         raise online_client.OnlineStoryError("private infrastructure response")
@@ -176,7 +178,7 @@ def test_qt_uses_real_loopback_http_and_keeps_fixed_payload(qtbot, monkeypatch):
         worker.start()
         try:
             monkeypatch.setenv(story._ONLINE_PORT_ENV, str(server.server_port))
-            monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.StandardButton.Yes)
+            monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
             view = make_view(qtbot)
             view.query.setText("сюжет про находку")
             qtbot.mouseClick(view.online_button, LEFT)
@@ -196,7 +198,7 @@ def test_online_cards_scroll_without_squeezing_button_labels(qtbot, monkeypatch)
     from desktop.theme.scaling import set_ui_scale
 
     monkeypatch.setenv(story._ONLINE_PORT_ENV, "8765")
-    monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.StandardButton.Yes)
+    monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
     monkeypatch.setattr(online_client, "search_online", lambda *_a, **_kw: tuple(
         online_client.OnlineStoryResult(f"tmdb:movie:{i}", "movie", f"Фильм {i}", None,
                                         "Длинный сюжет " * 20, "Длинный фрагмент " * 12)
@@ -218,3 +220,28 @@ def test_online_cards_scroll_without_squeezing_button_labels(qtbot, monkeypatch)
         assert all(upper.geometry().bottom() < lower.geometry().top() for upper, lower in zip(cards, cards[1:]))
     finally:
         set_ui_scale(1.0)
+
+
+@pytest.mark.parametrize("dismiss_key", [Qt.Key.Key_Return, Qt.Key.Key_Escape])
+def test_empty_local_catalog_copy_and_real_default_deny(qtbot, monkeypatch, dismiss_key):
+    monkeypatch.setenv(story._ONLINE_PORT_ENV, "8765")
+    sent, inspected = [], []
+    monkeypatch.setattr(online_client, "search_online", lambda *_a, **_kw: sent.append(True) or ())
+    view = make_view(qtbot)
+    assert "не нужны локальные каталог и модель" in view.status.text()
+    assert "Для локального поиска" in view.status.text()
+    view.query.setText("черновик")
+    qtbot.keyClick(view.query, Qt.Key.Key_Return)
+    assert view.online_button.isEnabled() and not view.search_button.isEnabled()
+    assert not sent
+
+    def dismiss():
+        modal = QApplication.activeModalWidget()
+        inspected.append((modal.button(QMessageBox.StandardButton.Yes).text(),
+                          modal.defaultButton().text(), modal.escapeButton().text()))
+        qtbot.keyClick(modal, dismiss_key)
+
+    QTimer.singleShot(0, dismiss)
+    qtbot.mouseClick(view.online_button, LEFT)
+    assert inspected == [("Отправить запрос", "Не отправлять", "Не отправлять")]
+    assert not sent and view.query.text() == "черновик" and view._online_worker is None

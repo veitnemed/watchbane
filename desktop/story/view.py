@@ -377,6 +377,12 @@ class StorySearchView:
             self.search()
 
     def _show_idle(self):
+        if self._online_port is not None and not self._catalog_ready:
+            local_hint = ("Для локального поиска повторите чтение каталога или откройте файл."
+                          if self._catalog_read_failed else
+                          "Для локального поиска загрузите описания из TMDb или откройте файл каталога.")
+            self.status.setText("Для поиска на тестовом сервере не нужны локальные каталог и модель. " + local_hint)
+            return
         if self._catalog_read_failed:
             self.status.setText("Повторите чтение каталога профиля или откройте локальный файл. Запрос останется в поле.")
             return
@@ -822,14 +828,19 @@ class StorySearchView:
         self._online_confirming = True
         self._sync_online_button()
         try:
-            agreed = QMessageBox.question(
-                self.widget, "Отправить запрос тестовому серверу?",
+            dialog = QMessageBox(
+                QMessageBox.Icon.Question, "Отправить запрос тестовому серверу?",
                 f"Этот сюжетный запрос будет передан отдельной программе на этом компьютере "
                 f"(127.0.0.1:{self._online_port}). Коллекция, настройки и ключ TMDb не передаются. "
                 "Обычный поиск остаётся локальным.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, self.widget,
             )
+            dialog.button(QMessageBox.StandardButton.Yes).setText("Отправить запрос")
+            dialog.button(QMessageBox.StandardButton.No).setText("Не отправлять")
+            dialog.setDefaultButton(QMessageBox.StandardButton.No)
+            dialog.setEscapeButton(QMessageBox.StandardButton.No)
+            agreed = dialog.exec()
+            dialog.deleteLater()
         finally:
             self._online_confirming = False
             self._sync_online_button()
