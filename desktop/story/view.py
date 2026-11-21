@@ -8,7 +8,7 @@ from threading import Event
 
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QShortcut, QKeySequence
-from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLayout, QLabel, QLineEdit,
                             QPushButton, QScrollArea, QFrame, QMessageBox, QFileDialog, QDialog, QMenu, QProgressBar)
 from candidates import service
 from candidates.title_state_service import STATE_WATCHLIST, get_title_states
@@ -21,6 +21,14 @@ from config.app_settings_store import ProfileSetting, get_active_profile_root
 _MODEL_SETTING = "story_search.model_dir"
 _MODEL_ENV = "WATCHBANE_STORY_MODEL_DIR"
 _MODEL_UNSET = object()
+_ONLINE_PORT_ENV = "WATCHBANE_EXPERIMENTAL_STORY_PORT"
+
+
+def _experimental_story_port():
+    value = os.environ.get(_ONLINE_PORT_ENV, "")
+    if value.isascii() and value.isdecimal() and len(value) <= 5 and 1 <= int(value) <= 65535:
+        return int(value)
+    return None
 
 
 def _publisher_model_dir():
@@ -68,6 +76,26 @@ class StoryWorker(QThread):
             self.snapshot_failed.emit()
         except Exception:
             self.failed.emit()
+
+
+class OnlineStoryWorker(QThread):
+    def __init__(self, query, port, parent):
+        super().__init__(parent)
+        self.query = query
+        self.port = port
+        self.cancelled = Event()
+        self.results = None
+
+    def cancel(self):
+        self.cancelled.set()
+
+    def run(self):
+        try:
+            from desktop.story.online_client import search_online
+
+            self.results = search_online(self.query, consent=True, port=self.port, cancelled=self.cancelled)
+        except Exception:
+            pass  # No private request, response, or transport detail in the UI.
 
 
 class SnapshotCheckWorker(QThread):
@@ -154,6 +182,10 @@ class StorySearchView:
         self.posters = CardPosters(self.widget)
         self.widget.setStyleSheet(build_story_style())
         self._worker = None
+        self._online_worker = None
+        self._online_port = _experimental_story_port()
+        self._online_confirming = False
+        self._online_visible = False
         self._catalog_worker = None
         self._snapshot_worker = None
         self._snapshot_cancelled = False
@@ -204,6 +236,17 @@ class StorySearchView:
         self.search_button = QPushButton("Найти историю")
         self.search_button.setObjectName("storySearchButton")
         row.addWidget(self.search_button)
+        self.online_button = QPushButton("Поиск на тестовом сервере…")
+        self.online_button.setObjectName("storyOnlineSearch")
+        self.online_button.setVisible(self._online_port is not None)
+        self.online_button.setEnabled(False)
+        self.online_button.clicked.connect(self._confirm_online_search)
+        row.addWidget(self.online_button)
+        self.online_cancel = QPushButton("Отменить поиск на сервере")
+        self.online_cancel.setObjectName("storyCancelOnlineSearch")
+        self.online_cancel.hide()
+        self.online_cancel.clicked.connect(self._cancel_online_search)
+        row.addWidget(self.online_cancel)
         self.text_search_button = QPushButton("Перейти на поиск по словам")
         self.text_search_button.clicked.connect(self._use_text_search)
         self.text_search_button.setVisible(bool(self.model_dir))
@@ -293,6 +336,7 @@ class StorySearchView:
         root.addWidget(scroll, 1)
         self.search_button.clicked.connect(self.search)
         self.query.returnPressed.connect(self.search)
+        self.query.textChanged.connect(self._online_query_changed)
         self.focus_shortcut = QShortcut(QKeySequence("Ctrl+L"), self.widget)
         self.focus_shortcut.activated.connect(self._focus_query)
         self.escape_shortcut = QShortcut(QKeySequence("Escape"), self.widget)
@@ -328,7 +372,8 @@ class StorySearchView:
             return
         if self._catalog_worker is None:
             self._update_catalog_count()
-        if self.query.text().strip() and self._worker is None and not self._closing:
+        if (self.query.text().strip() and self._worker is None and not self._closing
+                and self._online_worker is None and not self._online_visible and not self._online_confirming):
             self.search()
 
     def _show_idle(self):
@@ -388,7 +433,7 @@ class StorySearchView:
             self.query.setFocus()
 
     def _can_switch_source(self):
-        return not (self._closing or self._worker or self._catalog_worker or self._snapshot_worker)
+        return not (self._closing or self._worker or self._catalog_worker or self._snapshot_worker or self._online_worker)
 
     def _choose_snapshot(self):
         if not self._can_switch_source():
@@ -415,10 +460,12 @@ class StorySearchView:
         self.cancel_catalog_button.show()
         self.catalog_status.setText("Проверяем локальный файл…")
         worker.finished.connect(self._snapshot_finished, Qt.ConnectionType.QueuedConnection)
+        self._sync_online_button()
         worker.start()
 
     def _snapshot_finished(self):
         worker, self._snapshot_worker = self._snapshot_worker, None
+        self._sync_online_button()
         if worker is None:
             return
         worker.deleteLater()
@@ -441,6 +488,7 @@ class StorySearchView:
             self._switch_source(None, None)
 
     def _switch_source(self, path, count):
+        self._online_visible = False
         self.seed_path, self._snapshot_rows = path, count
         self._seed_count = None
         if path and self._auth_dialog:
@@ -489,6 +537,7 @@ class StorySearchView:
         worker.finished_with_result.connect(self._catalog_result)
         worker.failed.connect(self._catalog_failed)
         worker.finished.connect(self._catalog_finished)
+        self._sync_online_button()
         worker.start()
 
     def _catalog_credentials_ready(self, ready):
@@ -530,6 +579,7 @@ class StorySearchView:
 
     def _catalog_finished(self):
         worker, self._catalog_worker = self._catalog_worker, None
+        self._sync_online_button()
         if worker:
             worker.deleteLater()
         self.catalog_button.setEnabled(True)
@@ -740,6 +790,8 @@ class StorySearchView:
         return label
 
     def _clear(self):
+        self.cards_layout.setSizeConstraint(QLayout.SizeConstraint.SetDefaultConstraint)
+        self.cards.setMinimumHeight(0)
         self.posters.clear()
         while self.cards_layout.count() > 1:
             item = self.cards_layout.takeAt(0)
@@ -753,14 +805,100 @@ class StorySearchView:
         else:
             self.status.setText("Описания будут обновлены при следующем поиске.")
 
+    def _sync_online_button(self):
+        self.online_button.setEnabled(bool(self._online_port and self.query.text().strip()
+                                           and self._can_switch_source() and not self._online_confirming))
+
+    def _online_query_changed(self, _text):
+        worker = self._online_worker
+        if worker is not None and self.query.text().strip() != worker.query:
+            self._cancel_online_search()
+        self._sync_online_button()
+
+    def _confirm_online_search(self):
+        query = self.query.text().strip()
+        if not self._online_port or not query or not self._can_switch_source() or self._online_confirming:
+            return
+        self._online_confirming = True
+        self._sync_online_button()
+        try:
+            agreed = QMessageBox.question(
+                self.widget, "Отправить запрос тестовому серверу?",
+                f"Этот сюжетный запрос будет передан отдельной программе на этом компьютере "
+                f"(127.0.0.1:{self._online_port}). Коллекция, настройки и ключ TMDb не передаются. "
+                "Обычный поиск остаётся локальным.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+        finally:
+            self._online_confirming = False
+            self._sync_online_button()
+        if (agreed != QMessageBox.StandardButton.Yes or self.query.text().strip() != query
+                or not self._can_switch_source()):
+            return
+        self._online_visible = True
+        for widget in (self.hero, self.heading, self.subtitle, self.examples):
+            widget.hide()
+        self._clear()
+        self._records = {}
+        self.status.setToolTip("")
+        self.status.setText("Ищем на тестовом сервере…")
+        self.scope.setText("Тестовый сервер на этом компьютере · TMDb")
+        self._online_worker = OnlineStoryWorker(query, self._online_port, self.widget)
+        self._online_worker.finished.connect(self._online_finished, Qt.ConnectionType.QueuedConnection)
+        self.online_cancel.setEnabled(True)
+        self.online_cancel.show()
+        self._sync_online_button()
+        self._online_worker.start()
+
+    def _cancel_online_search(self):
+        if self._online_worker is not None and not self._online_worker.cancelled.is_set():
+            self._online_worker.cancel()
+            self.online_cancel.setEnabled(False)
+            self.status.setText("Поиск на тестовом сервере отменён. Запрос остался в поле.")
+
+    def _online_finished(self):
+        worker, self._online_worker = self._online_worker, None
+        if worker is None:
+            return
+        worker.deleteLater()
+        self.online_cancel.hide()
+        self._sync_online_button()
+        if self._closing or worker.cancelled.is_set() or self.query.text().strip() != worker.query:
+            return
+        if worker.results is None:
+            self.status.setText("Тестовый сервер не ответил или вернул ошибку. "
+                                "Повторите запрос или выберите обычный локальный поиск.")
+            return
+        from candidates.story_search import StoryDocument, StoryHit
+
+        hits, records = [], {}
+        for result in worker.results:
+            key = result.id
+            doc = StoryDocument(key, result.title, result.overview, result.media_type,
+                                "TMDb · тестовый сервер", year=result.year)
+            hits.append(StoryHit(doc, 0.0, result.evidence))
+            records[key] = dict(title=result.title, overview=result.overview, media_type=result.media_type,
+                                tmdb_id=int(key.rsplit(":", 1)[1]), year=result.year, source="TMDb",
+                                source_provider="tmdb",
+                                localized={"ru": {"title": result.title, "overview": result.overview}})
+        self.status.setText(f"Варианты с тестового сервера: {len(hits)}" if hits else
+                            "Тестовый сервер не нашёл вариантов. Попробуйте другое описание.")
+        self.status.setToolTip("Сходство по описанию не подтверждает каждое сюжетное условие.")
+        self._render_cards(hits, records, online=True)
+
     def search(self):
-        if self._closing or self._snapshot_worker:
+        if self._closing or self._snapshot_worker or self._online_confirming:
             return
         if self._worker is not None:
             self._pending_query = self.query.text()
             self.status.setText("Текущий поиск ещё работает. Следующим выполним новый запрос.")
             return
+        self._cancel_online_search()
+        self._online_visible = False
+        self.scope.setText(self._model_scope())
         self._active_query = self.query.text()
+        self.status.setToolTip("")
         compact = bool(self._active_query.strip()) and self._catalog_ready
         self.hero.setVisible(not compact)
         self.heading.setVisible(not compact)
@@ -782,6 +920,7 @@ class StorySearchView:
         self._worker.failed.connect(self._search_failed)
         self._worker.snapshot_failed.connect(self._snapshot_search_failed)
         self._worker.finished.connect(self._finished)
+        self._sync_online_button()
         self._worker.start()
 
     def _snapshot_search_failed(self):
@@ -806,6 +945,7 @@ class StorySearchView:
         self.snapshot_button.setEnabled(self._catalog_worker is None)
         self._sync_model_actions()
         self.query.setEnabled(True)
+        self._sync_online_button()
         if not self._closing and self._pending_query is not None:
             pending, self._pending_query = self._pending_query, None
             self.query.setText(pending)
@@ -814,7 +954,6 @@ class StorySearchView:
     def _show_results(self, response, records, count):
         if self._closing or self._pending_query is not None:
             return
-        self._records = records
         if self.seed_path:
             self._seed_count = count
             self._update_catalog_count()
@@ -851,23 +990,29 @@ class StorySearchView:
             "Поиск по смыслу · результаты могут совпадать только частично" if semantic else
             "Поиск по словам · для поиска по смыслу подключите модель"
         )
+        self._render_cards(response.hits, records)
+
+    def _render_cards(self, hits, records, *, online=False):
+        if online:
+            self.cards_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
+        self._records = records
         try:
             states = get_title_states({
                 hit.document.key: records[hit.document.key]
-                for hit in response.hits if hit.document.key in records
+                for hit in hits if hit.document.key in records
             })
         except Exception:
             states = None
             self.status.setText("Не удалось прочитать статусы коллекции. "
                                 "Действия с карточками недоступны. Повторите поиск.")
-        for hit in response.hits:
+        for hit in hits:
             doc = hit.document
             card = QFrame()
             card.setObjectName("storyCard")
             shell = QHBoxLayout(card)
             shell.setContentsMargins(*[layout_px(14)] * 4)
             shell.setSpacing(layout_px(14))
-            poster = self._poster(doc)
+            poster = self._poster(doc, offline=online)
             shell.addWidget(poster, 0, Qt.AlignmentFlag.AlignTop)
             body = QWidget()
             body.setObjectName("storyCardBody")
@@ -878,7 +1023,7 @@ class StorySearchView:
             self._label(layout, doc.title, "storyTitle")
             metadata = ["Сериал" if doc.media_type == "tv" else "Фильм"]
             if doc.year: metadata.append(str(doc.year))
-            metadata.append("Локальный каталог")
+            metadata.append("Тестовый сервер" if online else "Локальный каталог")
             if "английский fallback" in doc.source: metadata.append("Английский fallback")
             self._label(layout, " · ".join(metadata), "storyMuted")
             excerpt = self._label(layout, "Из описания: «" + hit.evidence + "»", "storyEvidence")
@@ -924,16 +1069,21 @@ class StorySearchView:
                 actions.addWidget(button)
             actions.addStretch()
             layout.addLayout(actions)
+            if online:
+                # Let the results area scroll instead of compressing text and
+                # buttons into the viewport when it shows all five results.
+                card.ensurePolished()
+                card.setMinimumHeight(max(card.sizeHint().height(), layout_px(180)))
             self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)
 
-    def _poster(self, doc):
+    def _poster(self, doc, *, offline=False):
         label = QLabel("СЕРИАЛ\n\nБез постера" if doc.media_type == "tv" else "ФИЛЬМ\n\nБез постера")
         label.setObjectName("storyPoster")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setFixedSize(layout_px(68), layout_px(94))
         label.setAccessibleName("Постер недоступен")
         candidate = self._records.get(doc.key)
-        if candidate:
+        if candidate and not offline:
             self.posters.bind(label, candidate, doc.title)
         return label
 
@@ -983,6 +1133,8 @@ class StorySearchView:
         self.posters.clear()
         self._closing = True
         self._pending_query = None
+        if self._online_worker is not None:
+            self._online_worker.cancel()
         if self._catalog_worker:
             self._catalog_worker.cancel()
         if self._snapshot_worker:
