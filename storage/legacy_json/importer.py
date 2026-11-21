@@ -24,6 +24,7 @@ from storage.legacy_json.exporter import (
     CANONICAL_RATING_SCALE,
     LEGACY_EXPORT_MANIFEST,
     LEGACY_EXPORT_SCHEMA_VERSION,
+    LEGACY_EXPORT_V3_MARKER,
 )
 
 
@@ -78,27 +79,70 @@ def _json_sources(paths: LegacyJsonPaths) -> tuple[Path, ...]:
         paths.settings,
         paths.poster_cache,
         paths.manifest,
+        paths.base_dir / LEGACY_EXPORT_V3_MARKER,
     )
 
 
-def _export_rating_metadata(paths: LegacyJsonPaths) -> tuple[int | None, str | None]:
+_MEMBER_FIELDS = {
+    "watched": "titles", "meta": "meta", "candidate_pool": "candidate_pool",
+    "candidate_criteria": "candidate_criteria", "watchlist": "watchlist",
+    "hidden": "hidden", "settings": "settings", "poster_cache": "poster_cache",
+}
+
+
+def _is_digest(value):
+    return isinstance(value, str) and len(value) == 64 and all(
+        char in "0123456789abcdef" for char in value
+    )
+
+
+def _export_metadata(paths: LegacyJsonPaths) -> tuple[int | None, dict[str, str]]:
+    marker = (paths.base_dir / LEGACY_EXPORT_V3_MARKER).exists()
     if not paths.manifest.is_file():
-        return None, None
+        if marker:
+            raise ValueError("Watchbane v3 export is missing its manifest")
+        return None, {}
     manifest = load_legacy_json_mapping(paths.manifest)
     version = manifest.get("schema_version")
     if manifest.get("format") != "watchbane-legacy-json" or type(version) is not int:
         raise ValueError(f"Unsupported Watchbane export schema version: {version!r}")
+    if marker and version != LEGACY_EXPORT_SCHEMA_VERSION:
+        raise ValueError("Watchbane v3 marker does not match manifest schema version")
+    if version == LEGACY_EXPORT_SCHEMA_VERSION and not marker:
+        raise ValueError("Watchbane v3 export is missing its format marker")
     if version == 1 and set(manifest) == {"format", "schema_version"}:
         # Version 1 was introduced after the SQLite migration to reactions.
-        return 1, None
-    if version != LEGACY_EXPORT_SCHEMA_VERSION:
+        return 1, {}
+    if version not in (2, LEGACY_EXPORT_SCHEMA_VERSION):
         raise ValueError(f"Unsupported Watchbane export schema version: {version!r}")
-    digest = manifest.get("watched_titles_sha256")
-    if (manifest.get("watched_rating_scale") != CANONICAL_RATING_SCALE
-            or not isinstance(digest, str) or len(digest) != 64
-            or any(char not in "0123456789abcdef" for char in digest)):
+    if manifest.get("watched_rating_scale") != CANONICAL_RATING_SCALE:
         raise ValueError("Invalid Watchbane export rating metadata")
-    return version, digest
+    if version == 2:
+        digest = manifest.get("watched_titles_sha256")
+        if not _is_digest(digest):
+            raise ValueError("Invalid Watchbane export rating metadata")
+        return version, {"watched/titles.json": digest}
+    checksums = manifest.get("files_sha256")
+    required = {
+        getattr(paths, field).relative_to(paths.base_dir).as_posix()
+        for field in _MEMBER_FIELDS.values()
+    }
+    if (not isinstance(checksums, dict) or checksums.keys() != required
+            or not all(_is_digest(value) for value in checksums.values())):
+        raise ValueError("Invalid Watchbane export member manifest")
+    return version, checksums
+
+
+def _read_export_member(path: Path, relative: str, digest: str | None) -> dict:
+    if not path.is_file():
+        raise ValueError(f"Export is missing {relative}")
+    raw = path.read_bytes()
+    if digest is not None and hashlib.sha256(raw).hexdigest() != digest:
+        raise ValueError(f"{relative} does not match Watchbane export metadata")
+    payload = json.loads(raw.decode("utf-8-sig"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"Invalid Watchbane mapping: {relative}")
+    return payload
 
 
 def _load_watched_for_import(paths: LegacyJsonPaths, version: int | None, digest: str | None) -> dict:
@@ -112,14 +156,7 @@ def _load_watched_for_import(paths: LegacyJsonPaths, version: int | None, digest
                 main_info["user_score"] = legacy_score_to_user_rating(main_info.get("user_score"))
         return watched
 
-    if not paths.titles.is_file():
-        raise ValueError("Export is missing watched/titles.json")
-    raw = paths.titles.read_bytes()
-    if digest is not None and hashlib.sha256(raw).hexdigest() != digest:
-        raise ValueError("Watched ratings file does not match Watchbane export metadata")
-    watched = json.loads(raw.decode("utf-8-sig"))
-    if not isinstance(watched, dict):
-        raise ValueError("Invalid Watchbane watched titles mapping")
+    watched = _read_export_member(paths.titles, "watched/titles.json", digest)
     for record in watched.values():
         if not isinstance(record, dict):
             raise ValueError("Invalid Watchbane watched title record")
@@ -157,18 +194,19 @@ def import_legacy_json_to_sqlite(
     """Import legacy JSON files into SQLite and return a count report."""
     paths = legacy_paths(base_dir)
     target_db = Path(db_path) if db_path is not None else get_db_path()
-    export_version, rating_digest = _export_rating_metadata(paths)
-
+    export_version, checksums = _export_metadata(paths)
     payloads = {
-        "watched": _load_watched_for_import(paths, export_version, rating_digest),
-        "meta": load_legacy_json_mapping(paths.meta),
-        "candidate_pool": load_legacy_json_mapping(paths.candidate_pool),
-        "candidate_criteria": load_legacy_json_mapping(paths.candidate_criteria),
-        "watchlist": load_legacy_json_mapping(paths.watchlist),
-        "hidden": load_legacy_json_mapping(paths.hidden),
-        "settings": load_legacy_json_mapping(paths.settings),
-        "poster_cache": load_legacy_json_mapping(paths.poster_cache),
+        "watched": _load_watched_for_import(paths, export_version, checksums.get("watched/titles.json")),
     }
+    for role, field in _MEMBER_FIELDS.items():
+        if role == "watched":
+            continue
+        path = getattr(paths, field)
+        relative = path.relative_to(paths.base_dir).as_posix()
+        payloads[role] = (
+            _read_export_member(path, relative, checksums[relative])
+            if export_version == LEGACY_EXPORT_SCHEMA_VERSION else load_legacy_json_mapping(path)
+        )
     report = {
         "ok": True,
         "dry_run": dry_run,

@@ -32,7 +32,7 @@ def test_export_sqlite_to_legacy_json_preserves_file_names(tmp_path) -> None:
     report = export_sqlite_to_legacy_json(output_dir=output_dir, db_path=db_path)
 
     assert report["counts"]["watched/titles.json"] == 1
-    for relative_path in (
+    members = (
         "watched/titles.json",
         "watched/meta.json",
         "candidates/pool.json",
@@ -41,13 +41,14 @@ def test_export_sqlite_to_legacy_json_preserves_file_names(tmp_path) -> None:
         "candidates/hidden.json",
         "settings.json",
         "cache/posters/posters.json",
-    ):
+    )
+    for relative_path in members:
         assert (output_dir / relative_path).is_file()
     assert _read_json(output_dir / "_watchbane_export.json") == {
         "format": "watchbane-legacy-json",
-        "schema_version": 2,
+        "schema_version": 3,
         "watched_rating_scale": "watchbane-reaction-1-to-3",
-        "watched_titles_sha256": hashlib.sha256((output_dir / "watched/titles.json").read_bytes()).hexdigest(),
+        "files_sha256": {name: hashlib.sha256((output_dir / name).read_bytes()).hexdigest() for name in members},
     }
 
 
@@ -165,6 +166,15 @@ def test_manifested_ratings_survive_repeated_import_and_sqlite_restore(tmp_path)
     restore_sqlite_database(first["runtime_backup"], db_path=target)
     assert _stored_ratings(target) == [3, 2]
 
+    (output / "_watchbane_export_v3").unlink()  # build a genuine older layout
+    _write_json(output / "_watchbane_export.json", {
+        "format": "watchbane-legacy-json", "schema_version": 2,
+        "watched_rating_scale": "watchbane-reaction-1-to-3",
+        "watched_titles_sha256": hashlib.sha256((output / "watched/titles.json").read_bytes()).hexdigest(),
+    })
+    import_legacy_json_to_sqlite(base_dir=output, db_path=target, create_backup=False)
+    assert _stored_ratings(target) == ratings
+
     # Historical manifest v1 was generated with the same canonical reaction
     # contract, but did not carry a digest or explicit scale.
     _write_json(output / "_watchbane_export.json", {"format": "watchbane-legacy-json", "schema_version": 1})
@@ -199,11 +209,12 @@ def test_mismatched_or_falsely_declared_ratings_are_rejected_before_mutation(tmp
 
     # Matching checksum cannot make out-of-scale values valid canonical data.
     _write_json(titles_path, _rated([8]))
-    manifest["watched_titles_sha256"] = hashlib.sha256(titles_path.read_bytes()).hexdigest()
+    manifest["files_sha256"]["watched/titles.json"] = hashlib.sha256(titles_path.read_bytes()).hexdigest()
     _write_json(manifest_path, manifest)
     with pytest.raises(ValueError, match="Invalid canonical"):
         import_legacy_json_to_sqlite(base_dir=output, db_path=target, create_backup=False)
 
+    (output / "_watchbane_export_v3").unlink()
     _write_json(manifest_path, {"format": "watchbane-legacy-json", "schema_version": 1})
     with pytest.raises(ValueError, match="Invalid canonical"):
         import_legacy_json_to_sqlite(base_dir=output, db_path=target, create_backup=False)
@@ -212,3 +223,140 @@ def test_mismatched_or_falsely_declared_ratings_are_rejected_before_mutation(tmp
         import_legacy_json_to_sqlite(base_dir=output, db_path=target, create_backup=False)
     assert _stored_ratings(target) == [3]
     assert not (output / "backups").exists()
+
+
+def test_export_pins_single_sqlite_generation_across_map_reads(tmp_path, monkeypatch):
+    from contextlib import closing
+    from storage.sqlite import settings_repository, watched_repository
+    from storage.sqlite.connection import connect
+
+    db = tmp_path / "live.sqlite3"
+    watched_repository.save_dataset_dict(_rated([2]), path=db)
+    settings_repository.save_settings_dict({"generation": "old"}, path=db)
+    original = watched_repository.load_dataset_dict
+
+    def read_then_write(*args, **kwargs):
+        result = original(*args, **kwargs)
+        with closing(connect(db)) as writer, writer:
+            watched_repository.save_dataset_dict(_rated([3]), conn=writer)
+            settings_repository.save_settings_dict({"generation": "new"}, conn=writer)
+        return result
+
+    with monkeypatch.context() as scope:
+        scope.setattr(watched_repository, "load_dataset_dict", read_then_write)
+        export_sqlite_to_legacy_json(output_dir=tmp_path / "export", db_path=db)
+    target = tmp_path / "restored.sqlite3"
+    import_legacy_json_to_sqlite(base_dir=tmp_path / "export", db_path=target, create_backup=False)
+    assert _stored_ratings(target) == [2]
+    assert settings_repository.load_settings_dict(path=target) == {"generation": "old"}
+    assert _stored_ratings(db) == [3]
+    assert settings_repository.load_settings_dict(path=db) == {"generation": "new"}
+
+
+def test_export_failure_does_not_publish_and_will_not_overwrite(tmp_path, monkeypatch):
+    import pytest
+    from storage.legacy_json import exporter
+    from storage.sqlite import watched_repository
+
+    db = tmp_path / "source.sqlite3"
+    watched_repository.save_dataset_dict(_rated([3]), path=db)
+    old = tmp_path / "prior"
+    export_sqlite_to_legacy_json(output_dir=old, db_path=db)
+    before = {f.relative_to(old): f.read_bytes() for f in old.rglob("*") if f.is_file()}
+    with pytest.raises(FileExistsError, match="new or empty"):
+        export_sqlite_to_legacy_json(output_dir=old, db_path=db)
+    assert {f.relative_to(old): f.read_bytes() for f in old.rglob("*") if f.is_file()} == before
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    original = exporter._dump_mapping
+
+    def full_disk(path, payload, **kwargs):
+        if path.name == "settings.json":
+            raise OSError("simulated disk failure")
+        return original(path, payload, **kwargs)
+
+    with monkeypatch.context() as scope:
+        scope.setattr(exporter, "_dump_mapping", full_disk)
+        with pytest.raises(OSError, match="disk failure"):
+            export_sqlite_to_legacy_json(output_dir=empty, db_path=db)
+    assert list(empty.iterdir()) == []
+    assert not list(tmp_path.glob(".watchbane-export-*"))
+    export_sqlite_to_legacy_json(output_dir=empty, db_path=db)
+    assert (empty / "_watchbane_export.json").is_file()
+
+
+def test_non_watched_v3_member_mismatch_or_absence_never_changes_target(tmp_path):
+    import pytest
+    from storage.sqlite import watched_repository
+
+    source, target = tmp_path / "source.sqlite3", tmp_path / "target.sqlite3"
+    out = tmp_path / "export"
+    watched_repository.save_dataset_dict(_rated([3]), path=source)
+    watched_repository.save_dataset_dict(_rated([2]), path=target)
+    export_sqlite_to_legacy_json(output_dir=out, db_path=source)
+
+    member = out / "settings.json"
+    _write_json(member, {"marker": "unexpected"})
+    with pytest.raises(ValueError, match="settings.json does not match"):
+        import_legacy_json_to_sqlite(base_dir=out, db_path=target)
+    member.unlink()
+    with pytest.raises(ValueError, match="missing settings.json"):
+        import_legacy_json_to_sqlite(base_dir=out, db_path=target)
+    assert _stored_ratings(target) == [2]
+    assert not (out / "backups").exists()
+
+
+def test_competing_exports_publish_only_one_whole_generation(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from storage.legacy_json import exporter
+    from storage.sqlite import settings_repository, watched_repository
+
+    sources = [tmp_path / "first.sqlite3", tmp_path / "second.sqlite3"]
+    for index, source in enumerate(sources, 1):
+        watched_repository.save_dataset_dict(_rated([index]), path=source)
+        settings_repository.save_settings_dict({"generation": index}, path=source)
+    ready = Barrier(2, timeout=5)
+    real_dump = exporter._dump_mapping
+
+    def parallel_dump(path, payload, **kwargs):
+        result = real_dump(path, payload, **kwargs)
+        if path.name == exporter.LEGACY_EXPORT_MANIFEST:
+            ready.wait()
+        return result
+
+    monkeypatch.setattr(exporter, "_dump_mapping", parallel_dump)
+    out = tmp_path / "same-target"
+    out.mkdir()
+
+    def publish(source):
+        try:
+            return export_sqlite_to_legacy_json(output_dir=out, db_path=source)["ok"]
+        except OSError:
+            return False
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(publish, sources))
+    assert sorted(outcomes) == [False, True]
+    target = tmp_path / "target.sqlite3"
+    import_legacy_json_to_sqlite(base_dir=out, db_path=target, create_backup=False)
+    winner = settings_repository.load_settings_dict(path=target)["generation"]
+    assert _stored_ratings(target) == [winner]
+
+
+def test_v3_manifest_loss_cannot_silently_downgrade_ratings(tmp_path):
+    import pytest
+    from storage.sqlite import watched_repository
+
+    source, target = tmp_path / "source.sqlite3", tmp_path / "target.sqlite3"
+    out = tmp_path / "export"
+    watched_repository.save_dataset_dict(_rated([3]), path=source)
+    watched_repository.save_dataset_dict(_rated([2]), path=target)
+    export_sqlite_to_legacy_json(output_dir=out, db_path=source)
+    (out / "_watchbane_export.json").unlink()
+    with pytest.raises(ValueError, match="missing its manifest"):
+        import_legacy_json_to_sqlite(base_dir=out, db_path=target)
+    assert _stored_ratings(target) == [2]
+    assert not (out / "backups").exists()
