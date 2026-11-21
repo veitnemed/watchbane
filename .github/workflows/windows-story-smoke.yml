@@ -26,6 +26,9 @@ on:
       - "tests/test_packaging_contract.py"
       - "tests/test_sqlite_watched_repository.py"
       - "tests/test_title_state_service.py"
+      - "tests/test_stale_saved*.py"
+      - "tests/test_story_model_install.py"
+      - "tests/test_story_narrative_negation.py"
   workflow_dispatch:
 
 permissions:
@@ -65,6 +68,7 @@ jobs:
           tests/test_sqlite_watched_repository.py
           tests/test_title_state_service.py
           tests/test_stale_saved_removal_identity.py
+          tests/test_stale_saved_write_conflict.py
           tests/test_story_model_install.py
           tests/test_story_narrative_negation.py
           tests/desktop/test_story_flow.py

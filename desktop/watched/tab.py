@@ -7,6 +7,7 @@ from collections.abc import Callable
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QPushButton, QScrollArea, QSplitter, QVBoxLayout, QWidget
 
+from candidates.models.action_errors import CandidateActionIdentityConflict
 from app.use_cases.watched_library import load_watched_library as load_watched_entries
 from candidates import title_state_service
 from desktop.i18n import tr
@@ -389,7 +390,11 @@ class WatchedTabView(WatchedTabActionsMixin):
             self._switch_section(SECTION_WATCHED, select_key=result.get("dataset_key"))
             return
         if action == "hidden":
-            self._state_service.hide_candidate(candidate)
+            try:
+                self._state_service.hide_candidate(candidate)
+            except CandidateActionIdentityConflict:
+                self._show_status("Действие не сохранено: в коллекции уже есть другой фильм или сериал с тем же названием и годом.", 4000)
+                return
             message = tr("library.status.hidden")
         else:
             self._state_service.restore_candidate(candidate)

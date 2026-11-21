@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sqlite3
 
+from candidates.models.action_errors import CandidateActionIdentityConflict
 from candidates.models.keys import (
     candidate_action_identity_key,
     candidate_imdb_identity,
@@ -236,6 +237,16 @@ def set_candidate_action(candidate: dict, action: str, *, conn: sqlite3.Connecti
     identity = candidate_action_identity_key(normalized)
     actions = (ACTION_WATCHLIST, ACTION_HIDDEN)
     matches = list(_matching_rows(conn, normalized, actions))
+    if candidate_typed_state_key(normalized) is None and (imdb := _imdb_key(normalized)):
+        safe_matches = []
+        for row, entry in matches:
+            other = _imdb_key(_row_value(row)[1])
+            if other is not None and other != imdb:
+                if row["identity_key"] == identity:
+                    raise CandidateActionIdentityConflict("Conflicting IMDb IDs for legacy candidate key")
+                continue
+            safe_matches.append((row, entry))
+        matches = safe_matches
     current = matches[-1][0]["action"] if matches else None
     same_action = [(row, entry) for row, entry in matches if row["action"] == action] if current == action else []
     if same_action:

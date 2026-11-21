@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import logging
 
+from PyQt6.QtWidgets import QMessageBox
+
+from candidates.models.action_errors import CandidateActionIdentityConflict
 from desktop.candidates.presenters import candidate_detail_identity
 
 logger = logging.getLogger(__name__)
@@ -80,7 +83,11 @@ class CandidateListActionsMixin:
         if not isinstance(candidate, dict):
             return
 
-        result = self._service.hide_candidate(candidate)
+        try:
+            result = self._service.hide_candidate(candidate)
+        except CandidateActionIdentityConflict:
+            QMessageBox.warning(self._widget, "Коллекция", "Действие не сохранено: в коллекции уже есть другой фильм или сериал с тем же названием и годом.")
+            return
         if isinstance(result, dict) and result.get("ok") is False:
             return
 

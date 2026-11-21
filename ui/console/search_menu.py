@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from candidates.models import country_schema
 from candidates.models import genre_schema
+from candidates.models.action_errors import CandidateActionIdentityConflict
 from candidates import service as candidate_service
 from candidates.sources.tmdb import country_options as tmdb_country_options
 from common import valid
@@ -121,12 +122,15 @@ def open_candidate_result_actions(candidates: list[dict]) -> None:
         text=">> ",
         funcs_list=[lambda value: value in {"0", "1", "2"}],
     )
-    if command == "1":
-        result = candidate_service.add_candidate_to_watchlist(candidate)
-        print(f"Добавлено в хочу посмотреть. Всего в списке: {result['count']}")
-    elif command == "2":
-        result = candidate_service.hide_candidate(candidate)
-        print(f"Кандидат скрыт. Всего скрытых: {result['count']}")
+    try:
+        if command == "1":
+            result = candidate_service.add_candidate_to_watchlist(candidate)
+            print(f"Добавлено в хочу посмотреть. Всего в списке: {result['count']}")
+        elif command == "2":
+            result = candidate_service.hide_candidate(candidate)
+            print(f"Кандидат скрыт. Всего скрытых: {result['count']}")
+    except CandidateActionIdentityConflict:
+        print("Действие не сохранено: в коллекции уже есть другой фильм или сериал с тем же названием и годом.")
 
 
 def _parse_optional_csv_list(value: str) -> list[str]:
