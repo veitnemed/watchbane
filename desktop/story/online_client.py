@@ -1,0 +1,167 @@
+"""Opt-in transport for a separately started Watchbane loopback story server."""
+from dataclasses import dataclass
+from http.client import HTTPConnection, HTTPException
+import json
+import re
+from socket import SHUT_RDWR
+from threading import Event, Thread
+from time import monotonic
+
+_HOST = "127.0.0.1"
+_PATH = "/v1/search"
+_TIMEOUT = 8.0
+_MAX_BYTES = 512 * 1024
+_RESULT_KEYS = {"id", "media_type", "title", "year", "overview", "evidence", "language"}
+_ID = re.compile(r"tmdb:(movie|tv):([1-9][0-9]{0,18})", re.ASCII)
+
+
+class OnlineStoryError(RuntimeError):
+    """Fixed, display-safe error; never includes the request or response body."""
+
+
+@dataclass(frozen=True)
+class OnlineStoryResult:
+    id: str
+    media_type: str
+    title: str
+    year: int | None
+    overview: str
+    evidence: str
+
+
+def _invalid_response():
+    return OnlineStoryError("Invalid response from the local story server.")
+
+
+def _parse(raw, limit):
+    def unique(pairs):
+        result = dict(pairs)
+        if len(result) != len(pairs):
+            raise ValueError
+        return result
+
+    try:
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=unique)
+        if (type(value) is not dict or set(value) != {"source", "results"} or value["source"] != "tmdb"
+                or type(value["results"]) is not list or len(value["results"]) > limit):
+            raise ValueError
+        results, seen = [], set()
+        for row in value["results"]:
+            if type(row) is not dict or set(row) != _RESULT_KEYS or row["language"] != "ru-RU":
+                raise ValueError
+            identifier = row["id"]
+            match = _ID.fullmatch(identifier) if type(identifier) is str else None
+            if not match or match[1] != row["media_type"] or int(match[2]) > (1 << 63)-1 or identifier in seen:
+                raise ValueError
+            year = row["year"]
+            if year is not None and (type(year) is not int or not 1800 <= year <= 2200):
+                raise ValueError
+            for key, maximum in (("title", 512), ("overview", 8192), ("evidence", 8192)):
+                field = row[key]
+                if (type(field) is not str or len(field) > maximum or "\x00" in field
+                        or (key != "evidence" and not field.strip())):
+                    raise ValueError
+                field.encode("utf-8")
+            results.append(OnlineStoryResult(identifier, row["media_type"], row["title"],
+                                             year, row["overview"], row["evidence"]))
+            seen.add(identifier)
+        return tuple(results)
+    except (ValueError, RecursionError):
+        raise _invalid_response() from None
+
+
+def search_online(
+    query: str,
+    *,
+    consent: bool = False,
+    port: int = 8765,
+    limit: int = 5,
+    cancelled: Event | None = None,
+) -> tuple[OnlineStoryResult, ...]:
+    """Send only query/limit to IPv4 loopback; never discover a server or fall back.
+
+    Call from a worker. The caller owns the explicit, per-request consent and may
+    set the cancellation event. Cancellation stops local waiting, not a server
+    operation that already received the POST.
+    """
+    if consent is not True:
+        raise OnlineStoryError("Local server search was not authorized.")
+    if (type(port) is not int or not 1 <= port <= 65535 or type(limit) is not int or not 1 <= limit <= 10
+            or type(query) is not str or len(query) > 600 or not query.strip()):
+        raise OnlineStoryError("Invalid local story search request.")
+    try:
+        body = json.dumps({"query": query.strip(), "limit": limit}, ensure_ascii=False).encode("utf-8")
+    except UnicodeError:
+        raise OnlineStoryError("Invalid local story search request.") from None
+    deadline = monotonic() + _TIMEOUT
+
+    def check_active():
+        if cancelled is not None and cancelled.is_set():
+            raise OnlineStoryError("Local story search was cancelled.")
+        if monotonic() >= deadline:
+            raise OnlineStoryError("Local story search timed out.")
+
+    check_active()
+    connection = HTTPConnection(_HOST, port, timeout=_TIMEOUT)
+    finished = Event()
+    watcher = None
+    try:
+        # Direct stdlib connection: no proxy, ambient auth, cookies or redirect
+        # handling. Keep the socket even if HTTPConnection detaches it on reply.
+        connection.connect()
+        stream = connection.sock
+        check_active()
+
+        def interrupt():
+            while not finished.wait(0.05):
+                if ((cancelled is not None and cancelled.is_set()) or monotonic() >= deadline):
+                    try:
+                        stream.shutdown(SHUT_RDWR)
+                    except OSError:
+                        pass
+                    return
+
+        # Socket timeout alone is an idle timeout; this also bounds slow headers
+        # and interrupts reads while they are blocked.
+        watcher = Thread(target=interrupt, daemon=True)
+        watcher.start()
+        connection.request("POST", _PATH, body, {
+            "Content-Type": "application/json", "Accept": "application/json",
+            "Accept-Encoding": "identity", "Cache-Control": "no-store",
+        })
+        check_active()
+        with connection.getresponse() as response:
+            check_active()
+            if response.status != 200:
+                raise OnlineStoryError("Local story server is unavailable.")
+            content_type = response.getheader("Content-Type", "").split(";", 1)[0].strip().lower()
+            encoding = response.getheader("Content-Encoding", "identity").strip().lower()
+            size = response.getheader("Content-Length")
+            if content_type != "application/json" or encoding != "identity":
+                raise _invalid_response()
+            if size is not None and (not size.isascii() or not size.isdecimal() or len(size) > 9
+                                     or not 0 < int(size) <= _MAX_BYTES):
+                raise _invalid_response()
+            raw = bytearray()
+            while True:
+                check_active()
+                chunk = response.read1(min(16384, _MAX_BYTES - len(raw) + 1))
+                check_active()
+                if not chunk:
+                    break
+                raw.extend(chunk)
+                if len(raw) > _MAX_BYTES:
+                    raise _invalid_response()
+            if size is not None and len(raw) != int(size):
+                raise _invalid_response()
+        results = _parse(raw, limit)
+        check_active()  # A superseded request cannot hand stale results back.
+        return results
+    except (OSError, HTTPException):
+        check_active()
+        raise OnlineStoryError("Local story server is unavailable.") from None
+    finally:
+        finished.set()
+        connection.close()
+        if watcher is not None:
+            watcher.join()
