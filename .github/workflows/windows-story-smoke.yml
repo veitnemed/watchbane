@@ -82,6 +82,7 @@ jobs:
           tests/test_story_narrative_negation.py
           tests/test_story_seed_snapshot.py
           tests/desktop/test_story_flow.py
+          tests/desktop/test_story_no_match.py
           tests/desktop/test_story_catalog_flow.py
           tests/desktop/test_story_quiet_ui.py
           tests/desktop/test_story_snapshot_picker.py
