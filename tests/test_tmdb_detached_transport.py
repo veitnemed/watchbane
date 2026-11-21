@@ -80,7 +80,8 @@ def test_production_redirect_handler_never_returns_a_follow_up_request():
 
 
 @pytest.mark.parametrize(("body", "reason"), [(b"{", "invalid_response"), (b"[]", "invalid_response"),
-                                               (b" " * (2 * 1024 * 1024 + 1), "response_too_large")])
+                                               (b" " * (2 * 1024 * 1024 + 1), "response_too_large")],
+                         ids=("malformed-json", "non-object-json", "body-over-limit"))
 def test_invalid_or_large_response_still_consumes_attempt(body, reason):
     transport = DetachedTmdbTransport(1, bearer=lambda: "fixture", opener=lambda *_a, **_k: BytesIO(body))
     with pytest.raises(DetachedTmdbError, match=f"^{reason}$"):
