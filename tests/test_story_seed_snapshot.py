@@ -149,3 +149,22 @@ def test_preview_check_validates_installed_sidecar(tmp_path, monkeypatch, capsys
     with pytest.raises(SystemExit, match="2"):
         preview.main()
     assert "строка 1" in capsys.readouterr().err
+
+
+def test_seed_observes_same_length_rewrite_even_when_mtime_is_preserved(tmp_path, monkeypatch):
+    import os
+    from candidates import story_seed_snapshot as seed
+    original_identity = seed._identity
+    monkeypatch.setattr(seed, "_identity", lambda info: original_identity(info)[:4])
+
+
+    path = snapshot(tmp_path / "seed.jsonl", [record()])
+    assert set(load_seed_snapshot(path)) == {"tmdb:movie:321"}
+    before = path.stat()
+    snapshot(path, [record(tmdb_id=678)])
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+    after = path.stat()
+    assert (after.st_ino, after.st_size, after.st_mtime_ns) == (
+        before.st_ino, before.st_size, before.st_mtime_ns,
+    )
+    assert set(load_seed_snapshot(path)) == {"tmdb:movie:678"}

@@ -202,3 +202,31 @@ def test_file_with_zero_eligible_rows_retries_after_same_path_replacement(qtbot,
     assert "недоступен или повреждён" in view.status.text()
     assert "доступно: 0" not in view.catalog_status.text()
     assert view.snapshot_button.menu() is view.snapshot_menu and view.snapshot_button.isEnabled()
+
+
+def test_search_rereads_same_length_in_place_snapshot_before_showing_actions(qtbot, monkeypatch, tmp_path):
+    import os
+
+    path = write_snapshot(tmp_path / "active.jsonl", [(314, "Первая карточка")])
+    choose(monkeypatch, path)
+    view = open_view(qtbot)
+    click(qtbot, view.snapshot_button)
+    qtbot.waitUntil(lambda: view._snapshot_worker is None)
+    search(qtbot, view)
+    assert set(view._records) == {"tmdb:movie:314"}
+
+    before = path.stat()
+    path.write_bytes(path.read_bytes().replace(b"314", b"315"))
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+    search(qtbot, view)
+    assert set(view._records) == {"tmdb:movie:315"}
+
+    # Neither a malformed update nor cached cards may remain actionable.
+    before = path.stat()
+    path.write_bytes(b"!" + path.read_bytes()[1:])
+    os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+    click(qtbot, view.search_button)
+    qtbot.waitUntil(lambda: view._worker is None)
+    assert view.cards_layout.count() == 1
+    assert "Файл каталога недоступен или повреждён" in view.status.text()
+    assert view.seed_path == str(path) and view.snapshot_button.isEnabled()

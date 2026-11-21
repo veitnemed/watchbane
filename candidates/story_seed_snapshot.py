@@ -1,10 +1,12 @@
 """Read an operator-built TMDb snapshot without importing it into a user profile."""
-from functools import lru_cache
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import stat
 import sys
+from threading import Lock
 
 MAX_ROWS = 20_000
 MAX_LINE_BYTES = 32 * 1024
@@ -64,44 +66,86 @@ def _row(raw):
     return key, value
 
 
-@lru_cache(maxsize=1)
-def _read(path, identity):
+_cache_lock = Lock()
+_cached_snapshot = None
+
+
+def _read(stream, identity, expected_digest):
     items = {}
     total = 0
-    with path.open("rb") as stream:
-        line_no = 0
-        while line := stream.readline(MAX_LINE_BYTES + 1):
-            line_no += 1
-            total += len(line)
-            if len(line) > MAX_LINE_BYTES or total > MAX_FILE_BYTES or line_no > MAX_ROWS:
-                raise StorySeedSnapshotError("Каталог превышает лимит размера или числа записей.")
-            try:
-                key, value = _row(json.loads(line))
-                if key in items:
-                    raise ValueError
-            except (ValueError, UnicodeError) as exc:
-                raise StorySeedSnapshotError(f"Некорректная или повторная запись каталога, строка {line_no}.") from exc
-            items[key] = value
+    digest = hashlib.sha256()
+    stream.seek(0)
+    _check_file_identity(stream, identity)
+    line_no = 0
+    while line := stream.readline(MAX_LINE_BYTES + 1):
+        line_no += 1
+        total += len(line)
+        if len(line) > MAX_LINE_BYTES or total > MAX_FILE_BYTES or line_no > MAX_ROWS:
+            raise StorySeedSnapshotError("Каталог превышает лимит размера или числа записей.")
+        digest.update(line)
+        try:
+            key, value = _row(json.loads(line))
+            if key in items:
+                raise ValueError
+        except (ValueError, UnicodeError) as exc:
+            raise StorySeedSnapshotError(f"Некорректная или повторная запись каталога, строка {line_no}.") from exc
+        items[key] = value
+    _check_file_identity(stream, identity)
+    if digest.digest() != expected_digest:
+        raise StorySeedSnapshotError("Каталог изменился во время чтения. Повторите поиск.")
     if not items:
         raise StorySeedSnapshotError("Файл каталога пуст.")
-    # The exporter uses atomic replacement. Never cache a file rewritten mid-read.
-    if _identity(path) != identity:
-        raise StorySeedSnapshotError("Каталог изменился во время чтения. Повторите поиск.")
     return items
 
 
-def _identity(path):
-    s = path.stat()
-    return (s.st_dev, s.st_ino, s.st_size, s.st_mtime_ns)
+def _identity(info):
+    return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
+
+
+def _check_file_identity(stream, identity):
+    if _identity(os.fstat(stream.fileno())) != identity:
+        raise StorySeedSnapshotError("Каталог изменился во время чтения. Повторите поиск.")
+
+
+def _snapshot_digest(stream, identity):
+    # mtime can be preserved during an in-place copy. A digest prevents stale
+    # IDs across platforms even when the remaining metadata is also unchanged.
+    digest = hashlib.sha256()
+    total = 0
+    _check_file_identity(stream, identity)
+    while block := stream.read(1024 * 1024):
+        total += len(block)
+        if total > MAX_FILE_BYTES:
+            raise StorySeedSnapshotError("Каталог превышает лимит размера или числа записей.")
+        digest.update(block)
+    _check_file_identity(stream, identity)
+    return digest.digest()
 
 
 def load_seed_snapshot(path):
     """Return an ID-keyed read-only snapshot; callers must not mutate its rows."""
+    global _cached_snapshot
     path = Path(path).expanduser().resolve()
     try:
-        identity = _identity(path)
-        if not path.is_file() or identity[2] > MAX_FILE_BYTES:
+        info = path.stat()
+        if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_FILE_BYTES:
             raise StorySeedSnapshotError("Не удалось открыть файл каталога или он слишком большой.")
-        return _read(path, identity)
+        identity = _identity(info)
+        with path.open("rb") as stream:
+            digest = _snapshot_digest(stream, identity)
+            key = (path, identity, digest)
+            with _cache_lock:
+                cached = _cached_snapshot
+            if cached is not None and cached[0] == key:
+                result = cached[1]
+            else:
+                # On miss, parse the same open descriptor, not a new file
+                # at this path. Validate bytes again without buffering 64 MiB.
+                result = _read(stream, identity, digest)
+            if _identity(path.stat()) != identity:
+                raise StorySeedSnapshotError("Каталог изменился во время чтения. Повторите поиск.")
+        with _cache_lock:
+            _cached_snapshot = (key, result)
+        return result
     except OSError as exc:
         raise StorySeedSnapshotError("Не удалось открыть файл каталога.") from exc

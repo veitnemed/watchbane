@@ -31,6 +31,7 @@ on:
       - "tests/test_stale_saved*.py"
       - "tests/test_story_model_install.py"
       - "tests/test_story_narrative_negation.py"
+      - "tests/test_story_seed_snapshot.py"
   workflow_dispatch:
 
 permissions:
@@ -75,6 +76,7 @@ jobs:
           tests/test_stale_saved_write_conflict.py
           tests/test_story_model_install.py
           tests/test_story_narrative_negation.py
+          tests/test_story_seed_snapshot.py
           tests/desktop/test_story_flow.py
           tests/desktop/test_story_catalog_flow.py
           tests/desktop/test_story_quiet_ui.py
