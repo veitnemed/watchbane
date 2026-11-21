@@ -165,9 +165,9 @@ def _imdb_key(candidate):
     return None
 
 
-def _matching_rows(active, candidate, actions=None):
+def _matching_rows(active, candidate, actions=None, *, reject_legacy_imdb_conflict=False):
     typed = candidate_typed_state_key(candidate)
-    imdb = _imdb_key(candidate) if typed else None
+    imdb = _imdb_key(candidate) if typed or reject_legacy_imdb_conflict else None
     legacy_keys = candidate_legacy_state_keys(candidate)
     media = normalize_media_type(candidate.get("media_type"))
     for row in _action_rows(active, actions, typed):
@@ -180,7 +180,9 @@ def _matching_rows(active, candidate, actions=None):
                 yield row, entry
         elif (stored_typed is None and row["identity_key"] in legacy_keys
               and normalize_media_type(stored.get("media_type")) == media):
-            yield row, entry
+            # Legacy title/year aliases can contain different known works.
+            if imdb is None or _imdb_key(stored) in (None, imdb):
+                yield row, entry
 
 
 def load_effective_candidate_actions_dict(
@@ -288,7 +290,9 @@ def remove_candidate_actions(
         with transaction(active, owned):
             if owned:
                 active.execute("BEGIN IMMEDIATE")
-            return _delete_matches(active, list(_matching_rows(active, candidate, action_values)))
+            return _delete_matches(active, list(_matching_rows(
+                active, candidate, action_values, reject_legacy_imdb_conflict=True,
+            )))
     finally:
         if owned:
             active.close()
@@ -303,7 +307,9 @@ def load_candidate_state_actions(
     """Read one effective saved/hidden state, preferring the latest matching action."""
     active, owned = connection(conn, path)
     try:
-        matches = list(_matching_rows(active, candidate, (ACTION_WATCHLIST, ACTION_HIDDEN)))
+        matches = list(_matching_rows(
+            active, candidate, (ACTION_WATCHLIST, ACTION_HIDDEN), reject_legacy_imdb_conflict=True,
+        ))
         if candidate_typed_state_key(candidate) and matches:
             return {str(matches[-1][0]["action"])}
         return {str(row["action"]) for row, _ in matches}
