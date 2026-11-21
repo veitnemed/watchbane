@@ -60,22 +60,32 @@ wheel's contents separately.
 Отдельный [пилот первого самостоятельного запуска](../operations/STORY_FIRST_RUN_UX_ACCEPTANCE.md) проверяет понятность сценария для нового человека. Этот план не означает, что пилот уже пройден.
 
 Use an already authorized clean Windows client. An enabled [Windows
-Sandbox](https://learn.microsoft.com/en-us/windows/security/threat-protection/windows-sandbox/windows-sandbox-overview)
-is suitable for a disposable first-launch check; use a clean VM snapshot for
-a specific desktop edition or for testing across a Windows reboot. An app
-restart in the same sandbox session tests profile persistence, not persistence
-after the sandbox is closed. Record the actual edition, build and architecture;
-a Windows 11 result is not evidence of Windows 10 support.
+Sandbox](https://learn.microsoft.com/en-us/windows/security/application-security/application-isolation/windows-sandbox/)
+is suitable for a disposable first-launch check. Windows 11 version 22H2 and
+later preserve guest state across a reboot initiated inside Sandbox; closing
+Sandbox still discards it. Prefer a clean VM snapshot for acceptance on a
+specific desktop edition or for durable profile verification. Record the
+actual edition, build and architecture; a Windows 11 result is not evidence
+of Windows 10 support.
 
-1. Start with the exact candidate Windows archive from the intended delivery
-   channel. Verify and record its SHA-256 and build commit. Record the VC++ v14
+1. Download the exact candidate Windows archive through the intended
+   recipient channel using its normal browser or download client, as a regular
+   user under default security settings. A direct local copy is diagnostic
+   only. Record browser receipt, warnings or blocks separately, then verify and
+   record the SHA-256 and build commit if downloaded. Record the VC++ v14
    registration before starting; don't uninstall system runtimes to simulate a
    blank host. Use a fresh application profile without Python, seeded weights
    or imported user data. If sharing files with a VM, expose only the needed
    candidate and approved QA inputs, not a developer profile or credentials.
-2. Extract or install normally as a regular user and run the unmodified product
-   executable. Record any missing runtime, unexpected elevation or manual setup.
-   Hosted CI and private QA overlays are useful diagnostics, not substitutes.
+2. Record normal extraction or installation and first launch separately. Check
+   the unmodified executable's signature and publisher, and record any
+   [SmartScreen](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation),
+   [Smart App Control](https://learn.microsoft.com/en-us/windows/apps/develop/smart-app-control/overview),
+   UAC or other prompt, including whether it warned or blocked. Record missing
+   runtimes, unexpected elevation or manual setup separately. Do not disable
+   protections or bypass a block to pass acceptance. If launch is blocked,
+   mark the app and E5 steps as not run, not as application failures. Hosted
+   CI and private QA overlays are useful diagnostics, not substitutes.
 3. With internet enabled, use the visible **Подключить поиск по смыслу…**
    control once and confirm the offered download. Check that E5 is shown as
    active after verification. No manual model path, Python install or API key
