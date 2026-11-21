@@ -13,6 +13,7 @@ on:
       - "posters/**"
       - "tools/build_desktop.ps1"
       - "tools/qa/audit_windows_distribution.py"
+      - "tools/qa/build_story_starter_catalog.py"
       - "tools/smoke_windows_bundle.ps1"
       - "requirements*.txt"
       - "app/**"
@@ -39,6 +40,7 @@ on:
       - "tests/test_story_narrative_negation.py"
       - "tests/test_story_seed_snapshot.py"
       - "tests/test_tmdb_detached_transport.py"
+      - "tests/test_story_starter_catalog.py"
   workflow_dispatch:
 
 permissions:
@@ -92,6 +94,7 @@ jobs:
           tests/test_story_narrative_negation.py
           tests/test_story_seed_snapshot.py
           tests/test_tmdb_detached_transport.py
+          tests/test_story_starter_catalog.py
           tests/desktop/test_story_flow.py
           tests/desktop/test_story_no_match.py
           tests/desktop/test_story_catalog_flow.py

@@ -16,6 +16,8 @@ import tempfile
 import time
 from urllib.error import HTTPError, URLError
 
+from apis.tmdb.detached_transport import DetachedTmdbError, DetachedTmdbTransport
+
 
 MEDIA = ("movie", "tv")
 # TV has composite action/adventure and sci-fi/fantasy genres. "|" is TMDb OR.
@@ -143,6 +145,29 @@ class Acquisition:
                     raise AcquisitionError("TMDb: длительный Retry-After; повторите запуск позже.") from None
                 self.sleep(wait)
         raise AssertionError("unreachable")
+
+
+class DetachedAcquisition:
+    """One logical runner operation per guarded launch; no second retry loop."""
+
+    def __init__(self, transport: DetachedTmdbTransport):
+        self.transport = transport
+        self.requests = self.detail_requests = 0
+        self.initial_attempts = transport.attempts
+
+    @property
+    def attempts(self):
+        return self.transport.attempts - self.initial_attempts
+
+    def request(self, path, params, *, detail=False):
+        self.requests += 1
+        self.detail_requests += int(detail)
+        try:
+            return self.transport.get(path, params)
+        except DetachedTmdbError as error:
+            if detail and error.code == "http" and error.status == 404:
+                return None
+            raise
 
 
 def _id(row):
@@ -321,15 +346,20 @@ def _coverage(conn):
             "tv_russia_origin": tv_ru, "tv_unknown_origin": tv_unknown,
             "unusable_overview_count": unusable if tracked == committed else None}
 
-def build_catalog(checkpoint, output, plan, *, get=None, sleep=time.sleep, progress=None):
-    if get is None:
+def build_catalog(checkpoint, output, plan, *, get=None, sleep=time.sleep, progress=None,
+                  detached_transport: DetachedTmdbTransport | None = None):
+    """Optionally use a caller-provided detached run budget; CLI remains unchanged."""
+    if get is not None and detached_transport is not None:
+        raise ValueError("Выберите один способ подключения к TMDb.")
+    if get is None and detached_transport is None:
         from apis.tmdb_api import tmdb_get as get
     checkpoint, output = Path(checkpoint), Path(output)
     if checkpoint.resolve() == output.resolve():
         raise ValueError("Контрольная точка и JSONL должны лежать в разных файлах.")
     plan_buckets = tuple(buckets(plan))
     checkpoint.parent.mkdir(parents=True, exist_ok=True)
-    api = Acquisition(get, sleep=sleep)
+    api = DetachedAcquisition(detached_transport) if detached_transport is not None else Acquisition(get, sleep=sleep)
+    stop_reason = None
     with closing(sqlite3.connect(checkpoint)) as conn:
         _setup(conn, plan)
         caps = {"movie": (plan.target + 1) // 2, "tv": plan.target // 2}
@@ -347,14 +377,27 @@ def build_catalog(checkpoint, output, plan, *, get=None, sleep=time.sleep, progr
             # Same global round-robin sequence after resume, even mid-cycle.
             page, _, bucket = min(pending)
             need = caps[bucket.media] - counts[bucket.media]
-            counts[bucket.media] += _page(conn, api, bucket, page, need, plan)
+            try:
+                counts[bucket.media] += _page(conn, api, bucket, page, need, plan)
+            except DetachedTmdbError as error:
+                if detached_transport is None:
+                    raise
+                # _page only publishes after all of its remote operations.
+                stop_reason = error.code
+                break
             if progress:
-                progress({m: counts[m] for m in MEDIA} | {"bucket": bucket.key, "page": page, "api_requests": api.requests})
+                update = {m: counts[m] for m in MEDIA} | {"bucket": bucket.key, "page": page, "api_requests": api.requests}
+                if detached_transport is not None:
+                    update["transport_attempts"] = api.attempts
+                progress(update)
         complete = all(counts[m] == caps[m] for m in MEDIA)
         if complete:
             _export(conn, output)
-        return {"complete": complete, "count": sum(counts.values()), "by_media": {m: counts[m] for m in MEDIA},
-                "api_requests_this_run": api.requests, "english_detail_requests_this_run": api.detail_requests} | _coverage(conn)
+        result = {"complete": complete, "count": sum(counts.values()), "by_media": {m: counts[m] for m in MEDIA},
+                  "api_requests_this_run": api.requests, "english_detail_requests_this_run": api.detail_requests} | _coverage(conn)
+        if detached_transport is not None:
+            result.update(transport_attempts_this_run=api.attempts, stop_reason=stop_reason)
+        return result
 
 
 def main(argv=None):

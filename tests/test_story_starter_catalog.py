@@ -240,3 +240,80 @@ def test_legacy_exact_checkpoint_signature_is_unchanged_and_cannot_switch_order(
     assert after == legacy_signature
     assert build_catalog(checkpoint, output, Plan(40, "2025-12-31"), get=unexpected)["complete"]
     assert not unexpected.discover
+
+
+def _detached_fixture(cap, source, calls, *, error=None):
+    from io import BytesIO
+    from urllib.parse import parse_qsl, urlsplit
+
+    from apis.tmdb.detached_transport import DetachedTmdbTransport
+
+    def open_fixture(request, *, timeout):
+        url = urlsplit(request.full_url)
+        path = url.path.removeprefix("/3")
+        calls.append(path)
+        if error is not None:
+            raise error
+        params = dict(parse_qsl(url.query))
+        if "page" in params:
+            params["page"] = int(params["page"])
+        return BytesIO(json.dumps(source(path, params, retries=0, timeout=timeout)).encode())
+    return DetachedTmdbTransport(cap, bearer=lambda: "fictional-fixture", opener=open_fixture)
+
+
+def test_detached_budget_mid_page_resumes_without_partial_export_or_partial_page(tmp_path):
+    plan = Plan(2, "2025-12-31")
+    checkpoint, output = tmp_path / "checkpoint.sqlite3", tmp_path / "catalog.jsonl"
+    output.write_bytes(b"already published")
+    first, calls = CatalogFixture(), []
+    result = build_catalog(checkpoint, output, plan, detached_transport=_detached_fixture(3, first, calls))
+    assert result["stop_reason"] == "budget_exhausted"
+    assert result["by_media"] == {"movie": 1, "tv": 0}
+    assert result["transport_attempts_this_run"] == len(calls) == 3
+    assert result["api_requests_this_run"] == 4  # Includes refused EN Details.
+    assert calls[0] == "/discover/movie" and calls[2] == "/discover/tv"
+    assert output.read_bytes() == b"already published"
+    with sqlite3.connect(checkpoint) as conn:
+        assert conn.execute("SELECT media FROM seen").fetchall() == [("movie",)]
+        assert conn.execute("SELECT count(*) FROM batches").fetchone()[0] == 1
+
+    second, resumed_calls = CatalogFixture(), []
+    resumed = build_catalog(checkpoint, output, plan,
+                            detached_transport=_detached_fixture(2, second, resumed_calls))
+    assert resumed["complete"] and resumed["stop_reason"] is None
+    assert resumed["transport_attempts_this_run"] == len(resumed_calls) == 2
+    assert resumed_calls[0] == "/discover/tv"
+    reference = tmp_path / "reference.jsonl"
+    build_catalog(tmp_path / "ref.sqlite3", reference, plan, get=CatalogFixture())
+    assert output.read_bytes() == reference.read_bytes()
+
+
+@pytest.mark.parametrize(("error", "reason"), [
+    (HTTPError("private-fixture", 429, "private-fixture", {}, None), "throttled"),
+    (TimeoutError("private-fixture"), "transport"),
+])
+def test_detached_failures_never_retry_or_publish(tmp_path, error, reason):
+    calls = []
+    checkpoint, output = tmp_path / "checkpoint.sqlite3", tmp_path / "catalog.jsonl"
+    result = build_catalog(checkpoint, output, Plan(2, "2025-12-31"),
+                           detached_transport=_detached_fixture(4, CatalogFixture(), calls, error=error),
+                           sleep=lambda _delay: pytest.fail("detached runner must not retry"))
+    assert not result["complete"] and result["stop_reason"] == reason
+    assert result["api_requests_this_run"] == result["transport_attempts_this_run"] == len(calls) == 1
+    assert not output.exists()
+    with sqlite3.connect(checkpoint) as conn:
+        assert conn.execute("SELECT count(*) FROM batches").fetchone()[0] == 0
+
+
+def test_detached_zero_budget_does_not_resolve_credentials_or_publish(tmp_path):
+    from apis.tmdb.detached_transport import DetachedTmdbTransport
+
+    def unexpected(*_args, **_kwargs):
+        pytest.fail("zero budget must not access credentials or launch")
+    transport = DetachedTmdbTransport(0, bearer=unexpected, opener=unexpected)
+    output = tmp_path / "catalog.jsonl"
+    result = build_catalog(tmp_path / "checkpoint.sqlite3", output, Plan(2, "2025-12-31"),
+                           detached_transport=transport)
+    assert result["stop_reason"] == "budget_exhausted"
+    assert result["api_requests_this_run"] == 1 and result["transport_attempts_this_run"] == 0
+    assert not output.exists()
