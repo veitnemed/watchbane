@@ -176,3 +176,51 @@ def test_failed_backup_is_never_listed_and_prior_backup_stays_restorable(tmp_pat
     assert list(storage_data.load_dataset()) == ["Beta"]
     assert restore_backup(prior) == 1
     assert list(storage_data.load_dataset()) == ["Alpha"]
+
+
+def test_restore_rejects_live_wal_connection_without_detaching_it(tmp_path, monkeypatch):
+    import sqlite3
+    import pytest
+
+    _use_sqlite(tmp_path, monkeypatch)
+    storage_data.save_dataset({"Old": _movie("Old")})
+    prior = create_backup()
+    storage_data.save_dataset({"Current": _movie("Current")})
+    from storage.sqlite.connection import get_db_path
+
+    from contextlib import closing
+    with closing(sqlite3.connect(get_db_path())) as live:
+        assert live.execute("PRAGMA journal_mode").fetchone() == ("wal",)
+        assert live.execute("SELECT COUNT(*) FROM watched_records").fetchone() == (1,)
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            restore_backup(prior)
+        live.execute("UPDATE watched_records SET dataset_key='Committed after refusal'")
+        live.commit()
+        assert list(storage_data.load_dataset()) == ["Committed after refusal"]
+
+    assert restore_backup(prior) == 1
+    assert list(storage_data.load_dataset()) == ["Old"]
+    from storage.files import get_latest_backups
+    safety_backup = get_latest_backups()[0]
+    assert safety_backup != prior
+    assert restore_backup(safety_backup) == 1
+    assert list(storage_data.load_dataset()) == ["Committed after refusal"]
+
+
+def test_console_reports_busy_restore_without_claiming_backup_is_corrupt(tmp_path, monkeypatch, capsys):
+    from contextlib import closing
+    import sqlite3
+    from storage.sqlite.connection import get_db_path
+    from ui.console import backup_menu
+
+    _use_sqlite(tmp_path, monkeypatch)
+    storage_data.save_dataset({"Old": _movie("Old")})
+    create_backup()
+    storage_data.save_dataset({"Current": _movie("Current")})
+    answers = iter(["1", "yes"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+    with closing(sqlite3.connect(get_db_path())) as live:
+        live.execute("SELECT COUNT(*) FROM watched_records").fetchone()
+        backup_menu.open_backup_menu()
+    assert "Профиль занят" in capsys.readouterr().out
+    assert list(storage_data.load_dataset()) == ["Current"]

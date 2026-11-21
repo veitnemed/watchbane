@@ -3,6 +3,7 @@
 import sqlite3
 
 from storage import files as storage_files
+from storage.sqlite.backup import RestoreTargetBusyError
 
 
 def open_backup_menu() -> None:
@@ -40,6 +41,9 @@ def open_backup_menu() -> None:
 
     try:
         records_count = storage_files.restore_backup(file_path)
+    except RestoreTargetBusyError:
+        print("Профиль занят. Закройте другие окна Watchbane и повторите восстановление. Данные не изменены.")
+        return
     except (OSError, ValueError, sqlite3.DatabaseError):
         print("Backup повреждён или несовместим. Данные не изменены.")
         return
