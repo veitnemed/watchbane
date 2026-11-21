@@ -74,7 +74,7 @@ jobs:
       - name: Test packaging and search-first UI
         id: story_pytest
         run: >-
-          python -m pytest -q --junitxml=story-test-result.xml
+          python -m pytest -q --tb=short --junitxml=story-test-result.xml
           tests/test_packaging_contract.py
           tests/test_sqlite_watched_repository.py
           tests/test_sqlite_backup_restore.py
@@ -123,8 +123,13 @@ jobs:
           p = Path("story-test-result.xml")
           if p.is_file():
               for case in ET.parse(p).iter("testcase"):
-                  if case.find("failure") is not None or case.find("error") is not None:
-                      names.append(re.sub(r"[^A-Za-z0-9_.-]", "_", case.get("name", ""))[:90])
+                  problem = case.find("failure")
+                  if problem is None:
+                      problem = case.find("error")
+                  if problem is not None:
+                      node = re.sub(r"[^A-Za-z0-9_.-]", "_", case.get("name", ""))[:90]
+                      lines = re.findall(r"test_[A-Za-z0-9_]+[.]py:(\d+)", problem.text or "")
+                      names.append(node + (":" + lines[-1] if lines else ""))
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
               f.write("nodes=" + (",".join(names[:3]) or "unknown") + "\n")
           '@ | python -
