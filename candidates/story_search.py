@@ -94,8 +94,17 @@ def unsupported_negation(query: str) -> bool:
         "узнает", "узнают", "узнал", "узнала", "узнали",
         "возвращается", "возвращаются", "вернулся", "вернулась", "вернулись",
     }
-    return any(w == "не" and (i+1 == len(words) or words[i+1] not in plot_verbs)
-               for i, w in enumerate(words))
+    for i, word in enumerate(words):
+        if word != "не":
+            continue
+        following = words[i + 1] if i + 1 < len(words) else ""
+        # This idiom describes ignorance, not a request to omit a topic.
+        # Do not broadly allow «не имеет»: it can introduce a filter.
+        if i and words[i - 1] == "понятия" and following in {"имеет", "имела", "имел", "имеют", "имели"}:
+            continue
+        if following not in plot_verbs:
+            return True
+    return False
 
 
 OUT_OF_SCOPE_NOTICE = (
