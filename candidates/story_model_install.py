@@ -69,6 +69,13 @@ def _check_active(cancelled: Callable[[], bool] | None, deadline: float) -> None
         raise StoryModelInstallError("Model download timed out", "timeout")
 
 
+def _raise_idle_timeout(cancelled: Callable[[], bool] | None, deadline: float) -> None:
+    # A connect/read capped by the remaining total budget can expire exactly
+    # at the deadline; report deadline (or cancellation) before idle timeout.
+    _check_active(cancelled, deadline)
+    raise StoryModelInstallError("Model connection timed out waiting for data", "idle_timeout") from None
+
+
 def _safe_url(url: str) -> bool:
     try:
         parsed = urlsplit(url)
@@ -102,6 +109,12 @@ def _open_artifact(opener, name: str, cancelled: Callable[[], bool] | None, dead
                     raise StoryModelInstallError("Model server returned an empty redirect", "invalid_response") from None
                 url = urljoin(url, location)
                 continue
+        except TimeoutError:
+            _raise_idle_timeout(cancelled, deadline)
+        except URLError as error:
+            if not isinstance(error.reason, TimeoutError):
+                raise
+            _raise_idle_timeout(cancelled, deadline)
         if response.status != 200:
             response.close()
             raise StoryModelInstallError("Model server did not return a complete artifact", "invalid_response")
@@ -159,7 +172,10 @@ def _download_set(stage, cancelled, deadline, on_progress) -> int:
             written = 0
             while True:
                 _check_active(cancelled, deadline)
-                chunk = response.read1(_CHUNK_SIZE)
+                try:
+                    chunk = response.read1(_CHUNK_SIZE)
+                except TimeoutError:
+                    _raise_idle_timeout(cancelled, deadline)
                 _check_active(cancelled, deadline)
                 if not chunk:
                     break

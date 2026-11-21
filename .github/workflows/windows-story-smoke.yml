@@ -64,11 +64,15 @@ jobs:
           tests/test_packaging_contract.py
           tests/test_sqlite_watched_repository.py
           tests/test_title_state_service.py
+          tests/test_stale_saved_removal_identity.py
+          tests/test_story_model_install.py
+          tests/test_story_narrative_negation.py
           tests/desktop/test_story_flow.py
           tests/desktop/test_story_catalog_flow.py
           tests/desktop/test_story_quiet_ui.py
           tests/desktop/test_story_snapshot_picker.py
           tests/desktop/test_story_model_preference.py
+          tests/desktop/test_story_model_install_ui.py
       - name: Build a disposable Windows bundle
         run: ./tools/build_desktop.ps1
       - name: Observe native prerequisites in the semantic QA build

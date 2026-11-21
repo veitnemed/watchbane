@@ -300,3 +300,40 @@ def test_repair_falls_back_to_exclusive_copy_if_hardlinks_unavailable(tmp_path, 
     monkeypatch.setattr(installer, "link", unsupported)
     alternate = installer.repair_profile_story_model(tmp_path)
     assert {name: (alternate / name).read_bytes() for name in _ARTIFACTS} == _ARTIFACTS
+
+
+@pytest.mark.parametrize("timeout_type", ["open", "wrapped", "read", "deadline_during_read"])
+def test_model_distinguishes_idle_transport_from_total_deadline(tmp_path, fake_download, monkeypatch, timeout_type):
+    from urllib.error import URLError
+
+    t = [0.0]
+    monkeypatch.setattr(installer, "monotonic", lambda: t[0])
+    first = _PREFIX + "onnx/model.onnx"
+
+    class InterruptAfterBytes(Response):
+        def read1(self, length):
+            if self.tell() > 0:
+                if timeout_type == "deadline_during_read":
+                    t[0] = installer.TOTAL_TIMEOUT_SECONDS
+                raise TimeoutError("private transfer address")
+            return super().read1(length)
+
+    if timeout_type == "open":
+        fail = TimeoutError("private transfer address")
+    elif timeout_type == "wrapped":
+        fail = URLError(TimeoutError("private transfer address"))
+    else:
+        fail = InterruptAfterBytes(_MODEL)
+    fake_download.responses[first] = fail
+    destination = tmp_path / "model"
+    progress = []
+    with pytest.raises(installer.StoryModelInstallError) as got:
+        installer.install_story_model(destination, on_progress=lambda done, total: progress.append(done))
+    assert got.value.code == ("timeout" if timeout_type == "deadline_during_read" else "idle_timeout")
+    assert "private" not in str(got.value)
+    assert bool(progress) == timeout_type.endswith("read")
+    assert not destination.exists() and list(tmp_path.iterdir()) == []
+
+    fake_download.responses[first] = Response(_MODEL)
+    assert installer.install_story_model(destination) == destination
+    assert (destination / "onnx/model.onnx").read_bytes() == _MODEL

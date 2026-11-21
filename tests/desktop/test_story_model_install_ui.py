@@ -217,3 +217,48 @@ def test_managed_model_recovery_requires_explicit_action_and_preserves_selection
     assert repair_attempts == [view._model_install_profile] * 2
     assert get_setting(story_ui._MODEL_SETTING) == view.model_dir == str(repaired)
     assert not view._install_repair.isVisible() and marker.read_text() == "untouched"
+
+
+@pytest.mark.parametrize(("code", "visible"), [
+    ("timeout", "общий лимит времени"),
+    ("idle_timeout", "соединение слишком долго не передавало данные"),
+])
+def test_timeout_after_positive_progress_allows_explicit_retry(qtbot, monkeypatch, tmp_path, code, visible):
+    ready, release = Event(), Event()
+    attempts = []
+
+    def simulate_install(destination, *, on_progress, cancelled):
+        attempts.append(destination)
+        if len(attempts) == 1:
+            on_progress(150_000_000, story_model_install.DOWNLOAD_BYTE_LIMIT)
+            ready.set()
+            assert release.wait(5)
+            raise story_model_install.StoryModelInstallError("private URL", code)
+        return tmp_path / "verified-fixture"
+
+    monkeypatch.setattr(story_model_install, "install_story_model", simulate_install)
+    view = open_view(qtbot)
+    view.query.setText("черновик")
+    click(qtbot, view.install_model_button)
+    assert not attempts
+    click(qtbot, view._install_confirm)
+    try:
+        qtbot.waitUntil(ready.is_set)
+        qtbot.waitUntil(lambda: "150 МБ" in view._install_status.text())
+        assert view._install_progress.isVisible() and not view._install_confirm.isEnabled()
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: view._model_install_worker is None)
+    assert visible in view._install_status.text().lower()
+    assert "private" not in view._install_status.text() and code not in view._install_status.text()
+    assert not view._install_progress.isVisible() and not view._install_cancel.isVisible()
+    assert view._install_confirm.isEnabled() and view._install_manual.isEnabled()
+    assert not view._install_repair.isVisible()
+    assert len(attempts) == 1 and view.model_dir is None
+    assert get_setting(story_ui._MODEL_SETTING, "absent") == "absent"
+    assert view.query.text() == "черновик"
+
+    click(qtbot, view._install_confirm)
+    qtbot.waitUntil(lambda: view._model_install_worker is None)
+    assert len(attempts) == 2 and attempts[0] == attempts[1]
+    assert get_setting(story_ui._MODEL_SETTING) == str(tmp_path / "verified-fixture")
