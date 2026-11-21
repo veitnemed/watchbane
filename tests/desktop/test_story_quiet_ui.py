@@ -178,7 +178,8 @@ def test_collection_state_read_failure_makes_search_cards_read_only_until_retry(
     assert not calls
     qtbot.mouseClick(buttons["Полный сюжет"], Qt.MouseButton.LeftButton)
     assert buttons["Полный сюжет"].isChecked()
-    assert any("Вечером" in label.text() and label.isVisible() for label in card.findChildren(QLabel))
+    qtbot.waitUntil(lambda: any("Вечером" in label.text() and label.isVisible()
+                               for label in card.findChildren(QLabel)))
 
     unavailable = False
     _, buttons = submit()
