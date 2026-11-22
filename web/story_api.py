@@ -18,6 +18,7 @@ from candidates.story_artwork import is_provider_poster_path
 from candidates.story_seed_snapshot import MAX_ROWS, StorySeedSnapshotError, load_seed_snapshot_with_digest
 from candidates.story_semantic import DEFAULT_E5_BATCH_SIZE, LocalE5, SemanticStorySearch, validate_e5_batch_size
 from candidates.story_vector_cache import PREPROCESS_VERSION
+from web.story_local_rate import LocalRateBudget, local_rate_config
 
 _MAX_BODY = 8192
 _MAX_QUERY = 600
@@ -228,13 +229,21 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
                startup_batch_size: int = DEFAULT_E5_BATCH_SIZE, artwork_metadata: bool = False,
                index_metadata: bool = False, skip_singleton_evidence: bool = False,
                expected_catalog_sha256: str | None = None,
-               expected_snapshot_sha256: str | None = None):
-    """One verified engine per worker; tests may inject a local engine factory."""
+               expected_snapshot_sha256: str | None = None,
+               local_rate_per_minute: int | None = None, local_rate_burst: int | None = None):
+    """One verified engine per worker; tests may inject a local engine factory.
+
+    The optional search rate budget is per process, off by default, and only
+    intended for this loopback lab; it is not a public ingress control.
+    """
     validate_e5_batch_size(startup_batch_size)
     if previous_catalog is not None and cache_dir is None:
         raise ValueError("A previous catalog requires an explicit cache directory.")
     strict = _strict_startup_requested(cache_dir, previous_catalog, expected_catalog_sha256,
                                        expected_snapshot_sha256)
+    rate = local_rate_config(local_rate_per_minute, local_rate_burst)
+    rate_budget = LocalRateBudget(*rate) if rate is not None else None
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         options = {} if cache_dir is None else {"cache_dir": cache_dir}
@@ -295,6 +304,13 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
         if index_versions and app.state.index_counts is None:
             raise HTTPException(503, "search_index_unavailable")
         query, limit = await _read_query(request)
+        # Opt-in lab policy: charge valid attempts before the independent
+        # single-flight gate. With no token, 429 takes precedence; otherwise
+        # an occupied worker yields the existing 503 and the token is spent.
+        if rate_budget is not None:
+            retry_after = rate_budget.retry_after()
+            if retry_after is not None:
+                raise HTTPException(429, "search_rate_limited", headers={"Retry-After": str(retry_after)})
         if not search_slot.acquire(blocking=False):
             raise HTTPException(503, "search_busy", headers={"Retry-After": "1"})
         try:
@@ -355,9 +371,14 @@ def main(argv=None):
     parser.add_argument("--skip-singleton-evidence", action="store_true",
                         help="Experimental QA: skip E5 explanation when only one sentence exists")
     parser.add_argument("--index-metadata", action="store_true", help="Allow negotiated exact indexed-description counts")
+    parser.add_argument("--local-rate-per-minute", type=int,
+                        help="Opt-in loopback lab budget, 1–3600 valid attempts per minute; spent before busy admission")
+    parser.add_argument("--local-rate-burst", type=int,
+                        help="Optional 1–60 token burst (default: min(rate, 5)); requires local-rate-per-minute")
     args = parser.parse_args(argv)
     try:
         validate_e5_batch_size(args.startup_passage_batch_size)
+        local_rate_config(args.local_rate_per_minute, args.local_rate_burst)
         _strict_startup_requested(args.cache_dir, args.previous_catalog, args.expected_catalog_sha256,
                                   args.expected_snapshot_sha256)
     except ValueError as error:
@@ -370,7 +391,9 @@ def main(argv=None):
                           artwork_metadata=args.artwork_metadata, index_metadata=args.index_metadata,
                           skip_singleton_evidence=args.skip_singleton_evidence,
                           expected_catalog_sha256=args.expected_catalog_sha256,
-                          expected_snapshot_sha256=args.expected_snapshot_sha256), host="127.0.0.1",
+                          expected_snapshot_sha256=args.expected_snapshot_sha256,
+                          local_rate_per_minute=args.local_rate_per_minute,
+                          local_rate_burst=args.local_rate_burst), host="127.0.0.1",
                 port=args.port, access_log=False, proxy_headers=False)
 
 
