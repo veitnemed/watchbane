@@ -693,54 +693,89 @@ def test_recommendation_status_copy_avoids_technical_jargon() -> None:
         assert all(token not in en for token in forbidden_en), f"{key} en={en!r}"
 
 
-def test_recommendation_actions_live_below_main_info_inside_scroll(qtbot) -> None:
+@pytest.mark.parametrize("height", [565, 720])
+def test_recommendation_actions_stay_above_scrolling_details(qtbot, height) -> None:
+    from PyQt6.QtCore import QPoint, QRect
+
     from desktop.theme.shell_layout import LEFT_PANEL_TOP_COMPENSATION_PX
 
     service = FakeCandidateService(_candidate_set(1, long_overview=True))
     _service, _session, _filters_view, list_view = _build_views(qtbot, service)
-    list_view.widget.resize(1280, 720)
+    root = list_view.widget
+    root.resize(1280, height)
     list_widget = _candidate_list(list_view)
     list_widget.setCurrentIndex(list_widget.model().index(0, 0))
-    qtbot.wait(10)
-    panel = list_view.widget.findChild(QFrame, "recommendationActionPanel")
-    reasons_panel = list_view.widget.findChild(QFrame, "recommendationReasonsPanel")
-    decision_cluster = list_view.widget.findChild(QWidget, "recommendationDecisionCluster")
-    detail_scroll = list_view.widget.findChild(QScrollArea, "candidateSearchDetailScroll")
-    main_info_panel = list_view.widget.findChild(QFrame, "detailMainInfoPanel")
-    overview_section = list_view.widget.findChild(QFrame, "detailOverviewSection")
-    overview_footer = list_view.widget.findChild(QWidget, "detailOverviewFooter")
-    overview_text = list_view.widget.findChild(QLabel, "detailOverviewText")
-    rating_prompt = list_view.widget.findChild(QLabel, "recommendationUserRatingPrompt")
-    watchlist_button = list_view.widget.findChild(QPushButton, "recommendationWatchlistButton")
-    hidden_button = list_view.widget.findChild(QPushButton, "recommendationHiddenButton")
+
+    def find(kind, name):
+        widget = root.findChild(kind, name)
+        assert widget is not None, name
+        return widget
+
+    panel = find(QFrame, "recommendationActionPanel")
+    reasons = find(QFrame, "recommendationReasonsPanel")
+    cluster = find(QWidget, "recommendationDecisionCluster")
+    scroll = find(QScrollArea, "candidateSearchDetailScroll")
+    main = find(QFrame, "detailMainInfoPanel")
+    overview = find(QFrame, "detailOverviewSection")
+    footer = find(QWidget, "detailOverviewFooter")
+    overview_text = find(QLabel, "detailOverviewText")
+    watched = find(QPushButton, "recommendationWatchedButton")
+    watchlist = find(QPushButton, "recommendationWatchlistButton")
+    hidden = find(QPushButton, "recommendationHiddenButton")
+    back = find(QPushButton, "recommendationRatingBackButton")
+    rating = find(QWidget, "recommendationUserRatingSelector")
     rating_buttons = list(list_view._candidate_rating_selector.buttons())
 
-    assert panel is not None and panel.isVisible()
-    assert reasons_panel is not None and reasons_panel.isVisible()
-    assert decision_cluster is not None and decision_cluster.isVisible()
-    assert detail_scroll is not None
-    assert main_info_panel is not None
-    assert overview_section is not None and overview_section.isVisible()
-    assert overview_footer is not None and overview_footer.isVisible()
-    assert overview_text is not None and overview_text.isVisible()
-    assert detail_scroll.widget().isAncestorOf(panel)
-    assert panel.parentWidget() is decision_cluster
-    assert reasons_panel.parentWidget() is overview_footer
-    assert overview_footer.parentWidget() is overview_section
-    assert overview_text.geometry().bottom() <= overview_footer.geometry().top()
-    assert decision_cluster.layout().count() == 1
-    assert decision_cluster.parentWidget().objectName() == "detailMainInfoSection"
-    assert decision_cluster.geometry().top() >= main_info_panel.geometry().bottom()
+    bar = scroll.verticalScrollBar()
+    qtbot.waitUntil(lambda: panel.isVisible() and bar.maximum() > 0)
+    assert cluster.isAncestorOf(panel) and not scroll.widget().isAncestorOf(panel)
+    assert all(scroll.widget().isAncestorOf(widget) for widget in (main, overview, reasons))
+    assert overview.isAncestorOf(footer) and footer.isAncestorOf(reasons)
     assert list_view._detail_panel.layout().contentsMargins().top() == LEFT_PANEL_TOP_COMPENSATION_PX
-    assert rating_prompt is not None and "Смотрел" in rating_prompt.text()
-    rating_widths = [button.width() for button in rating_buttons]
-    assert max(rating_widths) - min(rating_widths) <= 1
-    assert len({button.height() for button in rating_buttons}) == 1
-    assert watchlist_button is not None and hidden_button is not None
+
+    def bounds(widget):
+        return QRect(widget.mapTo(root, QPoint()), widget.size())
+
+    bar.setValue(0)
+    assert bar.value() == 0
+    panel_start = bounds(panel)
+    viewport = bounds(scroll.viewport())
+    assert panel_start.bottom() < viewport.top()
+    assert viewport.top() <= bounds(main).top() < bounds(overview).top()
+    assert bounds(overview_text).bottom() <= bounds(footer).top()
+
+    # Move the real detail viewport. A wrapper-parent assertion alone cannot
+    # establish that the content scrolls while the decision panel stays put.
+    content = (main, overview, reasons)
+    origins = [bounds(widget).top() for widget in content]
+    end = bar.maximum()
+    bar.setValue(end)
+    qtbot.waitUntil(lambda: bounds(main).top() < origins[0])
+    assert bar.value() == end
+    assert [before - bounds(widget).top() for before, widget in zip(origins, content)] == [end] * len(content)
+    assert bounds(panel) == panel_start and bounds(panel).bottom() < bounds(scroll.viewport()).top()
+    assert bounds(reasons).intersects(bounds(scroll.viewport()))
+
+    actions = (watched, watchlist, hidden)
+    assert all(button.isVisible() and button.isEnabled() for button in actions)
+    # Equal stretch can split an odd number of viewport pixels by one.
+    action_widths = [button.width() for button in actions]
+    assert max(action_widths) - min(action_widths) <= 1
+    assert len({button.height() for button in actions}) == 1
+    assert not rating.isVisible() and not back.isVisible()
+    qtbot.mouseClick(watched, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(rating.isVisible)
+    assert back.isVisible() and not any(button.isVisible() for button in actions)
     assert all(button.isVisible() for button in rating_buttons)
-    assert watchlist_button.isVisible() and hidden_button.isVisible()
-    assert watchlist_button.size() == hidden_button.size()
-    assert detail_scroll.verticalScrollBar().maximum() > 0
+    widths = [button.width() for button in rating_buttons]
+    assert max(widths) - min(widths) <= 1
+    assert len({button.height() for button in rating_buttons}) == 1
+    assert bounds(panel).bottom() < bounds(scroll.viewport()).top()
+
+    qtbot.mouseClick(back, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(watched.isVisible)
+    assert all(button.isVisible() for button in actions)
+    assert not rating.isVisible() and not back.isVisible()
 
 
 def test_recommendation_reason_remains_visible_without_overview(qtbot) -> None:
