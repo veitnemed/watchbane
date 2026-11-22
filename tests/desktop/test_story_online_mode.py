@@ -66,6 +66,7 @@ def test_explicit_cancel_default_and_requery_consent(qtbot, monkeypatch):
 
 def test_accepted_result_runs_on_worker_and_saves_typed_movie_and_tv(qtbot, monkeypatch):
     monkeypatch.setenv(story._ONLINE_PORT_ENV, "32123")
+    monkeypatch.delenv(story._ONLINE_ARTWORK_ENV, raising=False)
     monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
     main_thread, received = get_ident(), []
 
@@ -78,6 +79,9 @@ def test_accepted_result_runs_on_worker_and_saves_typed_movie_and_tv(qtbot, monk
     monkeypatch.setattr(online_client, "search_online", request)
     view = make_view(qtbot)
     monkeypatch.setattr(view.posters, "bind", lambda *_: pytest.fail("online result must not fetch a poster"))
+    from desktop.shared import story_posters
+    monkeypatch.setattr(story_posters, "cached_provider_picture",
+                        lambda *_: pytest.fail("default online results must not read poster cache"))
     view.query.setText(" возвращение ")
     qtbot.mouseClick(view.online_button, LEFT)
     qtbot.waitUntil(lambda: view._online_worker is None)
@@ -343,3 +347,260 @@ def test_late_busy_cannot_overwrite_cancel_on_edit(qtbot, monkeypatch):
     qtbot.waitUntil(lambda: view._online_worker is None)
     assert "отменён" in view.status.text() and "занят" not in view.status.text()
     assert view.query.text() == "новый запрос"
+
+
+@pytest.mark.parametrize("real_cached_poster", [False, True])
+def test_loopback_artwork_reads_only_existing_exact_typed_poster(qtbot, monkeypatch, tmp_path, real_cached_poster):
+    from hashlib import sha256
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import json
+    import os
+    from pathlib import Path
+    from threading import Thread
+
+    from PyQt6.QtGui import QColor, QImage
+    from desktop.shared import story_posters
+    from posters import download_images
+
+    cache = tmp_path / "preview"
+    cache.mkdir()
+    monkeypatch.setattr(download_images, "PREVIEW_POSTER_DIR", cache)
+    monkeypatch.setenv(story._ONLINE_ARTWORK_ENV, "1")
+    monkeypatch.delenv(story._ONLINE_OUTCOME_ENV, raising=False)
+    path = "/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg" if real_cached_poster else "/generated-qa.jpg"
+    destination = download_images.preview_poster_path_for_url("https://image.tmdb.org/t/p/w342" + path)
+    if real_cached_poster:
+        source = os.environ.get("WATCHBANE_QA_REAL_CACHED_POSTER")
+        if not source:
+            pytest.skip("Pinned local QA-only Interstellar cache entry not supplied")
+        raw_cache = Path(source).read_bytes()
+        assert sha256(raw_cache).hexdigest() == "fc6fd15def01f9f728c92f9e8ee87f404426819b4e51d6dc53c186225e847382"
+        destination.write_bytes(raw_cache)
+    else:
+        image = QImage(2, 3, QImage.Format.Format_RGB32)
+        image.fill(QColor("#805aad"))
+        assert image.save(str(destination), "PNG")
+        raw_cache = destination.read_bytes()
+
+    received, image_gets = [], []
+    rows = [{
+        "id": f"tmdb:{kind}:157336", "media_type": kind, "title": title,
+        "year": 2014, "overview": "Астронавты ищут новый дом.", "evidence": "ищут новый дом", "language": "ru-RU",
+    } for kind, title in (("movie", "Интерстеллар"), ("tv", "Отдельная фикстура сериала"))]
+    body = json.dumps({"source": "tmdb", "results": rows, "artwork": {"tmdb:movie:157336": path}}).encode()
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            received.append((self.path, json.loads(self.rfile.read(int(self.headers["Content-Length"]))),
+                             self.headers.get("Watchbane-Search-Artwork")))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Watchbane-Search-Artwork", "1")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    try:
+        server = HTTPServer(("127.0.0.1", 0), Handler)
+    except PermissionError:
+        pytest.skip("Execution sandbox does not permit opening a loopback socket")
+    with server:
+        worker = Thread(target=server.serve_forever, kwargs={"poll_interval": .02}, daemon=True)
+        worker.start()
+        try:
+            monkeypatch.setenv(story._ONLINE_PORT_ENV, str(server.server_port))
+            view = make_view(qtbot)
+
+            def blocked(*args):
+                image_gets.append(1)
+                raise AssertionError("Online artwork must never use the download queue")
+
+            monkeypatch.setattr(view.posters, "bind", blocked)
+            monkeypatch.setattr(view.posters.controller._manager, "get", blocked)
+            open_attempts = []
+            real_read = story_posters.cached_provider_picture
+
+            def cache_read(*args):
+                open_attempts.append(args[0])
+                return real_read(*args)
+
+            monkeypatch.setattr(story_posters, "cached_provider_picture", cache_read)
+            view.query.setText("сюжет про находку")
+            monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.No)
+            qtbot.mouseClick(view.online_button, LEFT)
+            assert not open_attempts and not received
+
+            monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
+            qtbot.mouseClick(view.online_button, LEFT)
+            qtbot.waitUntil(lambda: view._online_worker is None)
+            posters = view.cards.findChildren(QLabel, "storyPoster")
+            assert len(posters) == 2
+            assert posters[0].accessibleName() == "Постер: Интерстеллар" and not posters[0].pixmap().isNull()
+            assert posters[1].accessibleName() == "Постер недоступен" and posters[1].pixmap().isNull()
+            assert received == [("/v1/search", {"query": "сюжет про находку", "limit": 5}, "1")]
+            assert open_attempts == [path] and not image_gets
+            assert destination.read_bytes() == raw_cache and list(cache.iterdir()) == [destination]
+            assert all(not any(name in record for name in ("poster_path", "poster_url"))
+                       for record in view._records.values())
+            for button in view.cards.findChildren(QPushButton, "storySaveAction"):
+                qtbot.mouseClick(button, LEFT)
+            for media in ("movie", "tv"):
+                assert get_title_state({"tmdb_id": 157336, "media_type": media}) == STATE_WATCHLIST
+            assert not image_gets and destination.read_bytes() == raw_cache
+        finally:
+            server.shutdown()
+            worker.join(2)
+
+
+def test_cache_only_artwork_rejects_bad_paths_corrupt_oversized_and_symlink(qtbot, monkeypatch, tmp_path):
+    from PyQt6.QtCore import QSize
+    from PyQt6.QtGui import QImage
+    from desktop.shared.story_posters import cached_provider_picture
+    from posters import download_images
+
+    monkeypatch.setattr(download_images, "PREVIEW_POSTER_DIR", tmp_path)
+    canonical = "https://image.tmdb.org/t/p/w342"
+    path, size = "/fixture.jpg", QSize(68, 94)
+    cache = download_images.preview_poster_path_for_url(canonical + path)
+    assert cached_provider_picture("https://image.tmdb.org" + path, size) is None
+    assert cached_provider_picture("/../fixture.jpg", size) is None
+    assert cached_provider_picture(path, size) is None
+
+    broken = b"not an image"
+    cache.write_bytes(broken)
+    assert cached_provider_picture(path, size) is None and cache.read_bytes() == broken
+    with cache.open("wb") as overflow:
+        overflow.truncate(1024 * 1024 + 1)
+    assert cached_provider_picture(path, size) is None
+    cache.unlink()
+    other = tmp_path / "other.png"
+    assert QImage(2, 3, QImage.Format.Format_RGB32).save(str(other), "PNG")
+    try:
+        cache.symlink_to(other)
+    except OSError:
+        pytest.skip("Creating symlinks is unavailable on this test host")
+    assert cached_provider_picture(path, size) is None and cache.is_symlink() and other.is_file()
+
+
+def test_cache_only_artwork_rechecks_byte_limit_on_open_descriptor(qtbot, monkeypatch, tmp_path):
+    import os
+
+    from PyQt6.QtCore import QSize
+    from desktop.shared import story_posters
+    from posters import download_images
+
+    monkeypatch.setattr(download_images, "PREVIEW_POSTER_DIR", tmp_path)
+    path = "/fixture.jpg"
+    cache = download_images.preview_poster_path_for_url("https://image.tmdb.org/t/p/w342" + path)
+    cache.write_bytes(b"sized before open")
+    positions = []
+
+    def grow_after_open(name, flags):
+        assert name == cache
+        fd = original_open(name, flags)
+        with cache.open("r+b") as file:
+            file.truncate(1024 * 1024 + 1)
+        return fd
+
+    class ReadSpy:
+        def __init__(self, fd, mode):
+            self.stream = original_fdopen(fd, mode)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.stream.close()
+
+        def fileno(self):
+            return self.stream.fileno()
+
+        def read(self, *args):
+            positions.append(self.stream.tell())
+            return self.stream.read(*args)
+
+    original_open, original_fdopen = os.open, os.fdopen
+    with monkeypatch.context() as patch:
+        patch.setattr(story_posters.os, "open", grow_after_open)
+        patch.setattr(story_posters.os, "fdopen", ReadSpy)
+        assert story_posters.cached_provider_picture(path, QSize(68, 94)) is None
+    assert cache.stat().st_size == 1024 * 1024 + 1
+    assert not positions
+
+
+@pytest.mark.parametrize("width,height", [(1025, 10), (10, 1537)])
+def test_cache_only_artwork_rejects_over_dimension_compressed_source(qtbot, monkeypatch, tmp_path, width, height):
+    from PyQt6.QtCore import QSize
+    from PyQt6.QtGui import QColor, QImage
+    from desktop.shared.story_posters import cached_provider_picture
+    from posters import download_images
+
+    monkeypatch.setattr(download_images, "PREVIEW_POSTER_DIR", tmp_path)
+    path = "/fixture.png"
+    cache = download_images.preview_poster_path_for_url("https://image.tmdb.org/t/p/w342" + path)
+    source = QImage(width, height, QImage.Format.Format_RGB32)
+    source.fill(QColor("#805aad"))
+    assert source.save(str(cache), "PNG")
+    original = cache.read_bytes()
+    assert len(original) < 1024 * 1024
+    assert cached_provider_picture(path, QSize(68, 94)) is None
+    assert cache.read_bytes() == original
+
+
+def test_cache_only_artwork_drops_decoded_output_above_requested_size(qtbot, monkeypatch, tmp_path):
+    from PyQt6.QtCore import QSize
+    from PyQt6.QtGui import QImage
+    from desktop.shared import story_posters
+    from posters import download_images
+
+    monkeypatch.setattr(download_images, "PREVIEW_POSTER_DIR", tmp_path)
+    path = "/fixture.png"
+    cache = download_images.preview_poster_path_for_url("https://image.tmdb.org/t/p/w342" + path)
+    cache.write_bytes(b"decoder stub")
+
+    class IgnoresScale:
+        def __init__(self, buffer):
+            pass
+
+        def size(self):
+            return QSize(100, 200)
+
+        def format(self):
+            return b"png"
+
+        def setScaledSize(self, _):
+            pass
+
+        def read(self):
+            return QImage(100, 200, QImage.Format.Format_RGB32)
+
+    monkeypatch.setattr(story_posters, "QImageReader", IgnoresScale)
+    assert story_posters.cached_provider_picture(path, QSize(68, 94)) is None
+
+
+def test_late_opt_in_artwork_is_never_read_after_cancellation(qtbot, monkeypatch):
+    from desktop.shared import story_posters
+
+    monkeypatch.setenv(story._ONLINE_PORT_ENV, "8765")
+    monkeypatch.setenv(story._ONLINE_ARTWORK_ENV, "1")
+    monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
+    entered, reads = Event(), []
+
+    def search(_query, *, consent, port, cancelled, with_artwork):
+        assert consent and with_artwork
+        entered.set()
+        assert cancelled.wait(2)
+        return (online_client.OnlineStoryResult("tmdb:tv:1", "tv", "Устаревший", None, "сюжет", "", "/late.jpg"),)
+
+    monkeypatch.setattr(online_client, "search_online", search)
+    monkeypatch.setattr(story_posters, "cached_provider_picture", lambda *_: reads.append(1))
+    view = make_view(qtbot)
+    view.query.setText("старый сюжет")
+    qtbot.mouseClick(view.online_button, LEFT)
+    qtbot.waitUntil(entered.is_set)
+    view.query.setText("другой сюжет")
+    qtbot.waitUntil(lambda: view._online_worker is None)
+    assert not reads and view.cards_layout.count() == 1

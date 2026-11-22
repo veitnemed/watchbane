@@ -4,6 +4,7 @@ Reuses the existing preview cache and queue, never the legacy proxy fallback.
 """
 import os
 import re
+import stat
 import tempfile
 from pathlib import Path
 import weakref
@@ -12,10 +13,17 @@ from PyQt6.QtCore import QObject, QEvent, QUrl, QTimer, QBuffer, QByteArray, QIO
 from PyQt6.QtGui import QImageReader, QPixmap
 from PyQt6.QtNetwork import QNetworkRequest, QNetworkReply
 from PyQt6 import sip
+from candidates.story_artwork import is_provider_poster_path
 from desktop.candidates.poster_prefetch import CandidatePosterPrefetchController
 from posters.download_images import MAX_POSTER_BYTES, preview_poster_path_for_url
 
 _PATTERN = re.compile(r'https://image\.tmdb\.org/t/p/(?:original|w\d{2,4})/([A-Za-z0-9_-]{1,160}\.(?:jpg|png|webp))\Z')
+
+# Online card cache reads happen on the GUI thread. These caps apply only
+# to that optional preview, never to ordinary local or full poster artwork.
+_CACHED_PROVIDER_BYTES = 1024 * 1024
+_CACHED_PROVIDER_WIDTH = 1024
+_CACHED_PROVIDER_HEIGHT = 1536
 
 
 def cdn_url(value):
@@ -43,6 +51,51 @@ def local_picture(path, size):
         image = reader.read()
         return None if image.isNull() else QPixmap.fromImage(image)
     except (OSError, ValueError):
+        return None
+
+
+def cached_provider_picture(poster_path, size):
+    """Read only exact, already cached TMDb artwork. No network or cache writes."""
+    from PyQt6.QtCore import Qt
+
+    if not is_provider_poster_path(poster_path):
+        return None
+    # The provider name never becomes a filesystem path. The trusted CDN URL
+    # is only the input to our existing hashed local cache key.
+    path = preview_poster_path_for_url("https://image.tmdb.org/t/p/w342" + poster_path).absolute()
+    try:
+        # Reject symlinks (including a redirected preview directory) before
+        # opening. O_NOFOLLOW adds descriptor-time protection where available.
+        if path.resolve(strict=True) != path:
+            return None
+        meta = path.stat(follow_symlinks=False)
+        if not stat.S_ISREG(meta.st_mode) or not 0 < meta.st_size <= _CACHED_PROVIDER_BYTES:
+            return None
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_BINARY", 0)
+        with os.fdopen(os.open(path, flags), "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(opened.st_mode) or not os.path.samestat(meta, opened)
+                    or path.resolve(strict=True) != path or not 0 < opened.st_size <= _CACHED_PROVIDER_BYTES):
+                return None
+            data = stream.read(_CACHED_PROVIDER_BYTES + 1)
+        if not 0 < len(data) <= _CACHED_PROVIDER_BYTES:
+            return None
+        buffer = QBuffer()
+        buffer.setData(QByteArray(data))
+        buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+        reader = QImageReader(buffer)
+        source_size = reader.size()
+        if (not image_reader_valid(reader) or source_size.width() > _CACHED_PROVIDER_WIDTH
+                or source_size.height() > _CACHED_PROVIDER_HEIGHT):
+            return None
+        scaled_size = source_size.scaled(size, Qt.AspectRatioMode.KeepAspectRatio)
+        reader.setScaledSize(scaled_size)
+        image = reader.read()
+        if (image.isNull() or image.width() > scaled_size.width()
+                or image.height() > scaled_size.height()):
+            return None
+        return QPixmap.fromImage(image)
+    except (OSError, ValueError, RuntimeError):
         return None
 
 

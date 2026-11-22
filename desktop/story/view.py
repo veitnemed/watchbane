@@ -23,6 +23,7 @@ _MODEL_ENV = "WATCHBANE_STORY_MODEL_DIR"
 _MODEL_UNSET = object()
 _ONLINE_PORT_ENV = "WATCHBANE_EXPERIMENTAL_STORY_PORT"
 _ONLINE_OUTCOME_ENV = "WATCHBANE_EXPERIMENTAL_STORY_OUTCOME"
+_ONLINE_ARTWORK_ENV = "WATCHBANE_EXPERIMENTAL_STORY_ARTWORK"
 _ONLINE_EMPTY_MESSAGES = {
     "explicit_non_film_request": "Тестовый сервер ищет только фильмы и сериалы. Опишите сцену или сюжет.",
     "unsupported_exclusion": "Тестовый сервер пока не проверяет исключения. Опишите, что происходит в фильме.",
@@ -87,11 +88,12 @@ class StoryWorker(QThread):
 
 
 class OnlineStoryWorker(QThread):
-    def __init__(self, query, port, parent, *, with_outcome=False):
+    def __init__(self, query, port, parent, *, with_outcome=False, with_artwork=False):
         super().__init__(parent)
         self.query = query
         self.port = port
         self.with_outcome = with_outcome
+        self.with_artwork = with_artwork
         self.cancelled = Event()
         self.results = None
         self.busy = False
@@ -104,6 +106,8 @@ class OnlineStoryWorker(QThread):
             from desktop.story.online_client import OnlineStoryBusy, search_online
 
             options = {"with_outcome": True} if self.with_outcome else {}
+            if self.with_artwork:
+                options["with_artwork"] = True
             try:
                 self.results = search_online(self.query, consent=True, port=self.port,
                                              cancelled=self.cancelled, **options)
@@ -200,6 +204,7 @@ class StorySearchView:
         self._online_worker = None
         self._online_port = _experimental_story_port()
         self._online_outcome = os.environ.get(_ONLINE_OUTCOME_ENV) == "1"
+        self._online_artwork = os.environ.get(_ONLINE_ARTWORK_ENV) == "1"
         self._online_confirming = False
         self._online_visible = False
         self._catalog_worker = None
@@ -871,7 +876,8 @@ class StorySearchView:
         self.status.setToolTip("")
         self.status.setText("Ищем на тестовом сервере…")
         self.scope.setText("Тестовый сервер на этом компьютере · TMDb")
-        self._online_worker = OnlineStoryWorker(query, self._online_port, self.widget, with_outcome=self._online_outcome)
+        self._online_worker = OnlineStoryWorker(query, self._online_port, self.widget,
+                                               with_outcome=self._online_outcome, with_artwork=self._online_artwork)
         self._online_worker.finished.connect(self._online_finished, Qt.ConnectionType.QueuedConnection)
         self.online_cancel.setEnabled(True)
         self.online_cancel.show()
@@ -922,7 +928,10 @@ class StorySearchView:
         self.status.setText(f"Варианты с тестового сервера: {len(hits)}" if hits else
                             "Тестовый сервер не нашёл вариантов. Попробуйте другое описание.")
         self.status.setToolTip("Сходство по описанию не подтверждает каждое сюжетное условие.")
-        self._render_cards(hits, records, online=True)
+        # Keep artwork out of candidates passed to collection actions; these
+        # optional opaque names are valid only for the current search.
+        artwork = {row.id: row.poster_path for row in results if row.poster_path} if worker.with_artwork else {}
+        self._render_cards(hits, records, online=True, online_artwork=artwork)
 
     def search(self):
         if self._closing or self._snapshot_worker or self._online_confirming:
@@ -1029,7 +1038,7 @@ class StorySearchView:
         )
         self._render_cards(response.hits, records)
 
-    def _render_cards(self, hits, records, *, online=False):
+    def _render_cards(self, hits, records, *, online=False, online_artwork=None):
         if online:
             self.cards_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         self._records = records
@@ -1049,7 +1058,7 @@ class StorySearchView:
             shell = QHBoxLayout(card)
             shell.setContentsMargins(*[layout_px(14)] * 4)
             shell.setSpacing(layout_px(14))
-            poster = self._poster(doc, offline=online)
+            poster = self._poster(doc, offline=online, cached_provider_path=(online_artwork or {}).get(doc.key))
             shell.addWidget(poster, 0, Qt.AlignmentFlag.AlignTop)
             body = QWidget()
             body.setObjectName("storyCardBody")
@@ -1113,14 +1122,22 @@ class StorySearchView:
                 card.setMinimumHeight(max(card.sizeHint().height(), layout_px(180)))
             self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)
 
-    def _poster(self, doc, *, offline=False):
+    def _poster(self, doc, *, offline=False, cached_provider_path=None):
         label = QLabel("СЕРИАЛ\n\nБез постера" if doc.media_type == "tv" else "ФИЛЬМ\n\nБез постера")
         label.setObjectName("storyPoster")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setFixedSize(layout_px(68), layout_px(94))
         label.setAccessibleName("Постер недоступен")
         candidate = self._records.get(doc.key)
-        if candidate and not offline:
+        if offline:
+            if cached_provider_path:
+                from desktop.shared.story_posters import cached_provider_picture
+
+                picture = cached_provider_picture(cached_provider_path, label.size())
+                if picture is not None:
+                    label.setPixmap(picture)
+                    label.setAccessibleName("Постер: " + doc.title)
+        elif candidate:
             self.posters.bind(label, candidate, doc.title)
         return label
 
