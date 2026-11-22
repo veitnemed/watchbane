@@ -126,3 +126,46 @@ def test_manifest_cannot_substitute_old_catalog_for_new(bundle):
     metadata.write_text(json.dumps(pins))
     with pytest.raises(ValueError, match="bundle pins"):
         joint.validated_bundle(bundle)
+
+
+def test_1000_dense_rows_change_only_typed_marker_and_reserve_probe_years():
+    from candidates.story_search import media_constraints
+
+    def rows(generation):
+        return [json.loads(line) for line in joint.fixture_bytes(generation, 1000).splitlines()]
+
+    old, new = rows("old"), rows("new")
+    assert len(old) == len(new) == 1000
+    assert sum(a != b for a, b in zip(old, new, strict=True)) == 1
+    assert old[0]["media_type"] == "movie" and old[1]["media_type"] == "tv" and old[0]["tmdb_id"] == old[1]["tmdb_id"]
+    assert old[0] | {"overview": new[0]["overview"]} == new[0]
+    assert len({(row["media_type"],row["tmdb_id"]) for row in old}) == 1000
+    assert len({row["overview"] for row in old[2:]}) == 998
+    for i, query in enumerate(("фильм 2000 про альпиниста", "сериал 2010 про доктора")):
+        kind, year = media_constraints(query)
+        assert [row for row in old if (row["media_type"],row["year"]) == (kind,year)] == [old[i]]
+
+
+def test_preparation_1000_requires_exact_pinned_previous_and_999_reused(tmp_path, monkeypatch):
+    bundle = tmp_path / "bundle"
+    bundle.mkdir(mode=0o700)
+    calls = []
+    def prebuild(catalog, pin, model, cache, **kwargs):
+        calls.append((catalog,pin,cache,kwargs))
+        assert sha256(catalog.read_bytes()).hexdigest() == pin
+        if catalog.parent.name == "old":
+            assert kwargs == {"batch_size": 4}
+            counts = {}
+        else:
+            a,b,c,_ = calls[0]
+            assert kwargs == {"batch_size": 4, "previous_catalog": a, "previous_catalog_sha256": b,
+                              "previous_cache_dir": c, "previous_snapshot_sha256": "a" * 64}
+            counts = {"reused_rows": 999, "encoded_rows": 1}
+        return {"catalog_sha256": pin, "snapshot_sha256": "a" * 64, "rows":1000,"seconds":1, **counts}
+    monkeypatch.setattr(joint, "prebuild", prebuild)
+    result = joint.prepare(bundle, tmp_path, rows=1000)
+    assert result["rows_per_generation"] == 1000 and result["reused_rows"] == 999
+    assert result["encoded_rows"] == 1
+    assert len(joint.validated_bundle(bundle, 1000)[1]) == 2
+    with pytest.raises(ValueError, match="bundle pins"):
+        joint.validated_bundle(bundle)  # exact 2-row default will not accept the large bundle

@@ -6,6 +6,12 @@ on:
     paths:
       - ".github/workflows/linux-arm-e5-joint-cgroup.yml"
   workflow_dispatch:
+    inputs:
+      rows:
+        description: Synthetic rows per serving generation
+        type: choice
+        options: ["2", "1000"]
+        default: "2"
 
 permissions:
   contents: read
@@ -18,7 +24,7 @@ jobs:
   arm64-container:
     if: github.ref == 'refs/heads/feature/story-search'
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 18
+    timeout-minutes: 20
     env:
       HF_HUB_DISABLE_IMPLICIT_TOKEN: "1"
     steps:
@@ -50,7 +56,10 @@ jobs:
           timeout --kill-after=10s 8m python -m tools.qa.diagnose_story_model_download "$RUNNER_TEMP/watchbane-arm-joint-model"
       - name: Prebuild separately and exercise both strict processes in one fresh ARM64 cgroup
         shell: bash
+        env:
+          WATCHBANE_JOINT_ROWS: ${{ inputs.rows || '1000' }}
         run: |
+          case "$WATCHBANE_JOINT_ROWS" in 2|1000) ;; *) exit 2 ;; esac
           work="$(mktemp -d "$RUNNER_TEMP/watchbane-joint-handover.XXXXXX")"
           scratch="$work/source"
           bundle="$work/synthetic-bundle"
@@ -72,8 +81,13 @@ jobs:
             fi
             container="$prefix-$phase"
             status=0
-            # An 85-second TERM deadline and 5-second hard-stop grace.
-            timeout --verbose --kill-after=5s 85s docker run --name "$container" --pull=never --init \
+            wall=85
+            grace=5
+            if [ "$phase" = prepare ] && [ "$WATCHBANE_JOINT_ROWS" = 1000 ]; then
+              wall=210
+              grace=10
+            fi
+            timeout --verbose --kill-after="${grace}s" "${wall}s" docker run --name "$container" --pull=never --init \
               --platform linux/arm64 --network none --cgroupns private \
               --cpus 2 --memory 2g --memory-swap 2g \
               --user "$(id -u):$(id -g)" --read-only --cap-drop ALL --security-opt no-new-privileges \
@@ -82,9 +96,10 @@ jobs:
               --mount "type=bind,src=$RUNNER_TEMP/watchbane-arm-joint-model,dst=/opt/watchbane-model,readonly" \
               --mount "$mount" \
               watchbane-arm-joint:local python -m tools.qa.exercise_story_joint_cgroup "$phase" \
-              --model-dir /opt/watchbane-model --bundle-dir /opt/watchbane-synthetic "${args[@]}" || status=$?
+              --model-dir /opt/watchbane-model --bundle-dir /opt/watchbane-synthetic --rows "$WATCHBANE_JOINT_ROWS" "${args[@]}" || status=$?
             state="$(docker inspect --format '{{.State.OOMKilled}} {{.State.ExitCode}} {{.State.Running}}' "$container")" || state="inspection_failed"
-            printf 'phase=%s wall_term_seconds=85 wall_kill_seconds=90 runner_exit=%s container_oom_exit_running=%s\n' "$phase" "$status" "$state"
+            printf 'phase=%s rows=%s wall_term_seconds=%s wall_kill_seconds=%s runner_exit=%s container_oom_exit_running=%s\n' \
+              "$phase" "$WATCHBANE_JOINT_ROWS" "$wall" "$((wall + grace))" "$status" "$state"
             if [ "${state%% *}" = true ]; then
               printf 'phase=%s capacity_failure=docker_oom_kill\n' "$phase"
             elif [ "$status" = 124 ]; then
