@@ -1,0 +1,76 @@
+name: Watchbane bounded ARM64 Docker lab
+
+on:
+  push:
+    branches: ["feature/story-search"]
+    paths:
+      - ".github/workflows/linux-arm-e5-cgroup.yml"
+      - ".github/docker/watchbane-arm-cgroup.Dockerfile"
+      - "tools/qa/smoke_story_arm_cgroup.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watchbane-linux-arm-e5-cgroup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arm64-container:
+    if: github.ref == 'refs/heads/feature/story-search'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    env:
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build a local dependencies-only ARM64 lab image
+        shell: bash
+        run: |
+          test "$(uname -sm)" = "Linux aarch64"
+          test "$(id -u)" -ne 0
+          case "$(docker info --format '{{.OSType}}/{{.Architecture}}')" in
+            linux/aarch64|linux/arm64) ;;
+            *) echo "Native ARM64 Docker daemon required"; exit 1 ;;
+          esac
+          context="$(mktemp -d)"
+          trap 'rm -rf -- "$context"' EXIT
+          git show HEAD:.github/docker/watchbane-arm-cgroup.Dockerfile > "$context/Dockerfile"
+          git show HEAD:requirements-story.txt > "$context/requirements-story.txt"
+          git show HEAD:requirements-story-server.txt > "$context/requirements-story-server.txt"
+          timeout --kill-after=10s 4m docker build --platform linux/arm64 --tag watchbane-arm-cgroup:local "$context"
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' watchbane-arm-cgroup:local)" = "linux/arm64"
+      - name: Fetch and verify the pinned model only on the host
+        shell: bash
+        run: |
+          timeout --kill-after=10s 8m python -m tools.qa.diagnose_story_model_download "$RUNNER_TEMP/watchbane-arm-cgroup-model"
+      - name: Verify one synthetic E5 loopback request under exact cgroup limits
+        shell: bash
+        run: |
+          scratch="$(mktemp -d "$RUNNER_TEMP/watchbane-cgroup-source.XXXXXX")"
+          container="watchbane-arm-cgroup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true; rm -rf -- "$scratch"' EXIT
+          git archive HEAD -- apis app candidates common config dataset posters storage tools/qa web | tar -x -C "$scratch"
+          status=0
+          timeout --kill-after=10s 3m docker run --name "$container" --pull=never --init \
+            --platform linux/arm64 --network none --cgroupns private \
+            --cpus 2 --memory 2g --memory-swap 2g \
+            --user "$(id -u):$(id -g)" --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,nosuid,nodev,size=64m --env HOME=/tmp \
+            --mount "type=bind,src=$scratch,dst=/opt/watchbane-source,readonly" \
+            --mount "type=bind,src=$RUNNER_TEMP/watchbane-arm-cgroup-model,dst=/opt/watchbane-model,readonly" \
+            watchbane-arm-cgroup:local python -m tools.qa.smoke_story_arm_cgroup --model-dir /opt/watchbane-model || status=$?
+          if state="$(docker inspect --format '{{.State.OOMKilled}} {{.State.ExitCode}}' "$container")"; then
+            printf 'container_oom_killed_and_exit=%s\n' "$state"
+            [ "$state" = "false 0" ] || exit 1
+          else
+            exit 1
+          fi
+          exit "$status"
+      # No published ports, image push, QA-data upload, remote deployment, or billing setup.
