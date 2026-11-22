@@ -179,3 +179,107 @@ def test_imported_unlinked_duplicate_collapses_without_losing_bare_filter(tmp_pa
     assert repo.load_action_identities(repo.ACTION_WATCHLIST, path=path) == {bare}
     assert [row["overview"] for row in state.load_action_candidates(repo.ACTION_WATCHLIST, path=path)] == ["Newest"]
     assert repo.load_candidate_actions_dict(repo.ACTION_WATCHLIST, path=path) == saved
+
+
+@pytest.mark.parametrize(("first", "new"), [("ru", "en"), ("en", "ru")])
+def test_exact_typed_repeat_save_fills_locales_without_replacing_known_fields_or_crossing_media(
+    tmp_path, monkeypatch, first, new,
+):
+    path = tmp_path / "watchbane.sqlite3"
+    movie_key, tv_key = "tmdb:movie:1", "tmdb:tv:1"
+    monkeypatch.setattr(repo, "_now", lambda: "2026-01-01T00:00:00+00:00")
+    old = item(1, title="Original title", overview="Original description", tmdb_score=8.1,
+               custom={"existing": True},
+               localized={first: {"title": "Prior title", "overview": " ", "reviewed": True}})
+    tv = item(1, media="tv", localized={first: {"title": "Series only", "overview": "Series plot"}})
+    state.add_to_watchlist(old, path=path)
+    state.add_to_watchlist(tv, path=path)
+    before = repo.load_candidate_actions_dict(repo.ACTION_WATCHLIST, path=path)
+    monkeypatch.setattr(repo, "_now", lambda: "2026-01-02T00:00:00+00:00")
+    supplied = item(1, title="New alias", overview="Alternate description", tmdb_score=9.9,
+                    custom={"must_not_replace": True},
+                    localized={
+                        first: {"title": "Wrong replacement", "overview": "Missing prior overview"},
+                        new: {"title": "Second-language title", "overview": "Second-language synopsis",
+                              "unrecognized": "must not be imported"},
+                        "xx": {"title": "unsupported locale"},
+                    })
+    assert state.add_to_watchlist(supplied, path=path)["identity"] == movie_key
+    after = repo.load_candidate_actions_dict(repo.ACTION_WATCHLIST, path=path)
+    assert set(after) == {movie_key, tv_key}
+    assert after[tv_key] == before[tv_key]
+    assert after[movie_key]["added_at"] == before[movie_key]["added_at"] == "2026-01-01T00:00:00+00:00"
+    saved = after[movie_key]["candidate"]
+    assert saved["localized"] == {
+        first: {"title": "Prior title", "overview": "Missing prior overview", "reviewed": True},
+        new: {"title": "Second-language title", "overview": "Second-language synopsis"},
+    }
+    assert {key: saved[key] for key in ("title", "overview", "tmdb_score", "custom")} == {
+        "title": "Original title", "overview": "Original description", "tmdb_score": 8.1,
+        "custom": {"existing": True},
+    }
+
+
+@pytest.mark.parametrize("prior", [
+    {"ru": ["imported", "but", "not", "a", "block"], "en": {"title": 5, "overview": False}},
+    {"ru": None, "en": {"title": 5, "overview": False}},
+    ["old malformed root"],
+])
+def test_repeat_save_keeps_malformed_existing_locale_metadata(tmp_path, prior):
+    path = tmp_path / "watchbane.sqlite3"
+    state.add_to_watchlist(item(1, localized=prior), path=path)
+    state.add_to_watchlist(item(1, localized={
+        "ru": {"title": "Untouched block"}, "en": {"title": "Do not coerce", "overview": "Do not overwrite"},
+    }), path=path)
+    current = repo.load_candidate_actions_dict(repo.ACTION_WATCHLIST, path=path)
+    assert current["tmdb:movie:1"]["candidate"]["localized"] == prior
+
+
+def test_exact_repeat_does_not_infer_a_missing_media_type(tmp_path):
+    path = tmp_path / "watchbane.sqlite3"
+    previous = item(1, media="tv", localized={"ru": {"title": "Selected series"}})
+    fallback = item(1, media="tv", localized={"en": {"title": "Potentially unrelated"}})
+    fallback.pop("media_type")
+    state.add_to_watchlist(previous, path=path)
+    state.add_to_watchlist(fallback, path=path)
+    saved = repo.load_candidate_actions_dict(repo.ACTION_WATCHLIST, path=path)
+    assert saved["tmdb:tv:1"]["candidate"]["localized"] == previous["localized"]
+
+
+@pytest.mark.parametrize("legacy_is_untyped", [False, True])
+def test_legacy_alias_or_imdb_bridge_consolidates_without_locale_enrichment(tmp_path, legacy_is_untyped):
+    path = tmp_path / "watchbane.sqlite3"
+    prior = item(None if legacy_is_untyped else 1, imdb_id="tt1234567",
+                 localized={"ru": {"title": "Known localized title"}})
+    repo.save_candidate_actions_dict(repo.ACTION_WATCHLIST, {"old alias|2020|movie": {
+        "candidate": prior, "added_at": "2026-01-01T00:00:00+00:00",
+    }}, path=path)
+    state.add_to_watchlist(item(1, imdb_id="tt1234567", localized={"en": {"title": "New locale"}}), path=path)
+    after = repo.load_candidate_actions_dict(repo.ACTION_WATCHLIST, path=path)
+    assert set(after) == {"tmdb:movie:1"}
+    assert after["tmdb:movie:1"]["candidate"]["localized"] == prior["localized"]
+    assert after["tmdb:movie:1"]["added_at"] == "2026-01-01T00:00:00+00:00"
+
+
+def test_changing_saved_status_does_not_import_locales_from_prior_action(tmp_path):
+    path = tmp_path / "watchbane.sqlite3"
+    first = item(1, localized={"ru": {"title": "Previous state"}})
+    second = item(1, localized={"en": {"title": "New state"}})
+    state.hide_candidate(first, path=path)
+    state.add_to_watchlist(second, path=path)
+    assert not repo.load_candidate_actions_dict(repo.ACTION_HIDDEN, path=path)
+    after = repo.load_candidate_actions_dict(repo.ACTION_WATCHLIST, path=path)
+    assert after["tmdb:movie:1"]["candidate"]["localized"] == second["localized"]
+
+
+@pytest.mark.parametrize("invalid", [123, "invalid\0text", "\ud800"])
+def test_repeat_save_does_not_import_invalid_or_inferred_localized_fields(tmp_path, invalid):
+    path = tmp_path / "watchbane.sqlite3"
+    first = item(1, localized={"ru": {"title": "Known title", "overview": "Known synopsis"}})
+    state.add_to_watchlist(first, path=path)
+    state.add_to_watchlist(item(1, title="Do not infer from a primary title", localized={
+        "ru": {"overview": "Do not replace"},
+        "en": {"title": invalid, "overview": invalid},
+    }), path=path)
+    saved = repo.load_candidate_actions_dict(repo.ACTION_WATCHLIST, path=path)
+    assert saved["tmdb:movie:1"]["candidate"]["localized"] == first["localized"]

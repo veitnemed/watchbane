@@ -13,6 +13,7 @@ from candidates.models.keys import (
     candidate_typed_state_key,
     title_identity_key,
 )
+from dataset.language import SUPPORTED_DATA_LANGUAGES
 from dataset.models.media_type import normalize_media_type
 from candidates.models.schema import normalize_candidate_record
 from storage.sqlite.json_codec import dumps_json, loads_json
@@ -231,13 +232,42 @@ def load_effective_candidate_actions_dict(
             active.close()
 
 
+def _fill_missing_localized(prior, incoming):
+    """Fill explicit supported locale fields without replacing imported values."""
+    if not isinstance(prior, dict) or not isinstance(incoming, dict):
+        return prior
+    merged = dict(prior)
+    for locale in SUPPORTED_DATA_LANGUAGES:
+        proposed = incoming.get(locale)
+        if not isinstance(proposed, dict):
+            continue
+        current = prior.get(locale, {})
+        if not isinstance(current, dict):
+            continue
+        block = dict(current)
+        for field in ("title", "overview"):
+            old = current.get(field)
+            new = proposed.get(field)
+            if ((old is None or isinstance(old, str) and not old.strip())
+                    and isinstance(new, str) and new.strip() and "\0" not in new):
+                try:
+                    new.encode("utf-8")
+                except UnicodeEncodeError:
+                    continue
+                block[field] = new
+        if block != current:
+            merged[locale] = block
+    return merged
+
+
 def set_candidate_action(candidate: dict, action: str, *, conn: sqlite3.Connection) -> str:
     """Switch state in the caller's transaction and keep repeat-save metadata."""
     normalized = normalize_candidate_record(candidate)
     identity = candidate_action_identity_key(normalized)
+    typed = candidate_typed_state_key(normalized)
     actions = (ACTION_WATCHLIST, ACTION_HIDDEN)
     matches = list(_matching_rows(conn, normalized, actions))
-    if candidate_typed_state_key(normalized) is None and (imdb := _imdb_key(normalized)):
+    if typed is None and (imdb := _imdb_key(normalized)):
         safe_matches = []
         for row, entry in matches:
             other = _imdb_key(_row_value(row)[1])
@@ -253,6 +283,7 @@ def set_candidate_action(candidate: dict, action: str, *, conn: sqlite3.Connecti
         # Preserve the earliest timestamp and the known payload when only an
         # alternate spelling of the same work is saved again.
         created = str(same_action[0][0]["created_at"])
+        incoming_localized = normalized.get("localized")
         new_entry = {}
         for _, entry in reversed(same_action):
             previous = entry.get("candidate")
@@ -261,6 +292,18 @@ def set_candidate_action(candidate: dict, action: str, *, conn: sqlite3.Connecti
             new_entry.update(entry)
         if candidate_typed_state_key(candidate) is not None:
             normalized["tmdb_id"] = candidate["tmdb_id"]
+        if action == ACTION_WATCHLIST and typed is not None and len(matches) == 1:
+            row, entry = same_action[0]
+            previous = entry.get("candidate")
+            # A legacy alias/IMDb bridge or inferred media type is not the
+            # exact typed record boundary required for locale enrichment.
+            if (row["identity_key"] == typed and isinstance(previous, dict)
+                    and candidate.get("media_type") in ("movie", "tv")
+                    and previous.get("media_type") == candidate["media_type"]
+                    and candidate_typed_state_key(previous) == typed):
+                prior_localized = previous.get("localized")
+                if isinstance(prior_localized, dict) and prior_localized:
+                    normalized["localized"] = _fill_missing_localized(prior_localized, incoming_localized)
         new_entry["candidate"] = normalized
         new_entry[_timestamp_field(action)] = created
     else:
