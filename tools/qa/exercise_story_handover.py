@@ -55,12 +55,15 @@ def request(port, path, body=None):
 
 
 @contextmanager
-def launch(catalog, model, batch_size, *, cache_dir=None, prepared_index=False, cache_proof=None, strict_pins=None):
+def launch(catalog, model, batch_size, *, cache_dir=None, prepared_index=False, cache_proof=None, strict_pins=None, port=None):
     # The app cannot accept an inherited socket. Check both the child and an
     # application-specific marker; this port allocation is not deploy-grade.
-    with socket.socket() as holder:
-        holder.bind(("127.0.0.1", 0))
-        port = holder.getsockname()[1]
+    if port is None:
+        with socket.socket() as holder:
+            holder.bind(("127.0.0.1", 0))
+            port = holder.getsockname()[1]
+    elif type(port) is not int or not 1 <= port <= 65535:
+        raise ValueError("Expected an explicit IPv4 loopback port from 1 through 65535.")
     args = [sys.executable, "-m", "web.story_api", "--catalog", str(catalog), "--model-dir", str(model),
             "--port", str(port), "--startup-passage-batch-size", str(batch_size)]
     if cache_dir is not None:
