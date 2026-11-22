@@ -1,0 +1,102 @@
+name: Watchbane ARM64 loopback TCP handover lab
+
+on:
+  push:
+    branches: ["feature/story-search"]
+    paths:
+      - ".github/workflows/linux-arm-e5-tcp-handover.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watchbane-linux-arm-e5-tcp-handover-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arm64-container:
+    if: github.ref == 'refs/heads/feature/story-search'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    env:
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build a local dependencies-only ARM64 lab image
+        shell: bash
+        run: |
+          test "$(uname -sm)" = "Linux aarch64"
+          test "$(id -u)" -ne 0
+          case "$(docker info --format '{{.OSType}}/{{.Architecture}}')" in
+            linux/aarch64|linux/arm64) ;;
+            *) echo "Native ARM64 Docker daemon required"; exit 1 ;;
+          esac
+          context="$(mktemp -d)"
+          trap 'rm -rf -- "$context"' EXIT
+          git show HEAD:.github/docker/watchbane-arm-cgroup.Dockerfile > "$context/Dockerfile"
+          git show HEAD:requirements-story.txt > "$context/requirements-story.txt"
+          git show HEAD:requirements-story-server.txt > "$context/requirements-story-server.txt"
+          timeout --kill-after=10s 4m docker build --platform linux/arm64 --tag watchbane-arm-tcp:local "$context"
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' watchbane-arm-tcp:local)" = "linux/arm64"
+      - name: Fetch and verify the pinned model only on the host
+        shell: bash
+        run: |
+          timeout --kill-after=10s 8m python -m tools.qa.diagnose_story_model_download "$RUNNER_TEMP/watchbane-arm-tcp-model"
+      - name: Prepare separately and exercise one private IPv4 TCP listener under a fresh 2 GiB cgroup
+        shell: bash
+        run: |
+          work="$(mktemp -d "$RUNNER_TEMP/watchbane-tcp-handover.XXXXXX")"
+          scratch="$work/source"
+          bundle="$work/synthetic-bundle"
+          prefix="watchbane-tcp-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker rm -f "$prefix-prepare" "$prefix-exercise" >/dev/null 2>&1 || true
+            rm -rf -- "$work"
+          }
+          trap cleanup EXIT
+          mkdir -m700 -- "$scratch" "$bundle"
+          git archive HEAD -- candidates tools/qa web | tar -x -C "$scratch"
+          test -f "$scratch/tools/qa/exercise_story_generation_tcp.py"
+          test -f "$scratch/tools/qa/exercise_story_generation_tcp_cgroup.py"
+          for phase in prepare exercise; do
+            mount="type=bind,src=$bundle,dst=/opt/watchbane-synthetic"
+            command=(-m tools.qa.exercise_story_generation_tcp prepare)
+            wall=205
+            grace=5
+            if [ "$phase" = exercise ]; then
+              mount="$mount,readonly"
+              command=(-m tools.qa.exercise_story_generation_tcp_cgroup)
+              wall=85
+            fi
+            container="$prefix-$phase"
+            status=0
+            timeout --verbose --kill-after="${grace}s" "${wall}s" docker run --name "$container" --pull=never --init \
+              --platform linux/arm64 --network none --cgroupns private \
+              --cpus 2 --memory 2g --memory-swap 2g \
+              --user "$(id -u):$(id -g)" --read-only --cap-drop ALL --security-opt no-new-privileges \
+              --tmpfs /tmp:rw,nosuid,nodev,size=64m --env HOME=/tmp \
+              --mount "type=bind,src=$scratch,dst=/opt/watchbane-source,readonly" \
+              --mount "type=bind,src=$RUNNER_TEMP/watchbane-arm-tcp-model,dst=/opt/watchbane-model,readonly" \
+              --mount "$mount" \
+              watchbane-arm-tcp:local python "${command[@]}" \
+              --model-dir /opt/watchbane-model --bundle-dir /opt/watchbane-synthetic --rows 1000 || status=$?
+            state="$(docker inspect --format '{{.State.OOMKilled}} {{.State.ExitCode}} {{.State.Running}}' "$container")" || state="inspection_failed"
+            printf 'phase=%s rows=%s wall_term_seconds=%s wall_kill_seconds=%s runner_exit=%s container_oom_exit_running=%s\n' \
+              "$phase" 1000 "$wall" "$((wall + grace))" "$status" "$state"
+            if [ "${state%% *}" = true ]; then
+              printf 'phase=%s capacity_failure=docker_oom_kill\n' "$phase"
+            elif [ "$status" = 124 ]; then
+              printf 'phase=%s capacity_failure=docker_wall_timeout\n' "$phase"
+            elif [ "$status" = 137 ]; then
+              printf 'phase=%s capacity_failure=docker_killed_or_timeout\n' "$phase"
+            fi
+            docker rm -f "$container" >/dev/null 2>&1 || true
+            if [ "$status" != 0 ] || [ "$state" != "false 0 false" ]; then exit 1; fi
+          done
+      # No published ports, workflow artifacts, registry push, deployment, or billing setup.
