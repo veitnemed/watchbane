@@ -82,6 +82,53 @@ class StoryResponse:
     reason: str | None = None
 
 
+_BELIEF_VERBS = {"верит", "верят", "верил", "верила", "верили"}
+_BELIEF_SUBJECTS = {
+    "он", "она", "они", "который", "которая", "которые",
+    "полиция", "полицейский", "полицейские", "детектив", "следователь", "следователи",
+    "герой", "героиня", "герои", "отец", "мать", "семья", "брат", "сестра",
+    "свидетель", "свидетели", "сосед", "соседи", "врач", "врачи",
+}
+_BELIEF_RECIPIENTS = {
+    "ему", "ей", "им", "герою", "героине", "отцу", "матери", "брату", "сестре", "свидетелю",
+}
+
+
+def _narrative_disbelief(query, words, negation):
+    """Accept adjacent third-person disbelief clauses, not bare «не верит»."""
+    subject = negation - 1
+    if subject < 0:
+        return False
+    receiver_before = words[subject] in _BELIEF_RECIPIENTS
+    if receiver_before:
+        subject -= 1
+    if subject < 0 or words[subject] not in _BELIEF_SUBJECTS:
+        return False
+
+    text = query.casefold().replace("ё", "е")
+    spans = tuple(re.finditer(r"[а-яa-z0-9]+", text))
+    verb = negation + 1
+
+    def gap(left):
+        return text[spans[left].end():spans[left + 1].start()].strip(" \t")
+
+    # Only adjacency inside a clause; a prior sentence is not a subject.
+    if any(gap(i) for i in range(subject, verb)):
+        return False
+    if receiver_before:
+        return True
+    if verb + 1 >= len(words):
+        return False
+    tail = words[verb + 1]
+    if tail in _BELIEF_RECIPIENTS:
+        return not gap(verb)
+    if verb + 2 >= len(words):
+        return False
+    if tail == "что":
+        return gap(verb) in ("", ",") and not gap(verb + 1)
+    return tail == "в" and not gap(verb) and not gap(verb + 1)
+
+
 def unsupported_negation(query: str) -> bool:
     words = tokens(query)
     if set(words) & {"без", "кроме", "никаких", "никакого", "никакой", "исключая", "исключить", "нет"}:
@@ -102,6 +149,8 @@ def unsupported_negation(query: str) -> bool:
         # This idiom describes ignorance, not a request to omit a topic.
         # Do not broadly allow «не имеет»: it can introduce a filter.
         if i and words[i - 1] == "понятия" and following in {"имеет", "имела", "имел", "имеют", "имели"}:
+            continue
+        if following in _BELIEF_VERBS and _narrative_disbelief(query, words, i):
             continue
         if following not in plot_verbs:
             return True
