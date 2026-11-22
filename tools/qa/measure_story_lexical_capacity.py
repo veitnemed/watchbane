@@ -17,9 +17,11 @@ _ALPHABET = "абвгдежзиклмнопрстуфхцчшщэюя"
 _STEMS = ("летописец", "проводник", "зодчество", "переводчик", "картограф", "первопроходец")
 
 
-def make_documents(count, density):
-    if type(count) is not int or not 1 <= count <= _ROWS_MAX or density not in ("low", "high"):
-        raise ValueError("expected 1–2000 documents and low/high synthetic density")
+def make_documents(count, density, *, x86_5k_lab=False):
+    allowed = type(count) is int and (1 <= count <= _ROWS_MAX or
+                                      (x86_5k_lab is True and count == 5000 and density == "low"))
+    if not allowed or density not in ("low", "high"):
+        raise ValueError("unsupported synthetic row count or density")
     for row in range(count):
         signature = "".join(_ALPHABET[(row // len(_ALPHABET)**i) % len(_ALPHABET)] for i in (2, 1, 0))
         if density == "low":

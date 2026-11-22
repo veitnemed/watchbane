@@ -27,12 +27,12 @@ _REPEATS = 4
 _QUERIES = ("летописец картограф", "межзвёздный полёт", "меткаааб", "летаписец")
 
 
-def fixture(path, rows, density):
+def fixture(path, rows, density, *, x86_5k_lab=False):
     from tools.qa.measure_story_lexical_capacity import make_documents
     expected = set()
     probes = []
     with path.open("x", encoding="utf-8", newline="\n") as file:
-        for index, doc in enumerate(make_documents(rows, density)):
+        for index, doc in enumerate(make_documents(rows, density, x86_5k_lab=x86_5k_lab)):
             # Shared numeric IDs across adjacent synthetic film/series rows
             # make losing the type observable. The IDs are not looked up.
             identifier = 2147482000 + index // 2
@@ -57,7 +57,8 @@ def ids(result, expected):
     return tuple(keyed)
 
 
-def measure(model_dir, rows, density, mode, *, readiness_timeout=300, cache_dir=None, cache_phase=None, pressure=False):
+def measure(model_dir, rows, density, mode, *, readiness_timeout=300, cache_dir=None, cache_phase=None, pressure=False,
+            launcher=launch, x86_5k_lab=False):
     if mode not in _MODES or not (model_dir / "onnx/model.onnx").is_file():
         # LocalE5 verifies the official pinned files and invokes real ONNX;
         # fail here rather than silently choosing its alternate INT8 variant.
@@ -70,14 +71,14 @@ def measure(model_dir, rows, density, mode, *, readiness_timeout=300, cache_dir=
         raise ValueError("cold capacity probe requires an empty cache directory")
     with tempfile.TemporaryDirectory(prefix="watchbane-capacity-") as work:
         catalog = Path(work) / "synthetic-qa-only.jsonl"
-        expected, queries = fixture(catalog, rows, density)
+        expected, queries = fixture(catalog, rows, density, x86_5k_lab=x86_5k_lab)
         catalog_sha256 = sha256(catalog.read_bytes()).hexdigest()
         warm = []
         bodies = [json.dumps({"query": query, "limit": 5}, ensure_ascii=False).encode("utf-8")
                   for query in queries]
         proof = Path(work) / "startup-cache-proof" if cache_phase == "restart" else None
         started = time.monotonic()
-        with launch(catalog, model_dir, 4, prepared_index=mode == "prepared",
+        with launcher(catalog, model_dir, 4, prepared_index=mode == "prepared",
                     cache_dir=cache_dir, cache_proof=proof) as server:
             wait_health(server, readiness_timeout)
             readiness = time.monotonic() - started
