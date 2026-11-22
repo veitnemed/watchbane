@@ -51,15 +51,18 @@ def request(port, path, body=None):
 
 
 @contextmanager
-def launch(catalog, model, batch_size):
+def launch(catalog, model, batch_size, *, cache_dir=None):
     # The app cannot accept an inherited socket. Check both the child and an
     # application-specific marker; this port allocation is not deploy-grade.
     with socket.socket() as holder:
         holder.bind(("127.0.0.1", 0))
         port = holder.getsockname()[1]
+    args = [sys.executable, "-m", "web.story_api", "--catalog", str(catalog), "--model-dir", str(model),
+            "--port", str(port), "--startup-passage-batch-size", str(batch_size)]
+    if cache_dir is not None:
+        args.extend(("--cache-dir", str(cache_dir)))
     child = subprocess.Popen(
-        [sys.executable, "-m", "web.story_api", "--catalog", str(catalog), "--model-dir", str(model),
-         "--port", str(port), "--startup-passage-batch-size", str(batch_size)],
+        args,
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     try:

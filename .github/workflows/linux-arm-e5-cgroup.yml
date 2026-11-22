@@ -50,7 +50,7 @@ jobs:
         shell: bash
         run: |
           timeout --kill-after=10s 8m python -m tools.qa.diagnose_story_model_download "$RUNNER_TEMP/watchbane-arm-cgroup-model"
-      - name: Verify one synthetic E5 loopback request under exact cgroup limits
+      - name: Verify synthetic E5 cold and cached-restart requests under exact cgroup limits
         shell: bash
         run: |
           scratch="$(mktemp -d "$RUNNER_TEMP/watchbane-cgroup-source.XXXXXX")"
@@ -65,7 +65,7 @@ jobs:
             --tmpfs /tmp:rw,nosuid,nodev,size=64m --env HOME=/tmp \
             --mount "type=bind,src=$scratch,dst=/opt/watchbane-source,readonly" \
             --mount "type=bind,src=$RUNNER_TEMP/watchbane-arm-cgroup-model,dst=/opt/watchbane-model,readonly" \
-            watchbane-arm-cgroup:local python -m tools.qa.smoke_story_arm_cgroup --model-dir /opt/watchbane-model || status=$?
+            watchbane-arm-cgroup:local python -m tools.qa.smoke_story_arm_cgroup --model-dir /opt/watchbane-model --cache-restart || status=$?
           if state="$(docker inspect --format '{{.State.OOMKilled}} {{.State.ExitCode}}' "$container")"; then
             printf 'container_oom_killed_and_exit=%s\n' "$state"
             [ "$state" = "false 0" ] || exit 1

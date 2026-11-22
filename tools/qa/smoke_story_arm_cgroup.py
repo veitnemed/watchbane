@@ -39,7 +39,7 @@ def read_usage(root):
             "oom_group_kill": group_kills, "memory_max_events": events.get("max", 0), "within_limit_without_oom": limits_ok and group_kills == 0}
 
 
-def run(model_dir, *, root=ROOT):
+def run(model_dir, *, root=ROOT, cache_restart=False):
     # Host verification may already warm the kernel page cache. This checks
     # a fresh container/process, not evicted page-cache startup.
     if (platform.system(), platform.machine(), sys.version_info[:3]) != ("Linux", "aarch64", (3, 12, 16)):
@@ -49,7 +49,7 @@ def run(model_dir, *, root=ROOT):
     print(json.dumps({"cgroup_limits": read_limits(root)}), flush=True)
     result = None
     try:
-        result = smoke(model_dir, require_native_arm=True)
+        result = smoke(model_dir, require_native_arm=True, **({"cache_restart": True} if cache_restart else {}))
         print(json.dumps({"synthetic_loopback_probe": result}), flush=True)
     finally:
         usage = read_usage(root)
@@ -62,8 +62,9 @@ def run(model_dir, *, root=ROOT):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model-dir", type=Path, required=True)
+    parser.add_argument("--cache-restart", action="store_true")
     args = parser.parse_args(argv)
-    run(args.model_dir)
+    run(args.model_dir, cache_restart=args.cache_restart)
     return 0
 
 
