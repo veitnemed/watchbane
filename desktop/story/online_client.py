@@ -19,6 +19,7 @@ _RETRY_SECONDS = re.compile(r"[1-9]|[1-5][0-9]|60", re.ASCII)
 _OUTCOME_HEADER = "Watchbane-Search-Outcome"
 _ARTWORK_HEADER = "Watchbane-Search-Artwork"
 _INDEX_HEADER = "Watchbane-Search-Index"
+_LOCALE_HEADER = "Watchbane-Search-Locale"
 _OUTCOME_V1 = frozenset({
     ("candidates", "possible_local_results"),
     ("scope_refusal", "explicit_non_film_request"),
@@ -58,6 +59,8 @@ class OnlineStoryResult:
     overview: str
     evidence: str
     poster_path: str | None = None
+    # Declared synopsis locale, not proof of the title's language.
+    synopsis_locale: str = "ru-RU"
 
 
 @dataclass(frozen=True)
@@ -98,7 +101,7 @@ def _matches_error(raw, detail):
         return False
 
 
-def _parse(raw, limit, *, with_outcome=False, with_artwork=False, with_index=False):
+def _parse(raw, limit, *, with_outcome=False, with_artwork=False, with_index=False, with_locale=False):
     try:
         value = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object)
         keys = {"source", "results", "outcome"} if with_outcome else {"source", "results"}
@@ -110,8 +113,9 @@ def _parse(raw, limit, *, with_outcome=False, with_artwork=False, with_index=Fal
                 or type(value["results"]) is not list or len(value["results"]) > limit):
             raise ValueError
         results, seen = [], set()
+        synopsis_locales = ("ru-RU", "en-US") if with_locale else ("ru-RU",)
         for row in value["results"]:
-            if type(row) is not dict or set(row) != _RESULT_KEYS or row["language"] != "ru-RU":
+            if type(row) is not dict or set(row) != _RESULT_KEYS or row["language"] not in synopsis_locales:
                 raise ValueError
             identifier = row["id"]
             match = _ID.fullmatch(identifier) if type(identifier) is str else None
@@ -127,7 +131,8 @@ def _parse(raw, limit, *, with_outcome=False, with_artwork=False, with_index=Fal
                     raise ValueError
                 field.encode("utf-8")
             results.append(OnlineStoryResult(identifier, row["media_type"], row["title"],
-                                             year, row["overview"], row["evidence"]))
+                                             year, row["overview"], row["evidence"],
+                                             synopsis_locale=row["language"]))
             seen.add(identifier)
         if with_artwork:
             artwork = value["artwork"]
@@ -170,6 +175,7 @@ def search_online(
     with_outcome: bool = False,
     with_artwork: bool = False,
     with_index: bool = False,
+    with_locale: bool = False,
 ) -> tuple[OnlineStoryResult, ...] | OnlineStoryOutcome | OnlineStoryIndexedResult:
     """Send only query/limit to IPv4 loopback; never discover a server or fall back.
 
@@ -180,12 +186,15 @@ def search_online(
     Opt-in artwork also requires an exact echo; it returns opaque provider
     names only, with no image rendering, resolution, or extra I/O. Index
     counts likewise require an exact negotiated echo on this same response.
+    Locale v1 admits declared English synopsis rows only after its exact echo;
+    otherwise the legacy contract accepts Russian rows only.
     """
     if consent is not True:
         raise OnlineStoryError("Local server search was not authorized.")
     if (type(port) is not int or not 1 <= port <= 65535 or type(limit) is not int or not 1 <= limit <= 10
             or type(query) is not str or len(query) > 600 or not query.strip()
-            or type(with_outcome) is not bool or type(with_artwork) is not bool or type(with_index) is not bool):
+            or type(with_outcome) is not bool or type(with_artwork) is not bool or type(with_index) is not bool
+            or type(with_locale) is not bool):
         raise OnlineStoryError("Invalid local story search request.")
     try:
         body = json.dumps({"query": query.strip(), "limit": limit}, ensure_ascii=False).encode("utf-8")
@@ -231,6 +240,8 @@ def search_online(
             headers[_ARTWORK_HEADER] = "1"
         if with_index:
             headers[_INDEX_HEADER] = "1"
+        if with_locale:
+            headers[_LOCALE_HEADER] = "1"
         connection.request("POST", _PATH, body, headers)
         check_active()
         with connection.getresponse() as response:
@@ -257,6 +268,8 @@ def search_online(
             if not server_error and with_artwork and response.getheader(_ARTWORK_HEADER) != "1":
                 raise invalid()
             if not server_error and with_index and response.getheader(_INDEX_HEADER) != "1":
+                raise invalid()
+            if not server_error and with_locale and response.getheader(_LOCALE_HEADER) != "1":
                 raise invalid()
             content_type = response.getheader("Content-Type", "").split(";", 1)[0].strip().lower()
             encoding = response.getheader("Content-Encoding", "identity").strip().lower()
@@ -294,6 +307,8 @@ def search_online(
             parser_options["with_artwork"] = True
         if with_index:
             parser_options["with_index"] = True
+        if with_locale:
+            parser_options["with_locale"] = True
         results = _parse(raw, limit, **parser_options)
         check_active()  # A superseded request cannot hand stale results back.
         return results

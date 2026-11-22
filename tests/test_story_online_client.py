@@ -319,3 +319,111 @@ def test_cancellation_while_reading_429_suppresses_typed_cooldown(transport):
     with pytest.raises(online.OnlineStoryError, match="cancelled") as captured:
         online.search_online("private-query", consent=True, cancelled=cancelled)
     assert type(captured.value) is online.OnlineStoryError
+
+
+@pytest.fixture
+def tcp_locale_exchange():
+    from contextlib import ExitStack
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from threading import Thread
+
+    configuration = {"body": payload(hit()), "headers": (), "status": 200}
+    calls = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_POST(self):
+            raw = self.rfile.read(int(self.headers["Content-Length"]))
+            calls.append((self.path, raw, dict(self.headers)))
+            self.send_response(configuration["status"])
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(configuration["body"])))
+            for name, value in configuration["headers"]:
+                self.send_header(name, value)
+            self.end_headers()
+            self.wfile.write(configuration["body"])
+
+    with ExitStack() as stack:
+        server = stack.enter_context(HTTPServer(("127.0.0.1", 0), Handler))
+        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": .01}, daemon=True)
+        thread.start()
+        stack.callback(thread.join, 2)
+        stack.callback(server.shutdown)
+        yield server.server_port, configuration, calls
+
+
+def test_locale_opt_in_over_tcp_carries_synopsis_locale_with_existing_negotiated_features(tcp_locale_exchange):
+    port, config, calls = tcp_locale_exchange
+    options = {
+        "Watchbane-Search-Locale": "1", "Watchbane-Search-Outcome": "1",
+        "Watchbane-Search-Artwork": "1", "Watchbane-Search-Index": "1",
+    }
+    config["headers"] = list(options.items())
+    english = hit("tv", language="en-US", overview="The pilot comes home.", evidence="comes home")
+    config["body"] = json.dumps({
+        "source": "tmdb", "results": [hit(), english],
+        "outcome": {"state": "candidates", "reason": "possible_local_results"},
+        "artwork": {"tmdb:tv:27": "/opaque_tv.jpg"}, "index": {"total": 2, "movies": 1, "tv": 1},
+    }, ensure_ascii=False).encode()
+
+    res = online.search_online(" пилот ", consent=True, port=port, limit=2, with_locale=True,
+                               with_outcome=True, with_artwork=True, with_index=True)
+    (path, raw, headers), = calls
+    assert path == "/v1/search" and raw == '{"query": "пилот", "limit": 2}'.encode()
+    assert {k: v for k, v in headers.items() if k.startswith("Watchbane-")} == options
+    assert res.index == online.OnlineStoryIndex(2, 1, 1)
+    assert res.result.state == "candidates"
+    russian, english = res.result.results
+    assert russian.synopsis_locale == "ru-RU" and russian.poster_path is None
+    assert english.title == "Пилот"  # Synopsis locale does not imply title locale.
+    assert english.synopsis_locale == "en-US" and english.poster_path == "/opaque_tv.jpg"
+
+
+@pytest.mark.parametrize(("opt_in", "echoes", "locale"), [
+    (False, (), "en-US"), (False, ("1",), "en-US"),
+    (True, (), "en-US"), (True, (), "ru-RU"), (True, ("2",), "en-US"),
+    (True, ("1", "1"), "en-US"), (True, ("1, 1",), "en-US"),
+    (True, ("1",), "en"), (True, ("1",), "en-us"), (True, ("1",), "en-GB"),
+    (True, ("1",), "fr-FR"), (True, ("1",), None), (True, ("1",), ["en-US"]),
+])
+def test_locale_refuses_unnegotiated_duplicate_or_invalid_locale_without_retry_over_tcp(
+    tcp_locale_exchange, opt_in, echoes, locale,
+):
+    port, config, calls = tcp_locale_exchange
+    config["headers"] = [("Watchbane-Search-Locale", value) for value in echoes]
+    config["body"] = payload(hit(language=locale))
+    with pytest.raises(online.OnlineStoryError, match="Invalid response"):
+        online.search_online("пилот", consent=True, port=port, with_locale=opt_in)
+    (_, _, headers), = calls
+    assert headers.get("Watchbane-Search-Locale") == ("1" if opt_in else None)
+
+
+def test_locale_keeps_legacy_consent_and_positional_result_compatible_over_tcp(tcp_locale_exchange):
+    port, _, calls = tcp_locale_exchange
+    with pytest.raises(online.OnlineStoryError, match="not authorized"):
+        online.search_online("secret", consent=False, with_locale=True, port=port)
+    with pytest.raises(online.OnlineStoryError, match="Invalid local story search request"):
+        online.search_online("secret", consent=True, with_locale=1, port=port)
+    assert not calls
+    result = online.search_online("пилот", consent=True, port=port)
+    (_, raw, headers), = calls
+    assert "Watchbane-Search-Locale" not in headers
+    assert raw == '{"query": "пилот", "limit": 5}'.encode()
+    assert result == (online.OnlineStoryResult("tmdb:movie:27", "movie", "Пилот", 2001,
+                                             "Пилот возвращается домой.", "возвращается домой", None),)
+    assert online.OnlineStoryResult("tmdb:movie:27", "movie", "Пилот", 2001, "", "",
+                                    "/legacy.jpg").poster_path == "/legacy.jpg"
+
+
+@pytest.mark.parametrize("code", [429, 503])
+def test_locale_does_not_change_busy_or_rate_limited_error_contract(tcp_locale_exchange, code):
+    port, config, calls = tcp_locale_exchange
+    config["status"] = code
+    config["headers"] = [("Cache-Control", "no-store"), ("Retry-After", "3")]
+    config["body"] = b'{"detail":"search_rate_limited"}' if code == 429 else b'{"detail":"search_busy"}'
+    exception = online.OnlineStoryRateLimited if code == 429 else online.OnlineStoryBusy
+    with pytest.raises(exception):
+        online.search_online("пилот", consent=True, port=port, with_locale=True)
+    assert len(calls) == 1
