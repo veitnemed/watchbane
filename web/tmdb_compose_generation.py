@@ -1,6 +1,6 @@
 """Compose a private reviewed seed generation without replacing an active one."""
 from collections.abc import Mapping
-from contextlib import closing
+from contextlib import closing, nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
@@ -81,33 +81,44 @@ def compose_reviewed_generation(
             "language": change.language, "year": change.year,
             **({"poster_path": old["poster_path"]} if old and "poster_path" in old else {}),
         }
-    if len(rows) > MAX_ROWS:
-        raise ValueError("Seed exceeds reader size limits")
+    digest_out = _write_detached_seed(output, rows)
+    return ComposedGeneration(digest, digest_out, len(rows), replaced, len(changes) - replaced, reviews)
 
+
+def _write_detached_seed(output, rows):
+    return _write_detached_lines(output, (
+        (json.dumps(row, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+        for row in rows.values()
+    ))
+
+
+def _write_detached_lines(output, lines, *, publication_guard=nullcontext):
     written = 0
+    line_no = 0
     new_digest = sha256()
     temporary = None
     try:
         with NamedTemporaryFile(dir=output.parent, prefix=".tmdb-generation-", delete=False) as stream:
             temporary = Path(stream.name)
-            for key in rows:
-                line = (json.dumps(rows[key], ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-                        + "\n").encode("utf-8")
+            for line_no, line in enumerate(lines, 1):
                 written += len(line)
-                if len(line) > MAX_LINE_BYTES or written > MAX_FILE_BYTES:
+                if len(line) > MAX_LINE_BYTES or written > MAX_FILE_BYTES or line_no > MAX_ROWS:
                     raise ValueError("Seed exceeds reader size limits")
                 stream.write(line)
                 new_digest.update(line)
+            if not line_no:
+                raise ValueError("Cannot seal an empty seed")
             stream.flush()
             os.fsync(stream.fileno())
         # Same-directory hard link is atomic and fails if a competitor creates
         # the destination first. Never fall back to copying or overwriting.
-        os.link(temporary, output)
+        with publication_guard():
+            os.link(temporary, output)
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
 
-    return ComposedGeneration(digest, new_digest.hexdigest(), len(rows), replaced, len(changes) - replaced, reviews)
+    return new_digest.hexdigest()
 
 
 
