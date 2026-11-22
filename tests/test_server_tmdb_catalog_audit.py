@@ -95,3 +95,86 @@ def test_rejects_checkpoint_with_inconsistent_typed_row(checkpoint):
                      (json.dumps({**json.loads(current), "media_type": "movie"}),))
     with pytest.raises(ValueError, match="Invalid hydration description"):
         audit_hydration(plan=plan, checkpoint=db)
+
+
+def test_private_tv_origin_and_observed_language_are_independent(tmp_path):
+    from web.tmdb_seed_export import export_reviewed_seed
+
+    movie = tmp_path / "movie_ids_01_02_2026.json.gz"
+    tv = tmp_path / "tv_series_ids_01_02_2026.json.gz"
+    for path, ids in ((movie, [1]), (tv, [1, 2, 3, 4, 5])):
+        path.write_bytes(gzip.compress(b"".join(
+            json.dumps({"id": i, "adult": False}).encode() + b"\n" for i in ids
+        )))
+    plan = plan_daily_ids(export_date=date(2026, 1, 2), movie_file=movie, tv_file=tv, per_media_limit=5)
+    db = tmp_path / "origins.sqlite"
+    english = "Independently reviewed English synopsis."
+    russian = "Независимо проверенное русское описание."
+    # Coproduction (1), non-RU translated (2), RU with EN fallback (3),
+    # absent despite Russian original_language (4), conflicting locale sets (5).
+    countries = {1: ["RU", "FR", "RU"], 2: ["JP"], 3: ["RU"], 5: ["RU"]}
+
+    def opener(request, *, timeout):
+        url = urlsplit(request.full_url)
+        locale = parse_qs(url.query)["language"][0]
+        identifier = int(url.path.rsplit("/", 1)[1])
+        is_movie = "/movie/" in url.path
+        data = {"id": identifier, "adult": False, "title" if is_movie else "name": "Synthetic",
+                "overview": russian, "original_language": "ru"}
+        if is_movie:
+            data["production_countries"] = [{"iso_3166_1": "RU"}]
+            data["origin_country"] = ["RU"]  # not trusted as TV evidence
+        else:
+            if identifier in countries:
+                data["origin_country"] = countries[identifier]
+            if identifier in (3, 5):
+                data["overview"] = "" if locale == "ru-RU" else english
+                if locale == "en-US":
+                    if identifier == 5:
+                        data["origin_country"] = ["DE"]
+                    else:
+                        del data["origin_country"]  # earlier typed snapshot remains usable evidence
+        return io.BytesIO(json.dumps(data).encode())
+
+    result = hydrate_id_plan(plan=plan, checkpoint=db, transport=DetachedTmdbTransport(
+        10, bearer=lambda: "fictional-test-marker", opener=opener,
+    ))
+    assert result.complete and result.hydrated == 6 and result.attempts_this_run == 8
+    review = {
+        f"tmdb:{kind}:{identifier}": ReviewedLanguage(sha256(text.encode()).hexdigest(), lang)
+        for kind, identifier, text, lang in (
+            ("tv", 1, russian, "ru"), ("tv", 2, russian, "ru"), ("tv", 3, english, "en"),
+            ("tv", 4, russian, "ru"), ("tv", 5, english, "en"), ("movie", 1, russian, "ru"),
+        )
+    }
+    plain = audit_hydration(plan=plan, checkpoint=db)
+    assert plain["by_media"]["tv"]["observed_language_by_recorded_origin"]["ru_only"]["unverified"] == 1
+    groups = audit_hydration(plan=plan, checkpoint=db, observed=review)["by_media"]
+    cross = groups["tv"]["observed_language_by_recorded_origin"]
+    assert {origin: {lang: count for lang, count in langs.items() if count} for origin, langs in cross.items()} == {
+        "ru_only": {"en": 1}, "ru_coproduction": {"ru": 1},
+        "other_recorded": {"ru": 1}, "unknown": {"ru": 1, "en": 1},
+    }
+    assert groups["movie"]["observed_language_by_recorded_origin"]["unknown"]["ru"] == 1
+    with closing(sqlite3.connect(db)) as conn:
+        typed = {key: json.loads(payload) for key, payload in conn.execute(
+            "SELECT tmdb_id, payload FROM hydration_items WHERE media='tv'"
+        )}
+        assert typed[1]["origin_country_codes"] == ["FR", "RU"]
+        assert "origin_country_codes" not in typed[5]
+
+    def export(name):
+        path = tmp_path / name
+        export_reviewed_seed(plan=plan, checkpoint=db, output=path, reviewed=review, use_cleared=True)
+        return path.read_bytes()
+
+    before = export("recorded.jsonl")
+    with closing(sqlite3.connect(db)) as conn, conn:
+        for key in (1, 2, 3):
+            typed[key].pop("origin_country_codes")
+            conn.execute("UPDATE hydration_items SET payload=? WHERE media='tv' AND tmdb_id=?",
+                         (json.dumps(typed[key]), key))
+    assert export("legacy.jsonl") == before
+    assert b"origin_country" not in before
+    legacy = audit_hydration(plan=plan, checkpoint=db, observed=review)["by_media"]["tv"]
+    assert legacy["observed_language_by_recorded_origin"]["unknown"] == legacy["observed_language"]

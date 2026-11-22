@@ -3,6 +3,7 @@ from contextlib import closing
 from dataclasses import dataclass
 from datetime import date
 import json
+import re
 from pathlib import Path
 import sqlite3
 
@@ -32,7 +33,19 @@ def _detail(transport, item, locale):
     return row, row[title_key].strip()
 
 
+_COUNTRY_CODE = re.compile(r"[A-Z]{2}", flags=re.ASCII)
+
+
+def normalize_country_codes(codes):
+    """Recognize a bounded, wholly shaped country-code list, not a locale."""
+    if (not isinstance(codes, list) or not 1 <= len(codes) <= 256
+            or any(not isinstance(code, str) or not _COUNTRY_CODE.fullmatch(code) for code in codes)):
+        return ()
+    return tuple(sorted(set(codes)))
+
+
 def _fetch(transport, item):
+    origin_sets = set()
     for locale in ("ru-RU", "en-US"):
         try:
             row, title = _detail(transport, item, locale)
@@ -44,6 +57,8 @@ def _fetch(transport, item):
             raise
         if row.get("adult") is not False:
             return "ineligible", None
+        if item.media_type == "tv" and (codes := normalize_country_codes(row.get("origin_country"))):
+            origin_sets.add(codes)
         overview = row.get("overview")
         if overview is None or (isinstance(overview, str) and not overview.strip()):
             continue
@@ -57,6 +72,8 @@ def _fetch(transport, item):
         return "hydrated", json.dumps({
             "media_type": item.media_type, "tmdb_id": item.tmdb_id,
             "title": title, "overview": overview.strip(), "year": year,
+            # Keep disagreement between locales unknown rather than merging.
+            **({"origin_country_codes": next(iter(origin_sets))} if len(origin_sets) == 1 else {}),
             "requested_locale": locale,  # not proof of synopsis language
         }, ensure_ascii=False, sort_keys=True)
     return "missing_overview", None

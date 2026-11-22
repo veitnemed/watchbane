@@ -9,7 +9,7 @@ from pathlib import Path
 import sqlite3
 
 from web.tmdb_ids import IdPlan
-from web.tmdb_hydration import HYDRATION_STATES
+from web.tmdb_hydration import HYDRATION_STATES, normalize_country_codes
 
 
 @dataclass(frozen=True)
@@ -25,11 +25,28 @@ class ReviewedLanguage:
     language: str  # ru / en / other
 
 
+_ORIGINS = ("ru_only", "ru_coproduction", "other_recorded", "unknown")
+_LANGUAGES = ("ru", "en", "other", "unverified")
+
+
+def _origin_bucket(row):
+    codes = normalize_country_codes(row.get("origin_country_codes"))
+    if not codes:
+        return "unknown"
+    if codes == ("RU",):
+        return "ru_only"
+    return "ru_coproduction" if "RU" in codes else "other_recorded"
+
+
 def audit_hydration(
     *, plan: IdPlan, checkpoint: Path,
     observed: Mapping[str, ReviewedLanguage] | None = None,
 ) -> dict:
-    """Do not export titles, IDs, digests, or descriptions; report counts only."""
+    """Report counts only. Origin/language cross-tab covers hydrated descriptions.
+
+    Origin reflects only the recorded TMDb TV origin field, not legal
+    nationality. Older rows and movies remain unknown.
+    """
     planned = {i.key: i.media_type for i in plan.queue}
     if len(planned) != len(plan.queue) or any(k not in ("movie", "tv") for k in planned.values()):
         raise ValueError("Invalid typed ID plan")
@@ -43,7 +60,10 @@ def audit_hydration(
             "planned": sum(kind == media for kind in planned.values()),
             "pending": 0, **dict.fromkeys(HYDRATION_STATES, 0),
             "requested_locale": {"ru-RU": 0, "en-US": 0},
-            "observed_language": {"ru": 0, "en": 0, "other": 0, "unverified": 0},
+            "observed_language": dict.fromkeys(_LANGUAGES, 0),
+            "observed_language_by_recorded_origin": {
+                origin: dict.fromkeys(_LANGUAGES, 0) for origin in _ORIGINS
+            },
         }
     manifest = json.dumps(plan.manifest(), sort_keys=True, separators=(",", ":"))
     seen = set()
@@ -85,6 +105,7 @@ def audit_hydration(
                     raise ValueError("Language review does not match the stored description")
                 language = evidence.language
             bucket["observed_language"][language] += 1
+            bucket["observed_language_by_recorded_origin"][_origin_bucket(row) if media == "tv" else "unknown"][language] += 1
     if not observations.keys() <= seen:
         raise ValueError("Language review requires a hydrated description")
 
