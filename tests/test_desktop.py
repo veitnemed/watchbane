@@ -4182,7 +4182,68 @@ def test_candidate_detail_action_click_handlers_still_work(qapp) -> None:
     assert CANDIDATE_DETAIL_CARD_PROFILE.show_hide_candidate_button is False
 
 
-def test_build_score_count_html_smoke() -> None:
+@pytest.fixture
+def optional_plotly_renderer() -> None:
+    from importlib.util import find_spec
+
+    # The ordinary workflow does not install requirements-experiments.txt.
+    # Only a missing top-level package may skip direct rendering tests.
+    # A discoverable but broken package, submodule, or renderer must fail.
+    if find_spec("plotly") is None:
+        pytest.skip("Interactive chart renderer requires optional Plotly (requirements-experiments.txt)")
+
+
+@pytest.mark.parametrize("unavailable", ["plotly", "PyQt6.QtWebEngineWidgets"])
+def test_analytics_renders_qt_bars_without_optional_interactive_chart_stack(qtbot, monkeypatch, unavailable):
+    import builtins
+    import sys
+    from types import ModuleType
+
+    from PyQt6.QtWidgets import QFrame, QLabel, QWidget
+    from desktop.analytics import view as analytics
+
+    webengine = "PyQt6.QtWebEngineWidgets"
+    imports = []
+    real_import = builtins.__import__
+
+    def optional_import(name, *args, **kwargs):
+        if name == webengine or name.partition(".")[0] == "plotly":
+            imports.append(name)
+            if name == unavailable or name.partition(".")[0] == unavailable:
+                raise ModuleNotFoundError("Missing optional fixture: " + unavailable, name=unavailable)
+        return real_import(name, *args, **kwargs)
+
+    if unavailable == "plotly":
+        # Let the WebEngine import boundary succeed without needing it
+        # installed. Plotly failure must occur before any WebEngine view.
+        permitted_import = ModuleType(webengine)
+        permitted_import.QWebEngineView = lambda: pytest.fail("Created WebEngine view without working Plotly")
+        monkeypatch.setitem(sys.modules, webengine, permitted_import)
+    monkeypatch.setattr(builtins, "__import__", optional_import)
+    monkeypatch.setattr(analytics, "get_pool_view", lambda: [])
+    monkeypatch.setattr(analytics, "get_pool_genre_count_rows", lambda: [
+        {"label": "Fixture genre A", "count": 3}, {"label": "Fixture genre B", "count": 1},
+    ])
+
+    page = analytics.AnalyticsView(_make_entries())
+    qtbot.addWidget(page.widget)
+    page.widget.show()
+    layout = page._pool_genre_count_layout
+    assert layout.count() == 3
+    message, *bars = [layout.itemAt(index).widget() for index in range(layout.count())]
+    assert message.objectName() == "analyticsFallback"
+    assert unavailable in message.text()
+    assert all(row.objectName() == "analyticsBarRow" and row.isVisible() for row in bars)
+    assert [row.findChild(QLabel, "barLabel").text() for row in bars] == ["Fixture genre A", "Fixture genre B"]
+    assert [row.findChild(QLabel, "barCount").text() for row in bars] == ["3 · 75.0%", "1 · 25.0%"]
+    assert bars[0].findChild(QFrame, "barFill").width() > bars[1].findChild(QFrame, "barFill").width() > 0
+    assert page.widget.findChild(QWidget, analytics.ANALYTICS_PLOTLY_OBJECT_NAME) is None
+    assert not page._plotly_html_paths
+    plotly_imports = [name for name in imports if name.partition(".")[0] == "plotly"]
+    assert bool(plotly_imports) is (unavailable == "plotly")
+
+
+def test_build_score_count_html_smoke(optional_plotly_renderer) -> None:
     from desktop.analytics.charts import build_score_count_html
 
     html = build_score_count_html(
@@ -4199,7 +4260,7 @@ def test_build_score_count_html_smoke() -> None:
     assert "plotly" in html.lower()
 
 
-def test_build_score_distribution_html_smoke() -> None:
+def test_build_score_distribution_html_smoke(optional_plotly_renderer) -> None:
     from desktop.analytics.charts import build_score_distribution_html
 
     html = build_score_distribution_html(
@@ -4218,7 +4279,7 @@ def test_build_score_distribution_html_smoke() -> None:
     assert "7.0-7.9" in html
 
 
-def test_build_genre_count_html_smoke() -> None:
+def test_build_genre_count_html_smoke(optional_plotly_renderer) -> None:
     from desktop.analytics.charts import build_genre_count_html
 
     html = build_genre_count_html(
@@ -4229,7 +4290,7 @@ def test_build_genre_count_html_smoke() -> None:
     assert "bar" in html.lower()
 
 
-def test_build_year_average_html_smoke() -> None:
+def test_build_year_average_html_smoke(optional_plotly_renderer) -> None:
     from desktop.analytics.charts import build_year_average_html
 
     html = build_year_average_html(
@@ -4313,7 +4374,7 @@ def test_analytics_hides_dataset_completeness_block() -> None:
     assert "_fill_completeness" not in source
 
 
-def test_score_count_chart_height_matches_plotly_constant() -> None:
+def test_score_count_chart_height_matches_plotly_constant(optional_plotly_renderer) -> None:
     from desktop.analytics.charts import CHART_BASE_HEIGHT, SCORE_CHART_HEIGHT, build_score_count_figure
 
     figure = build_score_count_figure([{"score": 8.5, "count": 2, "example_titles": ["A"], "extra_count": 0}])
