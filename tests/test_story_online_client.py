@@ -237,3 +237,26 @@ def test_real_http_roundtrip_over_ipv4_loopback():
         finally:
             server.shutdown()
             worker.join()
+
+
+@pytest.mark.parametrize(("status", "body", "headers", "busy"), [
+    (503, b'{"detail":"search_busy"}', {}, True),
+    (503, b'{"detail":"search_busy"}', {"Content-Length": "24"}, True),
+    (502, b'{"detail":"search_busy"}', {}, False),
+    (503, b'{"detail":"search_unavailable"}', {}, False),
+    (503, b'{"detail":"search_busy","detail":"search_busy"}', {}, False),
+    (503, b'{"detail":"search_busy","private":"not-an-error-field"}', {}, False),
+    (503, b'{"detail":"search_busy"}' + b" " * 256, {}, False),
+    (503, b'{"detail":"search_busy"}', {"Content-Type": "text/plain"}, False),
+    (503, b'{"detail":"search_busy"}', {"Content-Encoding": "gzip"}, False),
+    (503, b'{"detail":"search_busy"}', {"Content-Length": "25"}, False),
+    (503, b'{"detail":"search_busy"}', {"Content-Length": "257"}, False),
+])
+def test_only_bounded_exact_search_busy_503_has_typed_error(transport, status, body, headers, busy):
+    connection, calls, _ = transport
+    connection.reply = Response(body, status=status, **headers)
+    with pytest.raises(online.OnlineStoryError) as captured:
+        online.search_online("never echo", consent=True, with_outcome=True)
+    assert isinstance(captured.value, online.OnlineStoryBusy) is busy
+    assert "private" not in str(captured.value) and "never echo" not in str(captured.value)
+    assert [call[0] for call in calls] == ["create", "connect", "POST", "close"]

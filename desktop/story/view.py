@@ -94,16 +94,21 @@ class OnlineStoryWorker(QThread):
         self.with_outcome = with_outcome
         self.cancelled = Event()
         self.results = None
+        self.busy = False
 
     def cancel(self):
         self.cancelled.set()
 
     def run(self):
         try:
-            from desktop.story.online_client import search_online
+            from desktop.story.online_client import OnlineStoryBusy, search_online
 
             options = {"with_outcome": True} if self.with_outcome else {}
-            self.results = search_online(self.query, consent=True, port=self.port, cancelled=self.cancelled, **options)
+            try:
+                self.results = search_online(self.query, consent=True, port=self.port,
+                                             cancelled=self.cancelled, **options)
+            except OnlineStoryBusy:
+                self.busy = True
         except Exception:
             pass  # No private request, response, or transport detail in the UI.
 
@@ -887,6 +892,10 @@ class StorySearchView:
         self.online_cancel.hide()
         self._sync_online_button()
         if self._closing or worker.cancelled.is_set() or self.query.text().strip() != worker.query:
+            return
+        if worker.busy:
+            self.status.setText("Тестовый сервер занят другим запросом. Ваш запрос остался в поле. "
+                                "Чтобы повторить, снова нажмите «Поиск на тестовом сервере…».")
             return
         if worker.results is None:
             self.status.setText("Тестовый сервер не ответил или вернул ошибку. "

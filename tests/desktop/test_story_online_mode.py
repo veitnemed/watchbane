@@ -245,3 +245,101 @@ def test_empty_local_catalog_copy_and_real_default_deny(qtbot, monkeypatch, dism
     qtbot.mouseClick(view.online_button, LEFT)
     assert inspected == [("Отправить запрос", "Не отправлять", "Не отправлять")]
     assert not sent and view.query.text() == "черновик" and view._online_worker is None
+
+
+@pytest.mark.parametrize("real_http", [False, True], ids=["worker-only", "loopback-http"])
+def test_busy_is_editable_and_retries_only_with_a_second_consent(qtbot, monkeypatch, real_http):
+    from contextlib import ExitStack
+    import json
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from threading import Thread
+
+    requests = []
+    prompts = []
+    decisions = iter((QMessageBox.StandardButton.Yes, QMessageBox.StandardButton.No,
+                      QMessageBox.StandardButton.Yes))
+
+    def confirm(_dialog):
+        prompts.append("shown")
+        return next(decisions)
+
+    monkeypatch.delenv(story._ONLINE_OUTCOME_ENV, raising=False)
+    monkeypatch.setattr(QMessageBox, "exec", confirm)
+
+    with ExitStack() as stack:
+        if real_http:
+            class Handler(BaseHTTPRequestHandler):
+                def log_message(self, *_args):
+                    pass
+
+                def do_POST(self):
+                    requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"])))["query"])
+                    busy = len(requests) == 1
+                    data = b'{"detail":"search_busy"}' if busy else json.dumps({"source": "tmdb", "results": [{
+                        "id": "tmdb:tv:42", "media_type": "tv", "title": "Fixture", "year": 2020,
+                        "overview": "A test plot", "evidence": "", "language": "ru-RU",
+                    }]}).encode()
+                    self.send_response(503 if busy else 200)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+
+            try:
+                server = stack.enter_context(HTTPServer(("127.0.0.1", 0), Handler))
+            except PermissionError:
+                pytest.skip("Loopback bind not permitted")
+            thread = Thread(target=server.serve_forever, kwargs={"poll_interval": .02}, daemon=True)
+            thread.start()
+            stack.callback(thread.join, 2)
+            stack.callback(server.shutdown)
+            port = server.server_port
+        else:
+            def request(query, **_):
+                requests.append(query)
+                if len(requests) == 1:
+                    raise online_client.OnlineStoryBusy("fixed")
+                return (online_client.OnlineStoryResult("tmdb:tv:42", "tv", "Fixture", 2020, "A test plot", ""),)
+
+            monkeypatch.setattr(online_client, "search_online", request)
+            port = 8765
+
+        monkeypatch.setenv(story._ONLINE_PORT_ENV, str(port))
+        view = make_view(qtbot)
+        view.query.setText("первый сюжет")
+        qtbot.mouseClick(view.online_button, LEFT)
+        qtbot.waitUntil(lambda: view._online_worker is None)
+        assert "занят другим запросом" in view.status.text()
+        assert view.query.text() == "первый сюжет" and view.online_button.isEnabled()
+        assert view.query.isEnabled() and view.cards_layout.count() == 1
+        view.on_tab_activated()
+        view.query.setText("отредактированный сюжет")
+        qtbot.wait(30)
+        assert requests == ["первый сюжет"] and len(prompts) == 1
+        qtbot.mouseClick(view.online_button, LEFT)  # Explicit decline: still no POST.
+        assert requests == ["первый сюжет"] and len(prompts) == 2
+        qtbot.mouseClick(view.online_button, LEFT)
+        qtbot.waitUntil(lambda: view._online_worker is None)
+        assert requests == ["первый сюжет", "отредактированный сюжет"] and len(prompts) == 3
+        assert "тестового сервера: 1" in view.status.text()
+
+
+def test_late_busy_cannot_overwrite_cancel_on_edit(qtbot, monkeypatch):
+    monkeypatch.setenv(story._ONLINE_PORT_ENV, "8765")
+    monkeypatch.delenv(story._ONLINE_OUTCOME_ENV, raising=False)
+    monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
+    entered = Event()
+
+    def request(query, *, cancelled, **_):
+        entered.set()
+        assert cancelled.wait(2)
+        raise online_client.OnlineStoryBusy("late")
+    monkeypatch.setattr(online_client, "search_online", request)
+    view = make_view(qtbot)
+    view.query.setText("исходный запрос")
+    qtbot.mouseClick(view.online_button, LEFT)
+    qtbot.waitUntil(entered.is_set)
+    view.query.setText("новый запрос")
+    qtbot.waitUntil(lambda: view._online_worker is None)
+    assert "отменён" in view.status.text() and "занят" not in view.status.text()
+    assert view.query.text() == "новый запрос"

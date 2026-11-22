@@ -11,6 +11,7 @@ _HOST = "127.0.0.1"
 _PATH = "/v1/search"
 _TIMEOUT = 8.0
 _MAX_BYTES = 512 * 1024
+_MAX_BUSY_BYTES = 256
 _OUTCOME_HEADER = "Watchbane-Search-Outcome"
 _OUTCOME_V1 = frozenset({
     ("candidates", "possible_local_results"),
@@ -26,6 +27,10 @@ _ID = re.compile(r"tmdb:(movie|tv):([1-9][0-9]{0,18})", re.ASCII)
 
 class OnlineStoryError(RuntimeError):
     """Fixed, display-safe error; never includes the request or response body."""
+
+
+class OnlineStoryBusy(OnlineStoryError):
+    """The loopback server is handling another search; never retried automatically."""
 
 
 @dataclass(frozen=True)
@@ -49,15 +54,23 @@ def _invalid_response():
     return OnlineStoryError("Invalid response from the local story server.")
 
 
-def _parse(raw, limit, *, with_outcome=False):
-    def unique(pairs):
-        result = dict(pairs)
-        if len(result) != len(pairs):
-            raise ValueError
-        return result
+def _unique_object(pairs):
+    result = dict(pairs)
+    if len(result) != len(pairs):
+        raise ValueError
+    return result
 
+
+def _is_busy(raw):
     try:
-        value = json.loads(raw.decode("utf-8"), object_pairs_hook=unique)
+        return json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object) == {"detail": "search_busy"}
+    except (ValueError, RecursionError):
+        return False
+
+
+def _parse(raw, limit, *, with_outcome=False):
+    try:
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object)
         keys = {"source", "results", "outcome"} if with_outcome else {"source", "results"}
         if (type(value) is not dict or set(value) != keys or value["source"] != "tmdb"
                 or type(value["results"]) is not list or len(value["results"]) > limit):
@@ -163,30 +176,44 @@ def search_online(
         check_active()
         with connection.getresponse() as response:
             check_active()
-            if response.status != 200:
+            busy_candidate = response.status == 503
+            if response.status != 200 and not busy_candidate:
                 raise OnlineStoryError("Local story server is unavailable.")
-            if with_outcome and response.getheader(_OUTCOME_HEADER) != "1":
-                raise _invalid_response()
+
+            def invalid():
+                if busy_candidate:
+                    return OnlineStoryError("Local story server is unavailable.")
+                return _invalid_response()
+
+            maximum = _MAX_BUSY_BYTES if busy_candidate else _MAX_BYTES
+            if not busy_candidate and with_outcome and response.getheader(_OUTCOME_HEADER) != "1":
+                raise invalid()
             content_type = response.getheader("Content-Type", "").split(";", 1)[0].strip().lower()
             encoding = response.getheader("Content-Encoding", "identity").strip().lower()
             size = response.getheader("Content-Length")
             if content_type != "application/json" or encoding != "identity":
-                raise _invalid_response()
+                raise invalid()
             if size is not None and (not size.isascii() or not size.isdecimal() or len(size) > 9
-                                     or not 0 < int(size) <= _MAX_BYTES):
-                raise _invalid_response()
+                                     or not 0 < int(size) <= maximum):
+                raise invalid()
             raw = bytearray()
             while True:
                 check_active()
-                chunk = response.read1(min(16384, _MAX_BYTES - len(raw) + 1))
+                chunk = response.read1(min(16384, maximum - len(raw) + 1))
                 check_active()
                 if not chunk:
                     break
                 raw.extend(chunk)
-                if len(raw) > _MAX_BYTES:
-                    raise _invalid_response()
+                if len(raw) > maximum:
+                    raise invalid()
             if size is not None and len(raw) != int(size):
-                raise _invalid_response()
+                raise invalid()
+            if busy_candidate:
+                recognized = _is_busy(raw)
+                check_active()
+                if recognized:
+                    raise OnlineStoryBusy("Local story server is busy.")
+                raise invalid()
         results = _parse(raw, limit, with_outcome=True) if with_outcome else _parse(raw, limit)
         check_active()  # A superseded request cannot hand stale results back.
         return results
