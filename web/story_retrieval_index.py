@@ -78,7 +78,7 @@ class CandidateOrders:
 
 
 class PreparedRetrievalIndex:
-    """Exhaustive full-matrix dot product plus inverted character TF-IDF.
+    """Exhaustive row-wise dense scores plus inverted character TF-IDF.
 
     Preparation does not encode text or touch data files. A contiguous float32
     input matrix can be reused rather than duplicated; caller must not mutate it.
@@ -111,15 +111,19 @@ class PreparedRetrievalIndex:
                 raise ValueError("eligibility must be a Boolean mask over the index")
             rows = np.flatnonzero(mask)
 
-        dense = self.matrix @ vector
+        # Keep the reference's scalar float32 dot product for all eligible
+        # rows. A BLAS matvec can reduce in a different order and change
+        # near-ties, including deep ranks used by lexical-only candidates.
+        dense = np.fromiter((self.matrix[row] @ vector for row in rows),
+                            dtype=np.float32, count=rows.size)
         lexical = self.lexical.scores(query)
-        dense_rows = rows[np.lexsort((self.key_rank[rows], -dense[rows]))]
+        dense_rows = rows[np.lexsort((self.key_rank[rows], -dense))]
         positive = rows[lexical[rows] > 0]
         lexical_rows = positive[np.lexsort((self.key_rank[positive], -lexical[positive]))]
         # Preserve opposing-channel ranks beyond top K: RRF needs ranks for
         # candidates recalled by only the other channel.
-        dense_ranks = np.full(len(dense), -1, dtype=np.intp)
-        lexical_ranks = np.full(len(dense), -1, dtype=np.intp)
+        dense_ranks = np.full(len(self.matrix), -1, dtype=np.intp)
+        lexical_ranks = np.full(len(self.matrix), -1, dtype=np.intp)
         dense_ranks[dense_rows] = np.arange(dense_rows.size)
         lexical_ranks[lexical_rows] = np.arange(lexical_rows.size)
         return CandidateOrders(tuple(map(int, dense_rows[:top_k])),

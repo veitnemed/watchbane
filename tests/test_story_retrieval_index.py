@@ -83,3 +83,53 @@ def test_lexical_scores_support_ordinary_float_sum_runtimes(monkeypatch):
     monkeypatch.setattr(story_retrieval_index, "_FLOAT_SUM_COMPENSATES", False)
     prepared = PreparedRetrievalIndex(docs, np.zeros((len(docs), 1), dtype=np.float32))
     np.testing.assert_array_equal(prepared.lexical.scores(query), expected)
+
+
+def test_float32_near_pairs_follow_scalar_ranks_through_fifth_card():
+    from candidates.story_semantic import SemanticStorySearch
+
+    rng = np.random.default_rng(322)
+    left = rng.normal(size=(1000, 384)).astype(np.float32)
+    left /= np.linalg.norm(left, axis=1)[:, None]
+    right = left.copy()
+    right[:, 0] = np.nextafter(right[:, 0], np.float32(np.inf))
+    matrix = np.vstack((left, right))
+    query_vector = rng.normal(size=(2, 384)).astype(np.float32)[1].copy()
+    query_vector /= np.linalg.norm(query_vector)
+
+    docs = _docs([(f"tmdb:movie:{10000 + i}" if i != 1171 else "tmdb:tv:10171",
+                   f"Садовая дорожка {i}.") for i in range(len(matrix))])
+    query = "Туман"
+    # On the reproducing OpenBLAS runtime a matvec ties rows 171 and 1171,
+    # but the scalar dot product distinguishes them. Four greater scores
+    # force their ordering to decide the final fifth result.
+    dense = sorted(range(len(matrix)), key=lambda i: (-float(matrix[i] @ query_vector), docs[i].key))
+    visible = (*dense[:4], 171, 1171)
+    mask = [i in visible for i in range(len(matrix))]
+    oracle = [i for i in dense if mask[i]]
+    assert oracle[-2:] == sorted((171, 1171),
+                                 key=lambda i: (-float(matrix[i] @ query_vector), docs[i].key))
+
+    index = PreparedRetrievalIndex(docs, matrix)
+    order = index.orders(query, query_vector, eligible=mask, top_k=5)
+    assert order.dense_top == tuple(oracle[:5])
+    assert order.lexical_top == ()
+    assert [int(order.dense_ranks[i]) for i in oracle] == list(range(len(oracle)))
+    assert np.all(order.dense_ranks[~np.asarray(mask)] == -1)
+
+    class ControlledEncoder:
+        variant = "synthetic"
+
+        def encode(self, texts, prefix="passage: ", **_kwargs):
+            if prefix == "query: ":
+                assert texts == [query]
+                return query_vector[None, :]
+            assert texts == [doc.overview for doc in docs]
+            return matrix
+
+    hidden = {doc.key for i, doc in enumerate(docs) if not mask[i]}
+    expected = [docs[i].key for i in oracle[:5]]
+    for factory in (None, PreparedRetrievalIndex):
+        engine = SemanticStorySearch(docs, ControlledEncoder(), retrieval_factory=factory)
+        result = engine.search(query, excluded=hidden, limit=5, repair_typos=False, evidence=False)
+        assert [hit.document.key for hit in result.hits] == expected
