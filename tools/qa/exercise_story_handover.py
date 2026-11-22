@@ -55,7 +55,7 @@ def request(port, path, body=None):
 
 
 @contextmanager
-def launch(catalog, model, batch_size, *, cache_dir=None, prepared_index=False, cache_proof=None):
+def launch(catalog, model, batch_size, *, cache_dir=None, prepared_index=False, cache_proof=None, strict_pins=None):
     # The app cannot accept an inherited socket. Check both the child and an
     # application-specific marker; this port allocation is not deploy-grade.
     with socket.socket() as holder:
@@ -67,6 +67,9 @@ def launch(catalog, model, batch_size, *, cache_dir=None, prepared_index=False, 
         args.extend(("--cache-dir", str(cache_dir)))
     if prepared_index:
         args.append("--prepared-index")
+    if strict_pins is not None:
+        catalog_pin, snapshot_pin = strict_pins
+        args.extend(("--expected-catalog-sha256", catalog_pin, "--expected-snapshot-sha256", snapshot_pin))
     if cache_proof is not None:
         args[2:3] = ["tools.qa.serve_story_cache_hit", str(cache_proof)]
     child = subprocess.Popen(
