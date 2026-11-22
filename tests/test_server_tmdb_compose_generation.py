@@ -1,7 +1,9 @@
 """Fixture-only composition and atomicity checks through the real seed loader."""
+from contextlib import closing
 from datetime import date
 from hashlib import sha256
 import json
+import sqlite3
 
 import pytest
 
@@ -61,7 +63,10 @@ def test_fixture_composes_exact_typed_and_unchanged_rows_deterministically(gener
     old_rows, old_digest = load_seed_snapshot_with_digest(generation["previous"])
     result = composer.compose_reviewed_generation(**generation)
     new_rows, sha = load_seed_snapshot_with_digest(generation["output"])
-    assert result == composer.ComposedGeneration(old_digest, sha, 3, 1, 1)
+    assert result == composer.ComposedGeneration(
+        old_digest, sha, 3, 1, 1,
+        tuple(sorted(generation["reviewed"].items(), key=lambda pair: pair[0].key)),
+    )
     assert new_rows[TV.key] == old_rows[TV.key]
     assert new_rows[MOVIE.key]["poster_path"] == old_rows[MOVIE.key]["poster_path"]
     assert new_rows[MOVIE.key]["overview"] == "Новое описание фильма"
@@ -118,3 +123,86 @@ def test_english_fallback_cannot_remove_preexisting_russian_search_coverage(gene
     with pytest.raises(ValueError, match="Russian search coverage"):
         composer.compose_reviewed_generation(**generation)
     assert generation["previous"].read_bytes() == before and not generation["output"].exists()
+
+def test_pre_switch_checks_digest_and_keeps_old_state_for_pending_or_completed_newer_version(generation):
+    receipt = composer.compose_reviewed_generation(**generation)
+    output, db = generation["output"], generation["checkpoint"]
+    raw = output.read_bytes()
+    seen = []
+    args = dict(checkpoint=db, generation=output, receipt=receipt,
+                switch_local=lambda *payload: seen.append(payload), use_cleared=True)
+    output.write_bytes(raw.replace(b"Updated fixture", b"Mutated fixture"))
+    with pytest.raises(ValueError, match="does not match"):
+        composer.apply_reviewed_generation_locally(**args)
+    output.write_bytes(raw)
+    _commit(db, 2, MOVIE)
+    with pytest.raises(ValueError, match="pending"):
+        composer.apply_reviewed_generation_locally(**args)
+    # Even an identical synopsis staged under a new monotonic ticket is stale.
+    _stage(db, MOVIE, "Новое описание фильма")
+    with pytest.raises(ValueError, match="superseded"):
+        composer.apply_reviewed_generation_locally(**args)
+    assert seen == []
+
+
+def test_switch_excludes_same_checkpoint_writer_on_real_wal_and_uses_verified_rows(generation):
+    db, output = generation["checkpoint"], generation["output"]
+    with closing(sqlite3.connect(db)) as conn:
+        assert conn.execute("PRAGMA journal_mode=WAL").fetchone() == ("wal",)
+    receipt = composer.compose_reviewed_generation(**generation)
+    original_bytes = output.read_bytes()
+    active = (receipt.previous_sha256, None)
+
+    def switch(expected, candidate, snapshot):
+        nonlocal active
+        assert active[0] == expected
+        # A new window cannot advance during the check-to-switch interval even
+        # in WAL mode, with an independent SQLite writer connection.
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            _commit(db, 2, MOVIE)
+        assert pending_change(db, MOVIE) is None
+        # Simulate a local file being edited after validation. The callback has
+        # the validated bytes' snapshot and never reopens this pathname.
+        output.write_bytes(original_bytes.replace(b"Updated fixture", b"Mutated fixture"))
+        assert snapshot[MOVIE.key]["title"] == "Updated fixture"
+        active = (candidate, snapshot)
+
+    composer.apply_reviewed_generation_locally(
+        checkpoint=db, generation=output, receipt=receipt, switch_local=switch, use_cleared=True,
+    )
+    assert active[0] == receipt.sha256 and active[1][MOVIE.key]["title"] == "Updated fixture"
+    _commit(db, 2, MOVIE)
+    assert pending_change(db, MOVIE).version > generation["reviewed"][MOVIE].version
+
+
+def test_local_switch_failure_does_not_leave_writer_reserved(generation):
+    receipt = composer.compose_reviewed_generation(**generation)
+    db = generation["checkpoint"]
+
+    def decline(*_):
+        raise RuntimeError("active generation changed")
+
+    args = dict(checkpoint=db, generation=generation["output"], receipt=receipt, switch_local=decline)
+    with pytest.raises(PermissionError):
+        composer.apply_reviewed_generation_locally(**args)
+    with pytest.raises(RuntimeError, match="active generation changed"):
+        composer.apply_reviewed_generation_locally(**args, use_cleared=True)
+    _commit(db, 2, MOVIE)
+
+
+def test_preactivation_fails_closed_on_busy_or_missing_checkpoint(generation, tmp_path):
+    receipt = composer.compose_reviewed_generation(**generation)
+
+    def unexpected(*_):
+        pytest.fail("A failed fence must not call the switch")
+
+    db = generation["checkpoint"]
+    args = dict(generation=generation["output"], receipt=receipt, switch_local=unexpected, use_cleared=True)
+    missing = tmp_path / "missing.sqlite"
+    with pytest.raises(sqlite3.OperationalError):
+        composer.apply_reviewed_generation_locally(checkpoint=missing, **args)
+    assert not missing.exists()
+    with closing(sqlite3.connect(db)) as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            composer.apply_reviewed_generation_locally(checkpoint=db, **args)

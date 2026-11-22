@@ -1,11 +1,14 @@
 """Compose a private reviewed seed generation without replacing an active one."""
 from collections.abc import Mapping
+from contextlib import closing
+from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
 import json
 import os
 from pathlib import Path
 import re
+import sqlite3
 from tempfile import NamedTemporaryFile
 
 from candidates.story_seed_snapshot import (
@@ -15,7 +18,9 @@ from candidates.story_seed_snapshot import (
     load_seed_snapshot_with_digest,
 )
 from web.tmdb_ids import QueueItem
-from web.tmdb_reviewed_refresh import ReviewedRefresh, read_reviewed_refresh
+from web.tmdb_reviewed_refresh import (
+    ReviewedRefresh, _read_reviewed_refresh, _validated_reviews, read_reviewed_refresh,
+)
 
 
 @dataclass(frozen=True)
@@ -25,6 +30,7 @@ class ComposedGeneration:
     rows: int
     replaced: int
     added: int
+    reviews: tuple[tuple[QueueItem, ReviewedRefresh], ...]
 
 
 def _existing_seed_row(row):
@@ -61,7 +67,8 @@ def compose_reviewed_generation(
     if digest != previous_sha256:
         raise ValueError("Previous seed SHA-256 does not match")
     rows = {key: _existing_seed_row(row) for key, row in snapshot.items()}
-    changes = read_reviewed_refresh(checkpoint=checkpoint, reviewed=reviewed)
+    reviews = _validated_reviews(reviewed)
+    changes = read_reviewed_refresh(checkpoint=checkpoint, reviewed=dict(reviews))
     replaced = 0
     for change in changes:
         old = rows.get(change.item.key)
@@ -100,4 +107,55 @@ def compose_reviewed_generation(
         if temporary is not None:
             temporary.unlink(missing_ok=True)
 
-    return ComposedGeneration(digest, new_digest.hexdigest(), len(rows), replaced, len(changes) - replaced)
+    return ComposedGeneration(digest, new_digest.hexdigest(), len(rows), replaced, len(changes) - replaced, reviews)
+
+
+
+def apply_reviewed_generation_locally(
+    *, checkpoint: Path, generation: Path, receipt: ComposedGeneration, switch_local,
+    use_cleared: bool = False,
+):
+    """Guard one synchronous, in-memory switch of a detached local generation.
+
+    The trusted caller supplies the composer receipt and a short local callback.
+    The callback receives the expected prior digest, the candidate digest, and
+    the exact verified rows (not the path). It must atomically compare the
+    current local generation to the prior digest and adopt the passed rows, or
+    decline without mutation. Do not reload from disk or schedule a later
+    switch in that callback. This is not a durable pointer, routing change or
+    distributed lock. Only competing SQLite writes on this checkpoint are
+    excluded until the callback returns; the checkpoint must not be replaced.
+    Prepare/validate expensive state outside the callback where applicable.
+    """
+    if use_cleared is not True:
+        raise PermissionError("Explicit intended-use clearance is required")
+    if not isinstance(receipt, ComposedGeneration):
+        raise ValueError("Expected a composer receipt")
+    reviews = _validated_reviews(dict(receipt.reviews))
+    if (reviews != receipt.reviews or not callable(switch_local)
+            or any(type(digest) is not str or re.fullmatch(r"[a-f0-9]{64}", digest) is None
+                   for digest in (receipt.previous_sha256, receipt.sha256))):
+        raise ValueError("Invalid generation receipt or local switch")
+
+    # Parse the same bytes covered by the digest, and keep the global loader
+    # cache insulated from callback mutation. Never give it a mutable pathname.
+    snapshot, digest = load_seed_snapshot_with_digest(generation)
+    if digest != receipt.sha256 or len(snapshot) != receipt.rows:
+        raise ValueError("Candidate seed does not match the composer receipt")
+    snapshot = deepcopy(snapshot)
+    with closing(sqlite3.connect(Path(checkpoint).resolve().as_uri() + "?mode=rw",
+                                 uri=True, timeout=0)) as conn:
+        # Acquire before checking and hold through the switch. A read
+        # transaction alone permits the problematic interleave in WAL mode.
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            current = _read_reviewed_refresh(conn, reviews)
+            for change in current:
+                row = snapshot.get(change.item.key)
+                if (row is None or row["title"] != change.title.strip()
+                        or row["overview"] != change.overview.strip() or row["year"] != change.year
+                        or set(row["localized"]) != {change.language[:2]}):
+                    raise ValueError("Candidate seed does not contain the exact reviewed refresh")
+            return switch_local(receipt.previous_sha256, digest, snapshot)
+        finally:
+            conn.rollback()
