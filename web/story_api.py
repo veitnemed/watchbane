@@ -255,7 +255,7 @@ def main(argv=None):
     parser.add_argument("--model-dir", type=Path, required=True)
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--cache-dir", type=Path, help="Explicit detached server passage cache")
-    parser.add_argument("--prepared-index", action="store_true", help="Opt in to exact prepared retrieval")
+    parser.add_argument("--prepared-index", action="store_true", help="Opt in to prepared exhaustive retrieval")
     parser.add_argument("--previous-catalog", type=Path, help="Optional previous approved snapshot for passage reuse")
     parser.add_argument("--startup-passage-batch-size", type=int, default=DEFAULT_E5_BATCH_SIZE,
                         help="Maximum E5 batch for initial passages only (1–16)")

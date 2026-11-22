@@ -1,4 +1,4 @@
-"""Prepared exact in-memory candidate retrieval for the server (not yet wired)."""
+"""Prepared exhaustive in-memory candidate retrieval for opt-in server use."""
 from collections import Counter
 from dataclasses import dataclass
 from math import log, sqrt
@@ -6,6 +6,11 @@ from math import log, sqrt
 import numpy as np
 
 from candidates.story_lexical import grams
+
+
+# CPython 3.12+ compensates built-in float sum; older runtimes may use
+# ordinary addition. Detect the arithmetic used by the reference scorer.
+_FLOAT_SUM_COMPENSATES = sum((1., 2.**-53, 2.**-53)) != 1.
 
 
 class _InvertedLexical:
@@ -43,9 +48,22 @@ class _InvertedLexical:
         scores = np.zeros(self.count, dtype=np.float64)
         # Query gram order matches LexicalIndex.scores, and each individual
         # posting contains each row at most once (no repeated fancy-index writes).
+        residual = np.zeros_like(scores) if _FLOAT_SUM_COMPENSATES else None
         for gram, weight in self._normalized(query).items():
             span = self.slices[gram]
-            scores[self.rows[span]] += weight * self.weights[span]
+            rows = self.rows[span]
+            product = weight * self.weights[span]
+            if residual is None:
+                scores[rows] += product
+                continue
+            # Neumaier compensation, as in CPython's built-in float sum.
+            # Both operands are nonnegative, so magnitude is ordinary order.
+            previous = scores[rows]
+            updated = previous + product
+            residual[rows] += (np.maximum(previous, product) - updated) + np.minimum(previous, product)
+            scores[rows] = updated
+        if residual is not None:
+            scores += residual
         return scores
 
 
@@ -60,7 +78,7 @@ class CandidateOrders:
 
 
 class PreparedRetrievalIndex:
-    """Exact full-matrix dot product plus inverted character TF-IDF.
+    """Exhaustive full-matrix dot product plus inverted character TF-IDF.
 
     Preparation does not encode text or touch data files. A contiguous float32
     input matrix can be reused rather than duplicated; caller must not mutate it.

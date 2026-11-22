@@ -26,7 +26,7 @@ def test_candidate_orders_match_brute_force_and_retain_cross_channel_ranks(mask,
     vector = np.array([1, 1], dtype=np.float32)
     index = PreparedRetrievalIndex(docs, vectors)
     expected_scores = LexicalIndex(docs).scores(query)
-    np.testing.assert_allclose(index.lexical.scores(query), expected_scores, rtol=1e-14, atol=1e-16)
+    np.testing.assert_array_equal(index.lexical.scores(query), expected_scores)
     rows = range(len(docs)) if mask is None else [i for i, allowed in enumerate(mask) if allowed]
     dense = sorted(rows, key=lambda i: (-float(vectors[i] @ vector), docs[i].key))
     sparse = sorted((i for i in rows if expected_scores[i] > 0),
@@ -61,3 +61,25 @@ def test_synthetic_vectors_recall_and_fused_candidate_order_match_previous_algor
     old_l = [sparse.index(i) if i in sparse else -1 for i in range(len(docs))]
     assert fused(found.dense_top, found.lexical_top, found.dense_ranks, found.lexical_ranks) == fused(
         dense[:40], sparse[:40], old_d, old_l)
+
+
+def test_lexical_scores_support_ordinary_float_sum_runtimes(monkeypatch):
+    from candidates.story_lexical import grams
+    from tools.qa.measure_story_lexical_capacity import make_documents
+    from web import story_retrieval_index
+
+    docs = tuple(make_documents(16, "low"))
+    query = docs[0].overview
+    baseline = LexicalIndex(docs)
+    query_weights = baseline.vector(grams(query))
+
+    def ordinary_score(document_weights):
+        result = 0.
+        for gram, weight in query_weights.items():
+            result += weight * document_weights.get(gram, 0.)
+        return result
+
+    expected = [ordinary_score(weights) for weights in baseline.vectors]
+    monkeypatch.setattr(story_retrieval_index, "_FLOAT_SUM_COMPENSATES", False)
+    prepared = PreparedRetrievalIndex(docs, np.zeros((len(docs), 1), dtype=np.float32))
+    np.testing.assert_array_equal(prepared.lexical.scores(query), expected)
