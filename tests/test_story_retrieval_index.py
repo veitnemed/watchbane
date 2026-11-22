@@ -133,3 +133,63 @@ def test_float32_near_pairs_follow_scalar_ranks_through_fifth_card():
         engine = SemanticStorySearch(docs, ControlledEncoder(), retrieval_factory=factory)
         result = engine.search(query, excluded=hidden, limit=5, repair_typos=False, evidence=False)
         assert [hit.document.key for hit in result.hits] == expected
+
+
+@pytest.mark.parametrize("factory", [None, PreparedRetrievalIndex])
+def test_search_observer_traces_actual_pre_fusion_lanes_without_a_second_encoding(factory):
+    from candidates.story_semantic import SemanticStorySearch, StoryCandidateTrace
+
+    docs = _docs([
+        ("tmdb:tv:7", "Космонавт совершает побег."),
+        *[(f"tmdb:movie:{i}", "Космонавт совершает побег." if i == 7 else "Садовая дорожка.")
+          for i in range(1, 45)],
+    ])
+
+    class Encoder:
+        variant = "synthetic"
+        calls = 0
+
+        def encode(self, texts, prefix="passage: ", **_kwargs):
+            if prefix == "query: ":
+                self.calls += 1
+                return np.array([[1]], dtype=np.float32)
+            return np.arange(len(texts), dtype=np.float32).reshape(-1, 1)
+
+    encoder = Encoder()
+    search = SemanticStorySearch(docs, encoder, retrieval_factory=factory).search
+    kwargs = {"repair_typos": False, "evidence": False}
+    query = "Космонавт совершает побег"
+    normal = search(query, **kwargs)
+    assert encoder.calls == 1
+    traces = []
+    assert search(query, observe_candidates=traces.append, **kwargs) == normal
+    assert encoder.calls == 2
+    assert traces == [StoryCandidateTrace(
+        "retrieved",
+        tuple(f"tmdb:movie:{i}" for i in range(44, 4, -1)),
+        ("tmdb:movie:7", "tmdb:tv:7"),
+        frozenset(doc.key for doc in docs),
+    )]
+    assert traces[0].lexical_keys[-1] not in traces[0].dense_keys
+
+    traces.clear()
+    search("сериал про космонавта", observe_candidates=traces.append, **kwargs)
+    assert traces[0].eligible_keys == frozenset({"tmdb:tv:7"})
+    assert traces[0].dense_keys == ("tmdb:tv:7",)
+    assert set(traces[0].lexical_keys) <= {"tmdb:tv:7"}
+
+    for blocked_query, reason, excluded in [
+        ("", "need_plot_detail", ()),
+        ("как настроить роутер", "explicit_non_film_request", ()),
+        ("фильм без войны", "unsupported_exclusion", ()),
+        ("А" * 601, "query_too_long", ()),
+        ("фильм 1980 про побег", "no_filtered_descriptions", ()),
+        (query, "no_eligible_catalog_entries", {doc.key for doc in docs}),
+    ]:
+        traces.clear()
+        before = encoder.calls
+        assert search(blocked_query, observe_candidates=traces.append, excluded=excluded, **kwargs) == (
+            search(blocked_query, excluded=excluded, **kwargs)
+        )
+        assert traces == [StoryCandidateTrace(reason)]
+        assert encoder.calls == before

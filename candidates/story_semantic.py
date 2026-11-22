@@ -4,6 +4,7 @@ No HTTP client, Hub loader, remote code, pickle or automatic download. Model fil
 must already exist and match the publisher checksums. Personal text stays in RAM.
 """
 from collections import OrderedDict
+from dataclasses import dataclass
 from pathlib import Path
 import re
 from threading import RLock
@@ -117,6 +118,16 @@ def normalized_query(query, vocabulary):
     return " ".join(fixed)
 
 
+@dataclass(frozen=True)
+class StoryCandidateTrace:
+    """Offline QA observation of the actual pre-fusion retrieval lanes."""
+
+    route: str
+    dense_keys: tuple[str, ...] = ()
+    lexical_keys: tuple[str, ...] = ()
+    eligible_keys: frozenset[str] = frozenset()
+
+
 class SemanticStorySearch:
     def __init__(self,documents,encoder,*,cancelled=None,retrieval_factory=None,skip_singleton_evidence=False):
         self.documents=tuple(documents)
@@ -134,14 +145,24 @@ class SemanticStorySearch:
     def search_with_outcome(self, query, *, limit):
         return self.search(query, limit=limit, include_route_reason=True)
 
-    def search(self,query,*,excluded=frozenset(),limit=5,rerank=False,hybrid=True,domain_filters=True,repair_typos=True,evidence=True,role_adjustment=False,include_route_reason=False):
+    def search(self,query,*,excluded=frozenset(),limit=5,rerank=False,hybrid=True,domain_filters=True,repair_typos=True,evidence=True,role_adjustment=False,include_route_reason=False,observe_candidates=None):
         words=tokens(query)
-        if len(query)>600:return self._response((),"Сократите описание до 600 символов.")
-        if not(set(words)-STOP):return self._response((),"Опишите героя или событие.", reason="need_plot_detail" if include_route_reason else None)
+        if len(query)>600:
+            if observe_candidates is not None:
+                observe_candidates(StoryCandidateTrace("query_too_long"))
+            return self._response((),"Сократите описание до 600 символов.")
+        if not(set(words)-STOP):
+            if observe_candidates is not None:
+                observe_candidates(StoryCandidateTrace("need_plot_detail"))
+            return self._response((),"Опишите героя или событие.", reason="need_plot_detail" if include_route_reason else None)
         if unsupported_negation(query):
+            if observe_candidates is not None:
+                observe_candidates(StoryCandidateTrace("unsupported_exclusion"))
             return self._response((),"Отрицания пока не поддерживаются. Опишите желаемую историю утвердительно.",
                                   reason="unsupported_exclusion" if include_route_reason else None)
         if domain_filters and instructional_non_plot(query, self.title_words):
+            if observe_candidates is not None:
+                observe_candidates(StoryCandidateTrace("explicit_non_film_request"))
             return self._response((), OUT_OF_SCOPE_NOTICE, reason="explicit_non_film_request" if include_route_reason else None)
         kind,year=media_constraints(query) if domain_filters else (None,None)
         indices=[i for i,d in enumerate(self.documents) if d.key not in excluded and (not kind or d.media_type==kind) and (year is None or d.year==year)]
@@ -150,6 +171,8 @@ class SemanticStorySearch:
                 (kind is None or d.media_type == kind) and (year is None or d.year == year) for d in self.documents
             )
             reason = "no_filtered_descriptions" if filtered_empty else ("no_eligible_catalog_entries" if include_route_reason else None)
+            if observe_candidates is not None:
+                observe_candidates(StoryCandidateTrace("no_filtered_descriptions" if filtered_empty else "no_eligible_catalog_entries"))
             return self._response((), "В этом локальном наборе пока нет подходящих описаний.", reason=reason)
         corrected=normalized_query(query,self.vocabulary) if repair_typos else query
         q=self.encoder.encode([corrected],prefix="query: ")[0]
@@ -161,18 +184,27 @@ class SemanticStorySearch:
             lexical_order=sorted((i for i in indices if lexical[i]>0),key=lambda i:(-lexical[i],self.documents[i].key))
             dense_rank={i:r for r,i in enumerate(dense_order)}
             lexical_rank={i:r for r,i in enumerate(lexical_order)}
-            candidates=set(dense_order[:40])|set(lexical_order[:40])
+            dense_top, lexical_top = dense_order[:40], lexical_order[:40]
+            candidates=set(dense_top)|set(lexical_top)
         else:
             eligible = [False] * len(self.documents)
             for index in indices:
                 eligible[index] = True
             orders = self.retrieval.orders(corrected, q, eligible=eligible, top_k=40)
-            candidates = set(orders.dense_top) | set(orders.lexical_top)
+            dense_top, lexical_top = orders.dense_top, orders.lexical_top
+            candidates = set(dense_top) | set(lexical_top)
             dense_rank = {i: int(orders.dense_ranks[i]) for i in candidates}
             lexical_rank = {i: int(orders.lexical_ranks[i]) for i in candidates if orders.lexical_ranks[i] >= 0}
             # Dense-only and reranked response scores keep the original scalar
             # dot product. Hybrid only needs orders and avoids redundant dots.
             dense = {i: float(self.vectors[i] @ q) for i in candidates} if not hybrid or rerank else {}
+        if observe_candidates is not None:
+            observe_candidates(StoryCandidateTrace(
+                "retrieved",
+                tuple(self.documents[i].key for i in dense_top),
+                tuple(self.documents[i].key for i in lexical_top),
+                frozenset(self.documents[i].key for i in indices),
+            ))
         # Union recall: semantic candidates survive with zero literal overlap.
         rrf={i:1/(60+dense_rank[i])+(0.35/(60+lexical_rank[i]) if i in lexical_rank else 0) for i in candidates}
         ordered=sorted(candidates,key=lambda i:(-rrf[i],self.documents[i].key))
