@@ -25,6 +25,8 @@ on:
       - "storage/**"
       - "tests/desktop/test_story*.py"
       - "tests/test_packaging_contract.py"
+      - "tests/test_candidate_action_identity.py"
+      - "tests/desktop/test_collection_action_identity.py"
       - "tests/test_sqlite_watched_repository.py"
       - "tests/test_sqlite_backup_restore.py"
       - "tests/test_sqlite_export_legacy.py"
@@ -79,6 +81,8 @@ jobs:
         run: >-
           python -m pytest -q --tb=short --junitxml=story-test-result.xml
           tests/test_packaging_contract.py
+          tests/test_candidate_action_identity.py
+          tests/desktop/test_collection_action_identity.py
           tests/test_sqlite_watched_repository.py
           tests/test_sqlite_backup_restore.py
           tests/test_sqlite_export_legacy.py
