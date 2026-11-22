@@ -120,7 +120,11 @@ class Generation:
 
 
 def build(folder, pins, name, encoder, *, scale=2, barrier=None):
-    engine = shared.build(folder, pins, len(rows(name, scale)), encoder, verified_callback=barrier)
+    return build_checked_generation(folder, pins, len(rows(name, scale)), encoder, barrier=barrier)
+
+
+def build_checked_generation(folder, pins, expected_rows, encoder, *, barrier=None):
+    engine = shared.build(folder, pins, expected_rows, encoder, verified_callback=barrier)
     artwork = {}
     documents, digest = story_api._load_documents(folder / "synthetic.jsonl", artwork_paths=artwork)
     index = story_api._index_counts(engine)
