@@ -5,6 +5,7 @@ import argparse
 from contextlib import asynccontextmanager
 import json
 from pathlib import Path
+import re
 from threading import Lock
 
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -27,15 +28,23 @@ class _StartupPassageEncoder:
     """The initial, exact document batch is the only persistable call."""
 
     def __init__(self, encoder, cache, identity, documents, previous_catalog=None,
-                 startup_batch_size=DEFAULT_E5_BATCH_SIZE):
+                 startup_batch_size=DEFAULT_E5_BATCH_SIZE, expected_snapshot_sha256=None):
         self.encoder, self.cache, self.identity = encoder, cache, identity
         self.expected = tuple(doc.overview for doc in documents)
         self.documents, self.previous_catalog = documents, previous_catalog
         self.variant = encoder.variant
         self.startup_batch_size = startup_batch_size
+        self.expected_snapshot_sha256 = expected_snapshot_sha256
 
     def encode(self, texts, prefix="passage: ", **kwargs):
         expected, self.expected = self.expected, None
+        if expected is not None and self.expected_snapshot_sha256 is not None:
+            if prefix != "passage: " or tuple(texts) != expected:
+                raise ValueError("Strict cached startup requires the exact initial passage batch.")
+            verified = self.cache.load_with_digest(self.identity)
+            if verified is None or verified[1] != self.expected_snapshot_sha256:
+                raise ValueError("Required passage snapshot missing, invalid, or SHA-256 mismatch.")
+            return verified[0]
         if expected is None or prefix != "passage: " or tuple(texts) != expected:
             return self.encoder.encode(texts, prefix=prefix, **kwargs)
         if self.startup_batch_size != DEFAULT_E5_BATCH_SIZE:
@@ -96,23 +105,54 @@ def _startup_passage_identity(catalog_sha, encoder, documents, startup_batch_siz
                                            preprocessing=preprocessing)
 
 
+def _strict_startup_requested(cache_dir, previous_catalog, catalog_pin, snapshot_pin):
+    if catalog_pin is None and snapshot_pin is None:
+        return False
+    if (cache_dir is None or previous_catalog is not None
+            or any(not isinstance(pin, str) or re.fullmatch(r"[0-9a-f]{64}", pin) is None
+                   for pin in (catalog_pin, snapshot_pin))):
+        raise ValueError("Strict startup requires both SHA-256 pins and a cache directory, without a previous catalog.")
+    return True
+
+
 def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = None, prepared_index: bool = False,
                  previous_catalog: Path | None = None, startup_batch_size: int = DEFAULT_E5_BATCH_SIZE,
-                 artwork_paths: dict | None = None, skip_singleton_evidence: bool = False):
+                 artwork_paths: dict | None = None, skip_singleton_evidence: bool = False,
+                 expected_catalog_sha256: str | None = None, expected_snapshot_sha256: str | None = None):
     """Index the approved snapshot; persistence is an explicit operator option."""
     validate_e5_batch_size(startup_batch_size)
     if previous_catalog is not None and cache_dir is None:
         raise ValueError("A previous catalog requires an explicit cache directory.")
-    documents, catalog_sha = _load_documents(catalog, artwork_paths=artwork_paths)
+    strict = _strict_startup_requested(cache_dir, previous_catalog, expected_catalog_sha256,
+                                       expected_snapshot_sha256)
+    try:
+        documents, catalog_sha = _load_documents(catalog, artwork_paths=artwork_paths)
+    except StorySeedSnapshotError:
+        if strict:
+            raise ValueError("Strict startup requires a valid local catalog.") from None
+        raise
+    if strict and catalog_sha != expected_catalog_sha256:
+        raise ValueError("Catalog SHA-256 mismatch.")
     if not documents:
         raise ValueError("The configured TMDb snapshot has no eligible Russian descriptions.")
-    encoder = LocalE5(model_dir)  # Always verify model artifacts, even on a cache hit.
+    if strict and (Path(cache_dir).is_symlink() or not Path(cache_dir).is_dir()
+                   or not (Path(model_dir) / "onnx/model.onnx").is_file()):
+        raise ValueError("Strict startup requires an existing cache directory and local FP32 files.")
+    try:
+        encoder = LocalE5(model_dir)  # Always verify model artifacts, even on a cache hit.
+    except Exception:
+        if strict:
+            raise ValueError("Strict startup could not verify the local FP32 model.") from None
+        raise
+    if strict and encoder.variant != "fp32":
+        raise ValueError("Strict startup requires the verified local FP32 model.")
     if cache_dir is not None:
         from web.story_vector_snapshot import PassageVectorSnapshot
 
         identity = _startup_passage_identity(catalog_sha, encoder, documents, startup_batch_size)
         encoder = _StartupPassageEncoder(encoder, PassageVectorSnapshot(cache_dir), identity, documents,
-                                         previous_catalog=previous_catalog, startup_batch_size=startup_batch_size)
+                                         previous_catalog=previous_catalog, startup_batch_size=startup_batch_size,
+                                         expected_snapshot_sha256=expected_snapshot_sha256)
     elif startup_batch_size != DEFAULT_E5_BATCH_SIZE:
         encoder = _StartupPassageEncoder(encoder, None, None, documents, startup_batch_size=startup_batch_size)
     extra = {"skip_singleton_evidence": True} if skip_singleton_evidence else {}
@@ -166,14 +206,20 @@ def _search_outcome(result):
 def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, cache_dir: Path | None = None,
                prepared_index: bool = False, previous_catalog: Path | None = None,
                startup_batch_size: int = DEFAULT_E5_BATCH_SIZE, artwork_metadata: bool = False,
-               skip_singleton_evidence: bool = False):
+               skip_singleton_evidence: bool = False, expected_catalog_sha256: str | None = None,
+               expected_snapshot_sha256: str | None = None):
     """One verified engine per worker; tests may inject a local engine factory."""
     validate_e5_batch_size(startup_batch_size)
     if previous_catalog is not None and cache_dir is None:
         raise ValueError("A previous catalog requires an explicit cache directory.")
+    strict = _strict_startup_requested(cache_dir, previous_catalog, expected_catalog_sha256,
+                                       expected_snapshot_sha256)
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         options = {} if cache_dir is None else {"cache_dir": cache_dir}
+        if strict:
+            options.update(expected_catalog_sha256=expected_catalog_sha256,
+                           expected_snapshot_sha256=expected_snapshot_sha256)
         if prepared_index:
             options["prepared_index"] = True
         if skip_singleton_evidence:
@@ -267,6 +313,8 @@ def main(argv=None):
     parser.add_argument("--cache-dir", type=Path, help="Explicit detached server passage cache")
     parser.add_argument("--prepared-index", action="store_true", help="Opt in to prepared exhaustive retrieval")
     parser.add_argument("--previous-catalog", type=Path, help="Optional previous approved snapshot for passage reuse")
+    parser.add_argument("--expected-catalog-sha256", help="Strict local startup: require exact approved JSONL bytes")
+    parser.add_argument("--expected-snapshot-sha256", help="Strict local startup: require exact prebuilt cache bytes")
     parser.add_argument("--startup-passage-batch-size", type=int, default=DEFAULT_E5_BATCH_SIZE,
                         help="Maximum E5 batch for initial passages only (1–16)")
     parser.add_argument("--artwork-metadata", action="store_true", help="Allow negotiated relative TMDb poster metadata")
@@ -275,6 +323,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         validate_e5_batch_size(args.startup_passage_batch_size)
+        _strict_startup_requested(args.cache_dir, args.previous_catalog, args.expected_catalog_sha256,
+                                  args.expected_snapshot_sha256)
     except ValueError as error:
         parser.error(str(error))
     if args.previous_catalog is not None and args.cache_dir is None:
@@ -283,7 +333,9 @@ def main(argv=None):
                           prepared_index=args.prepared_index, previous_catalog=args.previous_catalog,
                           startup_batch_size=args.startup_passage_batch_size,
                           artwork_metadata=args.artwork_metadata,
-                          skip_singleton_evidence=args.skip_singleton_evidence), host="127.0.0.1",
+                          skip_singleton_evidence=args.skip_singleton_evidence,
+                          expected_catalog_sha256=args.expected_catalog_sha256,
+                          expected_snapshot_sha256=args.expected_snapshot_sha256), host="127.0.0.1",
                 port=args.port, access_log=False, proxy_headers=False)
 
 

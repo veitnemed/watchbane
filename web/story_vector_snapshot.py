@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import stat
 import struct
 import tempfile
 
@@ -90,8 +91,21 @@ class PassageVectorSnapshot:
         fingerprint = identity.fingerprint()
         size = _HEADER.size + identity.count * DIMENSION * _DTYPE.itemsize
         try:
-            with self._path(identity).open("rb") as stream:
-                if os.fstat(stream.fileno()).st_size != size:
+            path = self._path(identity)
+            if with_digest:
+                # Strict operator paths must not follow a final symlink or
+                # block on an unexpected pipe. O_NOFOLLOW/NONBLOCK additionally
+                # guard platforms that implement them against a racing entry.
+                if self.root.is_symlink() or not stat.S_ISREG(path.lstat().st_mode):
+                    return None
+                flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+                flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+                opened = os.fdopen(os.open(path, flags), "rb")
+            else:
+                opened = path.open("rb")
+            with opened as stream:
+                info = os.fstat(stream.fileno())
+                if info.st_size != size or (with_digest and not stat.S_ISREG(info.st_mode)):
                     return None
                 header = stream.read(_HEADER.size)
                 magic, actual, count, dimension, expected_digest = _HEADER.unpack(header)
