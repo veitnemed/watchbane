@@ -39,10 +39,11 @@ def summarize_plan(plan):
                              for media in ("movie", "tv")},
         "sources": [asdict(source) for source in plan.sources],
         "queue_sha256": plan.manifest()["queue_sha256"],
+        **({"schedule": plan.manifest()["schedule"]} if plan.interleave else {}),
     }
 
 
-def _synthetic_plan(root):
+def _synthetic_plan(root, *, interleave):
     def source(stem, media):
         path = root / f"{stem}_{_REHEARSAL_DATE:%m_%d_%Y}.json.gz"
         data = "".join(json.dumps({"id": identifier, "adult": adult,
@@ -54,18 +55,25 @@ def _synthetic_plan(root):
         return path
 
     return plan_daily_ids(export_date=_REHEARSAL_DATE, movie_file=source("movie_ids", "movie"),
-                          tv_file=source("tv_series_ids", "tv"), per_media_limit=2)
+                          tv_file=source("tv_series_ids", "tv"), per_media_limit=2, interleave=interleave)
 
 
 class _FixtureOpener:
     """Routes consumed by the real detached HTTP transport; no network opener."""
 
-    def __init__(self, plan, *, resume):
+    def __init__(self, plan, *, resume, completed_before):
         self.interrupted = False
         self.requests_by_media = dict.fromkeys(("movie", "tv"), 0)
-        self.completed_movie_replays = 0
-        first_movie, second_movie, first_tv, second_tv = plan.queue
-        self.completed_movie = first_movie
+        self.request_media_order = []
+        first_movie, second_movie = (item for item in plan.queue if item.media_type == "movie")
+        first_tv, second_tv = (item for item in plan.queue if item.media_type == "tv")
+        self.request_order = []
+        for item in plan.queue[completed_before:]:
+            locales = ("ru-RU",) if item in (first_movie, second_tv) else ("ru-RU", "en-US")
+            self.request_order.extend((f"/3/{item.media_type}/{item.tmdb_id}", f"language={locale}")
+                                      for locale in locales)
+            if item == second_movie and not resume:
+                break
         self.routes = {}
         for item, locale, overview in (
             (first_movie, "ru-RU", "Условная история о мастерской."),
@@ -95,12 +103,16 @@ class _FixtureOpener:
         url = urlsplit(request.full_url)
         if url.scheme != "https" or url.netloc != "api.themoviedb.org":
             raise ValueError("Unexpected fixture origin")
-        route = self.routes.get((url.path, url.query))
+        key = url.path, url.query
+        index = len(self.request_media_order)
+        if index >= len(self.request_order) or key != self.request_order[index]:
+            raise ValueError("Unexpected fixture request order")
+        route = self.routes.get(key)
         if route is None:
             raise ValueError("Unexpected fixture request")
-        self.requests_by_media[url.path.split("/")[2]] += 1
-        if url.path == f"/3/{self.completed_movie.media_type}/{self.completed_movie.tmdb_id}":
-            self.completed_movie_replays += 1
+        media = url.path.split("/")[2]
+        self.requests_by_media[media] += 1
+        self.request_media_order.append(media)
         status, payload = route
         if status != 200:
             self.interrupted |= status == 429
@@ -109,11 +121,14 @@ class _FixtureOpener:
         return BytesIO(payload)
 
 
-def rehearse(checkpoint_dir, *, resume):
+def rehearse(checkpoint_dir, *, resume, interleave=False):
     directory = Path(checkpoint_dir)
     checkpoint = directory / _CHECKPOINT_NAME
     with TemporaryDirectory(prefix="watchbane-tmdb-fixture-") as temp:
-        plan = _synthetic_plan(Path(temp))
+        plan = _synthetic_plan(Path(temp), interleave=interleave)
+        # A synthetic 429 always stops during the second movie's English
+        # lookup. In the new schedule one TV title has already completed.
+        prefix_size = 2 if interleave else 1
         if resume:
             if (directory.is_symlink() or not directory.is_dir() or checkpoint.is_symlink()
                     or not checkpoint.is_file() or checkpoint.stat().st_nlink != 1
@@ -122,29 +137,31 @@ def rehearse(checkpoint_dir, *, resume):
             # Audit the exact fixture manifest before a writable open. Never
             # let resume implicitly create a database or migrate another plan.
             prior = audit_hydration(plan=plan, checkpoint=checkpoint)["distinct_typed_completed"]
-            if prior not in (1, len(plan.queue)):
+            if prior not in (prefix_size, len(plan.queue)):
                 raise ValueError("Expected interrupted or finished rehearsal")
-            # An arbitrary one-row checkpoint is not an interruption proof.
-            # Only the first fixture item can have committed before the 429.
-            if prior == 1:
-                first = plan.queue[0]
+            # A count is not an interruption proof. Validate exact typed
+            # prefix and terminal state before the next process can write.
+            if prior == prefix_size:
                 with closing(sqlite3.connect(checkpoint.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
-                    terminal = conn.execute("SELECT media, tmdb_id, status FROM hydration_items").fetchall()
-                if terminal != [(first.media_type, first.tmdb_id, "hydrated")]:
+                    terminal = set(conn.execute("SELECT media, tmdb_id, status FROM hydration_items"))
+                if terminal != {(item.media_type, item.tmdb_id, "hydrated")
+                                for item in plan.queue[:prefix_size]}:
                     raise ValueError("Expected the rehearsal interruption boundary")
         else:
             # Exclusive directory creation refuses an existing profile, empty
             # directory, or symlink before the SQLite path is opened.
             directory.mkdir(mode=0o700)
             prior = 0
-        opener = _FixtureOpener(plan, resume=resume)
+        opener = _FixtureOpener(plan, resume=resume, completed_before=prior)
         transport = DetachedTmdbTransport(2 * len(plan.queue), bearer=lambda: "offline-fixture", opener=opener)
         run = hydrate_id_plan(plan=plan, checkpoint=checkpoint, transport=transport)
         audit = audit_hydration(plan=plan, checkpoint=checkpoint)
+        if run.attempts_this_run != len(opener.request_order):
+            raise RuntimeError("Unexpected fixture attempt count")
         if resume:
-            if not run.complete or opener.interrupted or opener.completed_movie_replays:
+            if not run.complete or opener.interrupted:
                 raise RuntimeError("Unexpected fixture resume outcome")
-        elif run.stop_reason != "throttled" or not opener.interrupted or run.completed != 1:
+        elif run.stop_reason != "throttled" or not opener.interrupted or run.completed != prefix_size:
             raise RuntimeError("Did not observe the expected 429 fixture boundary")
         return {
             "mode": "synthetic_offline_rehearsal",
@@ -157,6 +174,8 @@ def rehearse(checkpoint_dir, *, resume):
             "http_429_this_run": int(opener.interrupted),
             "requests_by_media_this_run": opener.requests_by_media,
             "audit": audit,
+            **({"schedule": plan.manifest()["schedule"], "request_media_order": opener.request_media_order}
+               if interleave else {}),
         }
 
 
@@ -173,15 +192,18 @@ def main(argv=None):
     trial.add_argument("--checkpoint-dir", type=Path, required=True,
                        help="new disposable directory; only --resume accepts an existing rehearsal")
     trial.add_argument("--resume", action="store_true")
+    for command in (plan, trial):
+        command.add_argument("--interleave", action="store_true",
+                             help="alternate movie and TV title starts; keep this option unchanged for resume")
     args = parser.parse_args(argv)
     try:
         if args.command == "plan":
             cohort = IdCohort(*args.cohort) if args.cohort is not None else None
             result = {"mode": "read_only_dry_run", **summarize_plan(plan_daily_ids(
                 export_date=args.export_date, movie_file=args.movie, tv_file=args.tv,
-                per_media_limit=args.per_media_limit, cohort=cohort))}
+                per_media_limit=args.per_media_limit, cohort=cohort, interleave=args.interleave))}
         else:
-            result = rehearse(args.checkpoint_dir, resume=args.resume)
+            result = rehearse(args.checkpoint_dir, resume=args.resume, interleave=args.interleave)
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as exc:
         parser.exit(2, f"Detached TMDb preflight failed: {type(exc).__name__}\n")
     print(json.dumps(result, sort_keys=True))

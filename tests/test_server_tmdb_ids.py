@@ -185,3 +185,44 @@ def test_cohort_pin_changes_even_with_identical_empty_queue_and_checks_unselecte
     pair = _sources(tmp_path, [{"id": 1}], [{"id": 1, "adult": True}, {"id": 0, "adult": True}])
     with pytest.raises(ValueError, match="row 2"):
         _cohort_plan(pair, tmdb_ids.IdCohort(2, 1))
+
+
+@pytest.mark.parametrize("cohort", [None, tmdb_ids.IdCohort(2, 0)])
+def test_interleaved_opt_in_changes_only_cross_type_order_and_manifest(tmp_path, cohort):
+    movie = [{"id": i, "adult": False} for i in range(1, 150)]
+    tv = [{"id": i, "adult": False} for i in range(1, 30)]
+    pair = _sources(tmp_path, movie, tv)
+    args = dict(export_date=DAY, movie_file=pair[0], tv_file=pair[1], per_media_limit=7, cohort=cohort)
+    old = tmdb_ids.plan_daily_ids(**args)
+    new = tmdb_ids.plan_daily_ids(**args, interleave=True)
+    assert old == tmdb_ids.plan_daily_ids(**args, interleave=False)
+    assert "schedule" not in old.manifest()
+    assert new.manifest()["format"] == "tmdb-id-plan-v3-sha256-interleaved-sample"
+    assert new.manifest()["schedule"] == "movie-first-round-robin-v1"
+    assert new.manifest().get("cohort") == old.manifest().get("cohort")
+    assert new.manifest()["sources"] == old.manifest()["sources"]
+    assert len(new.queue) == len(old.queue) == 14
+    assert [i.media_type for i in new.queue] == ["movie", "tv"] * 7
+    for kind in ("movie", "tv"):
+        assert [i for i in new.queue if i.media_type == kind] == [i for i in old.queue if i.media_type == kind]
+    new.require_same_inputs(new.manifest())
+    with pytest.raises(ValueError, match="new checkpoint"):
+        new.require_same_inputs(old.manifest())
+    with pytest.raises(ValueError, match="new checkpoint"):
+        old.require_same_inputs(new.manifest())
+
+
+def test_interleaved_preserves_tail_even_when_one_type_is_empty_or_exhausted(tmp_path):
+    movie = [{"id": i, "adult": False} for i in range(1, 9)]
+    for tv in ([{"id": 1, "adult": False}], [{"id": 1}]):
+        pair = _sources(tmp_path, movie, tv)
+        args = dict(export_date=DAY, movie_file=pair[0], tv_file=pair[1], per_media_limit=3)
+        old = tmdb_ids.plan_daily_ids(**args)
+        new = tmdb_ids.plan_daily_ids(**args, interleave=True)
+        assert new.queue == old.queue[:1] + old.queue[3:] + old.queue[1:3]
+        if new.queue == old.queue:
+            assert new.manifest()["queue_sha256"] == old.manifest()["queue_sha256"]
+            with pytest.raises(ValueError, match="new checkpoint"):
+                new.require_same_inputs(old.manifest())
+        with pytest.raises(ValueError, match="Boolean"):
+            tmdb_ids.plan_daily_ids(**args, interleave="false")

@@ -79,6 +79,10 @@ def test_plan_only_reads_pinned_filename_and_prints_aggregates(tmp_path):
     assert str(tmp_path) not in json.dumps(first)
     assert {p: p.read_bytes() for p in tmp_path.iterdir()} == before
     assert output(*args, "--cohort", 2, 0)["cohort"] == {"count": 2, "index": 0}
+    mixed = output(*args, "--interleave")
+    assert mixed["schedule"] == "movie-first-round-robin-v1"
+    assert mixed["queue_sha256"] == first["queue_sha256"]  # only one title per type
+    assert {p: p.read_bytes() for p in tmp_path.iterdir()} == before
 
 
 def test_resume_refuses_missing_unrelated_or_aliased_file_without_writes(tmp_path):
@@ -119,3 +123,43 @@ def test_resume_refuses_surprising_sidecar_without_opening_it(tmp_path):
     assert result.returncode == 2
     assert unrelated.read_text(encoding="utf-8") == "must survive"
     assert db.read_bytes() == before
+
+
+def test_interleaved_429_commits_mixed_prefix_then_resumes_exact_pending_orders(tmp_path):
+    directory = tmp_path / "mixed"
+    args = ("rehearse", "--checkpoint-dir", directory, "--interleave")
+    interrupted = output(*args)
+    assert interrupted["schedule"] == "movie-first-round-robin-v1"
+    assert interrupted["phase"] == "interrupted"
+    assert interrupted["http_429_this_run"] == 1
+    assert (interrupted["planned"], interrupted["completed"], interrupted["pending"]) == (4, 2, 2)
+    assert interrupted["request_media_order"] == ["movie", "tv", "tv", "movie", "movie"]
+    db, = directory.iterdir()
+    prior = state(db)
+    assert [(media, status) for media, _, status in prior] == [("movie", "hydrated"), ("tv", "hydrated")]
+    before = db.read_bytes()
+    wrong = run("rehearse", "--checkpoint-dir", directory, "--resume")
+    assert wrong.returncode == 2 and not wrong.stdout and db.read_bytes() == before
+
+    resumed = output(*args, "--resume")
+    assert resumed["phase"] == "resumed" and resumed["complete"]
+    assert resumed["request_media_order"] == ["movie", "movie", "tv"]
+    assert resumed["completed_before"] == resumed["completed_this_run"] == 2
+    assert (resumed["missing_overview"], resumed["unavailable"], resumed["pending"]) == (1, 1, 0)
+    assert set(prior) <= set(state(db))
+    assert resumed["audit"]["by_media"]["tv"]["observed_language"] == {
+        "ru": 0, "en": 0, "other": 0, "unverified": 1,
+    }
+    assert output(*args, "--resume")["request_media_order"] == []
+
+
+def test_legacy_checkpoint_cannot_be_reinterpreted_as_interleaved(tmp_path):
+    directory = tmp_path / "legacy"
+    args = ("rehearse", "--checkpoint-dir", directory)
+    interrupted = output(*args)
+    assert interrupted["completed"] == 1 and "schedule" not in interrupted
+    db, = directory.iterdir()
+    before = db.read_bytes()
+    wrong = run(*args, "--resume", "--interleave")
+    assert wrong.returncode == 2 and not wrong.stdout and db.read_bytes() == before
+    assert output(*args, "--resume")["complete"]

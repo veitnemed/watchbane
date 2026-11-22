@@ -10,6 +10,7 @@ from hashlib import sha256
 from heapq import heappush, heapreplace
 from io import BytesIO
 import json
+from itertools import zip_longest
 from pathlib import Path
 import zlib
 
@@ -22,6 +23,8 @@ MAX_PER_MEDIA = 5000
 _PREFIX = {"movie": "movie_ids", "tv": "tv_series_ids"}
 _FORMAT = "tmdb-id-plan-v1-sha256-sample"
 _COHORT_FORMAT = "tmdb-id-plan-v2-sha256-cohort-sample"
+_INTERLEAVED_FORMAT = "tmdb-id-plan-v3-sha256-interleaved-sample"
+_INTERLEAVED_SCHEME = "movie-first-round-robin-v1"
 _COHORT_SCHEME = "typed-sha256-modulo-v1"
 MAX_COHORTS = 256
 
@@ -66,6 +69,11 @@ class IdPlan:
     sources: tuple[SourceSummary, ...]
     queue: tuple[QueueItem, ...]
     cohort: IdCohort | None = None
+    interleave: bool = False
+
+    def __post_init__(self):
+        if type(self.interleave) is not bool:
+            raise ValueError("Interleaved schedule requires an explicit Boolean")
 
     def manifest(self) -> dict:
         manifest = {
@@ -78,6 +86,9 @@ class IdPlan:
         if self.cohort is not None:
             manifest["format"] = _COHORT_FORMAT
             manifest["cohort"] = {"scheme": _COHORT_SCHEME, **asdict(self.cohort)}
+        if self.interleave:
+            manifest["format"] = _INTERLEAVED_FORMAT
+            manifest["schedule"] = _INTERLEAVED_SCHEME
         return manifest
 
     def require_same_inputs(self, previous_manifest: dict) -> None:
@@ -145,7 +156,7 @@ def _read_source(path: Path, media: str, expected: str, cap: int, cohort: IdCoho
 
 def plan_daily_ids(
     *, export_date: date, movie_file: Path, tv_file: Path, per_media_limit: int,
-    cohort: IdCohort | None = None,
+    cohort: IdCohort | None = None, interleave: bool = False,
 ) -> IdPlan:
     """Inspect both gzip inputs fully, then return a deterministic typed queue.
 
@@ -154,6 +165,9 @@ def plan_daily_ids(
     or rebalance unused TV/movie quota into the other kind. With a fixed cohort
     count, each typed ID belongs to just one cohort; caps still sample within
     each cohort, so running them all does not promise exhaustive coverage.
+    Interleaving is explicit: it alternates typed titles, movie first, then
+    appends the remainder of either type in its original sampled order. It
+    balances title starts, not HTTP attempts or successful descriptions.
     """
     if type(export_date) is not date:
         raise ValueError("An explicit export calendar date is required")
@@ -161,10 +175,16 @@ def plan_daily_ids(
         raise ValueError(f"per_media_limit must be an integer from 1 to {MAX_PER_MEDIA}")
     if cohort is not None and type(cohort) is not IdCohort:
         raise ValueError("Expected an explicit IdCohort")
-    sources, queue = [], []
+    if type(interleave) is not bool:
+        raise ValueError("Interleaved schedule requires an explicit Boolean")
+    sources, batches = [], []
     for media, path in (("movie", movie_file), ("tv", tv_file)):
         filename = f"{_PREFIX[media]}_{export_date:%m_%d_%Y}.json.gz"
         summary, items = _read_source(Path(path), media, filename, per_media_limit, cohort)
         sources.append(summary)
-        queue.extend(items)
-    return IdPlan(export_date.isoformat(), per_media_limit, tuple(sources), tuple(queue), cohort)
+        batches.append(items)
+    if interleave:
+        queue = tuple(item for pair in zip_longest(*batches) for item in pair if item is not None)
+    else:
+        queue = batches[0] + batches[1]
+    return IdPlan(export_date.isoformat(), per_media_limit, tuple(sources), queue, cohort, interleave)

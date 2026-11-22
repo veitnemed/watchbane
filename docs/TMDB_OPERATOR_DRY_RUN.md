@@ -41,3 +41,27 @@ drill does not support arbitrary SQLite databases or sidecar recovery and is
 not authorization to fetch, store, or distribute real TMDb data. A live pilot
 still requires authorized provider access and confirmed terms for the
 intended retrieval, storage, indexing, and serving.
+
+## Optional mixed movie and TV prefix
+
+Without a schedule option, the original plans and manifests are unchanged:
+all selected movies precede all selected series. Add `--interleave` to `plan`
+to alternate one movie then one series while both queues have entries. It
+preserves per-type sample order, caps, and optional cohort selection; it does
+not add eligible series when there were none. Titles can consume different
+numbers of locale requests, so this is a mixed **title** prefix, not equal
+HTTP quota consumption or a coverage guarantee.
+
+An interleaved checkpoint pins a distinct, versioned schedule even when
+its final typed queue happens to match the original. Start a separate drill
+and use the same flag on both commands:
+
+```sh
+python -m tools.qa.rehearse_tmdb_hydration rehearse --checkpoint-dir ./tmdb-mixed --interleave
+python -m tools.qa.rehearse_tmdb_hydration rehearse --checkpoint-dir ./tmdb-mixed --interleave --resume
+```
+
+For this synthetic schedule the first process commits one movie and one
+series before the exact same fixture 429; the next process attempts only the
+pending movie (Russian then English) and the pending series (Russian). Changing
+the schedule flag during a resume refuses the existing database without writes.
