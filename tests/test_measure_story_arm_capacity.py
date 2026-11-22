@@ -69,3 +69,60 @@ def test_compare_rejects_misleading_reports(tmp_path, bad):
     dump(b, y)
     with pytest.raises(ValueError):
         capacity.compare(a, b)
+
+
+def restart_captures(tmp_path):
+    a, b, x, y = captures(tmp_path)
+    for report, phase in ((x, "cold"), (y, "restart")):
+        report[-1]["capacity"].update(mode="prepared", density="high", cache_phase=phase,
+                                      proof_of_cache_hit=phase == "restart",
+                                      passage_snapshot_id="a" * 64, passage_snapshot_sha256="b" * 64)
+    return a, b, x, y
+
+
+def test_compare_restart_requires_real_witness_and_same_contents(tmp_path, capsys):
+    a, b, x, y = restart_captures(tmp_path)
+    dump(a, x)
+    dump(b, y)
+    capacity.compare_restart(a, b)
+    assert json.loads(capsys.readouterr().out)["cache_hit_proven"] is True
+    y[-1]["capacity"]["proof_of_cache_hit"] = False
+    dump(b, y)
+    with pytest.raises(ValueError, match="proof"):
+        capacity.compare_restart(a, b)
+    y[-1]["capacity"]["proof_of_cache_hit"] = True
+    y[-1]["capacity"]["passage_snapshot_sha256"] = "c" * 64
+    dump(b, y)
+    with pytest.raises(ValueError, match="preserve"):
+        capacity.compare_restart(a, b)
+
+
+def test_witness_requires_consumed_cache_and_no_startup_reencoding(tmp_path):
+    from types import SimpleNamespace
+    from tools.qa.serve_story_cache_hit import guard
+
+    class Cache:
+        def load(self, identity):
+            return None if identity is None else matrix
+
+    class Model:
+        def encode(self, texts):
+            return texts
+
+    matrix = object()
+    marker = tmp_path / "proof"
+    sample_id = SimpleNamespace(fingerprint=lambda: bytes.fromhex("ab" * 32))
+    load, encode, finished = guard(marker, Model, Cache)
+    with pytest.raises(RuntimeError, match="encoding during"):
+        encode(Model(), ["startup"])
+    with pytest.raises(RuntimeError, match="valid matching"):
+        load(Cache(), None)
+    assert load(Cache(), sample_id) is matrix
+    with pytest.raises(RuntimeError, match="encoding during"):
+        encode(Model(), ["startup even after cache hit"])
+    with pytest.raises(RuntimeError, match="did not use"):
+        finished(SimpleNamespace(vectors=object()))
+    assert not marker.exists()
+    finished(SimpleNamespace(vectors=matrix))
+    assert marker.read_text() == "ab" * 32
+    assert encode(Model(), ["request"]) == ["request"]

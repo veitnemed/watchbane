@@ -7,8 +7,13 @@ on:
       - ".github/workflows/linux-arm-e5-capacity.yml"
   workflow_dispatch:
     inputs:
+      scenario:
+        description: Synthetic capacity experiment
+        type: choice
+        options: ['backends', 'cache_restart']
+        default: 'backends'
       rows:
-        description: Generated synopses per test configuration
+        description: "Backends only: generated synopses per configuration (cache restart is fixed at 1000)"
         type: choice
         options: ['1000', '2000']
         default: '1000'
@@ -55,6 +60,7 @@ jobs:
         run: |
           timeout --kill-after=10s 8m python -m tools.qa.diagnose_story_model_download "$RUNNER_TEMP/watchbane-arm-cgroup-model"
       - name: Compare baseline/prepared in four independent ARM64 cgroups
+        if: inputs.scenario == 'backends'
         shell: bash
         env:
           WATCHBANE_LAB_ROWS: ${{ inputs.rows || '1000' }}
@@ -99,4 +105,42 @@ jobs:
             fi
           done
           exit "$failed"
+      - name: Prove unchanged typed order after cached restart in a fresh ARM64 cgroup
+        if: github.event_name == 'push' || inputs.scenario == 'cache_restart'
+        shell: bash
+        run: |
+          work="$(mktemp -d "$RUNNER_TEMP/watchbane-capacity-restart.XXXXXX")"
+          scratch="$work/source"
+          cache="$work/passage-cache"
+          mkdir -m 700 -- "$scratch" "$cache"
+          prefix="watchbane-arm-restart-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cleanup() {
+            docker rm -f "$prefix-cold" "$prefix-restart" >/dev/null 2>&1 || true
+            rm -rf -- "$work"
+          }
+          trap cleanup EXIT
+          git archive HEAD -- candidates tools/qa web | tar -x -C "$scratch"
+          for phase in cold restart; do
+            mount="type=bind,src=$cache,dst=/opt/watchbane-passage-cache"
+            if [ "$phase" = restart ]; then mount="$mount,readonly"; fi
+            container="$prefix-$phase"
+            status=0
+            timeout --kill-after=10s 6m docker run --name "$container" --pull=never --init \
+              --platform linux/arm64 --network none --cgroupns private \
+              --cpus 2 --memory 2g --memory-swap 2g \
+              --user "$(id -u):$(id -g)" --read-only --cap-drop ALL --security-opt no-new-privileges \
+              --tmpfs /tmp:rw,nosuid,nodev,size=64m --env HOME=/tmp \
+              --mount "type=bind,src=$scratch,dst=/opt/watchbane-source,readonly" \
+              --mount "type=bind,src=$RUNNER_TEMP/watchbane-arm-cgroup-model,dst=/opt/watchbane-model,readonly" \
+              --mount "$mount" \
+              watchbane-arm-cgroup:local python -m tools.qa.measure_story_arm_capacity run \
+              --model-dir /opt/watchbane-model --rows 1000 --density high --mode prepared \
+              --cache-dir /opt/watchbane-passage-cache --cache-phase "$phase" \
+              | tee "$work/$phase.jsonl" || status=$?
+            state="$(docker inspect --format '{{.State.OOMKilled}} {{.State.ExitCode}}' "$container")" || state="inspection_failed"
+            printf 'phase=%s runner_exit=%s container_oom_killed_and_exit=%s\n' "$phase" "$status" "$state"
+            docker rm -f "$container" >/dev/null 2>&1 || true
+            if [ "$status" != 0 ] || [ "$state" != "false 0" ]; then exit 1; fi
+          done
+          python -m tools.qa.measure_story_arm_capacity compare-restart "$work/cold.jsonl" "$work/restart.jsonl"
       # No published ports, upload, image push, remote deployment, or billing setup.
