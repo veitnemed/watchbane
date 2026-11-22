@@ -37,7 +37,7 @@ def test_negotiated_hits_keep_exact_legacy_order_and_payload(tmp_path):
         "outcome": {"state": "candidates", "reason": "possible_local_results"}
     }
     for response in (legacy, opt_in):
-        assert response.headers["Vary"] == HEADER
+        assert response.headers["Vary"] == f"{HEADER}, Watchbane-Search-Artwork"
         assert response.headers["Cache-Control"] == "no-store"
 
 
@@ -71,7 +71,7 @@ def test_unknown_version_and_unknown_engine_reason_never_echo_private_text(tmp_p
             assert invalid.json() == {"detail": "unsupported_search_outcome_version"}
             assert HEADER not in invalid.headers
             assert invalid.headers["cache-control"] == "no-store"
-            assert invalid.headers["vary"] == HEADER
+            assert invalid.headers["vary"] == f"{HEADER}, Watchbane-Search-Artwork"
         empty = client.post("/v1/search", json={"query": "private"}, headers={HEADER: "1"})
         assert empty.json()["outcome"] == {"state": "clarification", "reason": "no_candidates"}
         assert "private" not in empty.text

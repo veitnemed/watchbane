@@ -1,5 +1,5 @@
 """Opt-in transport for a separately started Watchbane loopback story server."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from http.client import HTTPConnection, HTTPException
 import json
 import re
@@ -7,12 +7,15 @@ from socket import SHUT_RDWR
 from threading import Event, Thread
 from time import monotonic
 
+from candidates.story_artwork import is_provider_poster_path
+
 _HOST = "127.0.0.1"
 _PATH = "/v1/search"
 _TIMEOUT = 8.0
 _MAX_BYTES = 512 * 1024
 _MAX_BUSY_BYTES = 256
 _OUTCOME_HEADER = "Watchbane-Search-Outcome"
+_ARTWORK_HEADER = "Watchbane-Search-Artwork"
 _OUTCOME_V1 = frozenset({
     ("candidates", "possible_local_results"),
     ("scope_refusal", "explicit_non_film_request"),
@@ -41,6 +44,7 @@ class OnlineStoryResult:
     year: int | None
     overview: str
     evidence: str
+    poster_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,10 +72,12 @@ def _is_busy(raw):
         return False
 
 
-def _parse(raw, limit, *, with_outcome=False):
+def _parse(raw, limit, *, with_outcome=False, with_artwork=False):
     try:
         value = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object)
         keys = {"source", "results", "outcome"} if with_outcome else {"source", "results"}
+        if with_artwork:
+            keys.add("artwork")
         if (type(value) is not dict or set(value) != keys or value["source"] != "tmdb"
                 or type(value["results"]) is not list or len(value["results"]) > limit):
             raise ValueError
@@ -95,6 +101,12 @@ def _parse(raw, limit, *, with_outcome=False):
             results.append(OnlineStoryResult(identifier, row["media_type"], row["title"],
                                              year, row["overview"], row["evidence"]))
             seen.add(identifier)
+        if with_artwork:
+            artwork = value["artwork"]
+            if (type(artwork) is not dict or not artwork.keys() <= seen
+                    or not all(is_provider_poster_path(path) for path in artwork.values())):
+                raise ValueError
+            results = [replace(row, poster_path=artwork.get(row.id)) for row in results]
         if with_outcome:
             outcome = value["outcome"]
             if type(outcome) is not dict or set(outcome) != {"state", "reason"}:
@@ -118,6 +130,7 @@ def search_online(
     limit: int = 5,
     cancelled: Event | None = None,
     with_outcome: bool = False,
+    with_artwork: bool = False,
 ) -> tuple[OnlineStoryResult, ...] | OnlineStoryOutcome:
     """Send only query/limit to IPv4 loopback; never discover a server or fall back.
 
@@ -125,12 +138,14 @@ def search_online(
     set the cancellation event. Cancellation stops local waiting, not a server
     operation that already received the POST. The optional outcome protocol
     requires the exact server echo and never retries with the legacy contract.
+    Opt-in artwork also requires an exact echo; it returns opaque provider
+    names only, with no image rendering, resolution, or extra I/O.
     """
     if consent is not True:
         raise OnlineStoryError("Local server search was not authorized.")
     if (type(port) is not int or not 1 <= port <= 65535 or type(limit) is not int or not 1 <= limit <= 10
             or type(query) is not str or len(query) > 600 or not query.strip()
-            or type(with_outcome) is not bool):
+            or type(with_outcome) is not bool or type(with_artwork) is not bool):
         raise OnlineStoryError("Invalid local story search request.")
     try:
         body = json.dumps({"query": query.strip(), "limit": limit}, ensure_ascii=False).encode("utf-8")
@@ -172,6 +187,8 @@ def search_online(
                    "Accept-Encoding": "identity", "Cache-Control": "no-store"}
         if with_outcome:
             headers[_OUTCOME_HEADER] = "1"
+        if with_artwork:
+            headers[_ARTWORK_HEADER] = "1"
         connection.request("POST", _PATH, body, headers)
         check_active()
         with connection.getresponse() as response:
@@ -187,6 +204,8 @@ def search_online(
 
             maximum = _MAX_BUSY_BYTES if busy_candidate else _MAX_BYTES
             if not busy_candidate and with_outcome and response.getheader(_OUTCOME_HEADER) != "1":
+                raise invalid()
+            if not busy_candidate and with_artwork and response.getheader(_ARTWORK_HEADER) != "1":
                 raise invalid()
             content_type = response.getheader("Content-Type", "").split(";", 1)[0].strip().lower()
             encoding = response.getheader("Content-Encoding", "identity").strip().lower()
@@ -214,7 +233,12 @@ def search_online(
                 if recognized:
                     raise OnlineStoryBusy("Local story server is busy.")
                 raise invalid()
-        results = _parse(raw, limit, with_outcome=True) if with_outcome else _parse(raw, limit)
+        parser_options = {}
+        if with_outcome:
+            parser_options["with_outcome"] = True
+        if with_artwork:
+            parser_options["with_artwork"] = True
+        results = _parse(raw, limit, **parser_options)
         check_active()  # A superseded request cannot hand stale results back.
         return results
     except (OSError, HTTPException):

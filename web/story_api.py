@@ -13,6 +13,7 @@ from starlette.requests import ClientDisconnect
 
 from candidates.safety.explicit_content import is_blocked_explicit_sexual_content
 from candidates.story_search import StoryDocument
+from candidates.story_artwork import is_provider_poster_path
 from candidates.story_seed_snapshot import StorySeedSnapshotError, load_seed_snapshot_with_digest
 from candidates.story_semantic import DEFAULT_E5_BATCH_SIZE, LocalE5, SemanticStorySearch, validate_e5_batch_size
 from candidates.story_vector_cache import PREPROCESS_VERSION
@@ -71,7 +72,7 @@ class _StartupPassageEncoder:
         return matrix
 
 
-def _load_documents(catalog):
+def _load_documents(catalog, *, artwork_paths=None):
     snapshot, catalog_sha = load_seed_snapshot_with_digest(catalog)
     documents = []
     for key, row in snapshot.items():
@@ -80,16 +81,19 @@ def _load_documents(catalog):
             continue
         documents.append(StoryDocument(key, russian["title"], russian["overview"],
                                        row["media_type"], "TMDb", year=row["year"]))
+        if artwork_paths is not None and is_provider_poster_path(row.get("poster_path")):
+            artwork_paths[key] = row["poster_path"]
     return documents, catalog_sha
 
 
 def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = None, prepared_index: bool = False,
-                 previous_catalog: Path | None = None, startup_batch_size: int = DEFAULT_E5_BATCH_SIZE):
+                 previous_catalog: Path | None = None, startup_batch_size: int = DEFAULT_E5_BATCH_SIZE,
+                 artwork_paths: dict | None = None):
     """Index the approved snapshot; persistence is an explicit operator option."""
     validate_e5_batch_size(startup_batch_size)
     if previous_catalog is not None and cache_dir is None:
         raise ValueError("A previous catalog requires an explicit cache directory.")
-    documents, catalog_sha = _load_documents(catalog)
+    documents, catalog_sha = _load_documents(catalog, artwork_paths=artwork_paths)
     if not documents:
         raise ValueError("The configured TMDb snapshot has no eligible Russian descriptions.")
     encoder = LocalE5(model_dir)  # Always verify model artifacts, even on a cache hit.
@@ -137,6 +141,7 @@ async def _read_query(request: Request):
 
 
 _OUTCOME_HEADER = "Watchbane-Search-Outcome"
+_ARTWORK_HEADER = "Watchbane-Search-Artwork"
 
 
 def _search_outcome(result):
@@ -152,7 +157,8 @@ def _search_outcome(result):
     return {"state": "clarification", "reason": reason}
 
 def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, cache_dir: Path | None = None,
-               prepared_index: bool = False, previous_catalog: Path | None = None, startup_batch_size: int = DEFAULT_E5_BATCH_SIZE):
+               prepared_index: bool = False, previous_catalog: Path | None = None,
+               startup_batch_size: int = DEFAULT_E5_BATCH_SIZE, artwork_metadata: bool = False):
     """One verified engine per worker; tests may inject a local engine factory."""
     validate_e5_batch_size(startup_batch_size)
     if previous_catalog is not None and cache_dir is None:
@@ -166,12 +172,17 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
             options["previous_catalog"] = previous_catalog
         if startup_batch_size != DEFAULT_E5_BATCH_SIZE:
             options["startup_batch_size"] = startup_batch_size
+        artwork_paths = {}
+        if artwork_metadata:
+            options["artwork_paths"] = artwork_paths
         engine = await run_in_threadpool(engine_factory, catalog, model_dir, **options)
+        app.state.artwork_paths = artwork_paths
         app.state.engine = engine
         try:
             yield
         finally:
             del app.state.engine
+            del app.state.artwork_paths
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     search_slot = Lock()
@@ -181,7 +192,7 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
         response = await call_next(request)
         if request.url.path == "/v1/search":
             response.headers["Cache-Control"] = "no-store"
-            response.headers.append("Vary", _OUTCOME_HEADER)
+            response.headers.append("Vary", f"{_OUTCOME_HEADER}, {_ARTWORK_HEADER}")
         return response
 
     @app.get("/healthz")
@@ -193,6 +204,9 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
         versions = request.headers.getlist(_OUTCOME_HEADER)
         if versions and versions != ["1"]:
             raise HTTPException(400, "unsupported_search_outcome_version")
+        artwork_versions = request.headers.getlist(_ARTWORK_HEADER)
+        if artwork_versions and artwork_versions != ["1"]:
+            raise HTTPException(400, "unsupported_search_artwork_version")
         query, limit = await _read_query(request)
         if not search_slot.acquire(blocking=False):
             raise HTTPException(503, "search_busy", headers={"Retry-After": "1"})
@@ -215,6 +229,13 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
             if versions:
                 payload["outcome"] = _search_outcome(result)
                 response.headers[_OUTCOME_HEADER] = "1"
+            if artwork_versions:
+                mapping = app.state.artwork_paths
+                payload["artwork"] = {
+                    row["id"]: mapping[row["id"]] for row in payload["results"]
+                    if is_provider_poster_path(mapping.get(row["id"]))
+                }
+                response.headers[_ARTWORK_HEADER] = "1"
             return payload
         except Exception:
             # Do not put search text, provider data, or an exception containing
@@ -238,6 +259,7 @@ def main(argv=None):
     parser.add_argument("--previous-catalog", type=Path, help="Optional previous approved snapshot for passage reuse")
     parser.add_argument("--startup-passage-batch-size", type=int, default=DEFAULT_E5_BATCH_SIZE,
                         help="Maximum E5 batch for initial passages only (1–16)")
+    parser.add_argument("--artwork-metadata", action="store_true", help="Allow negotiated relative TMDb poster metadata")
     args = parser.parse_args(argv)
     try:
         validate_e5_batch_size(args.startup_passage_batch_size)
@@ -247,7 +269,8 @@ def main(argv=None):
         parser.error("--previous-catalog requires --cache-dir")
     uvicorn.run(create_app(args.catalog, args.model_dir, cache_dir=args.cache_dir,
                           prepared_index=args.prepared_index, previous_catalog=args.previous_catalog,
-                          startup_batch_size=args.startup_passage_batch_size), host="127.0.0.1",
+                          startup_batch_size=args.startup_passage_batch_size,
+                          artwork_metadata=args.artwork_metadata), host="127.0.0.1",
                 port=args.port, access_log=False, proxy_headers=False)
 
 
