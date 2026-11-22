@@ -1,5 +1,6 @@
 import asyncio
 from hashlib import sha256
+from threading import Event
 import os
 
 import pytest
@@ -14,8 +15,35 @@ from web import story_api
 
 
 @pytest.mark.skipif(os.name != "posix", reason="Private POSIX synthetic prebuild")
-@pytest.mark.parametrize("scale,counts", [(2, [2, 3]), (1000, [1000, 1000])])
-def test_exact_generation_bundles_and_same_listener(tmp_path, monkeypatch, scale, counts):
+@pytest.mark.parametrize("scale,counts,lost", [
+    (2, [2, 3], None), (1000, [1000, 1000], None),
+    (2, [2, 3], "after"), (2, [2, 3], "before"),
+], ids=("small", "1k", "post-encode-timeout", "pre-encode-transport"))
+def test_exact_generation_bundles_and_same_listener(tmp_path, monkeypatch, scale, counts, lost):
+    if lost:
+        original_post = tcp.post
+        original_build = tcp.build
+        seen = Event()
+
+        def build(*args, **kwargs):
+            result = original_build(*args, **kwargs)
+            if args[2] == "new" and args[0] == bundle / "new" and kwargs.get("barrier") is None:
+                assert seen.wait(3)
+            return result
+
+        def post(*args, **kwargs):
+            if lost == "before" and kwargs.get("expected_status", 200) is None:
+                seen.set()
+                raise ConnectionRefusedError("Synthetic transport failure before sending")
+            result = original_post(*args, **kwargs)
+            if kwargs.get("expected_status", 200) is None:
+                tcp.verify(result, "old", 0, scale=scale)
+                seen.set()
+                raise TimeoutError("Synthetic loss after exact underlying HTTP success")
+            return result
+
+        monkeypatch.setattr(tcp, "build", build)
+        monkeypatch.setattr(tcp, "post", post)
     bundle, model = tmp_path / "bundle", tmp_path / "model"
     bundle.mkdir(mode=0o700)
     (model / "onnx").mkdir(parents=True)
@@ -56,7 +84,38 @@ def test_exact_generation_bundles_and_same_listener(tmp_path, monkeypatch, scale
     samples = result["unpaused"]
     assert 0 <= samples["old_success_while_candidate_still_building"] <= samples["old_success"]
     assert samples["attempted"] == samples["old_success"] + samples["busy"] + samples["errors"] <= 16
-    assert result["actual_query_calls"] == 11 + samples["old_success"]
+    assert result["actual_query_calls"] == 11 + samples["encoded_attempts"]
+    assert samples["errors"] == samples["deadline"] + samples["transport_errors"]
+    assert samples["encoded_attempts"] == samples["old_success"] + samples["encoded_without_observed_success"]
+    if lost == "after":
+        assert samples["attempted"] == samples["deadline"] == samples["encoded_without_observed_success"] == 1
+        assert samples["old_success"] == samples["transport_errors"] == 0
+    elif lost == "before":
+        assert samples["attempted"] == samples["transport_errors"] == 1
+        assert samples["encoded_attempts"] == samples["deadline"] == samples["old_success"] == 0
     assert samples["observation_ms"] >= 0
     assert before == {file: (sha256(file.read_bytes()).digest(), file.stat().st_ino)
                       for file in bundle.rglob("*") if file.is_file()}
+
+
+@pytest.mark.parametrize("outcomes,calls", [
+    ({1: "deadline"}, [1, 1]),
+    ({1: "deadline"}, [2]),
+    ({1: "busy"}, [1]),
+    ({1: "success"}, []),
+])
+def test_reconciliation_refuses_impossible_ledgers(outcomes, calls):
+    from types import SimpleNamespace
+
+    encoder = SimpleNamespace(sample_calls=calls, controlled_calls=11, query_calls=11 + len(calls))
+    with pytest.raises(ValueError, match="query encode accounting"):
+        tcp.reconcile_unpaused({}, outcomes, encoder)
+
+
+def test_sampler_does_not_count_malformed_http_as_transport(monkeypatch):
+    def broken(*args, **kwargs):
+        raise ValueError("Invalid negotiated contract")
+
+    monkeypatch.setattr(tcp, "post", broken)
+    with pytest.raises(ValueError, match="Invalid negotiated contract"):
+        asyncio.run(tcp.sample_unpaused(0, Event(), scale=2))

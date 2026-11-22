@@ -7,6 +7,7 @@ state. Controlled barriers demonstrate generation consistency, not uptime.
 import argparse
 import asyncio
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import lru_cache
 from hashlib import sha256
@@ -35,6 +36,25 @@ _WAIT = 15
 _CAP = 32 * 1024
 _SAMPLE_MAX = 16
 _SAMPLE_SECONDS = 4.0
+_SAMPLE_HEADER = "Watchbane-QA-Sample"
+_sample_id = ContextVar("tcp_qa_sample_id", default=None)
+
+
+class ObservedEncoder(shared.SharedProbeEncoder):
+    def __init__(self, model):
+        super().__init__(model)
+        self.sample_calls = []
+        self.controlled_calls = 0
+
+    def encode(self, texts, prefix="passage: ", **kwargs):
+        if prefix == "query: ":
+            ordinal = _sample_id.get()
+            if ordinal is None:
+                self.controlled_calls += 1
+            else:
+                self.sample_calls.append(ordinal)
+        return super().encode(texts, prefix=prefix, **kwargs)
+
 
 
 @lru_cache(maxsize=4)
@@ -169,9 +189,14 @@ def app_for(selection, before_search):
             raise HTTPException(403, "loopback_only")
         if any(request.headers.getlist(name) != ["1"] for name in _HEADERS):
             raise HTTPException(400, "required_qa_protocol_version")
+        raw_sample = request.headers.getlist(_SAMPLE_HEADER)
+        if raw_sample and (len(raw_sample) != 1
+                           or raw_sample[0] not in {str(i) for i in range(1, _SAMPLE_MAX + 1)}):
+            raise HTTPException(400, "invalid_qa_sample")
         query, limit = await story_api._read_query(request)
         if not gate.acquire(blocking=False):
             raise HTTPException(503, "search_busy", headers={"Retry-After": "1"})
+        token = _sample_id.set(int(raw_sample[0]) if raw_sample else None)
         try:
             # Capture every generation-varying dependency before any await.
             generation = selection.current
@@ -192,15 +217,18 @@ def app_for(selection, before_search):
         except Exception:
             raise HTTPException(503, "search_unavailable") from None
         finally:
+            _sample_id.reset(token)
             gate.release()
 
     return app
 
 
-def post(port, query, *, expected_status=200, timeout=_WAIT):
+def post(port, query, *, expected_status=200, timeout=_WAIT, sample=None):
     conn = HTTPConnection("127.0.0.1", port, timeout=timeout)
     try:
         headers = dict.fromkeys(_HEADERS, "1") | {"Content-Type": "application/json"}
+        if sample is not None:
+            headers[_SAMPLE_HEADER] = str(sample)
         body = json.dumps({"query": query, "limit": 1}, ensure_ascii=False).encode()
         conn.request("POST", "/v1/search", body, headers=headers)
         response = conn.getresponse()
@@ -237,6 +265,7 @@ async def sample_unpaused(port, finished, *, scale):
     start = monotonic()
     attempts = busy = errors = overlap = 0
     success_ms = []
+    observed = {}
     while attempts < _SAMPLE_MAX and not finished.is_set():
         remaining = _SAMPLE_SECONDS - (monotonic() - start)
         if remaining <= 0:
@@ -245,19 +274,22 @@ async def sample_unpaused(port, finished, *, scale):
         began = monotonic()
         try:
             reply = await asyncio.wait_for(asyncio.to_thread(
-                post, port, shared.query_for(0), expected_status=None, timeout=min(1.0, remaining),
+                post, port, shared.query_for(0), expected_status=None, timeout=min(1.0, remaining), sample=attempts,
             ), remaining)
-        except (OSError, TimeoutError, ValueError):
+        except OSError as exc:
+            observed[attempts] = "deadline" if isinstance(exc, TimeoutError) else "transport_error"
             errors += 1
             # A timed-out thread may still own the request briefly.
             break
         still_building = not finished.is_set()
         elapsed_ms = (monotonic() - began) * 1000
         if reply == {"detail": "search_busy"}:
+            observed[attempts] = "busy"
             busy += 1
         else:
             # Mixed payload is a correctness failure, not a latency sample error.
             verify(reply, _OLD, 0, scale=scale)
+            observed[attempts] = "success"
             success_ms.append(elapsed_ms)
             overlap += still_building
     success_ms.sort()
@@ -268,6 +300,25 @@ async def sample_unpaused(port, finished, *, scale):
         "successful_latency_ms": {name: (round(success_ms[ceil(q * len(success_ms)) - 1], 3) if success_ms else None)
                                   for name, q in (("p50", .50), ("p95", .95))},
         "stage_still_pending_when_sampling_ended": not finished.is_set(),
+    }, observed
+
+
+def reconcile_unpaused(report, observed, encoder):
+    # The listener has already drained. A client deadline/transport error
+    # can follow inference; only explicitly attributed encodes count here.
+    calls = set(encoder.sample_calls)
+    if (len(calls) != len(encoder.sample_calls) or not calls <= observed.keys()
+            or any((outcome == "success" and ordinal not in calls)
+                   or (outcome == "busy" and ordinal in calls)
+                   for ordinal, outcome in observed.items())
+            or encoder.controlled_calls != 11
+            or encoder.query_calls != encoder.controlled_calls + len(calls)):
+        raise ValueError("Unpaused query encode accounting mismatch")
+    return report | {
+        "encoded_attempts": len(calls),
+        "deadline": sum(v == "deadline" for v in observed.values()),
+        "transport_errors": sum(v == "transport_error" for v in observed.values()),
+        "encoded_without_observed_success": sum(observed[i] != "success" for i in calls),
     }
 
 
@@ -296,7 +347,7 @@ async def rehearse(directory, model, *, scale=2, model_factory=LocalE5):
     model = Path(model)
     if not (model / "onnx/model.onnx").is_file():
         raise ValueError("Expected local portable FP32 weights")
-    encoder = shared.SharedProbeEncoder(model_factory(model))
+    encoder = ObservedEncoder(model_factory(model))
     if encoder.variant != "fp32":
         raise ValueError("Expected one pinned FP32 model")
     old = await asyncio.wait_for(asyncio.to_thread(build, bundle / _OLD, pins[_OLD], _OLD, encoder, scale=scale), _WAIT)
@@ -349,7 +400,7 @@ async def rehearse(directory, model, *, scale=2, model_factory=LocalE5):
         try:
             if not await asyncio.to_thread(started.wait, _WAIT):
                 raise TimeoutError("Unpaused staging did not start")
-            unpaused_report = await sample_unpaused(port, finished, scale=scale)
+            unpaused_report, observed = await sample_unpaused(port, finished, scale=scale)
         finally:
             await asyncio.wait_for(unpaused, _WAIT)
         del unpaused
@@ -398,7 +449,7 @@ async def rehearse(directory, model, *, scale=2, model_factory=LocalE5):
             "corruption_refused": True,
             "controlled_staging_old_ready": True, "stale_capture_old": True, "inflight_busy": True,
             "rollback": True, "actual_query_calls": encoder.query_calls, "forbidden_startup_encodes": 0,
-            "unpaused": unpaused_report}
+            "unpaused": reconcile_unpaused(unpaused_report, observed, encoder)}
 
 
 def main():
