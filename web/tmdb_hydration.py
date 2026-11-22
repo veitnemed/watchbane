@@ -8,6 +8,7 @@ from pathlib import Path
 import sqlite3
 
 from apis.tmdb.detached_transport import DetachedTmdbError, DetachedTmdbTransport
+from web.tmdb_change_windows import pending_change, stage_and_ack_change
 from web.tmdb_ids import IdPlan, MAX_PER_MEDIA, QueueItem
 
 
@@ -62,8 +63,14 @@ def _fetch(transport, item):
         overview = row.get("overview")
         if overview is None or (isinstance(overview, str) and not overview.strip()):
             continue
-        if not isinstance(overview, str) or len(overview) > 8192 or len(title) > 512:
+        if (not isinstance(overview, str) or len(overview) > 8192 or len(title) > 512
+                or "\0" in overview or "\0" in title):
             raise DetachedTmdbError("invalid_typed_detail")
+        try:
+            title.encode("utf-8")
+            overview.encode("utf-8")
+        except UnicodeError:
+            raise DetachedTmdbError("invalid_typed_detail") from None
         raw_date = row.get("release_date" if item.media_type == "movie" else "first_air_date")
         try:
             year = date.fromisoformat(raw_date).year if isinstance(raw_date, str) else None
@@ -80,6 +87,43 @@ def _fetch(transport, item):
 
 
 HYDRATION_STATES = ("hydrated", "ineligible", "missing_overview", "unavailable")
+
+
+@dataclass(frozen=True)
+class ChangeRefresh:
+    status: str
+    attempts_this_run: int
+    stop_reason: str | None = None
+
+
+def refresh_pending_change(
+    *, checkpoint: Path, item: QueueItem, transport: DetachedTmdbTransport,
+) -> ChangeRefresh:
+    """Try one typed change against an explicitly supplied detached transport.
+
+    Obtain the current version from this checkpoint before fetching. Only a
+    hydrated result for that exact version may replace private staging and
+    acknowledge the pending row. Non-hydrated results are observations only:
+    they leave the row pending for operator review, never imply deletion, and
+    do not affect any published catalog. No network I/O holds a DB lock.
+    """
+    if not isinstance(transport, DetachedTmdbTransport):
+        raise TypeError("Supply a guarded detached TMDb transport")
+    ticket = pending_change(checkpoint, item)
+    if ticket is None:
+        return ChangeRefresh("not_pending", 0)
+    start = transport.attempts
+    try:
+        status, payload = _fetch(transport, ticket.item)
+    except DetachedTmdbError as error:
+        return ChangeRefresh("stopped", transport.attempts - start, error.code)
+    attempts = transport.attempts - start
+    if status != "hydrated":
+        return ChangeRefresh(status, attempts)
+    assert payload is not None
+    staged = stage_and_ack_change(checkpoint, ticket, staged_payload=payload.encode("utf-8"))
+    return ChangeRefresh("staged" if staged else "superseded", attempts)
+
 _ITEMS_SQL = """CREATE TABLE hydration_items (
     media TEXT NOT NULL CHECK(media IN ('movie', 'tv')),
     tmdb_id INTEGER NOT NULL CHECK(tmdb_id > 0),
