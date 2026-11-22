@@ -116,7 +116,7 @@ def loopback_search(port, timeout):
     return search
 
 
-def score(cases, indexed, search):
+def score(cases, indexed, search, *, observe_success=None):
     totals = Counter(lane for lane, _, _ in cases)
     known = totals["known_target"]
     covered = sum(key in indexed for lane, _, key in cases if lane == "known_target")
@@ -135,6 +135,8 @@ def score(cases, indexed, search):
         except (AttributeError, KeyError, OSError, TypeError, ValueError):
             continue
         latencies.append(1000 * (perf_counter() - start))
+        if observe_success is not None:
+            observe_success(lane, key, response, ranks)
         calls_ok[lane] += 1
         cards[lane] += bool(ranks)
         if lane == "known_target" and key in ranks:

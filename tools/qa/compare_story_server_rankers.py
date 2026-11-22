@@ -51,15 +51,13 @@ def rankers(engine, *, include_hybrid=False):
     def mask(query):
         if (not (set(tokens(query)) - STOP) or unsupported_negation(query)
                 or instructional_non_plot(query, engine.title_words)):
-            return []
+            return [], "scope_refused"
         kind, year = media_constraints(query)
-        return [i for i, doc in enumerate(docs)
-                if (kind is None or doc.media_type == kind) and (year is None or doc.year == year)]
+        ids = [i for i, doc in enumerate(docs)
+               if (kind is None or doc.media_type == kind) and (year is None or doc.year == year)]
+        return ids, None if ids else "no_eligible_documents"
 
-    def compare(query, method):
-        ids = mask(query)
-        if not ids:
-            return []
+    def compare(query, method, ids):
         # Match current server typo repair, uniformly for every baseline.
         corrected = normalized_query(query, engine.vocabulary)
         if method == "bm25":
@@ -75,15 +73,42 @@ def rankers(engine, *, include_hybrid=False):
 
     def adapted(method):
         def search(query):
-            ids = ([hit.document.key for hit in engine.search(query, limit=5).hits]
-                   if method == "current_hybrid" else compare(query, method))
-            return {"source": "tmdb", "results": [{"id": key} for key in ids]}
+            eligible, gate = mask(query)
+            if method == "current_hybrid":
+                # Keep the actual hybrid route intact. The shared comparison
+                # gate only describes its empty results; it does not force one.
+                ids = [hit.document.key for hit in engine.search(query, limit=5).hits]
+            else:
+                ids = [] if gate is not None else compare(query, method, eligible)
+            return {"source": "tmdb", "results": [{"id": key} for key in ids],
+                    "comparison_gate": gate}
         return search
 
     methods = ["bm25", "char_tfidf", "dense_e5"]
     if include_hybrid:
         methods.append("current_hybrid")
     return {method: adapted(method) for method in methods}
+
+
+def compare_metrics(cases, indexed, search):
+    """Classify successful results independently of target coverage and errors."""
+    buckets = ("with_cards", "scope_refused", "no_eligible_documents", "eligible_but_empty")
+    outcomes = {lane: dict.fromkeys(buckets, 0) for lane in LANES}
+    outcomes_by_coverage = {group: dict.fromkeys(buckets, 0) for group in ("covered", "absent")}
+
+    def observe(lane, key, response, ranks):
+        bucket = "with_cards" if ranks else response["comparison_gate"] or "eligible_but_empty"
+        outcomes[lane][bucket] += 1
+        if lane == "known_target":
+            outcomes_by_coverage["covered" if key in indexed else "absent"][bucket] += 1
+
+    report = score(cases, indexed, search, observe_success=observe)
+    # Scorer uses the same nearest-rank percentile, but this is neither HTTP
+    # latency nor an isolated comparison of model initialization costs.
+    report["latency_successful_process_ms"] = report.pop("latency_successful_http_ms")
+    report["successful_outcomes"] = outcomes
+    report["known_successful_outcomes_by_coverage"] = outcomes_by_coverage
+    return report
 
 
 def main(argv=None):
@@ -114,19 +139,19 @@ def main(argv=None):
         # Do not expose private paths, model metadata, catalog data, or queries.
         parser.exit(2, f"Comparison preflight failed: {type(exc).__name__}\n")
 
-    results = {}
-    for name, search in rankers(engine, include_hybrid=args.include_hybrid).items():
-        report = score(cases, indexed, search)
-        # Loopback harness calls this HTTP latency. Here it's process-local,
-        # with shared warm model; it is not a fair isolated performance run.
-        report.pop("latency_successful_http_ms", None)
-        results[name] = report
+    results = {
+        name: compare_metrics(cases, indexed, search)
+        for name, search in rankers(engine, include_hybrid=args.include_hybrid).items()
+    }
     print(json.dumps({
         "mode": "offline_aggregate_only", "cases_sha256": args.cases_sha256,
         "catalog_sha256": args.catalog_sha256, "eligible_catalog_ids": len(indexed),
         "excluded_unverified_target_count": len(args.exclude_unverified_target),
         "query_policy": "shared server scope, media/year filters and vocabulary typo repair",
-        "ranker_policy": "BM25 k1=1.2 b=.75; char TF-IDF 3–5; positive text scores only; dense cosine; ties by catalog ID",
+        "ranker_policy": "synopsis-only BM25 k1=1.2 b=.75, Unicode story tokens, stop words removed, "
+                         "OR over distinct content words, no prefix, full-catalog IDF; char TF-IDF 3–5; "
+                         "positive text scores only; dense cosine; ties by typed ID",
+        "latency_scope": "successful process-local calls, sequential lanes, shared model/cache; not HTTP or isolated benchmark",
         "rankers": results,
     }, sort_keys=True))
     return int(any(any(report["request_errors"].values()) for report in results.values()))
