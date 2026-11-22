@@ -8,6 +8,7 @@ from threading import Event, Thread
 from time import monotonic
 
 from candidates.story_artwork import is_provider_poster_path
+from candidates.story_seed_snapshot import MAX_ROWS
 
 _HOST = "127.0.0.1"
 _PATH = "/v1/search"
@@ -16,6 +17,7 @@ _MAX_BYTES = 512 * 1024
 _MAX_BUSY_BYTES = 256
 _OUTCOME_HEADER = "Watchbane-Search-Outcome"
 _ARTWORK_HEADER = "Watchbane-Search-Artwork"
+_INDEX_HEADER = "Watchbane-Search-Index"
 _OUTCOME_V1 = frozenset({
     ("candidates", "possible_local_results"),
     ("scope_refusal", "explicit_non_film_request"),
@@ -54,6 +56,19 @@ class OnlineStoryOutcome:
     reason: str
 
 
+@dataclass(frozen=True)
+class OnlineStoryIndex:
+    total: int
+    movies: int
+    tv: int
+
+
+@dataclass(frozen=True)
+class OnlineStoryIndexedResult:
+    result: tuple[OnlineStoryResult, ...] | OnlineStoryOutcome
+    index: OnlineStoryIndex
+
+
 def _invalid_response():
     return OnlineStoryError("Invalid response from the local story server.")
 
@@ -72,12 +87,14 @@ def _is_busy(raw):
         return False
 
 
-def _parse(raw, limit, *, with_outcome=False, with_artwork=False):
+def _parse(raw, limit, *, with_outcome=False, with_artwork=False, with_index=False):
     try:
         value = json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object)
         keys = {"source", "results", "outcome"} if with_outcome else {"source", "results"}
         if with_artwork:
             keys.add("artwork")
+        if with_index:
+            keys.add("index")
         if (type(value) is not dict or set(value) != keys or value["source"] != "tmdb"
                 or type(value["results"]) is not list or len(value["results"]) > limit):
             raise ValueError
@@ -107,6 +124,7 @@ def _parse(raw, limit, *, with_outcome=False, with_artwork=False):
                     or not all(is_provider_poster_path(path) for path in artwork.values())):
                 raise ValueError
             results = [replace(row, poster_path=artwork.get(row.id)) for row in results]
+        result = tuple(results)
         if with_outcome:
             outcome = value["outcome"]
             if type(outcome) is not dict or set(outcome) != {"state", "reason"}:
@@ -116,8 +134,17 @@ def _parse(raw, limit, *, with_outcome=False, with_artwork=False):
                 raise ValueError
             if bool(results) != (state == "candidates"):
                 raise ValueError
-            return OnlineStoryOutcome(tuple(results), state, reason)
-        return tuple(results)
+            result = OnlineStoryOutcome(result, state, reason)
+        if with_index:
+            index = value["index"]
+            if (type(index) is not dict or set(index) != {"total", "movies", "tv"}
+                    or any(type(count) is not int or not 0 <= count <= MAX_ROWS for count in index.values())
+                    or not 1 <= index["total"] == index["movies"] + index["tv"] <= MAX_ROWS
+                    or index["movies"] < sum(row.media_type == "movie" for row in results)
+                    or index["tv"] < sum(row.media_type == "tv" for row in results)):
+                raise ValueError
+            result = OnlineStoryIndexedResult(result, OnlineStoryIndex(**index))
+        return result
     except (ValueError, RecursionError):
         raise _invalid_response() from None
 
@@ -131,7 +158,8 @@ def search_online(
     cancelled: Event | None = None,
     with_outcome: bool = False,
     with_artwork: bool = False,
-) -> tuple[OnlineStoryResult, ...] | OnlineStoryOutcome:
+    with_index: bool = False,
+) -> tuple[OnlineStoryResult, ...] | OnlineStoryOutcome | OnlineStoryIndexedResult:
     """Send only query/limit to IPv4 loopback; never discover a server or fall back.
 
     Call from a worker. The caller owns the explicit, per-request consent and may
@@ -139,13 +167,14 @@ def search_online(
     operation that already received the POST. The optional outcome protocol
     requires the exact server echo and never retries with the legacy contract.
     Opt-in artwork also requires an exact echo; it returns opaque provider
-    names only, with no image rendering, resolution, or extra I/O.
+    names only, with no image rendering, resolution, or extra I/O. Index
+    counts likewise require an exact negotiated echo on this same response.
     """
     if consent is not True:
         raise OnlineStoryError("Local server search was not authorized.")
     if (type(port) is not int or not 1 <= port <= 65535 or type(limit) is not int or not 1 <= limit <= 10
             or type(query) is not str or len(query) > 600 or not query.strip()
-            or type(with_outcome) is not bool or type(with_artwork) is not bool):
+            or type(with_outcome) is not bool or type(with_artwork) is not bool or type(with_index) is not bool):
         raise OnlineStoryError("Invalid local story search request.")
     try:
         body = json.dumps({"query": query.strip(), "limit": limit}, ensure_ascii=False).encode("utf-8")
@@ -189,6 +218,8 @@ def search_online(
             headers[_OUTCOME_HEADER] = "1"
         if with_artwork:
             headers[_ARTWORK_HEADER] = "1"
+        if with_index:
+            headers[_INDEX_HEADER] = "1"
         connection.request("POST", _PATH, body, headers)
         check_active()
         with connection.getresponse() as response:
@@ -206,6 +237,8 @@ def search_online(
             if not busy_candidate and with_outcome and response.getheader(_OUTCOME_HEADER) != "1":
                 raise invalid()
             if not busy_candidate and with_artwork and response.getheader(_ARTWORK_HEADER) != "1":
+                raise invalid()
+            if not busy_candidate and with_index and response.getheader(_INDEX_HEADER) != "1":
                 raise invalid()
             content_type = response.getheader("Content-Type", "").split(";", 1)[0].strip().lower()
             encoding = response.getheader("Content-Encoding", "identity").strip().lower()
@@ -238,6 +271,8 @@ def search_online(
             parser_options["with_outcome"] = True
         if with_artwork:
             parser_options["with_artwork"] = True
+        if with_index:
+            parser_options["with_index"] = True
         results = _parse(raw, limit, **parser_options)
         check_active()  # A superseded request cannot hand stale results back.
         return results

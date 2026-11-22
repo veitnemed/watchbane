@@ -604,3 +604,88 @@ def test_late_opt_in_artwork_is_never_read_after_cancellation(qtbot, monkeypatch
     view.query.setText("другой сюжет")
     qtbot.waitUntil(lambda: view._online_worker is None)
     assert not reads and view.cards_layout.count() == 1
+
+
+def test_consented_loopback_shows_exact_index_size_only_on_negotiated_response(qtbot, monkeypatch):
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import json
+    from threading import Thread
+
+    sent = []
+    replies = [
+        (True, {"total": 3, "movies": 2, "tv": 1}),
+        (False, {"total": 3, "movies": 2, "tv": 1}),
+        (True, {"total": 30000, "movies": 20000, "tv": 10000}),
+    ]
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            sent.append((self.path, json.loads(self.rfile.read(int(self.headers["Content-Length"]))),
+                         self.headers.get("Watchbane-Search-Index")))
+            echo, index = replies.pop(0)
+            row = {"source": "tmdb", "results": [], "index": index}
+            body = json.dumps(row).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            if echo:
+                self.send_header("Watchbane-Search-Index", "1")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    try:
+        listener = HTTPServer(("127.0.0.1", 0), Handler)
+    except PermissionError:
+        pytest.skip("Execution sandbox does not permit opening a loopback socket")
+    with listener:
+        child = Thread(target=listener.serve_forever, kwargs={"poll_interval": .02}, daemon=True)
+        child.start()
+        try:
+            monkeypatch.setenv(story._ONLINE_PORT_ENV, str(listener.server_port))
+            monkeypatch.setenv(story._ONLINE_INDEX_ENV, "1")
+            monkeypatch.delenv(story._ONLINE_OUTCOME_ENV, raising=False)
+            monkeypatch.delenv(story._ONLINE_ARTWORK_ENV, raising=False)
+            ui = make_view(qtbot)
+            ui.query.setText("описание фильма")
+            monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.No)
+            qtbot.mouseClick(ui.online_button, LEFT)
+            assert not sent and "в индексе" not in ui.scope.text()
+            monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
+            for i in range(3):
+                qtbot.mouseClick(ui.online_button, LEFT)
+                qtbot.waitUntil(lambda: ui._online_worker is None)
+                if i == 0:
+                    assert ui.scope.text() == "Тестовый сервер · TMDb · Описаний в индексе: 3 (фильмы: 2, сериалы: 1)"
+                    assert "не нашёл вариантов" in ui.status.text()
+                else:
+                    assert "в индексе" not in ui.scope.text() and "вернул ошибку" in ui.status.text()
+                assert len(sent) == i + 1  # failure is never retried or downgraded
+            assert all(x == ("/v1/search", {"query": "описание фильма", "limit": 5}, "1") for x in sent)
+        finally:
+            listener.shutdown()
+            child.join(2)
+
+
+def test_no_index_count_from_cancelled_search(qtbot, monkeypatch):
+    monkeypatch.setenv(story._ONLINE_PORT_ENV, "8765")
+    monkeypatch.setenv(story._ONLINE_INDEX_ENV, "1")
+    monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
+    entered = Event()
+
+    def late(query, *, consent, port, cancelled, with_index):
+        assert consent and with_index
+        entered.set()
+        assert cancelled.wait(2)
+        return online_client.OnlineStoryIndexedResult((), online_client.OnlineStoryIndex(3, 2, 1))
+
+    monkeypatch.setattr(online_client, "search_online", late)
+    ui = make_view(qtbot)
+    ui.query.setText("старый сюжет")
+    qtbot.mouseClick(ui.online_button, LEFT)
+    qtbot.waitUntil(entered.is_set)
+    ui.query.setText("новый сюжет")
+    qtbot.waitUntil(lambda: ui._online_worker is None)
+    assert "в индексе" not in ui.scope.text() and "отменён" in ui.status.text()

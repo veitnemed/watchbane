@@ -24,6 +24,7 @@ _MODEL_UNSET = object()
 _ONLINE_PORT_ENV = "WATCHBANE_EXPERIMENTAL_STORY_PORT"
 _ONLINE_OUTCOME_ENV = "WATCHBANE_EXPERIMENTAL_STORY_OUTCOME"
 _ONLINE_ARTWORK_ENV = "WATCHBANE_EXPERIMENTAL_STORY_ARTWORK"
+_ONLINE_INDEX_ENV = "WATCHBANE_EXPERIMENTAL_STORY_INDEX"
 _ONLINE_EMPTY_MESSAGES = {
     "explicit_non_film_request": "Тестовый сервер ищет только фильмы и сериалы. Опишите сцену или сюжет.",
     "unsupported_exclusion": "Тестовый сервер пока не проверяет исключения. Опишите, что происходит в фильме.",
@@ -88,12 +89,13 @@ class StoryWorker(QThread):
 
 
 class OnlineStoryWorker(QThread):
-    def __init__(self, query, port, parent, *, with_outcome=False, with_artwork=False):
+    def __init__(self, query, port, parent, *, with_outcome=False, with_artwork=False, with_index=False):
         super().__init__(parent)
         self.query = query
         self.port = port
         self.with_outcome = with_outcome
         self.with_artwork = with_artwork
+        self.with_index = with_index
         self.cancelled = Event()
         self.results = None
         self.busy = False
@@ -108,6 +110,8 @@ class OnlineStoryWorker(QThread):
             options = {"with_outcome": True} if self.with_outcome else {}
             if self.with_artwork:
                 options["with_artwork"] = True
+            if self.with_index:
+                options["with_index"] = True
             try:
                 self.results = search_online(self.query, consent=True, port=self.port,
                                              cancelled=self.cancelled, **options)
@@ -205,6 +209,7 @@ class StorySearchView:
         self._online_port = _experimental_story_port()
         self._online_outcome = os.environ.get(_ONLINE_OUTCOME_ENV) == "1"
         self._online_artwork = os.environ.get(_ONLINE_ARTWORK_ENV) == "1"
+        self._online_index = os.environ.get(_ONLINE_INDEX_ENV) == "1"
         self._online_confirming = False
         self._online_visible = False
         self._catalog_worker = None
@@ -877,7 +882,8 @@ class StorySearchView:
         self.status.setText("Ищем на тестовом сервере…")
         self.scope.setText("Тестовый сервер на этом компьютере · TMDb")
         self._online_worker = OnlineStoryWorker(query, self._online_port, self.widget,
-                                               with_outcome=self._online_outcome, with_artwork=self._online_artwork)
+                                               with_outcome=self._online_outcome, with_artwork=self._online_artwork,
+                                               with_index=self._online_index)
         self._online_worker.finished.connect(self._online_finished, Qt.ConnectionType.QueuedConnection)
         self.online_cancel.setEnabled(True)
         self.online_cancel.show()
@@ -908,6 +914,12 @@ class StorySearchView:
                                 "Повторите запрос или выберите обычный локальный поиск.")
             return
         results = worker.results
+        if worker.with_index:
+            index = results.index
+            self.scope.setText(
+                f"Тестовый сервер · TMDb · Описаний в индексе: {index.total} "
+                f"(фильмы: {index.movies}, сериалы: {index.tv})")
+            results = results.result
         if worker.with_outcome:
             if results.state != "candidates":
                 self.status.setText(_ONLINE_EMPTY_MESSAGES[results.reason])

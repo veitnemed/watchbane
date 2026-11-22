@@ -15,7 +15,7 @@ from starlette.requests import ClientDisconnect
 from candidates.safety.explicit_content import is_blocked_explicit_sexual_content
 from candidates.story_search import StoryDocument
 from candidates.story_artwork import is_provider_poster_path
-from candidates.story_seed_snapshot import StorySeedSnapshotError, load_seed_snapshot_with_digest
+from candidates.story_seed_snapshot import MAX_ROWS, StorySeedSnapshotError, load_seed_snapshot_with_digest
 from candidates.story_semantic import DEFAULT_E5_BATCH_SIZE, LocalE5, SemanticStorySearch, validate_e5_batch_size
 from candidates.story_vector_cache import PREPROCESS_VERSION
 
@@ -189,6 +189,26 @@ async def _read_query(request: Request):
 
 _OUTCOME_HEADER = "Watchbane-Search-Outcome"
 _ARTWORK_HEADER = "Watchbane-Search-Artwork"
+_INDEX_HEADER = "Watchbane-Search-Index"
+_INDEX_KEY = re.compile(r"tmdb:(movie|tv):([1-9][0-9]{0,18})", re.ASCII)
+
+
+def _index_counts(engine):
+    """Count the immutable engine's exact typed rows, not JSONL/API totals."""
+    documents = getattr(engine, "documents", None)
+    if not isinstance(documents, tuple) or not 1 <= len(documents) <= MAX_ROWS:
+        return None
+    counts = {"total": len(documents), "movies": 0, "tv": 0}
+    seen = set()
+    for document in documents:
+        key = getattr(document, "key", None)
+        match = _INDEX_KEY.fullmatch(key) if type(key) is str else None
+        if (match is None or match[1] != getattr(document, "media_type", None)
+                or int(match[2]) > (1 << 63) - 1 or key in seen):
+            return None
+        seen.add(key)
+        counts["movies" if match[1] == "movie" else "tv"] += 1
+    return counts
 
 
 def _search_outcome(result):
@@ -206,7 +226,8 @@ def _search_outcome(result):
 def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, cache_dir: Path | None = None,
                prepared_index: bool = False, previous_catalog: Path | None = None,
                startup_batch_size: int = DEFAULT_E5_BATCH_SIZE, artwork_metadata: bool = False,
-               skip_singleton_evidence: bool = False, expected_catalog_sha256: str | None = None,
+               index_metadata: bool = False, skip_singleton_evidence: bool = False,
+               expected_catalog_sha256: str | None = None,
                expected_snapshot_sha256: str | None = None):
     """One verified engine per worker; tests may inject a local engine factory."""
     validate_e5_batch_size(startup_batch_size)
@@ -233,12 +254,14 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
             options["artwork_paths"] = artwork_paths
         engine = await run_in_threadpool(engine_factory, catalog, model_dir, **options)
         app.state.artwork_paths = artwork_paths
+        app.state.index_counts = await run_in_threadpool(_index_counts, engine) if index_metadata else None
         app.state.engine = engine
         try:
             yield
         finally:
             del app.state.engine
             del app.state.artwork_paths
+            del app.state.index_counts
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     search_slot = Lock()
@@ -248,7 +271,10 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
         response = await call_next(request)
         if request.url.path == "/v1/search":
             response.headers["Cache-Control"] = "no-store"
-            response.headers.append("Vary", f"{_OUTCOME_HEADER}, {_ARTWORK_HEADER}")
+            vary = f"{_OUTCOME_HEADER}, {_ARTWORK_HEADER}"
+            if index_metadata:
+                vary += f", {_INDEX_HEADER}"
+            response.headers.append("Vary", vary)
         return response
 
     @app.get("/healthz")
@@ -263,6 +289,11 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
         artwork_versions = request.headers.getlist(_ARTWORK_HEADER)
         if artwork_versions and artwork_versions != ["1"]:
             raise HTTPException(400, "unsupported_search_artwork_version")
+        index_versions = request.headers.getlist(_INDEX_HEADER)
+        if index_versions and index_versions != ["1"]:
+            raise HTTPException(400, "unsupported_search_index_version")
+        if index_versions and app.state.index_counts is None:
+            raise HTTPException(503, "search_index_unavailable")
         query, limit = await _read_query(request)
         if not search_slot.acquire(blocking=False):
             raise HTTPException(503, "search_busy", headers={"Retry-After": "1"})
@@ -292,6 +323,9 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
                     if is_provider_poster_path(mapping.get(row["id"]))
                 }
                 response.headers[_ARTWORK_HEADER] = "1"
+            if index_versions:
+                payload["index"] = app.state.index_counts
+                response.headers[_INDEX_HEADER] = "1"
             return payload
         except Exception:
             # Do not put search text, provider data, or an exception containing
@@ -320,6 +354,7 @@ def main(argv=None):
     parser.add_argument("--artwork-metadata", action="store_true", help="Allow negotiated relative TMDb poster metadata")
     parser.add_argument("--skip-singleton-evidence", action="store_true",
                         help="Experimental QA: skip E5 explanation when only one sentence exists")
+    parser.add_argument("--index-metadata", action="store_true", help="Allow negotiated exact indexed-description counts")
     args = parser.parse_args(argv)
     try:
         validate_e5_batch_size(args.startup_passage_batch_size)
@@ -332,7 +367,7 @@ def main(argv=None):
     uvicorn.run(create_app(args.catalog, args.model_dir, cache_dir=args.cache_dir,
                           prepared_index=args.prepared_index, previous_catalog=args.previous_catalog,
                           startup_batch_size=args.startup_passage_batch_size,
-                          artwork_metadata=args.artwork_metadata,
+                          artwork_metadata=args.artwork_metadata, index_metadata=args.index_metadata,
                           skip_singleton_evidence=args.skip_singleton_evidence,
                           expected_catalog_sha256=args.expected_catalog_sha256,
                           expected_snapshot_sha256=args.expected_snapshot_sha256), host="127.0.0.1",
