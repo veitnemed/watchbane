@@ -75,3 +75,47 @@ def test_join_rejects_substitution_replay_and_foreign_results(tmp_path):
         score_cohorts(switched, truth=truth, ranked_a={"q": []}, ranked_b={"q": []})
     with pytest.raises(ValueError, match="typed targets"):
         score_cohorts(plan, truth={"q": "tmdb:movie:01"}, ranked_a={"q": []}, ranked_b={"q": []})
+
+
+def test_http_outcomes_keep_equal_totals_failures_and_non_targets_distinct(tmp_path):
+    from tools.qa.compare_story_language_cohorts import score_cohort_outcomes
+
+    file, pin = _fixture(tmp_path)
+    cohort = plan_cohorts(file, expected_sha256=pin)
+    movie, tv = "tmdb:movie:1", "tmdb:tv:1"
+    frozen = {case: ("known_target", movie)
+              for case in ("lost", "gained", "both", "neither", "failed")}
+    frozen.update({"new": ("known_target", tv), "absent": ("known_target", "tmdb:tv:3"),
+                   "off": ("out_of_scope", None), "short": ("insufficient_detail", None),
+                   "unresolved": ("known_target", None)})
+    a = {"lost": [movie], "gained": [], "both": [movie], "neither": [], "failed": None,
+         "new": [], "absent": [movie], "off": None, "short": [], "unresolved": [movie]}
+    b = {"lost": [tv, movie], "gained": [movie], "both": [movie], "neither": [], "failed": [movie],
+         "new": [tv], "absent": [], "off": [], "short": [tv], "unresolved": None}
+    report = score_cohort_outcomes(cohort, frozen_cases=frozen, ranked_a=a, ranked_b=b)
+    assert report["paired_successes"] == 4 and report["paired_excluded_failed"] == 1
+    assert report["paired_transitions"] == {
+        "top1": {"a_only": 1, "b_only": 1, "both": 1, "neither": 1},
+        "top5": {"a_only": 0, "b_only": 1, "both": 2, "neither": 1},
+    }
+    assert report["expanded_only_successful_hits"] == {"successful": 1, "b_top1": 1, "b_top5": 1}
+    outcomes = report["outcomes"]
+    assert outcomes["out_of_scope"]["a_failed"] == outcomes["out_of_scope"]["b_empty"] == 1
+    assert outcomes["insufficient_detail"]["a_empty"] == outcomes["insufficient_detail"]["b_with_cards"] == 1
+    assert outcomes["unresolved_positive"]["a_with_cards"] == outcomes["unresolved_positive"]["b_failed"] == 1
+    assert outcomes["absent"]["a_with_cards"] == outcomes["absent"]["b_empty"] == 1
+    assert frozen["lost"] == ("known_target", movie)
+    assert "tmdb:" not in str(report)
+
+
+def test_http_outcomes_reject_invalid_truth_or_raw_response(tmp_path):
+    from tools.qa.compare_story_language_cohorts import score_cohort_outcomes
+
+    file, pin = _fixture(tmp_path)
+    cohort = plan_cohorts(file, expected_sha256=pin)
+    for bad in (("known_target", "tmdb:movie:01"), ("out_of_scope", "tmdb:movie:1"), ("other", None)):
+        with pytest.raises(ValueError, match="Invalid frozen"):
+            score_cohort_outcomes(cohort, frozen_cases={"q": bad}, ranked_a={"q": []}, ranked_b={"q": []})
+    with pytest.raises(ValueError, match="Rankings"):
+        score_cohort_outcomes(cohort, frozen_cases={"q": ("out_of_scope", None)},
+                              ranked_a={"q": "raw HTTP response"}, ranked_b={"q": []})

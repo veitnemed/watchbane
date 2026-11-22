@@ -92,3 +92,71 @@ def score_cohorts(cohorts: LanguageCohorts, *, truth: Mapping, ranked_a: Mapping
             bucket["b_with_cards"] += bool(rb)
     return {"catalog_a": len(a), "catalog_b": len(b), "paired": paired,
             "expanded_only": expanded_only, "absent": absent, "without_verified_target": unverified}
+
+
+def score_cohort_outcomes(cohorts: LanguageCohorts, *, frozen_cases: Mapping, ranked_a: Mapping,
+                          ranked_b: Mapping) -> dict:
+    """Audit paired HTTP outcomes from frozen case IDs, without reading query text.
+
+    Each frozen case has (lane, target) with the sealed benchmark lane name:
+    known_target with a verified typed target or None if its identity was not
+    verified; out_of_scope and insufficient_detail require None.
+    Each HTTP ranking is a Top-5 list/tuple on success, or None on failure.
+    Paired ranking transitions count only common targets with two successes;
+    failures are separately counted, never scored as empty misses.
+    """
+    negative_lanes = ("out_of_scope", "insufficient_detail")
+    if not isinstance(frozen_cases, Mapping) or not frozen_cases:
+        raise ValueError("Expected frozen intent and exact typed truth for every case")
+    truth = {}
+    for case, entry in frozen_cases.items():
+        if (not isinstance(entry, tuple) or len(entry) != 2
+                or (entry[0] == "known_target" and entry[1] is not None and not _typed(entry[1]))
+                or (entry[0] != "known_target" and (entry[0] not in negative_lanes or entry[1] is not None))):
+            raise ValueError("Invalid frozen intent or typed target")
+        truth[case] = entry[1]
+    if not isinstance(ranked_a, Mapping) or not isinstance(ranked_b, Mapping):
+        raise ValueError("HTTP outcomes must map each frozen case ID")
+    # Reuse exact key, typed membership, length and cohort structure validation.
+    # Empty conversion is exclusively for shape validation; its metrics are discarded.
+    checked = score_cohorts(cohorts, truth=truth,
+                           ranked_a={case: () if hits is None else hits for case, hits in ranked_a.items()},
+                           ranked_b={case: () if hits is None else hits for case, hits in ranked_b.items()})
+    a = {row.key for row in cohorts.baseline}
+    b = {row.key for row in cohorts.expanded}
+    buckets = {
+        name: {"cases": 0, "a_failed": 0, "b_failed": 0,
+               "a_empty": 0, "b_empty": 0, "a_with_cards": 0, "b_with_cards": 0}
+        for name in ("common", "expanded_only", "absent", *negative_lanes, "unresolved_positive")
+    }
+    transitions = {f"top{cutoff}": dict.fromkeys(("a_only", "b_only", "both", "neither"), 0)
+                   for cutoff in (1, 5)}
+    paired_successes = 0
+    expanded_hits = dict.fromkeys(("successful", "b_top1", "b_top5"), 0)
+    for case, (lane, target) in frozen_cases.items():
+        ra, rb = ranked_a[case], ranked_b[case]
+        if lane != "known_target":
+            cohort = lane
+        elif target is None:
+            cohort = "unresolved_positive"
+        else:
+            cohort = "common" if target in a else "expanded_only" if target in b else "absent"
+        bucket = buckets[cohort]
+        bucket["cases"] += 1
+        for side, hits in (("a", ra), ("b", rb)):
+            suffix = "failed" if hits is None else "with_cards" if hits else "empty"
+            bucket[f"{side}_{suffix}"] += 1
+        if cohort == "expanded_only" and rb is not None:
+            expanded_hits["successful"] += 1
+            expanded_hits["b_top1"] += target in rb[:1]
+            expanded_hits["b_top5"] += target in rb
+        if cohort == "common" and ra is not None and rb is not None:
+            paired_successes += 1
+            for cutoff in (1, 5):
+                ah, bh = target in ra[:cutoff], target in rb[:cutoff]
+                label = ("both" if bh else "a_only") if ah else ("b_only" if bh else "neither")
+                transitions[f"top{cutoff}"][label] += 1
+    return {"catalog_a": checked["catalog_a"], "catalog_b": checked["catalog_b"],
+            "outcomes": buckets, "paired_successes": paired_successes,
+            "paired_excluded_failed": buckets["common"]["cases"] - paired_successes,
+            "paired_transitions": transitions, "expanded_only_successful_hits": expanded_hits}
