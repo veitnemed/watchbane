@@ -80,13 +80,21 @@ class PassageVectorSnapshot:
 
     def load(self, identity):
         """Do not return a partial or mismatched matrix, even after interruption."""
+        return self._read(identity)
+
+    def load_with_digest(self, identity):
+        """Audit the validated snapshot and its whole-file SHA-256 together."""
+        return self._read(identity, with_digest=True)
+
+    def _read(self, identity, *, with_digest=False):
         fingerprint = identity.fingerprint()
         size = _HEADER.size + identity.count * DIMENSION * _DTYPE.itemsize
         try:
             with self._path(identity).open("rb") as stream:
                 if os.fstat(stream.fileno()).st_size != size:
                     return None
-                magic, actual, count, dimension, expected_digest = _HEADER.unpack(stream.read(_HEADER.size))
+                header = stream.read(_HEADER.size)
+                magic, actual, count, dimension, expected_digest = _HEADER.unpack(header)
                 if (magic, actual, count, dimension) != (_MAGIC, fingerprint, identity.count, DIMENSION):
                     return None
                 vector_bytes = stream.read(size - _HEADER.size + 1)
@@ -97,18 +105,37 @@ class PassageVectorSnapshot:
         matrix = np.frombuffer(vector_bytes, dtype=_DTYPE).reshape(identity.count, DIMENSION)
         if not all(np.isfinite(block).all() for block in _blocks(matrix)):
             return None
+        if with_digest:
+            digest = sha256(header)
+            digest.update(vector_bytes)
+            return matrix, digest.hexdigest()
         return matrix
 
     def save(self, identity, matrix):
         """Flush a complete, checksummed temporary file, then replace atomically."""
+        self._save(identity, matrix)
+
+    def save_new(self, identity, matrix, *, before_publish):
+        """Write atomically only if the target does not yet exist."""
+        if not callable(before_publish):
+            raise ValueError("expected an explicit pre-publication check")
+        return self._save(identity, matrix, before_publish=before_publish)
+
+    def _save(self, identity, matrix, *, before_publish=None):
         if (not isinstance(matrix, np.ndarray) or matrix.dtype.kind != "f" or matrix.dtype.itemsize != 4
                 or matrix.shape != (identity.count, DIMENSION)):
             raise ValueError("expected a matching float32 passage matrix")
-        self.root.mkdir(parents=True, exist_ok=True)
         target = self._path(identity)
+        staging = self.root
+        if before_publish is None:
+            self.root.mkdir(parents=True, exist_ok=True)
+        elif not self.root.exists():
+            # Stage in the existing private parent. A failed recheck for a new
+            # namespace must not leave an empty directory or a staged file.
+            staging = self.root.parent
         temporary = None
         try:
-            with tempfile.NamedTemporaryFile(dir=self.root, prefix=".stage-", delete=False) as stream:
+            with tempfile.NamedTemporaryFile(dir=staging, prefix=".stage-", delete=False) as stream:
                 temporary = Path(stream.name)
                 stream.write(b"\0" * _HEADER.size)
                 digest = sha256()
@@ -124,7 +151,14 @@ class PassageVectorSnapshot:
                                           DIMENSION, digest.digest()))
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.replace(temporary, target)
+            if before_publish is None:
+                os.replace(temporary, target)
+            else:
+                before_publish()
+                self.root.mkdir(exist_ok=True)
+                if self.root.is_symlink():
+                    raise ValueError("invalid passage namespace")
+                os.link(temporary, target)
         finally:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)

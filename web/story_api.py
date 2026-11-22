@@ -86,6 +86,16 @@ def _load_documents(catalog, *, artwork_paths=None):
     return documents, catalog_sha
 
 
+def _startup_passage_identity(catalog_sha, encoder, documents, startup_batch_size):
+    from web.story_vector_snapshot import SnapshotIdentity
+
+    preprocessing = PREPROCESS_VERSION
+    if startup_batch_size != DEFAULT_E5_BATCH_SIZE:
+        preprocessing += f":startup-batch={startup_batch_size}"
+    return SnapshotIdentity.from_documents(catalog_sha, encoder.cache_identity, documents,
+                                           preprocessing=preprocessing)
+
+
 def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = None, prepared_index: bool = False,
                  previous_catalog: Path | None = None, startup_batch_size: int = DEFAULT_E5_BATCH_SIZE,
                  artwork_paths: dict | None = None, skip_singleton_evidence: bool = False):
@@ -98,13 +108,9 @@ def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = Non
         raise ValueError("The configured TMDb snapshot has no eligible Russian descriptions.")
     encoder = LocalE5(model_dir)  # Always verify model artifacts, even on a cache hit.
     if cache_dir is not None:
-        from web.story_vector_snapshot import PassageVectorSnapshot, SnapshotIdentity
+        from web.story_vector_snapshot import PassageVectorSnapshot
 
-        preprocessing = PREPROCESS_VERSION
-        if startup_batch_size != DEFAULT_E5_BATCH_SIZE:
-            preprocessing += f":startup-batch={startup_batch_size}"
-        identity = SnapshotIdentity.from_documents(catalog_sha, encoder.cache_identity, documents,
-                                                   preprocessing=preprocessing)
+        identity = _startup_passage_identity(catalog_sha, encoder, documents, startup_batch_size)
         encoder = _StartupPassageEncoder(encoder, PassageVectorSnapshot(cache_dir), identity, documents,
                                          previous_catalog=previous_catalog, startup_batch_size=startup_batch_size)
     elif startup_batch_size != DEFAULT_E5_BATCH_SIZE:
