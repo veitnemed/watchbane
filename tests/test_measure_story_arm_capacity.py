@@ -126,3 +126,22 @@ def test_witness_requires_consumed_cache_and_no_startup_reencoding(tmp_path):
     finished(SimpleNamespace(vectors=matrix))
     assert marker.read_text() == "ab" * 32
     assert encode(Model(), ["request"]) == ["request"]
+
+
+def test_compare_requires_pressure_if_requested(tmp_path, capsys):
+    a, b, x, y = restart_captures(tmp_path)
+    dump(a, x)
+    dump(b, y)
+    with pytest.raises(ValueError, match="pressure"):
+        capacity.compare_restart(a, b, require_pressure=True)
+    pressure = {"passed": True, "within_deadline": True, "successful_order_mismatches": 0,
+                "recovery_successes": 3, "counts": {"ok": 3, "busy_503": 15,
+                                                     "unknown": 0, "rate_limited_429": 0}}
+    y[-1]["capacity"]["synthetic_pressure"] = pressure
+    dump(b, y)
+    capacity.compare_restart(a, b, require_pressure=True)
+    assert json.loads(capsys.readouterr().out)["pressure_proven"] is True
+    pressure["counts"]["rate_limited_429"] = 1
+    dump(b, y)
+    with pytest.raises(ValueError, match="pressure"):
+        capacity.compare_restart(a, b, require_pressure=True)

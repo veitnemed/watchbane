@@ -105,7 +105,7 @@ jobs:
             fi
           done
           exit "$failed"
-      - name: Prove unchanged typed order after cached restart in a fresh ARM64 cgroup
+      - name: Prove cached restart and bounded search admission in fresh ARM64 cgroups
         if: github.event_name == 'push' || inputs.scenario == 'cache_restart'
         shell: bash
         run: |
@@ -122,7 +122,11 @@ jobs:
           git archive HEAD -- candidates tools/qa web | tar -x -C "$scratch"
           for phase in cold restart; do
             mount="type=bind,src=$cache,dst=/opt/watchbane-passage-cache"
-            if [ "$phase" = restart ]; then mount="$mount,readonly"; fi
+            args=()
+            if [ "$phase" = restart ]; then
+              mount="$mount,readonly"
+              args+=(--pressure)
+            fi
             container="$prefix-$phase"
             status=0
             timeout --kill-after=10s 6m docker run --name "$container" --pull=never --init \
@@ -135,12 +139,12 @@ jobs:
               --mount "$mount" \
               watchbane-arm-cgroup:local python -m tools.qa.measure_story_arm_capacity run \
               --model-dir /opt/watchbane-model --rows 1000 --density high --mode prepared \
-              --cache-dir /opt/watchbane-passage-cache --cache-phase "$phase" \
+              --cache-dir /opt/watchbane-passage-cache --cache-phase "$phase" "${args[@]}" \
               | tee "$work/$phase.jsonl" || status=$?
             state="$(docker inspect --format '{{.State.OOMKilled}} {{.State.ExitCode}}' "$container")" || state="inspection_failed"
             printf 'phase=%s runner_exit=%s container_oom_killed_and_exit=%s\n' "$phase" "$status" "$state"
             docker rm -f "$container" >/dev/null 2>&1 || true
             if [ "$status" != 0 ] || [ "$state" != "false 0" ]; then exit 1; fi
           done
-          python -m tools.qa.measure_story_arm_capacity compare-restart "$work/cold.jsonl" "$work/restart.jsonl"
+          python -m tools.qa.measure_story_arm_capacity compare-restart "$work/cold.jsonl" "$work/restart.jsonl" --require-pressure
       # No published ports, upload, image push, remote deployment, or billing setup.

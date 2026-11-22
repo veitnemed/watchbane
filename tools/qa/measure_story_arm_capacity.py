@@ -53,13 +53,15 @@ def ids(result, expected):
     return tuple(keyed)
 
 
-def measure(model_dir, rows, density, mode, *, readiness_timeout=300, cache_dir=None, cache_phase=None):
+def measure(model_dir, rows, density, mode, *, readiness_timeout=300, cache_dir=None, cache_phase=None, pressure=False):
     if mode not in _MODES or not (model_dir / "onnx/model.onnx").is_file():
         # LocalE5 verifies the official pinned files and invokes real ONNX;
         # fail here rather than silently choosing its alternate INT8 variant.
         raise RuntimeError("expected mode and pinned FP32 weights")
     if cache_phase not in (None, *_CACHE_PHASES) or (cache_dir is None) != (cache_phase is None):
         raise ValueError("cache phase and detached cache directory must be supplied together")
+    if pressure and cache_phase != "restart":
+        raise ValueError("pressure probe requires a witnessed cached restart")
     if cache_phase == "cold" and any(cache_dir.iterdir()):
         raise ValueError("cold capacity probe requires an empty cache directory")
     with tempfile.TemporaryDirectory(prefix="watchbane-capacity-") as work:
@@ -94,6 +96,14 @@ def measure(model_dir, rows, density, mode, *, readiness_timeout=300, cache_dir=
                     raise RuntimeError("restart did not consume the exact cache identity")
                 cache = {"cache_phase": cache_phase, "passage_snapshot_id": identity,
                          "passage_snapshot_sha256": digest, "proof_of_cache_hit": proof is not None}
+            if pressure:
+                from tools.qa.story_search_pressure import pressure_report
+                report = pressure_report(server[0], bodies, [rank for rank, _ in runs],
+                                         lambda payload: ids(payload, expected))
+                if not report["passed"]:
+                    print(json.dumps({"synthetic_pressure_failure": report}), flush=True)
+                    raise RuntimeError("synthetic backpressure verification failed")
+                cache["synthetic_pressure"] = report
             if server[1].poll() is not None:
                 raise RuntimeError("search server stopped during capacity probe")
     return {"fixture": "synthetic_qa_only", "rows": rows, "density": density, "mode": mode,
@@ -123,7 +133,7 @@ def percentile(values, fraction):
     return sorted(values)[ceil(len(values) * fraction) - 1]
 
 
-def run(model_dir, rows, density, mode, *, root=ROOT, cache_dir=None, cache_phase=None):
+def run(model_dir, rows, density, mode, *, root=ROOT, cache_dir=None, cache_phase=None, pressure=False):
     if (platform.system(), platform.machine(), sys.version_info[:3]) != ("Linux", "aarch64", (3, 12, 16)):
         raise RuntimeError("requires native Linux ARM64 and pinned Python 3.12.16")
     if os.geteuid() == 0:
@@ -131,7 +141,7 @@ def run(model_dir, rows, density, mode, *, root=ROOT, cache_dir=None, cache_phas
     print(json.dumps({"cgroup_limits": read_limits(root)}), flush=True)
     try:
         sample = measure(model_dir, rows, density, mode, **(
-            {} if cache_phase is None else {"cache_dir": cache_dir, "cache_phase": cache_phase}))
+            {} if cache_phase is None else {"cache_dir": cache_dir, "cache_phase": cache_phase, "pressure": pressure}))
     finally:
         usage = read_usage(root)
         print(json.dumps({"cgroup_usage": usage}), flush=True)
@@ -173,7 +183,7 @@ def compare(baseline, prepared):
                       "density": a["density"], "parity": True, "synthetic_only": True}), flush=True)
 
 
-def compare_restart(cold, restart):
+def compare_restart(cold, restart, *, require_pressure=False):
     a, b = read_reports(cold, restart)
     common = ("catalog_sha256", "passage_snapshot_id", "passage_snapshot_sha256", "ordered_typed_results")
     for sample, phase, hit in ((a, "cold", False), (b, "restart", True)):
@@ -185,9 +195,23 @@ def compare_restart(cold, restart):
             raise ValueError("unexpected workload, cache identity or missing restart proof")
     if any(a[key] != b[key] for key in common):
         raise ValueError("restart did not preserve exact snapshot and typed Top-5")
+    pressure = b.get("synthetic_pressure")
+    if require_pressure:
+        if (not isinstance(pressure, dict) or pressure.get("passed") is not True
+                or pressure.get("within_deadline") is not True
+                or pressure.get("successful_order_mismatches") != 0
+                or pressure.get("recovery_successes") != 3
+                or not isinstance(pressure.get("counts"), dict)
+                or pressure["counts"].get("unknown") != 0
+                or pressure["counts"].get("rate_limited_429") != 0
+                or pressure["counts"].get("busy_503", 0) < 1
+                or pressure["counts"].get("ok", 0) < 3
+                or sum(pressure["counts"].values()) != 18):
+            raise ValueError("missing or failed restart pressure proof")
     print(json.dumps({"paired_typed_top5": len(a["ordered_typed_results"]),
                       "rows": 1000, "density": "high", "mode": "prepared",
-                      "cache_hit_proven": True, "snapshot_unchanged": True, "synthetic_only": True}), flush=True)
+                      "cache_hit_proven": True, "snapshot_unchanged": True, "synthetic_only": True,
+                      **({"pressure_proven": True} if require_pressure else {})}), flush=True)
 
 
 def valid_results(results, rows):
@@ -214,23 +238,27 @@ def main(argv=None):
     probe.add_argument("--mode", choices=_MODES, required=True)
     probe.add_argument("--cache-dir", type=Path)
     probe.add_argument("--cache-phase", choices=_CACHE_PHASES)
+    probe.add_argument("--pressure", action="store_true", help="Enable bounded local HTTP load after a proved cache restart")
     pairing = sub.add_parser("compare")
     pairing.add_argument("baseline", type=Path)
     pairing.add_argument("prepared", type=Path)
     restart = sub.add_parser("compare-restart")
     restart.add_argument("cold", type=Path)
     restart.add_argument("restart", type=Path)
+    restart.add_argument("--require-pressure", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "run":
         if (args.cache_phase is None) != (args.cache_dir is None) or (
                 args.cache_phase is not None and (args.rows, args.density, args.mode) != (1000, "high", "prepared")):
             parser.error("cache lab needs both cache arguments and 1000/high/prepared")
+        if args.pressure and args.cache_phase != "restart":
+            parser.error("pressure lab requires restart cache phase")
         run(args.model_dir, args.rows, args.density, args.mode,
-            cache_dir=args.cache_dir, cache_phase=args.cache_phase)
+            cache_dir=args.cache_dir, cache_phase=args.cache_phase, pressure=args.pressure)
     elif args.command == "compare":
         compare(args.baseline, args.prepared)
     else:
-        compare_restart(args.cold, args.restart)
+        compare_restart(args.cold, args.restart, require_pressure=args.require_pressure)
     return 0
 
 
