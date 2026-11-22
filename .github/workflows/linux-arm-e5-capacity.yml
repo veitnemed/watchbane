@@ -1,0 +1,102 @@
+name: Watchbane bounded ARM64 capacity lab
+
+on:
+  push:
+    branches: ["feature/story-search"]
+    paths:
+      - ".github/workflows/linux-arm-e5-capacity.yml"
+  workflow_dispatch:
+    inputs:
+      rows:
+        description: Generated synopses per test configuration
+        type: choice
+        options: ['1000', '2000']
+        default: '1000'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watchbane-linux-arm-e5-capacity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arm64-container:
+    if: github.ref == 'refs/heads/feature/story-search'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    env:
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build a local dependencies-only ARM64 lab image
+        shell: bash
+        run: |
+          test "$(uname -sm)" = "Linux aarch64"
+          test "$(id -u)" -ne 0
+          case "$(docker info --format '{{.OSType}}/{{.Architecture}}')" in
+            linux/aarch64|linux/arm64) ;;
+            *) echo "Native ARM64 Docker daemon required"; exit 1 ;;
+          esac
+          context="$(mktemp -d)"
+          trap 'rm -rf -- "$context"' EXIT
+          git show HEAD:.github/docker/watchbane-arm-cgroup.Dockerfile > "$context/Dockerfile"
+          git show HEAD:requirements-story.txt > "$context/requirements-story.txt"
+          git show HEAD:requirements-story-server.txt > "$context/requirements-story-server.txt"
+          timeout --kill-after=10s 4m docker build --platform linux/arm64 --tag watchbane-arm-cgroup:local "$context"
+          test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' watchbane-arm-cgroup:local)" = "linux/arm64"
+      - name: Fetch and verify the pinned model only on the host
+        shell: bash
+        run: |
+          timeout --kill-after=10s 8m python -m tools.qa.diagnose_story_model_download "$RUNNER_TEMP/watchbane-arm-cgroup-model"
+      - name: Compare baseline/prepared in four independent ARM64 cgroups
+        shell: bash
+        env:
+          WATCHBANE_LAB_ROWS: ${{ inputs.rows || '1000' }}
+        run: |
+          case "$WATCHBANE_LAB_ROWS" in 1000|2000) ;; *) exit 2 ;; esac
+          scratch="$(mktemp -d "$RUNNER_TEMP/watchbane-capacity-source.XXXXXX")"
+          reports="$(mktemp -d "$RUNNER_TEMP/watchbane-capacity-logs.XXXXXX")"
+          prefix="watchbane-arm-capacity-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          containers=()
+          cleanup() {
+            for container in "${containers[@]}"; do docker rm -f "$container" >/dev/null 2>&1 || true; done
+            rm -rf -- "$scratch" "$reports"
+          }
+          trap cleanup EXIT
+          git archive HEAD -- candidates tools/qa web | tar -x -C "$scratch"
+          failed=0
+          for density in low high; do
+            pair_failed=0
+            for mode in baseline prepared; do
+              container="$prefix-$density-$mode"
+              containers+=("$container")
+              status=0
+              log="$reports/$density-$mode.jsonl"
+              timeout --kill-after=10s 6m docker run --name "$container" --pull=never --init \
+                --platform linux/arm64 --network none --cgroupns private \
+                --cpus 2 --memory 2g --memory-swap 2g \
+                --user "$(id -u):$(id -g)" --read-only --cap-drop ALL --security-opt no-new-privileges \
+                --tmpfs /tmp:rw,nosuid,nodev,size=64m --env HOME=/tmp \
+                --mount "type=bind,src=$scratch,dst=/opt/watchbane-source,readonly" \
+                --mount "type=bind,src=$RUNNER_TEMP/watchbane-arm-cgroup-model,dst=/opt/watchbane-model,readonly" \
+                watchbane-arm-cgroup:local python -m tools.qa.measure_story_arm_capacity run \
+                --model-dir /opt/watchbane-model --rows "$WATCHBANE_LAB_ROWS" --density "$density" --mode "$mode" \
+                | tee "$log" || status=$?
+              state="$(docker inspect --format '{{.State.OOMKilled}} {{.State.ExitCode}}' "$container")" || state="inspection_failed"
+              printf 'density=%s mode=%s runner_exit=%s container_oom_killed_and_exit=%s\n' "$density" "$mode" "$status" "$state"
+              docker rm -f "$container" >/dev/null 2>&1 || true
+              if [ "$status" != 0 ] || [ "$state" != "false 0" ]; then pair_failed=1; fi
+            done
+            if [ "$pair_failed" = 1 ] || ! python -m tools.qa.measure_story_arm_capacity compare \
+                "$reports/$density-baseline.jsonl" "$reports/$density-prepared.jsonl"; then
+              failed=1
+            fi
+          done
+          exit "$failed"
+      # No published ports, upload, image push, remote deployment, or billing setup.

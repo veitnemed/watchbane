@@ -51,7 +51,7 @@ def request(port, path, body=None):
 
 
 @contextmanager
-def launch(catalog, model, batch_size, *, cache_dir=None):
+def launch(catalog, model, batch_size, *, cache_dir=None, prepared_index=False):
     # The app cannot accept an inherited socket. Check both the child and an
     # application-specific marker; this port allocation is not deploy-grade.
     with socket.socket() as holder:
@@ -61,6 +61,8 @@ def launch(catalog, model, batch_size, *, cache_dir=None):
             "--port", str(port), "--startup-passage-batch-size", str(batch_size)]
     if cache_dir is not None:
         args.extend(("--cache-dir", str(cache_dir)))
+    if prepared_index:
+        args.append("--prepared-index")
     child = subprocess.Popen(
         args,
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
