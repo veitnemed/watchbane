@@ -145,3 +145,48 @@ def test_compare_requires_pressure_if_requested(tmp_path, capsys):
     dump(b, y)
     with pytest.raises(ValueError, match="pressure"):
         capacity.compare_restart(a, b, require_pressure=True)
+
+
+def test_2k_pair_keeps_distinct_readiness_budgets_and_exact_top5(tmp_path, capsys):
+    a, b, x, y = restart_captures(tmp_path)
+    for report, budget in ((x, 340), (y, 30)):
+        report[-1]["capacity"].update(rows=2000, readiness_budget_seconds=budget)
+    dump(a, x)
+    dump(b, y)
+    capacity.compare_restart(a, b, rows=2000)
+    assert json.loads(capsys.readouterr().out)["rows"] == 2000
+
+    with pytest.raises(ValueError, match="unexpected workload"):
+        capacity.compare_restart(a, b)  # default remains the existing 1K gate
+
+    y[-1]["capacity"]["process_ready_seconds"] = 30.01
+    dump(b, y)
+    with pytest.raises(ValueError, match="readiness budget"):
+        capacity.compare_restart(a, b, rows=2000)
+
+    y[-1]["capacity"]["process_ready_seconds"] = 29.99
+    y[-1]["capacity"]["ordered_typed_results"][0].reverse()
+    dump(b, y)
+    with pytest.raises(ValueError, match="typed Top-5"):
+        capacity.compare_restart(a, b, rows=2000)
+
+
+def test_2k_readiness_timeout_remains_distinct_from_resource_failure(monkeypatch, capsys, tmp_path):
+    from types import SimpleNamespace
+    from tools.qa.exercise_story_handover import ReadinessTimeout
+
+    monkeypatch.setattr(capacity, "platform", SimpleNamespace(system=lambda: "Linux", machine=lambda: "aarch64"))
+    monkeypatch.setattr(capacity, "sys", SimpleNamespace(version_info=(3, 12, 16)))
+    monkeypatch.setattr(capacity, "os", SimpleNamespace(geteuid=lambda: 1001))
+    monkeypatch.setattr(capacity, "read_limits", lambda _root: {"cpu_quota_us": 200000})
+    monkeypatch.setattr(capacity, "read_usage", lambda _root: {"oom": 0})
+    def measure(*args, **options):
+        assert options["readiness_timeout"] == 30
+        raise ReadinessTimeout("startup deadline expired")
+    monkeypatch.setattr(capacity, "measure", measure)
+    with pytest.raises(ReadinessTimeout):
+        capacity.run(tmp_path, 2000, "high", "prepared", cache_dir=tmp_path, cache_phase="restart")
+    _, failure, usage = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert failure == {"capacity_failure": "readiness_timeout", "cache_phase": "restart",
+                       "rows": 2000, "readiness_budget_seconds": 30}
+    assert usage == {"cgroup_usage": {"oom": 0}}

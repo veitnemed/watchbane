@@ -26,6 +26,10 @@ class ExerciseError(RuntimeError):
     pass
 
 
+class ReadinessTimeout(ExerciseError):
+    """The expected loopback health state was not reached within its wall budget."""
+
+
 def pinned_bytes(path, expected):
     if not _SHA.fullmatch(expected) or not path.is_file():
         raise ExerciseError("invalid catalog file or SHA-256 pin")
@@ -102,7 +106,7 @@ def wait_health(server, seconds, *, rejected=False, on_not_ready=None):
         if on_not_ready is not None:
             on_not_ready()
         time.sleep(0.05)
-    raise ExerciseError("startup deadline expired")
+    raise ReadinessTimeout("startup deadline expired")
 
 
 def marker_result(result, marker, expected):

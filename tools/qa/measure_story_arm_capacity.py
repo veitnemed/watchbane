@@ -11,7 +11,7 @@ import sys
 import tempfile
 import time
 
-from tools.qa.exercise_story_handover import launch, request, wait_health
+from tools.qa.exercise_story_handover import ReadinessTimeout, launch, request, wait_health
 from tools.qa.smoke_story_arm_cgroup import ROOT, read_limits, read_usage
 
 
@@ -19,6 +19,10 @@ _ROWS = (1000, 2000)
 _DENSITIES = ("low", "high")
 _MODES = ("baseline", "prepared")
 _CACHE_PHASES = ("cold", "restart")
+# This experiment starts from ~148 s for 1000 high rows on native ARM64.
+# At 2000, allow ~2× that result plus 44 s; the matched snapshot startup
+# gets its own 30 s budget and Docker has separate wall limits.
+_2K_READINESS_SECONDS = {"cold": 340, "restart": 30}
 _REPEATS = 4
 _QUERIES = ("летописец картограф", "межзвёздный полёт", "меткаааб", "летаписец")
 
@@ -139,14 +143,23 @@ def run(model_dir, rows, density, mode, *, root=ROOT, cache_dir=None, cache_phas
     if os.geteuid() == 0:
         raise RuntimeError("container lab must not run as root")
     print(json.dumps({"cgroup_limits": read_limits(root)}), flush=True)
+    settings = {} if cache_phase is None else {"cache_dir": cache_dir, "cache_phase": cache_phase, "pressure": pressure}
+    readiness_budget = _2K_READINESS_SECONDS.get(cache_phase, 300) if rows == 2000 else 300
+    if rows == 2000 and cache_phase in _CACHE_PHASES:
+        settings["readiness_timeout"] = readiness_budget
     try:
-        sample = measure(model_dir, rows, density, mode, **(
-            {} if cache_phase is None else {"cache_dir": cache_dir, "cache_phase": cache_phase, "pressure": pressure}))
+        sample = measure(model_dir, rows, density, mode, **settings)
+    except ReadinessTimeout:
+        print(json.dumps({"capacity_failure": "readiness_timeout", "cache_phase": cache_phase,
+                          "rows": rows, "readiness_budget_seconds": readiness_budget}), flush=True)
+        raise
     finally:
         usage = read_usage(root)
         print(json.dumps({"cgroup_usage": usage}), flush=True)
     if not usage["within_limit_without_oom"]:
         raise RuntimeError("cgroup peak or OOM check failed")
+    if cache_phase is not None and rows == 2000:
+        sample["readiness_budget_seconds"] = readiness_budget
     print(json.dumps({"capacity": sample}), flush=True)
 
 
@@ -183,16 +196,21 @@ def compare(baseline, prepared):
                       "density": a["density"], "parity": True, "synthetic_only": True}), flush=True)
 
 
-def compare_restart(cold, restart, *, require_pressure=False):
+def compare_restart(cold, restart, *, rows=1000, require_pressure=False):
+    if rows not in _ROWS or (rows == 2000 and require_pressure):
+        raise ValueError("unexpected cache restart workload")
     a, b = read_reports(cold, restart)
     common = ("catalog_sha256", "passage_snapshot_id", "passage_snapshot_sha256", "ordered_typed_results")
     for sample, phase, hit in ((a, "cold", False), (b, "restart", True)):
         if ((sample["rows"], sample["density"], sample["mode"], sample.get("cache_phase"))
-                != (1000, "high", "prepared", phase)
+                != (rows, "high", "prepared", phase)
                 or sample.get("proof_of_cache_hit") is not hit
                 or any(not re.fullmatch(r"[0-9a-f]{64}", sample.get(key, ""))
                        for key in common[1:3])):
             raise ValueError("unexpected workload, cache identity or missing restart proof")
+        if rows == 2000 and (sample.get("readiness_budget_seconds") != _2K_READINESS_SECONDS[phase]
+                            or sample["process_ready_seconds"] > _2K_READINESS_SECONDS[phase]):
+            raise ValueError("2K cache phase did not meet its readiness budget")
     if any(a[key] != b[key] for key in common):
         raise ValueError("restart did not preserve exact snapshot and typed Top-5")
     pressure = b.get("synthetic_pressure")
@@ -209,7 +227,7 @@ def compare_restart(cold, restart, *, require_pressure=False):
                 or sum(pressure["counts"].values()) != 18):
             raise ValueError("missing or failed restart pressure proof")
     print(json.dumps({"paired_typed_top5": len(a["ordered_typed_results"]),
-                      "rows": 1000, "density": "high", "mode": "prepared",
+                      "rows": rows, "density": "high", "mode": "prepared",
                       "cache_hit_proven": True, "snapshot_unchanged": True, "synthetic_only": True,
                       **({"pressure_proven": True} if require_pressure else {})}), flush=True)
 
@@ -246,19 +264,20 @@ def main(argv=None):
     restart.add_argument("cold", type=Path)
     restart.add_argument("restart", type=Path)
     restart.add_argument("--require-pressure", action="store_true")
+    restart.add_argument("--rows", type=int, choices=_ROWS, default=1000)
     args = parser.parse_args(argv)
     if args.command == "run":
         if (args.cache_phase is None) != (args.cache_dir is None) or (
-                args.cache_phase is not None and (args.rows, args.density, args.mode) != (1000, "high", "prepared")):
-            parser.error("cache lab needs both cache arguments and 1000/high/prepared")
-        if args.pressure and args.cache_phase != "restart":
-            parser.error("pressure lab requires restart cache phase")
+                args.cache_phase is not None and (args.density, args.mode) != ("high", "prepared")):
+            parser.error("cache lab needs both cache arguments and high/prepared")
+        if args.pressure and (args.cache_phase != "restart" or args.rows != 1000):
+            parser.error("pressure lab requires restart cache phase with 1000 rows")
         run(args.model_dir, args.rows, args.density, args.mode,
             cache_dir=args.cache_dir, cache_phase=args.cache_phase, pressure=args.pressure)
     elif args.command == "compare":
         compare(args.baseline, args.prepared)
     else:
-        compare_restart(args.cold, args.restart, require_pressure=args.require_pressure)
+        compare_restart(args.cold, args.restart, rows=args.rows, require_pressure=args.require_pressure)
     return 0
 
 

@@ -10,10 +10,10 @@ on:
       scenario:
         description: Synthetic capacity experiment
         type: choice
-        options: ['backends', 'cache_restart']
+        options: ['backends', 'cache_restart', 'cache_restart_2k']
         default: 'backends'
       rows:
-        description: "Backends only: generated synopses per configuration (cache restart is fixed at 1000)"
+        description: "Backends only: generated synopses per configuration (restart sizes are fixed by the chosen scenario)"
         type: choice
         options: ['1000', '2000']
         default: '1000'
@@ -105,10 +105,13 @@ jobs:
             fi
           done
           exit "$failed"
-      - name: Prove cached restart and bounded search admission in fresh ARM64 cgroups
-        if: github.event_name == 'push' || inputs.scenario == 'cache_restart'
+      - name: Compare cold build and proved cached restart in fresh ARM64 cgroups
+        if: github.event_name == 'push' || inputs.scenario == 'cache_restart' || inputs.scenario == 'cache_restart_2k'
         shell: bash
+        env:
+          WATCHBANE_LAB_RESTART_ROWS: ${{ inputs.scenario == 'cache_restart' && '1000' || '2000' }}
         run: |
+          case "$WATCHBANE_LAB_RESTART_ROWS" in 1000|2000) ;; *) exit 2 ;; esac
           work="$(mktemp -d "$RUNNER_TEMP/watchbane-capacity-restart.XXXXXX")"
           scratch="$work/source"
           cache="$work/passage-cache"
@@ -123,13 +126,15 @@ jobs:
           for phase in cold restart; do
             mount="type=bind,src=$cache,dst=/opt/watchbane-passage-cache"
             args=()
+            wall=360
+            if [ "$WATCHBANE_LAB_RESTART_ROWS" = 2000 ]; then wall=390; fi
             if [ "$phase" = restart ]; then
               mount="$mount,readonly"
-              args+=(--pressure)
+              if [ "$WATCHBANE_LAB_RESTART_ROWS" = 1000 ]; then args+=(--pressure); else wall=55; fi
             fi
             container="$prefix-$phase"
             status=0
-            timeout --kill-after=10s 6m docker run --name "$container" --pull=never --init \
+            timeout --verbose --kill-after=10s "${wall}s" docker run --name "$container" --pull=never --init \
               --platform linux/arm64 --network none --cgroupns private \
               --cpus 2 --memory 2g --memory-swap 2g \
               --user "$(id -u):$(id -g)" --read-only --cap-drop ALL --security-opt no-new-privileges \
@@ -138,13 +143,23 @@ jobs:
               --mount "type=bind,src=$RUNNER_TEMP/watchbane-arm-cgroup-model,dst=/opt/watchbane-model,readonly" \
               --mount "$mount" \
               watchbane-arm-cgroup:local python -m tools.qa.measure_story_arm_capacity run \
-              --model-dir /opt/watchbane-model --rows 1000 --density high --mode prepared \
+              --model-dir /opt/watchbane-model --rows "$WATCHBANE_LAB_RESTART_ROWS" --density high --mode prepared \
               --cache-dir /opt/watchbane-passage-cache --cache-phase "$phase" "${args[@]}" \
               | tee "$work/$phase.jsonl" || status=$?
             state="$(docker inspect --format '{{.State.OOMKilled}} {{.State.ExitCode}}' "$container")" || state="inspection_failed"
-            printf 'phase=%s runner_exit=%s container_oom_killed_and_exit=%s\n' "$phase" "$status" "$state"
+            printf 'rows=%s phase=%s wall_budget_seconds=%s runner_exit=%s container_oom_killed_and_exit=%s\n' \
+              "$WATCHBANE_LAB_RESTART_ROWS" "$phase" "$wall" "$status" "$state"
+            if [ "${state%% *}" = true ]; then
+              printf 'capacity_failure=docker_oom_kill rows=%s phase=%s\n' "$WATCHBANE_LAB_RESTART_ROWS" "$phase"
+            elif [ "$status" = 124 ]; then
+              printf 'capacity_failure=docker_wall_timeout rows=%s phase=%s\n' "$WATCHBANE_LAB_RESTART_ROWS" "$phase"
+            elif [ "$status" = 137 ]; then
+              printf 'capacity_failure=docker_killed_or_timeout rows=%s phase=%s\n' "$WATCHBANE_LAB_RESTART_ROWS" "$phase"
+            fi
             docker rm -f "$container" >/dev/null 2>&1 || true
             if [ "$status" != 0 ] || [ "$state" != "false 0" ]; then exit 1; fi
           done
-          python -m tools.qa.measure_story_arm_capacity compare-restart "$work/cold.jsonl" "$work/restart.jsonl" --require-pressure
+          args=(--rows "$WATCHBANE_LAB_RESTART_ROWS")
+          if [ "$WATCHBANE_LAB_RESTART_ROWS" = 1000 ]; then args+=(--require-pressure); fi
+          python -m tools.qa.measure_story_arm_capacity compare-restart "$work/cold.jsonl" "$work/restart.jsonl" "${args[@]}"
       # No published ports, upload, image push, remote deployment, or billing setup.
