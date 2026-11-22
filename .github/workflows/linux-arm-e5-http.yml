@@ -1,0 +1,45 @@
+name: Watchbane Linux ARM64 E5 HTTP smoke
+
+# Downloads public pinned FP32 E5 (~487 MB). Deliberately not a broad CI trigger.
+on:
+  push:
+    branches: ["feature/story-search"]
+    paths:
+      - ".github/workflows/linux-arm-e5-http.yml"
+      - "tools/qa/smoke_story_arm_http.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watchbane-linux-arm-e5-http-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    env:
+      OPENBLAS_NUM_THREADS: "1"
+      HF_HUB_DISABLE_IMPLICIT_TOKEN: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify native ARM64 Linux and install pinned server dependencies
+        run: |
+          python -c 'import platform; assert platform.system() == "Linux" and platform.machine() == "aarch64"'
+          python -m pip install --only-binary=:all: -r requirements-story-server.txt
+      - name: Download and verify only the pinned official FP32 weights
+        shell: bash
+        run: |
+          timeout --kill-after=10s 8m python -c 'import sys; from pathlib import Path; from candidates.story_model_install import install_story_model; install_story_model(Path(sys.argv[1]))' "$RUNNER_TEMP/watchbane-e5-arm"
+      - name: Verify real Russian embeddings and search through loopback HTTP
+        shell: bash
+        run: |
+          timeout --kill-after=10s 3m python -m tools.qa.smoke_story_arm_http --require-native-arm --model-dir "$RUNNER_TEMP/watchbane-e5-arm"
+      # No credentials, upload, release, or provider catalog.
