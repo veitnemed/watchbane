@@ -116,3 +116,72 @@ def test_rejects_non_json_or_empty_export(tmp_path):
     pair[1].write_bytes(gzip.compress(b'not json\n'))
     with pytest.raises(ValueError, match="invalid UTF-8 JSON"):
         _plan(pair)
+
+
+def _cohort_plan(pair, cohort, cap=5):
+    return tmdb_ids.plan_daily_ids(export_date=DAY, movie_file=pair[0], tv_file=pair[1],
+                                   per_media_limit=cap, cohort=cohort)
+
+
+def test_no_cohort_retains_exact_prior_manifest_bytes(tmp_path):
+    row = {"id": 88, "adult": False}
+    pair = _sources(tmp_path, [row], [row])
+    actual = json.dumps(_plan(pair).manifest(), separators=(",", ":"))
+    hashes = [hashlib.sha256(p.read_bytes()).hexdigest() for p in pair]
+    queue_hash = hashlib.sha256(b"tmdb:movie:88\ntmdb:tv:88").hexdigest()
+    expected = (
+        '{"format":"tmdb-id-plan-v1-sha256-sample","date":"2026-01-02","per_media_limit":5,"sources":['
+        '{"media_type":"movie","filename":"movie_ids_01_02_2026.json.gz","compressed_sha256":"' + hashes[0]
+        + '","rows":1,"adult_rows":0,"unknown_adult_rows":0},'
+        '{"media_type":"tv","filename":"tv_series_ids_01_02_2026.json.gz","compressed_sha256":"' + hashes[1]
+        + '","rows":1,"adult_rows":0,"unknown_adult_rows":0}],"queue_sha256":"' + queue_hash + '"}'
+    )
+    assert actual.encode() == expected.encode()
+    assert _cohort_plan(pair, None).manifest() == json.loads(expected)
+
+
+def test_fixed_cohorts_are_disjoint_and_each_retains_typed_caps(tmp_path):
+    from collections import Counter
+
+    eligible = [{"id": i, "adult": False} for i in range(1, 25)]
+    flags = [{"id": 91, "adult": True}, {"id": 92, "adult": 0}, {"id": 93},
+             {"id": 94, "adult": None}, {"id": 95, "adult": "false"}]
+    pair = _sources(tmp_path, eligible + flags + eligible, eligible + flags)
+    seen = set()
+    for index in range(3):
+        cohort = tmdb_ids.IdCohort(3, index)
+        plan = _cohort_plan(pair, cohort, cap=50)
+        assert not seen.intersection(plan.queue)
+        seen.update(plan.queue)
+        assert all(row.tmdb_id <= 24 for row in plan.queue)
+        assert all(s.adult_rows == 1 and s.unknown_adult_rows == 4 for s in plan.sources)
+        assert plan.manifest()["cohort"] == {"scheme": "typed-sha256-modulo-v1", "count": 3, "index": index}
+        retried = _cohort_plan(pair, cohort, cap=50)
+        assert retried == plan
+        retried.require_same_inputs(plan.manifest())
+        limited = _cohort_plan(pair, cohort, cap=1)
+        assert max(Counter(i.media_type for i in limited.queue).values()) <= 1
+        with pytest.raises(ValueError, match="new checkpoint"):
+            retried.require_same_inputs(limited.manifest())
+    assert seen == {tmdb_ids.QueueItem(kind, i) for kind in ("movie", "tv") for i in range(1, 25)}
+
+
+@pytest.mark.parametrize(("count", "index"), [(1, 0), (257, 0), (3, -1), (3, 3), (3, True), (3.0, 0)])
+def test_invalid_cohort_selectors_do_not_coerce(count, index):
+    with pytest.raises(ValueError, match="zero-based"):
+        tmdb_ids.IdCohort(count, index)
+
+
+def test_cohort_pin_changes_even_with_identical_empty_queue_and_checks_unselected_tail(tmp_path):
+    pair = _sources(tmp_path, [{"id": 1}], [{"id": 1, "adult": True}])
+    first = _cohort_plan(pair, tmdb_ids.IdCohort(2, 0))
+    second = _cohort_plan(pair, tmdb_ids.IdCohort(2, 1))
+    assert first.queue == second.queue == ()
+    for competitor in (second, _cohort_plan(pair, tmdb_ids.IdCohort(3, 0)), _plan(pair)):
+        with pytest.raises(ValueError, match="new checkpoint"):
+            first.require_same_inputs(competitor.manifest())
+    with pytest.raises(ValueError, match="IdCohort"):
+        _cohort_plan(pair, {"count": 2, "index": 0})
+    pair = _sources(tmp_path, [{"id": 1}], [{"id": 1, "adult": True}, {"id": 0, "adult": True}])
+    with pytest.raises(ValueError, match="row 2"):
+        _cohort_plan(pair, tmdb_ids.IdCohort(2, 1))
