@@ -67,7 +67,9 @@ def test_console_dev_gui_launcher_sets_candidate_clear_env(monkeypatch) -> None:
 
     assert return_code == 0
     assert captured["command"][-1] == "start_app.py"
-    assert captured["cwd"].name == "watchbane"
+    checkout = Path(__file__).resolve().parents[1]
+    assert (checkout / "start_app.py").is_file()
+    assert captured["cwd"] == checkout
     assert captured["check"] is False
     assert captured["env"]["WATCHBANE_DATA_DIR"] == str(Path("tmp/dev_gui/empty_candidate_pool"))
     assert captured["env"][runtime.DEV_CLEAR_CANDIDATES_ENV] == "1"

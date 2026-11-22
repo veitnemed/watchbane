@@ -1300,10 +1300,47 @@ def test_scale_anchor_add_title_dialog_contract_properties(qapp, ui_scale) -> No
     preview_dialog.close()
 
 
+_LITERAL_DIMENSION_CALL = re.compile(
+    r"\.set(?P<mode>Fixed|Minimum)(?:Width|Height)\(\s*(?P<pixels>[1-9][0-9]*|0)\s*\)"
+)
+
+
+def _has_hardcoded_pixel_dimension(line: str) -> bool:
+    # A literal zero minimum releases a Qt constraint. A zero fixed
+    # dimension still sets the maximum to zero, so it remains a hit.
+    return any(match["mode"] == "Fixed" or match["pixels"] != "0"
+               for match in _LITERAL_DIMENSION_CALL.finditer(line))
+
+
+@pytest.mark.parametrize(("source", "found"), [
+    ("widget.setMinimumHeight(0)", False),
+    ("widget.setMinimumWidth( 0 )", False),
+    ("widget.setMinimumHeight(1)", True),
+    ("widget.setMinimumWidth(24)", True),
+    ("widget.setMinimumHeight(0); other.setMinimumHeight(1)", True),
+    ("widget.setFixedWidth(0)", True),
+    ("widget.setFixedHeight(48)", True),
+    ("widget.setMinimumWidth(scale_px(24))", False),
+])
+def test_literal_dimension_guard_only_exempts_zero_minimum_reset(source, found) -> None:
+    assert _has_hardcoded_pixel_dimension(source) is found
+
+
+def test_qt_zero_minimum_releases_but_zero_fixed_height_constrains(qapp) -> None:
+    from PyQt6.QtWidgets import QWidget
+
+    widget = QWidget()
+    widget.setMinimumHeight(32)
+    widget.resize(100, 10)
+    assert widget.height() == 32
+    widget.setMinimumHeight(0)
+    widget.resize(100, 10)
+    assert widget.height() == 10 and widget.maximumHeight() > 10
+    widget.setFixedHeight(0)
+    assert widget.minimumHeight() == widget.maximumHeight() == 0
+
+
 def test_hardcoded_px_guard_for_direct_sizing_calls() -> None:
-    pattern = re.compile(
-        r"\.set(?:Fixed|Minimum)(?:Width|Height)\(\s*(?:[1-9][0-9]*|0)\s*\)"
-    )
     # TODO: retire these legacy direct pixel calls by routing them through tokens/scaling helpers.
     legacy_whitelist = {
         ("desktop/analytics/sections/fallback_bars.py", "count.setFixedWidth(92)"),
@@ -1315,7 +1352,7 @@ def test_hardcoded_px_guard_for_direct_sizing_calls() -> None:
         normalized_path = path.as_posix()
         for line in path.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
-            if pattern.search(stripped):
+            if _has_hardcoded_pixel_dimension(stripped):
                 findings.add((normalized_path, stripped))
 
     assert findings == legacy_whitelist
