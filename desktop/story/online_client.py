@@ -14,7 +14,8 @@ _HOST = "127.0.0.1"
 _PATH = "/v1/search"
 _TIMEOUT = 8.0
 _MAX_BYTES = 512 * 1024
-_MAX_BUSY_BYTES = 256
+_MAX_ERROR_BYTES = 256
+_RETRY_SECONDS = re.compile(r"[1-9]|[1-5][0-9]|60", re.ASCII)
 _OUTCOME_HEADER = "Watchbane-Search-Outcome"
 _ARTWORK_HEADER = "Watchbane-Search-Artwork"
 _INDEX_HEADER = "Watchbane-Search-Index"
@@ -36,6 +37,16 @@ class OnlineStoryError(RuntimeError):
 
 class OnlineStoryBusy(OnlineStoryError):
     """The loopback server is handling another search; never retried automatically."""
+
+
+class OnlineStoryRateLimited(OnlineStoryError):
+    """A validated local cooldown; the caller may retry only with fresh consent."""
+
+    def __init__(self, retry_after: int):
+        if type(retry_after) is not int or not 1 <= retry_after <= 60:
+            raise ValueError("Invalid rate limit wait.")
+        self.retry_after = retry_after
+        super().__init__("Local story server rate limit reached.")
 
 
 @dataclass(frozen=True)
@@ -80,9 +91,9 @@ def _unique_object(pairs):
     return result
 
 
-def _is_busy(raw):
+def _matches_error(raw, detail):
     try:
-        return json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object) == {"detail": "search_busy"}
+        return json.loads(raw.decode("utf-8"), object_pairs_hook=_unique_object) == {"detail": detail}
     except (ValueError, RecursionError):
         return False
 
@@ -224,21 +235,28 @@ def search_online(
         check_active()
         with connection.getresponse() as response:
             check_active()
-            busy_candidate = response.status == 503
-            if response.status != 200 and not busy_candidate:
+            server_error = response.status in (429, 503)
+            if response.status != 200 and not server_error:
                 raise OnlineStoryError("Local story server is unavailable.")
 
             def invalid():
-                if busy_candidate:
+                if server_error:
                     return OnlineStoryError("Local story server is unavailable.")
                 return _invalid_response()
 
-            maximum = _MAX_BUSY_BYTES if busy_candidate else _MAX_BYTES
-            if not busy_candidate and with_outcome and response.getheader(_OUTCOME_HEADER) != "1":
+            maximum = _MAX_ERROR_BYTES if server_error else _MAX_BYTES
+            retry_after = None
+            if response.status == 429:
+                seconds = response.getheader("Retry-After", "")
+                if (type(seconds) is not str or _RETRY_SECONDS.fullmatch(seconds) is None
+                        or response.getheader("Cache-Control") != "no-store"):
+                    raise invalid()
+                retry_after = int(seconds)
+            if not server_error and with_outcome and response.getheader(_OUTCOME_HEADER) != "1":
                 raise invalid()
-            if not busy_candidate and with_artwork and response.getheader(_ARTWORK_HEADER) != "1":
+            if not server_error and with_artwork and response.getheader(_ARTWORK_HEADER) != "1":
                 raise invalid()
-            if not busy_candidate and with_index and response.getheader(_INDEX_HEADER) != "1":
+            if not server_error and with_index and response.getheader(_INDEX_HEADER) != "1":
                 raise invalid()
             content_type = response.getheader("Content-Type", "").split(";", 1)[0].strip().lower()
             encoding = response.getheader("Content-Encoding", "identity").strip().lower()
@@ -260,10 +278,13 @@ def search_online(
                     raise invalid()
             if size is not None and len(raw) != int(size):
                 raise invalid()
-            if busy_candidate:
-                recognized = _is_busy(raw)
+            if server_error:
+                detail = "search_rate_limited" if retry_after is not None else "search_busy"
+                recognized = _matches_error(raw, detail)
                 check_active()
                 if recognized:
+                    if retry_after is not None:
+                        raise OnlineStoryRateLimited(retry_after)
                     raise OnlineStoryBusy("Local story server is busy.")
                 raise invalid()
         parser_options = {}

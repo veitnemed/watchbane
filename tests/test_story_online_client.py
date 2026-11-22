@@ -260,3 +260,62 @@ def test_only_bounded_exact_search_busy_503_has_typed_error(transport, status, b
     assert isinstance(captured.value, online.OnlineStoryBusy) is busy
     assert "private" not in str(captured.value) and "never echo" not in str(captured.value)
     assert [call[0] for call in calls] == ["create", "connect", "POST", "close"]
+
+
+_RATE_BODY = b'{"detail":"search_rate_limited"}'
+
+
+@pytest.mark.parametrize("seconds", ["1", "7", "59", "60"])
+def test_rate_limited_429_is_typed_without_negotiated_success_headers(transport, seconds):
+    connection, calls, _ = transport
+    connection.reply = Response(_RATE_BODY, status=429,
+                                **{"Cache-Control": "no-store", "Retry-After": seconds})
+    with pytest.raises(online.OnlineStoryRateLimited) as captured:
+        online.search_online("never echo", consent=True, with_outcome=True, with_index=True, with_artwork=True)
+    assert captured.value.retry_after == int(seconds) and "never echo" not in str(captured.value)
+    assert [call[0] for call in calls] == ["create", "connect", "POST", "close"]
+
+
+@pytest.mark.parametrize("body,headers", [
+    (_RATE_BODY, {"Retry-After": ""}),
+    (_RATE_BODY, {"Retry-After": "0"}),
+    (_RATE_BODY, {"Retry-After": "61"}),
+    (_RATE_BODY, {"Retry-After": "2, 2"}),
+    (_RATE_BODY, {"Retry-After": "07"}),
+    (_RATE_BODY, {"Retry-After": "+7"}),
+    (_RATE_BODY, {"Retry-After": "٧"}),
+    (_RATE_BODY, {"Retry-After": "Sun, 22 Nov 2026 11:00:00 GMT"}),
+    (_RATE_BODY, {"Cache-Control": "private"}),
+    (_RATE_BODY, {"Content-Encoding": "gzip"}),
+    (_RATE_BODY, {"Content-Type": "text/plain"}),
+    (_RATE_BODY, {"Content-Length": "999"}),
+    (_RATE_BODY + b" " * 256, {}),
+    (b'{"detail":"search_rate_limited","detail":"search_rate_limited"}', {}),
+    (b'{"detail":"search_rate_limited","opaque":"private-value"}', {}),
+    (b'{"detail":"search_busy"}', {}),
+])
+def test_malformed_or_oversized_429_stays_generic_without_retry(transport, body, headers):
+    connection, calls, _ = transport
+    connection.reply = Response(body, status=429, **({"Cache-Control": "no-store", "Retry-After": "7"} | headers))
+    with pytest.raises(online.OnlineStoryError) as captured:
+        online.search_online("private-query", consent=True)
+    assert type(captured.value) is online.OnlineStoryError
+    assert "private" not in str(captured.value)
+    assert [call[0] for call in calls] == ["create", "connect", "POST", "close"]
+
+
+def test_cancellation_while_reading_429_suppresses_typed_cooldown(transport):
+    connection, _, _ = transport
+    cancelled = Event()
+
+    class CancelledReply(Response):
+        def read1(self, limit):
+            data = super().read1(limit)
+            cancelled.set()
+            return data
+
+    connection.reply = CancelledReply(_RATE_BODY, status=429,
+                                      **{"Cache-Control": "no-store", "Retry-After": "7"})
+    with pytest.raises(online.OnlineStoryError, match="cancelled") as captured:
+        online.search_online("private-query", consent=True, cancelled=cancelled)
+    assert type(captured.value) is online.OnlineStoryError

@@ -252,7 +252,8 @@ def test_empty_local_catalog_copy_and_real_default_deny(qtbot, monkeypatch, dism
 
 
 @pytest.mark.parametrize("real_http", [False, True], ids=["worker-only", "loopback-http"])
-def test_busy_is_editable_and_retries_only_with_a_second_consent(qtbot, monkeypatch, real_http):
+@pytest.mark.parametrize("initial_reply", ["busy", "rate-limited", "malformed-rate-limit"])
+def test_failed_or_budgeted_request_retries_only_with_fresh_consent(qtbot, monkeypatch, real_http, initial_reply):
     from contextlib import ExitStack
     import json
     from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -278,13 +279,22 @@ def test_busy_is_editable_and_retries_only_with_a_second_consent(qtbot, monkeypa
 
                 def do_POST(self):
                     requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"])))["query"])
-                    busy = len(requests) == 1
-                    data = b'{"detail":"search_busy"}' if busy else json.dumps({"source": "tmdb", "results": [{
-                        "id": "tmdb:tv:42", "media_type": "tv", "title": "Fixture", "year": 2020,
-                        "overview": "A test plot", "evidence": "", "language": "ru-RU",
-                    }]}).encode()
-                    self.send_response(503 if busy else 200)
+                    first = len(requests) == 1
+                    code = (503 if initial_reply == "busy" else 429) if first else 200
+                    if code == 503:
+                        data = b'{"detail":"search_busy"}'
+                    elif code == 429:
+                        data = b'{"detail":"search_rate_limited"}'
+                    else:
+                        data = json.dumps({"source": "tmdb", "results": [{
+                            "id": "tmdb:tv:42", "media_type": "tv", "title": "Fixture", "year": 2020,
+                            "overview": "A test plot", "evidence": "", "language": "ru-RU",
+                        }]}).encode()
+                    self.send_response(code)
                     self.send_header("Content-Type", "application/json")
+                    self.send_header("Cache-Control", "no-store")
+                    if code == 429:
+                        self.send_header("Retry-After", "7" if initial_reply == "rate-limited" else "61")
                     self.send_header("Content-Length", str(len(data)))
                     self.end_headers()
                     self.wfile.write(data)
@@ -302,7 +312,11 @@ def test_busy_is_editable_and_retries_only_with_a_second_consent(qtbot, monkeypa
             def request(query, **_):
                 requests.append(query)
                 if len(requests) == 1:
-                    raise online_client.OnlineStoryBusy("fixed")
+                    if initial_reply == "busy":
+                        raise online_client.OnlineStoryBusy("fixed")
+                    if initial_reply == "rate-limited":
+                        raise online_client.OnlineStoryRateLimited(7)
+                    raise online_client.OnlineStoryError("fixed")
                 return (online_client.OnlineStoryResult("tmdb:tv:42", "tv", "Fixture", 2020, "A test plot", ""),)
 
             monkeypatch.setattr(online_client, "search_online", request)
@@ -313,7 +327,12 @@ def test_busy_is_editable_and_retries_only_with_a_second_consent(qtbot, monkeypa
         view.query.setText("первый сюжет")
         qtbot.mouseClick(view.online_button, LEFT)
         qtbot.waitUntil(lambda: view._online_worker is None)
-        assert "занят другим запросом" in view.status.text()
+        notice = {
+            "busy": "занят другим запросом",
+            "rate-limited": "Слишком частые запросы. Повторите поиск через 7 с.",
+            "malformed-rate-limit": "не ответил или вернул ошибку",
+        }[initial_reply]
+        assert notice in view.status.text()
         assert view.query.text() == "первый сюжет" and view.online_button.isEnabled()
         assert view.query.isEnabled() and view.cards_layout.count() == 1
         view.on_tab_activated()
@@ -328,7 +347,8 @@ def test_busy_is_editable_and_retries_only_with_a_second_consent(qtbot, monkeypa
         assert "тестового сервера: 1" in view.status.text()
 
 
-def test_late_busy_cannot_overwrite_cancel_on_edit(qtbot, monkeypatch):
+@pytest.mark.parametrize("error", [online_client.OnlineStoryBusy("late"), online_client.OnlineStoryRateLimited(7)])
+def test_late_busy_or_cooldown_cannot_overwrite_cancel_on_edit(qtbot, monkeypatch, error):
     monkeypatch.setenv(story._ONLINE_PORT_ENV, "8765")
     monkeypatch.delenv(story._ONLINE_OUTCOME_ENV, raising=False)
     monkeypatch.setattr(QMessageBox, "exec", lambda *_: QMessageBox.StandardButton.Yes)
@@ -337,7 +357,7 @@ def test_late_busy_cannot_overwrite_cancel_on_edit(qtbot, monkeypatch):
     def request(query, *, cancelled, **_):
         entered.set()
         assert cancelled.wait(2)
-        raise online_client.OnlineStoryBusy("late")
+        raise error
     monkeypatch.setattr(online_client, "search_online", request)
     view = make_view(qtbot)
     view.query.setText("исходный запрос")
@@ -346,6 +366,7 @@ def test_late_busy_cannot_overwrite_cancel_on_edit(qtbot, monkeypatch):
     view.query.setText("новый запрос")
     qtbot.waitUntil(lambda: view._online_worker is None)
     assert "отменён" in view.status.text() and "занят" not in view.status.text()
+    assert "Слишком частые" not in view.status.text()
     assert view.query.text() == "новый запрос"
 
 
