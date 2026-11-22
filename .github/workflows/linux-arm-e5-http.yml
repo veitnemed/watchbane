@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/linux-arm-e5-http.yml"
       - "tools/qa/smoke_story_arm_http.py"
+      - "tools/qa/diagnose_story_model_download.py"
   workflow_dispatch:
 
 permissions:
@@ -37,7 +38,10 @@ jobs:
       - name: Download and verify only the pinned official FP32 weights
         shell: bash
         run: |
-          timeout --kill-after=10s 8m python -c 'import sys; from pathlib import Path; from candidates.story_model_install import install_story_model; install_story_model(Path(sys.argv[1]))' "$RUNNER_TEMP/watchbane-e5-arm"
+          status=0
+          timeout --kill-after=10s 8m python -m tools.qa.diagnose_story_model_download "$RUNNER_TEMP/watchbane-e5-arm" || status=$?
+          printf 'e5_install process_exit=%s\n' "$status"
+          exit "$status"
       - name: Verify real Russian embeddings and search through loopback HTTP
         shell: bash
         run: |
