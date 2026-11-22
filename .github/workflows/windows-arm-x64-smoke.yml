@@ -1,0 +1,46 @@
+name: Watchbane Windows 11 ARM64 emulation smoke
+
+# Same-runner disposable x64 build; no artifact handoff/publication.
+on:
+  push:
+    branches: ["feature/story-search"]
+    paths:
+      - ".github/workflows/windows-arm-x64-smoke.yml"
+      - "tools/smoke_windows_arm_x64.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watchbane-windows-arm-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  emulated-x64:
+    runs-on: windows-11-arm
+    timeout-minutes: 20
+    env:
+      QT_QPA_PLATFORM: offscreen
+      WATCHBANE_BUNDLE_PROFILE: semantic
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          architecture: x64
+      - name: Verify x64 Python and install build dependencies
+        shell: pwsh
+        run: |
+          python -c "import sysconfig; assert sysconfig.get_platform() == 'win-amd64'"
+          if ($LASTEXITCODE -ne 0) { throw "This check requires an x64 interpreter." }
+          python -m pip install --only-binary=:all: -r requirements-preview.txt "PyInstaller>=6.13,<7"
+      - name: Build x64 on the same disposable runner
+        shell: pwsh
+        run: ./tools/build_desktop.ps1
+      - name: Verify client ARM64, x64 PE, and fresh bundle startup
+        shell: pwsh
+        run: ./tools/smoke_windows_arm_x64.ps1 -BundleDirectory dist/Watchbane
+      # This is neither the normal x64 job's bundle nor a pristine Windows x64 acceptance check.
