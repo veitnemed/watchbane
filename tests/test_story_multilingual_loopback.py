@@ -141,6 +141,33 @@ def test_legacy_unchanged_qa_explicit_language_and_distinct_cache(tmp_path, snap
         assert reply.status_code == 403 and reply.headers["cache-control"] == "no-store"
 
 
+def _install_locale_probe_adapter(app, requests):
+    """Test-only wire bridge; real inference and all card data stay in the lab app."""
+    from fastapi import Request
+    from fastapi.responses import JSONResponse
+
+    @app.middleware("http")
+    async def adapt(request: Request, call_next):
+        versions = request.headers.getlist("Watchbane-Search-Locale")
+        requests.append((request.method, request.scope["path"], versions))
+        if request.method != "POST" or request.scope["path"] != "/v1/search":
+            return await call_next(request)
+        if versions != ["1"]:
+            return await call_next(request)  # The actual lab app has no legacy route.
+        request.scope.update(path="/qa/v1/search", raw_path=b"/qa/v1/search")
+        response = await call_next(request)
+        if response.status_code != 200:
+            return response
+        encoded = b"".join([part async for part in response.body_iterator])
+        result = json.loads(encoded)
+        assert result.pop("mode") == "operator_multilingual_qa"
+        # The QA route doesn't serialize year/evidence. Supply only the
+        # protocol's explicit absent values, never derived result fields.
+        for row in result["results"]:
+            row.update(year=None, evidence="")
+        return JSONResponse(result, headers={"Watchbane-Search-Locale": "1", "Cache-Control": "no-store"})
+
+
 def test_fp32_http_mixed_lane_optional(snapshots, tmp_path):
     """Run with explicit WATCHBANE_QA_MODEL_DIR pointing to pinned local weights."""
     import os
@@ -197,15 +224,31 @@ def test_fp32_http_mixed_lane_optional(snapshots, tmp_path):
         old = search(port, "/v1/search")
         assert [(x["id"], x["language"]) for x in old["results"]] == [("tmdb:movie:7", "ru-RU")]
     old_files = {path: path.read_bytes() for path in cache.rglob("*.wbsvec")}
+    from desktop.story.online_client import OnlineStoryError, search_online
+
     for _ in range(2):
-        with run(create_mixed_qa_app(baseline=baseline, operator_catalog=operator,
-                                     operator_sha256=pin, reviews=[review], model_dir=model,
-                                     cache_dir=cache)) as port:
+        lab = create_mixed_qa_app(baseline=baseline, operator_catalog=operator,
+                                  operator_sha256=pin, reviews=[review], model_dir=model, cache_dir=cache)
+        transport_requests = []
+        _install_locale_probe_adapter(lab, transport_requests)
+        with run(lab) as port:
             result = search(port, "/qa/v1/search")
             search(port, "/v1/search", status=404)
+            existing = [("POST", "/qa/v1/search", []), ("POST", "/v1/search", [])]
+            assert transport_requests == existing
+            with pytest.raises(OnlineStoryError, match="not authorized"):
+                search_online(_QUERY, port=port, consent=False, with_locale=True)
+            assert transport_requests == existing  # no new HTTP exchange at all
             assert [(x["id"], x["language"]) for x in result["results"]][:2] == [
                 ("tmdb:tv:7", "en-US"), ("tmdb:movie:7", "ru-RU"),
             ]
+            adapted = search_online(_QUERY, port=port, consent=True, with_locale=True)
+            assert transport_requests == existing + [("POST", "/v1/search", ["1"])]
+            assert [(r.id, r.media_type, r.synopsis_locale, r.title, r.overview) for r in adapted] == [
+                (row["id"], row["media_type"], row["language"], row["title"], row["overview"])
+                for row in result["results"]
+            ]
+            assert all(r.year is None and r.evidence == "" for r in adapted)
     actual_files = {path: path.read_bytes() for path in cache.rglob("*.wbsvec")}
     assert len(old_files) == 1 and len(actual_files) == 2
     assert all(actual_files[path] == raw for path, raw in old_files.items())
