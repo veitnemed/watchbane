@@ -87,3 +87,69 @@ def test_score_write_failure_keeps_card_and_reports_error(qtbot, monkeypatch):
     assert "Не удалось сохранить оценку" in view.status.text()
     assert cards(view)[0] is card
     assert view._entries[0][1]["main_info"]["user_score"] == 3
+
+
+def test_english_story_save_reopens_in_russian_collection_without_mislabeling_or_merging_tv(
+    qtbot, tmp_path, monkeypatch,
+):
+    from contextlib import closing
+    import json
+    import sqlite3
+
+    from candidates.story_search import StoryDocument, StoryHit
+    from desktop.settings.app_settings import APP_DATA_LANGUAGE_ENV, APP_INTERFACE_LANGUAGE_ENV
+    from desktop.story.view import StorySearchView
+    from storage.sqlite.connection import get_db_path
+
+    monkeypatch.setenv(APP_INTERFACE_LANGUAGE_ENV, "ru")
+    monkeypatch.setenv(APP_DATA_LANGUAGE_ENV, "ru")
+    db = get_db_path()
+    assert db.resolve().is_relative_to(tmp_path.resolve())
+    identifier = 12994
+    rows = (
+        ("movie", "en", "A Lantern at Dawn", "An engineer saves a ferry before dawn."),
+        ("tv", "ru", "Огни на берегу", "Капитан ищет пропавшую команду."),
+    )
+    expected = {}
+    for kind, locale, title, overview in rows:
+        key = f"tmdb:{kind}:{identifier}"
+        localized = {locale: {"title": title, "overview": overview}}
+        expected[key] = localized
+        candidate = {
+            "title": title, "overview": overview, "media_type": kind, "tmdb_id": identifier,
+            "year": 2024, "source": "TMDb", "source_provider": "tmdb", "localized": localized,
+        }
+        # The existing online protocol still refuses English. Inject the
+        # future typed record at the shared card renderer, not the HTTP parser;
+        # actual Save clicks, persistence and Collection are unchanged.
+        story = StorySearchView()
+        qtbot.addWidget(story.widget)
+        doc = StoryDocument(key, title, overview, kind, "fixture", year=2024)
+        story._render_cards([StoryHit(doc, 0.0, overview)], {key: candidate}, online=True)
+        story.widget.resize(1200, 850)
+        story.widget.show()
+        save = story.widget.findChild(QPushButton, "storySaveAction")
+        assert save is not None and save.isEnabled()
+        click(qtbot, save)
+        assert save.text() == "В коллекции" and not save.isEnabled()
+        story.prepare_for_shutdown()
+        story.widget.close()
+
+    # Save's SQLite connections have closed. A new, read-only connection
+    # verifies the actual persisted payloads before a fresh Collection widget.
+    with closing(sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+        saved = conn.execute("SELECT identity_key, candidate_json FROM candidate_actions WHERE action='watchlist'").fetchall()
+    assert len(saved) == len(rows)
+    assert {key: json.loads(raw)["candidate"]["localized"] for key, raw in saved} == expected
+
+    collection = open_collection(qtbot)
+    assert collection.legacy._data_language == "ru"
+    assert set(collection.legacy._action_candidates_by_key) == {f"__candidate__{key}" for key in expected}
+    assert len(cards(collection)) == len(rows)
+    displayed = {
+        (card.findChild(QLabel, "storyTitle").text(), card.findChild(QLabel, "storyEvidence").text())
+        for card in cards(collection)
+    }
+    assert displayed == {(title, overview) for _, _, title, overview in rows}
+    collection.prepare_for_shutdown()
+    collection.widget.close()
