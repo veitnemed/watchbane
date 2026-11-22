@@ -6,12 +6,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QHBoxLayout, QTabWidget, QWidget, QLabel
+from PyQt6.QtWidgets import QHBoxLayout, QLabel, QMessageBox, QPushButton, QTabWidget, QWidget
 
 from desktop.story.view import StorySearchView
 from desktop.candidates.filters_view import CandidateFiltersView
 from desktop.candidates.list_view import CandidateListView
 from desktop.candidates.session import CandidateSearchSession
+from desktop.i18n import translate
 from desktop.language_context import DesktopLanguageContext, load_desktop_language_context
 from desktop.shell.tab_contract import TabView, activate_tab_view
 from desktop.settings.tab_view import SettingsTabView
@@ -89,6 +90,24 @@ class MainTabRegistry:
         self.on_current_changed(self._tabs.currentIndex())
 
 
+def _open_about(parent: QWidget, languages: DesktopLanguageContext) -> None:
+    """Show persistent text credit without a token, external request, or asset."""
+    notice = languages.tr("about.tmdb.notice")
+    if languages.interface_language != "en":
+        notice += "\n\n" + translate("about.tmdb.notice", interface_language="en")
+    source = languages.tr("about.tmdb.source")
+    dialog = QMessageBox(QMessageBox.Icon.Information, languages.tr("about.title"), "Watchbane",
+                         QMessageBox.StandardButton.Close, parent)
+    dialog.setObjectName("watchbaneAboutDialog")
+    dialog.setTextFormat(Qt.TextFormat.PlainText)
+    dialog.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse |
+                                   Qt.TextInteractionFlag.TextSelectableByKeyboard)
+    # Copyable reference, not a remote image, hyperlink, or auto-navigation.
+    dialog.setInformativeText(f"{source}\n\n{notice}\n\nhttps://www.themoviedb.org")
+    dialog.finished.connect(dialog.deleteLater)
+    dialog.open()
+
+
 def build_main_tabs(
     tabs: QTabWidget,
     parent: QWidget,
@@ -116,6 +135,12 @@ def build_main_tabs(
     symbol.setToolTip("Watchbane")
     brand_layout.addWidget(symbol, alignment=Qt.AlignmentFlag.AlignVCenter)
     tabs.setCornerWidget(brand, Qt.Corner.TopLeftCorner)
+    about = QPushButton(languages.tr("about.title"), tabs)
+    about.setObjectName("watchbaneAboutButton")
+    about.setAccessibleName(languages.tr("about.title"))
+    about.setFlat(True)
+    about.clicked.connect(lambda _checked=False: _open_about(tabs, languages))
+    tabs.setCornerWidget(about, Qt.Corner.TopRightCorner)
 
     candidate_session = CandidateSearchSession()
 

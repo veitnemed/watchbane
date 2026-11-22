@@ -22,16 +22,32 @@ if profile == "semantic":
     # NumPy and tokenizers are handled by PyInstaller's extension analysis/hooks.
     semantic_binaries = collect_dynamic_libs("onnxruntime")
 
+# Keep the existing assets except the unused raster attributed to TMDb,
+# whose origin and permission to distribute have not been verified. Listing
+# files at this level avoids adding it through whole-directory collection.
+menu_images = "desktop/images/logos_for_start_select_menu"
+menu_datas = [
+    (f"{menu_images}/{name}", menu_images)
+    for name in (
+        "all_icons_for_label.png",
+        "icons2.png",
+        "refernce_start_theme.png",
+        "wathbane_logo.png",
+        "опсиание цветов.txt.txt",
+    )
+]
+menu_datas += [
+    (f"{menu_images}/{name}", f"{menu_images}/{name}")
+    for name in ("filters_menu", "split_icons")
+]
+
 a = Analysis(
     ["start_app.py"],
     pathex=[],
     binaries=semantic_binaries,
     datas=[
         ("desktop/images/logos", "desktop/images/logos"),
-        (
-            "desktop/images/logos_for_start_select_menu",
-            "desktop/images/logos_for_start_select_menu",
-        ),
+        *menu_datas,
         ("desktop/images/user_rating_not_for_me.svg", "desktop/images"),
         ("desktop/images/user_rating_ok.svg", "desktop/images"),
         ("desktop/images/user_rating_top.svg", "desktop/images"),

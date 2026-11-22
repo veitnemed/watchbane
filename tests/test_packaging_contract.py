@@ -118,6 +118,55 @@ def test_onedir_spec_bundles_only_runtime_image_assets() -> None:
     assert "ui_9" not in source
 
 
+
+def test_future_bundles_exclude_unverified_unused_raster_and_keep_all_existing_menu_assets(monkeypatch):
+    monkeypatch.delenv("WATCHBANE_BUNDLE_PROFILE", raising=False)
+    menu_images = Path("desktop/images/logos_for_start_select_menu")
+    excluded = menu_images / "logo_tmdb.png"
+    assert excluded.is_file()  # Tracked asset/history remains untouched.
+    destinations = set()
+    for source, destination in _analyze_spec().datas:
+        source = Path(source)
+        target = PurePosixPath(destination)
+        if source.is_dir():
+            destinations.update(target / item.relative_to(source).as_posix()
+                                for item in source.rglob("*") if item.is_file())
+        else:
+            destinations.add(target / source.name)
+    assert PurePosixPath(excluded.as_posix()) not in destinations
+    expected = {PurePosixPath(path.as_posix()) for path in menu_images.rglob("*")
+                if path.is_file() and path != excluded}
+    assert {p for p in destinations if p.is_relative_to(menu_images.as_posix())} == expected
+    for required in ("desktop/images/logos/main_icon.ico", "desktop/images/logos/w_symbol_png.png",
+                     "desktop/images/story_ticket.svg", "desktop/images/user_rating_top.svg"):
+        assert PurePosixPath(required) in destinations
+
+
+def test_source_package_reproducible_without_unverified_unused_raster(tmp_path):
+    from hashlib import sha256
+    from zipfile import ZipFile
+    from tools.qa import package_story_preview as package
+
+    root = Path.cwd()
+    path = "desktop/images/logos_for_start_select_menu/logo_tmdb.png"
+    assert (root / path).is_file()
+    assert not package.allowed(path)
+    commit, entries = package.sources(root, "HEAD")
+    assert path not in entries
+    for required in ("desktop/images/logos/main_icon.ico", "desktop/images/logos/w_symbol_png.png",
+                     "desktop/images/story_ticket.svg", "desktop/images/user_rating_top.svg",
+                     "desktop/images/logos_for_start_select_menu/split_icons/manual.png"):
+        assert required in entries
+    archive = tmp_path / "local-preview.zip"
+    first = package.archive_bytes(commit, entries)
+    archive.write_bytes(first)
+    second = package.archive_bytes(*package.sources(root, commit))
+    assert sha256(first).hexdigest() == sha256(second).hexdigest() and first == second
+    assert package.verify(archive, root, commit) == (commit, len(entries))
+    with ZipFile(archive) as zip_file:
+        assert package.PREFIX + path not in zip_file.namelist()
+
+
 def test_packaged_startup_does_not_dynamically_require_retired_analytics() -> None:
     source = Path("desktop/theme/ui_modules.py").read_text(encoding="utf-8")
     bootstrap_source = Path("desktop/shell/bootstrap.py").read_text(encoding="utf-8")

@@ -28,7 +28,6 @@ ASSETS = frozenset("""
     logos/main_icon.ico logos/w_symbol_png.png
     logos_for_start_select_menu/all_icons_for_label.png
     logos_for_start_select_menu/icons2.png
-    logos_for_start_select_menu/logo_tmdb.png
     logos_for_start_select_menu/wathbane_logo.png
     story_ticket.svg user_rating_not_for_me.svg user_rating_ok.svg user_rating_top.svg
 """.split()) | frozenset(
