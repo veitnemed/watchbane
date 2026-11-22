@@ -118,10 +118,11 @@ def normalized_query(query, vocabulary):
 
 
 class SemanticStorySearch:
-    def __init__(self,documents,encoder,*,cancelled=None,retrieval_factory=None):
+    def __init__(self,documents,encoder,*,cancelled=None,retrieval_factory=None,skip_singleton_evidence=False):
         self.documents=tuple(documents)
         self.title_words={tuple(tokens(d.title)) for d in self.documents}
         self.encoder=encoder
+        self.skip_singleton_evidence = skip_singleton_evidence
         self.vocabulary={w for d in documents for w in tokens(d.overview)}
         self.vectors=encoder.encode([d.overview for d in self.documents], **({"cancelled": cancelled} if cancelled else {}))
         self.retrieval = retrieval_factory(self.documents, self.vectors) if retrieval_factory is not None else None
@@ -207,6 +208,11 @@ class SemanticStorySearch:
             explained = []
             for hit in final_hits:
                 sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", hit.document.overview) if s.strip()]
+                if self.skip_singleton_evidence and len(sentences) == 1:
+                    # There is nothing to choose; the hit already has the
+                    # exact trimmed sentence as its excerpt.
+                    explained.append(hit)
+                    continue
                 best = int((self.encoder.encode(sentences) @ q).argmax())
                 explained.append(StoryHit(hit.document, hit.score, sentences[best]))
             final_hits = explained

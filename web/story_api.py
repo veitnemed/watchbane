@@ -88,7 +88,7 @@ def _load_documents(catalog, *, artwork_paths=None):
 
 def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = None, prepared_index: bool = False,
                  previous_catalog: Path | None = None, startup_batch_size: int = DEFAULT_E5_BATCH_SIZE,
-                 artwork_paths: dict | None = None):
+                 artwork_paths: dict | None = None, skip_singleton_evidence: bool = False):
     """Index the approved snapshot; persistence is an explicit operator option."""
     validate_e5_batch_size(startup_batch_size)
     if previous_catalog is not None and cache_dir is None:
@@ -109,11 +109,12 @@ def build_engine(catalog: Path, model_dir: Path, *, cache_dir: Path | None = Non
                                          previous_catalog=previous_catalog, startup_batch_size=startup_batch_size)
     elif startup_batch_size != DEFAULT_E5_BATCH_SIZE:
         encoder = _StartupPassageEncoder(encoder, None, None, documents, startup_batch_size=startup_batch_size)
+    extra = {"skip_singleton_evidence": True} if skip_singleton_evidence else {}
     if prepared_index:
         from web.story_retrieval_index import PreparedRetrievalIndex
 
-        return SemanticStorySearch(documents, encoder, retrieval_factory=PreparedRetrievalIndex)
-    return SemanticStorySearch(documents, encoder)
+        return SemanticStorySearch(documents, encoder, retrieval_factory=PreparedRetrievalIndex, **extra)
+    return SemanticStorySearch(documents, encoder, **extra)
 
 
 async def _read_query(request: Request):
@@ -158,7 +159,8 @@ def _search_outcome(result):
 
 def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, cache_dir: Path | None = None,
                prepared_index: bool = False, previous_catalog: Path | None = None,
-               startup_batch_size: int = DEFAULT_E5_BATCH_SIZE, artwork_metadata: bool = False):
+               startup_batch_size: int = DEFAULT_E5_BATCH_SIZE, artwork_metadata: bool = False,
+               skip_singleton_evidence: bool = False):
     """One verified engine per worker; tests may inject a local engine factory."""
     validate_e5_batch_size(startup_batch_size)
     if previous_catalog is not None and cache_dir is None:
@@ -168,6 +170,8 @@ def create_app(catalog: Path, model_dir: Path, *, engine_factory=build_engine, c
         options = {} if cache_dir is None else {"cache_dir": cache_dir}
         if prepared_index:
             options["prepared_index"] = True
+        if skip_singleton_evidence:
+            options["skip_singleton_evidence"] = True
         if previous_catalog is not None:
             options["previous_catalog"] = previous_catalog
         if startup_batch_size != DEFAULT_E5_BATCH_SIZE:
@@ -260,6 +264,8 @@ def main(argv=None):
     parser.add_argument("--startup-passage-batch-size", type=int, default=DEFAULT_E5_BATCH_SIZE,
                         help="Maximum E5 batch for initial passages only (1–16)")
     parser.add_argument("--artwork-metadata", action="store_true", help="Allow negotiated relative TMDb poster metadata")
+    parser.add_argument("--skip-singleton-evidence", action="store_true",
+                        help="Experimental QA: skip E5 explanation when only one sentence exists")
     args = parser.parse_args(argv)
     try:
         validate_e5_batch_size(args.startup_passage_batch_size)
@@ -270,7 +276,8 @@ def main(argv=None):
     uvicorn.run(create_app(args.catalog, args.model_dir, cache_dir=args.cache_dir,
                           prepared_index=args.prepared_index, previous_catalog=args.previous_catalog,
                           startup_batch_size=args.startup_passage_batch_size,
-                          artwork_metadata=args.artwork_metadata), host="127.0.0.1",
+                          artwork_metadata=args.artwork_metadata,
+                          skip_singleton_evidence=args.skip_singleton_evidence), host="127.0.0.1",
                 port=args.port, access_log=False, proxy_headers=False)
 
 
