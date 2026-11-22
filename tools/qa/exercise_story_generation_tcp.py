@@ -8,9 +8,11 @@ import argparse
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from functools import lru_cache
 from hashlib import sha256
 from http.client import HTTPConnection
 import json
+from math import ceil
 from pathlib import Path
 import socket
 from tempfile import TemporaryDirectory
@@ -21,7 +23,7 @@ from types import MappingProxyType
 from candidates.story_artwork import is_provider_poster_path
 from candidates.story_semantic import LocalE5
 from tools.qa import exercise_story_shared_session as shared
-from tools.qa.exercise_story_joint_cgroup import _BATCH, fixture
+from tools.qa.exercise_story_joint_cgroup import _BATCH, fixture, fixture_bytes
 from tools.qa.prebuild_story_passages import prebuild, private_directory
 from web import story_api
 
@@ -31,42 +33,68 @@ _NAMES = (_OLD, _NEW)
 _HEADERS = ("Watchbane-Search-Outcome", "Watchbane-Search-Artwork", "Watchbane-Search-Index")
 _WAIT = 15
 _CAP = 32 * 1024
+_SAMPLE_MAX = 16
+_SAMPLE_SECONDS = 4.0
 
 
-def rows(name):
+@lru_cache(maxsize=4)
+def rows(name, scale=2):
+    if name not in _NAMES or scale not in (2, 1000):
+        raise ValueError("Expected the small or 1,000-row synthetic profile")
     movie, tv = fixture(name)
     entries = (movie | {"poster_path": f"/qa-{name}-movie.jpg"},
                tv | {"poster_path": "/qa-invariant-tv.png"})
-    # Differing total and typed TV counts expose mixed-generation metadata.
+    if scale == 1000:
+        # Reuse the same detached high-density filler shape as the joint
+        # probe. Move one unmatched typed filler to the movie side, but
+        # do not change the 2000/2010 year-isolated marker probes.
+        filler = tuple(json.loads(raw) for raw in fixture_bytes(name, scale).splitlines()[2:])
+        if name == _NEW:
+            filler = filler[:-1] + (filler[-1] | {"media_type": "movie", "tmdb_id": 2147481998},)
+        return entries + filler
     if name == _NEW:
         entries += (tv | {"tmdb_id": 2147482010, "year": 2012, "title": "Дополнительная фикстура"},)
     return entries
 
 
-def data(name):
-    return "".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n" for row in rows(name)).encode()
+def data(name, scale=2):
+    return "".join(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n"
+                   for row in rows(name, scale)).encode()
 
 
-def prepare(directory, model):
+def prepare(directory, model, *, scale=2):
     bundle = private_directory(directory)
     if any(bundle.iterdir()):
         raise ValueError("Expected an empty private QA directory")
-    pins = {}
+    pins, summary = {}, {"prepared_synthetic_generations": 2, "rows": []}
     for name in _NAMES:
         folder = bundle / name
         (folder / "cache").mkdir(mode=0o700, parents=True)
         catalog = folder / "synthetic.jsonl"
-        raw = data(name)
+        raw = data(name, scale)
         catalog.write_bytes(raw)
-        result = prebuild(catalog, sha256(raw).hexdigest(), model, folder / "cache", batch_size=_BATCH)
-        if result["rows"] != len(rows(name)):
+        options = {}
+        if scale == 1000 and name == _NEW:
+            old = bundle / _OLD
+            options = {"previous_catalog": old / "synthetic.jsonl",
+                       "previous_catalog_sha256": pins[_OLD][0],
+                       "previous_cache_dir": old / "cache",
+                       "previous_snapshot_sha256": pins[_OLD][1]}
+        result = prebuild(catalog, sha256(raw).hexdigest(), model, folder / "cache", batch_size=_BATCH, **options)
+        if result["rows"] != len(rows(name, scale)):
             raise ValueError("Synthetic generation row count changed")
+        summary["rows"].append(result["rows"])
+        if options:
+            if (result["reused_rows"], result["encoded_rows"]) != (998, 2):
+                raise ValueError("Expected 998 exact reuses and the two changed typed rows")
+            summary.update(reused_rows=998, encoded_rows=2)
         pins[name] = [result["catalog_sha256"], result["snapshot_sha256"]]
-    (bundle / "pins.json").write_text(json.dumps(pins), encoding="ascii")
-    return {"prepared_synthetic_generations": 2, "rows": [2, 3]}
+    with (bundle / "pins.json").open("x", encoding="ascii") as manifest:
+        json.dump(pins, manifest)
+    return summary
 
 
-def read_pins(directory):
+def read_pins(directory, *, scale=2):
     bundle = private_directory(directory)
     with (bundle / "pins.json").open("rb") as stream:
         raw = stream.read(1025)
@@ -77,7 +105,7 @@ def read_pins(directory):
         raise ValueError("Invalid pins map")
     for name in _NAMES:
         pair = pins[name]
-        if (type(pair) is not list or len(pair) != 2 or pair[0] != sha256(data(name)).hexdigest()
+        if (type(pair) is not list or len(pair) != 2 or pair[0] != sha256(data(name, scale)).hexdigest()
                 or type(pair[1]) is not str or len(pair[1]) != 64
                 or any(c not in "0123456789abcdef" for c in pair[1])):
             raise ValueError("Expected the exact synthetic catalog and prebuilt snapshot pin")
@@ -91,8 +119,8 @@ class Generation:
     index: MappingProxyType
 
 
-def build(folder, pins, name, encoder, *, barrier=None):
-    engine = shared.build(folder, pins, len(rows(name)), encoder, verified_callback=barrier)
+def build(folder, pins, name, encoder, *, scale=2, barrier=None):
+    engine = shared.build(folder, pins, len(rows(name, scale)), encoder, verified_callback=barrier)
     artwork = {}
     documents, digest = story_api._load_documents(folder / "synthetic.jsonl", artwork_paths=artwork)
     index = story_api._index_counts(engine)
@@ -165,20 +193,21 @@ def app_for(selection, before_search):
     return app
 
 
-def post(port, query, *, expected_status=200):
-    conn = HTTPConnection("127.0.0.1", port, timeout=_WAIT)
+def post(port, query, *, expected_status=200, timeout=_WAIT):
+    conn = HTTPConnection("127.0.0.1", port, timeout=timeout)
     try:
         headers = dict.fromkeys(_HEADERS, "1") | {"Content-Type": "application/json"}
         body = json.dumps({"query": query, "limit": 1}, ensure_ascii=False).encode()
         conn.request("POST", "/v1/search", body, headers=headers)
         response = conn.getresponse()
         payload = response.read(_CAP + 1)
-        if (response.status != expected_status or len(payload) > _CAP
+        accepted = (200, 503) if expected_status is None else (expected_status,)
+        if (response.status not in accepted or len(payload) > _CAP
                 or response.getheader("Cache-Control") != "no-store"):
             raise ValueError("Unexpected bounded local HTTP reply")
-        if expected_status == 200 and any(response.getheader(name) != "1" for name in _HEADERS):
+        if response.status == 200 and any(response.getheader(name) != "1" for name in _HEADERS):
             raise ValueError("Missing exact protocol echo")
-        if expected_status == 503 and (response.getheader("Retry-After") != "1"
+        if response.status == 503 and (response.getheader("Retry-After") != "1"
                 or any(response.getheader(name) is not None for name in _HEADERS)):
             raise ValueError("Unexpected busy contract")
         return json.loads(payload)
@@ -186,16 +215,56 @@ def post(port, query, *, expected_status=200):
         conn.close()
 
 
-def verify(reply, generation, ordinal):
-    raw_row = rows(generation)[ordinal]
+def verify(reply, generation, ordinal, *, scale=2):
+    fixture_rows = rows(generation, scale)
+    raw_row = fixture_rows[ordinal]
     key = f"tmdb:{raw_row['media_type']}:{raw_row['tmdb_id']}"
     card = {k:v for k,v in raw_row.items() if k not in {"tmdb_id", "poster_path"}}
     card.update(id=key, evidence=raw_row["overview"])
+    movies = sum(row["media_type"] == "movie" for row in fixture_rows)
     if reply != {"source": "tmdb", "results": [card],
                  "artwork": {key: raw_row["poster_path"]},
-                 "index": {"total": len(rows(generation)), "movies": 1, "tv": len(rows(generation)) - 1},
+                 "index": {"total": len(fixture_rows), "movies": movies, "tv": len(fixture_rows) - movies},
                  "outcome": {"state": "candidates", "reason": "possible_local_results"}}:
         raise ValueError("Response mixed generations or changed its negotiated contract")
+
+
+async def sample_unpaused(port, finished, *, scale):
+    start = monotonic()
+    attempts = busy = errors = overlap = 0
+    success_ms = []
+    while attempts < _SAMPLE_MAX and not finished.is_set():
+        remaining = _SAMPLE_SECONDS - (monotonic() - start)
+        if remaining <= 0:
+            break
+        attempts += 1
+        began = monotonic()
+        try:
+            reply = await asyncio.wait_for(asyncio.to_thread(
+                post, port, shared.query_for(0), expected_status=None, timeout=min(1.0, remaining),
+            ), remaining)
+        except (OSError, TimeoutError, ValueError):
+            errors += 1
+            # A timed-out thread may still own the request briefly.
+            break
+        still_building = not finished.is_set()
+        elapsed_ms = (monotonic() - began) * 1000
+        if reply == {"detail": "search_busy"}:
+            busy += 1
+        else:
+            # Mixed payload is a correctness failure, not a latency sample error.
+            verify(reply, _OLD, 0, scale=scale)
+            success_ms.append(elapsed_ms)
+            overlap += still_building
+    success_ms.sort()
+    return {
+        "attempted": attempts, "old_success": len(success_ms), "busy": busy, "errors": errors,
+        "old_success_while_candidate_still_building": overlap,
+        "observation_ms": round((monotonic() - start) * 1000, 3),
+        "successful_latency_ms": {name: (round(success_ms[ceil(q * len(success_ms)) - 1], 3) if success_ms else None)
+                                  for name, q in (("p50", .50), ("p95", .95))},
+        "stage_still_pending_when_sampling_ended": not finished.is_set(),
+    }
 
 
 @asynccontextmanager
@@ -218,15 +287,15 @@ async def listener(app):
             await asyncio.wait_for(running, _WAIT)
 
 
-async def rehearse(directory, model, *, model_factory=LocalE5):
-    bundle, pins = read_pins(directory)
+async def rehearse(directory, model, *, scale=2, model_factory=LocalE5):
+    bundle, pins = read_pins(directory, scale=scale)
     model = Path(model)
     if not (model / "onnx/model.onnx").is_file():
         raise ValueError("Expected local portable FP32 weights")
     encoder = shared.SharedProbeEncoder(model_factory(model))
     if encoder.variant != "fp32":
         raise ValueError("Expected one pinned FP32 model")
-    old = await asyncio.wait_for(asyncio.to_thread(build, bundle / _OLD, pins[_OLD], _OLD, encoder), _WAIT)
+    old = await asyncio.wait_for(asyncio.to_thread(build, bundle / _OLD, pins[_OLD], _OLD, encoder, scale=scale), _WAIT)
     selection = Selection(old)
     capture, release = asyncio.Event(), asyncio.Event()
     hold_one = False
@@ -246,13 +315,13 @@ async def rehearse(directory, model, *, model_factory=LocalE5):
 
         async def check(name):
             for i in range(2):
-                verify(await request(i), name, i)
+                verify(await request(i), name, i, scale=scale)
 
         await check(_OLD)
         with TemporaryDirectory(prefix="wb-tcp-candidate-") as scratch:
-            corrupted = shared.corrupt_copy(bundle / _NEW, Path(scratch), len(rows(_NEW)))
+            corrupted = shared.corrupt_copy(bundle / _NEW, Path(scratch), len(rows(_NEW, scale)))
             try:
-                await asyncio.wait_for(asyncio.to_thread(build, corrupted, pins[_NEW], _NEW, encoder), _WAIT)
+                await asyncio.wait_for(asyncio.to_thread(build, corrupted, pins[_NEW], _NEW, encoder, scale=scale), _WAIT)
             except ValueError as error:
                 if str(error) != "Strict snapshot failed exact byte verification.":
                     raise
@@ -260,14 +329,25 @@ async def rehearse(directory, model, *, model_factory=LocalE5):
                 raise ValueError("Candidate with a bad vector payload was accepted")
         await check(_OLD)
 
-        # No barrier here. Record what actually happened without requiring
-        # overlap on this tiny fixture or extrapolating to live availability.
-        started = monotonic()
-        unpaused = asyncio.create_task(asyncio.to_thread(build, bundle / _NEW, pins[_NEW], _NEW, encoder))
-        verify(await request(0), _OLD, 0)
-        unpaused_pending_at_reply = not unpaused.done()
-        await asyncio.wait_for(unpaused, _WAIT)
-        unpaused_ms = round((monotonic() - started) * 1000, 3)
+        # This measurement has no artificial barrier or traffic shaping.
+        # A completed successful old response while the stage is pending
+        # is evidence of overlap, not a general availability/p95 guarantee.
+        started, finished = Event(), Event()
+
+        def build_unpaused():
+            started.set()
+            try:
+                return build(bundle / _NEW, pins[_NEW], _NEW, encoder, scale=scale)
+            finally:
+                finished.set()
+
+        unpaused = asyncio.create_task(asyncio.to_thread(build_unpaused))
+        try:
+            if not await asyncio.to_thread(started.wait, _WAIT):
+                raise TimeoutError("Unpaused staging did not start")
+            unpaused_report = await sample_unpaused(port, finished, scale=scale)
+        finally:
+            await asyncio.wait_for(unpaused, _WAIT)
         del unpaused
 
         verified, resume = Event(), Event()
@@ -278,7 +358,7 @@ async def rehearse(directory, model, *, model_factory=LocalE5):
                 raise TimeoutError("Controlled staging deadline")
 
         staging = asyncio.create_task(asyncio.to_thread(build, bundle / _NEW, pins[_NEW], _NEW, encoder,
-                                                        barrier=barrier))
+                                                        scale=scale, barrier=barrier))
         try:
             if not await asyncio.to_thread(verified.wait, _WAIT):
                 raise TimeoutError("New candidate did not reach strict staging barrier")
@@ -302,7 +382,7 @@ async def rehearse(directory, model, *, model_factory=LocalE5):
                 raise ValueError("Unexpected body while another search owns admission")
         finally:
             release.set()
-        verify(await inflight, _OLD, 0)
+        verify(await inflight, _OLD, 0, scale=scale)
         await check(_NEW)
         if not selection.switch(new, old):
             raise ValueError("Rollback must compare against the exact active generation")
@@ -310,11 +390,11 @@ async def rehearse(directory, model, *, model_factory=LocalE5):
     if encoder.forbidden_startup_calls:
         raise ValueError("Strict generation staging attempted to re-encode passages")
     return {"synthetic_only": True, "one_tcp_listener": True, "verified_model_sessions": 1,
-            "strict_artwork_index_outcome": True, "rows": [2, 3], "corruption_refused": True,
+            "strict_artwork_index_outcome": True, "rows": [len(rows(name, scale)) for name in _NAMES],
+            "corruption_refused": True,
             "controlled_staging_old_ready": True, "stale_capture_old": True, "inflight_busy": True,
             "rollback": True, "actual_query_calls": encoder.query_calls, "forbidden_startup_encodes": 0,
-            "unpaused_stage_and_old_reply_total_ms": unpaused_ms,
-            "unpaused_stage_pending_when_old_reply_finished": unpaused_pending_at_reply}
+            "unpaused": unpaused_report}
 
 
 def main():
@@ -322,9 +402,11 @@ def main():
     parser.add_argument("phase", choices=("prepare", "rehearse"))
     parser.add_argument("--bundle-dir", required=True, type=Path)
     parser.add_argument("--model-dir", required=True, type=Path)
+    parser.add_argument("--rows", type=int, choices=(2, 1000), default=2,
+                        help="2 is the original 2→3 case; 1000 is opt-in per generation")
     args = parser.parse_args()
-    result = (prepare(args.bundle_dir, args.model_dir) if args.phase == "prepare"
-              else asyncio.run(rehearse(args.bundle_dir, args.model_dir)))
+    result = (prepare(args.bundle_dir, args.model_dir, scale=args.rows) if args.phase == "prepare"
+              else asyncio.run(rehearse(args.bundle_dir, args.model_dir, scale=args.rows)))
     print(json.dumps(result), flush=True)
 
 
